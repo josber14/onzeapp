@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { resend } from "@/lib/resend";
 
 function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { email: normalizedEmail },
-      select: { id: true, email: true },
+      select: { id: true, email: true, fullName: true },
     });
 
     const genericMessage =
@@ -41,11 +42,32 @@ export async function POST(request: Request) {
       },
     });
 
-    console.log("Código de recuperación ONZE:", {
-      email: normalizedEmail,
-      code,
-      expiresAt,
+    const { error } = await resend.emails.send({
+      from: "ONZE <soporte@onze-pay.com>",
+      to: normalizedEmail,
+      subject: "Tu código de recuperación de ONZE",
+      html: `
+        <div style="font-family: Arial, Helvetica, sans-serif; color: #111827; line-height: 1.6;">
+          <h2 style="margin-bottom: 8px;">Recuperación de contraseña</h2>
+          <p>Hola${user.fullName ? `, ${user.fullName}` : ""}.</p>
+          <p>Tu código para restablecer la contraseña en ONZE es:</p>
+          <div style="font-size: 32px; font-weight: bold; letter-spacing: 6px; margin: 20px 0; color: #15803d;">
+            ${code}
+          </div>
+          <p>Este código vence en 15 minutos.</p>
+          <p>Si no solicitaste este cambio, puedes ignorar este correo.</p>
+        </div>
+      `,
+      text: `Tu código de recuperación de ONZE es: ${code}. Este código vence en 15 minutos.`,
     });
+
+    if (error) {
+      console.error("Resend error:", error);
+      return NextResponse.json(
+        { error: "No se pudo enviar el correo de recuperación." },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       ok: true,
