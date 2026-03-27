@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { resend } from "@/lib/resend";
+import { getResendClient } from "@/lib/resend";
 
 function generateCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -41,6 +41,8 @@ export async function POST(request: Request) {
         expiresAt,
       },
     });
+
+    const resend = getResendClient();
 
     const { error } = await resend.emails.send({
       from: "ONZE <soporte@onze-pay.com>",
