@@ -3,8 +3,32 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { createSessionToken } from "@/lib/session";
 
+export const runtime = "nodejs";
+
+function getErrorInfo(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+
+  if (typeof error === "object" && error !== null) {
+    return {
+      raw: JSON.stringify(error, Object.getOwnPropertyNames(error)),
+    };
+  }
+
+  return {
+    raw: String(error),
+  };
+}
+
 export async function POST(req: Request) {
   try {
+    await prisma.$connect();
+
     const body = await req.json();
     const email = String(body.email || "").trim().toLowerCase();
     const password = String(body.password || "");
@@ -43,11 +67,6 @@ export async function POST(req: Request) {
     }
 
     if (!user.passwordHash) {
-      console.error("LOGIN_ERROR: user without passwordHash", {
-        email: user.email,
-        userId: user.id,
-      });
-
       return NextResponse.json(
         { error: "La cuenta no tiene contraseña válida." },
         { status: 500 }
@@ -90,11 +109,13 @@ export async function POST(req: Request) {
 
     return response;
   } catch (error) {
-    console.error("LOGIN_ERROR", error);
+    console.error("LOGIN_ERROR_DETAILED", getErrorInfo(error));
 
     return NextResponse.json(
       { error: "Error interno del servidor." },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect().catch(() => {});
   }
 }

@@ -2,8 +2,32 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
+export const runtime = "nodejs";
+
+function getErrorInfo(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+
+  if (typeof error === "object" && error !== null) {
+    return {
+      raw: JSON.stringify(error, Object.getOwnPropertyNames(error)),
+    };
+  }
+
+  return {
+    raw: String(error),
+  };
+}
+
 export async function POST(req: Request) {
   try {
+    await prisma.$connect();
+
     const body = await req.json();
 
     const fullName = String(body.fullName || "").trim();
@@ -12,7 +36,7 @@ export async function POST(req: Request) {
     const phone = String(body.phone || "").trim();
     const residenceCountryCode = String(
       body.residenceCountryCode || ""
-    ).trim().toLowerCase();
+    ).trim();
 
     if (!fullName || !email || !password) {
       return NextResponse.json(
@@ -28,12 +52,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const exists = await prisma.user.findUnique({
+    const existingUser = await prisma.user.findUnique({
       where: { email },
       select: { id: true },
     });
 
-    if (exists) {
+    if (existingUser) {
       return NextResponse.json(
         { error: "Ese correo ya está registrado." },
         { status: 409 }
@@ -67,11 +91,13 @@ export async function POST(req: Request) {
       user,
     });
   } catch (error) {
-    console.error("REGISTER_ERROR", error);
+    console.error("REGISTER_ERROR_DETAILED", getErrorInfo(error));
 
     return NextResponse.json(
-      { error: "Error interno del servidor." },
+      { error: "Ocurrió un error inesperado." },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect().catch(() => {});
   }
 }
