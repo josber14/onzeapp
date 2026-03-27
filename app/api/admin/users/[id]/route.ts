@@ -47,7 +47,7 @@ export async function PATCH(req: Request, context: RouteContext) {
 
     if (userId === session.userId) {
       return NextResponse.json(
-        { error: "No puedes cambiar tu propio rol o estado desde este panel." },
+        { error: "No puedes cambiar tu propia cuenta desde este panel." },
         { status: 400 }
       );
     }
@@ -87,9 +87,7 @@ export async function PATCH(req: Request, context: RouteContext) {
       if (status === "activo") {
         data.approvedAt = new Date();
         data.approvedByUserId = session.userId;
-      }
-
-      if (status !== "activo") {
+      } else {
         data.approvedAt = null;
         data.approvedByUserId = null;
       }
@@ -123,6 +121,36 @@ export async function PATCH(req: Request, context: RouteContext) {
 
     if (typeof canConnectOwnSheet === "boolean") {
       data.canConnectOwnSheet = canConnectOwnSheet;
+    }
+
+    const finalOperatorMode =
+      data.operatorMode !== undefined ? data.operatorMode : undefined;
+    const finalDataSourceMode =
+      data.dataSourceMode !== undefined ? data.dataSourceMode : undefined;
+
+    if (finalOperatorMode === "porcentaje") {
+      data.partnerSharePercent = null;
+    }
+
+    if (finalOperatorMode === "socio") {
+      data.percentageRate = null;
+    }
+
+    if (
+      finalOperatorMode === "libre" ||
+      finalOperatorMode === "proveedor" ||
+      finalOperatorMode === "manual"
+    ) {
+      data.percentageRate = null;
+      data.partnerSharePercent = null;
+    }
+
+    if (finalDataSourceMode === "base_onze") {
+      data.canConnectOwnSheet = false;
+    }
+
+    if (finalDataSourceMode === "base_propia") {
+      data.canConnectOwnSheet = true;
     }
 
     const updatedUser = await prisma.user.update({
