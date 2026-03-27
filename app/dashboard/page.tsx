@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
+import LogoutButton from "@/components/logout-button";
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();
@@ -33,14 +34,7 @@ export default async function DashboardPage() {
               </a>
             )}
 
-            <form action="/api/auth/logout" method="post">
-              <button
-                type="submit"
-                className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-100 transition"
-              >
-                Cerrar sesión
-              </button>
-            </form>
+            <LogoutButton />
           </div>
         </div>
       </div>

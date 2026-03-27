@@ -78,7 +78,7 @@ export default function RegisterPage() {
               placeholder="Tu nombre completo"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl outline-none transition focus:border-slate-400"
+              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl text-black placeholder:text-slate-400 outline-none transition focus:border-slate-400"
             />
           </div>
 
@@ -89,7 +89,7 @@ export default function RegisterPage() {
               placeholder="correo@ejemplo.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl outline-none transition focus:border-slate-400"
+              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl text-black placeholder:text-slate-400 outline-none transition focus:border-slate-400"
             />
           </div>
 
@@ -102,7 +102,7 @@ export default function RegisterPage() {
               placeholder="********"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl outline-none transition focus:border-slate-400"
+              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl text-black placeholder:text-slate-400 outline-none transition focus:border-slate-400"
             />
           </div>
 
@@ -115,7 +115,7 @@ export default function RegisterPage() {
               placeholder="+56 9..."
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl outline-none transition focus:border-slate-400"
+              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl text-black placeholder:text-slate-400 outline-none transition focus:border-slate-400"
             />
           </div>
 
@@ -128,7 +128,7 @@ export default function RegisterPage() {
               placeholder="CL"
               value={country}
               onChange={(e) => setCountry(e.target.value)}
-              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl outline-none transition focus:border-slate-400"
+              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl text-black placeholder:text-slate-400 outline-none transition focus:border-slate-400"
             />
           </div>
 
