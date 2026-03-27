@@ -3,39 +3,42 @@
 import Link from "next/link";
 import { useState } from "react";
 
-export default function ForgotPasswordPage() {
+export default function ResetPasswordPage() {
   const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setMessage("");
-    setSubmitted(false);
 
     try {
-      const res = await fetch("/api/auth/forgot-password", {
+      const res = await fetch("/api/auth/reset-password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({
+          email,
+          code,
+          newPassword,
+        }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setMessage(data.error || "No se pudo procesar la solicitud.");
+        setMessage(data.error || "No se pudo restablecer la contraseña.");
         return;
       }
 
-      setMessage(
-        data.message ||
-          "Si el correo existe, te enviaremos un código para restablecer tu contraseña."
-      );
-      setSubmitted(true);
+      setMessage(data.message || "Contraseña actualizada correctamente.");
+      setEmail("");
+      setCode("");
+      setNewPassword("");
     } catch {
       setMessage("Ocurrió un error inesperado.");
     } finally {
@@ -47,10 +50,10 @@ export default function ForgotPasswordPage() {
     <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-8">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg md:p-8">
         <h1 className="text-center text-2xl font-bold text-gray-900">
-          Recuperar contraseña
+          Restablecer contraseña
         </h1>
         <p className="mt-2 text-center text-sm text-gray-500">
-          Ingresa tu correo y te enviaremos un código para recuperar el acceso.
+          Escribe tu correo, el código recibido y tu nueva contraseña.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -68,38 +71,55 @@ export default function ForgotPasswordPage() {
             />
           </div>
 
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Código
+            </label>
+            <input
+              type="text"
+              placeholder="123456"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-black placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-600"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Nueva contraseña
+            </label>
+            <input
+              type="password"
+              placeholder="Nueva contraseña"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-black placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-600"
+              required
+            />
+          </div>
+
           <button
             type="submit"
             disabled={loading}
             className="w-full rounded-xl bg-green-700 py-3 text-base font-semibold text-white transition hover:bg-green-800 disabled:opacity-70"
           >
-            {loading ? "Enviando..." : "Continuar"}
+            {loading ? "Guardando..." : "Actualizar contraseña"}
           </button>
         </form>
 
         {message && (
-          <div className="mt-4 text-center">
-            <p className="text-sm text-gray-700">{message}</p>
-
-            {submitted ? (
-              <Link
-                href="/reset-password"
-                className="mt-4 inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-gray-800 transition hover:bg-gray-100"
-              >
-                Ya tengo el código
-              </Link>
-            ) : null}
-          </div>
+          <p className="mt-4 text-center text-sm text-gray-700">{message}</p>
         )}
 
-        <p className="mt-6 text-center text-sm text-gray-600">
+        <div className="mt-6 text-center text-sm text-gray-600">
           <Link
             href="/login"
             className="font-semibold text-green-700 hover:text-green-800"
           >
             Volver a iniciar sesión
           </Link>
-        </p>
+        </div>
       </div>
     </main>
   );
