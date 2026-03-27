@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { createSessionToken, SessionRole } from "@/lib/session";
+import { createSessionToken } from "@/lib/session";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { email, password } = body;
+    const email = String(body.email || "").trim().toLowerCase();
+    const password = String(body.password || "");
 
     if (!email || !password) {
       return NextResponse.json(
@@ -17,12 +18,39 @@ export async function POST(req: Request) {
 
     const user = await prisma.user.findUnique({
       where: { email },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        status: true,
+        passwordHash: true,
+      },
     });
 
     if (!user) {
       return NextResponse.json(
-        { error: "Usuario no encontrado." },
-        { status: 404 }
+        { error: "Credenciales inválidas." },
+        { status: 401 }
+      );
+    }
+
+    if (user.status !== "activo") {
+      return NextResponse.json(
+        { error: "Tu cuenta no está activa." },
+        { status: 403 }
+      );
+    }
+
+    if (!user.passwordHash) {
+      console.error("LOGIN_ERROR: user without passwordHash", {
+        email: user.email,
+        userId: user.id,
+      });
+
+      return NextResponse.json(
+        { error: "La cuenta no tiene contraseña válida." },
+        { status: 500 }
       );
     }
 
@@ -30,30 +58,16 @@ export async function POST(req: Request) {
 
     if (!passwordOk) {
       return NextResponse.json(
-        { error: "Contraseña incorrecta." },
+        { error: "Credenciales inválidas." },
         { status: 401 }
       );
     }
-
-    if (user.status !== "activo") {
-      return NextResponse.json(
-        { error: "Tu cuenta aún no está activa." },
-        { status: 403 }
-      );
-    }
-
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        lastLoginAt: new Date(),
-      },
-    });
 
     const token = createSessionToken({
       userId: user.id,
       email: user.email,
       fullName: user.fullName,
-      role: user.role as SessionRole,
+      role: user.role,
     });
 
     const response = NextResponse.json({
@@ -63,14 +77,13 @@ export async function POST(req: Request) {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
-        status: user.status,
       },
     });
 
     response.cookies.set("onze_session", token, {
       httpOnly: true,
+      secure: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 60 * 60 * 24 * 7,
     });
