@@ -45,6 +45,13 @@ export async function PATCH(req: Request, context: RouteContext) {
       );
     }
 
+    if (userId === session.userId) {
+      return NextResponse.json(
+        { error: "No puedes cambiar tu propio rol o estado desde este panel." },
+        { status: 400 }
+      );
+    }
+
     const body = await req.json();
     const { role, status } = body;
 

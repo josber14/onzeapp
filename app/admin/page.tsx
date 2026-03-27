@@ -136,7 +136,7 @@ export default function AdminPage() {
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/login";
+    window.location.href = "/";
   }
 
   const stats = useMemo(() => {
@@ -366,121 +366,137 @@ export default function AdminPage() {
                       </td>
                     </tr>
                   ) : (
-                    filteredUsers.map((user) => (
-                      <tr
-                        key={user.id}
-                        className="border-b border-slate-100 text-sm last:border-b-0"
-                      >
-                        <td className="px-5 py-5 align-top">
-                          <div className="font-semibold text-slate-900">
-                            {user.fullName}
-                          </div>
-                          <div className="mt-1 text-slate-600">{user.email}</div>
-                          {user.phone && (
-                            <div className="mt-1 text-slate-500">{user.phone}</div>
-                          )}
-                        </td>
+                    filteredUsers.map((user) => {
+                      const isCurrentUser = sessionUser?.id === user.id;
+                      const isSavingThisUser = savingId === user.id;
 
-                        <td className="px-5 py-5 align-top text-slate-700">
-                          {user.tenant ? (
-                            <div>
-                              <div className="font-medium">{user.tenant.tradeName}</div>
-                              <div className="mt-1 text-slate-500">
-                                {user.tenant.code}
-                              </div>
+                      return (
+                        <tr
+                          key={user.id}
+                          className="border-b border-slate-100 text-sm last:border-b-0"
+                        >
+                          <td className="px-5 py-5 align-top">
+                            <div className="font-semibold text-slate-900">
+                              {user.fullName}
                             </div>
-                          ) : (
-                            "Sin tenant"
-                          )}
-                        </td>
+                            <div className="mt-1 text-slate-600">{user.email}</div>
+                            {user.phone && (
+                              <div className="mt-1 text-slate-500">{user.phone}</div>
+                            )}
+                            {isCurrentUser && (
+                              <div className="mt-2 inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                                Tu cuenta actual
+                              </div>
+                            )}
+                          </td>
 
-                        <td className="px-5 py-5 align-top">
-                          <select
-                            value={user.role}
-                            onChange={(e) =>
-                              updateUser(user.id, {
-                                role: e.target.value as UserItem["role"],
-                              })
-                            }
-                            disabled={savingId === user.id}
-                            className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-                          >
-                            <option value="super_admin_global">
-                              super_admin_global
-                            </option>
-                            <option value="super_admin_cliente">
-                              super_admin_cliente
-                            </option>
-                            <option value="operador">operador</option>
-                          </select>
-                        </td>
+                          <td className="px-5 py-5 align-top text-slate-700">
+                            {user.tenant ? (
+                              <div>
+                                <div className="font-medium">{user.tenant.tradeName}</div>
+                                <div className="mt-1 text-slate-500">
+                                  {user.tenant.code}
+                                </div>
+                              </div>
+                            ) : (
+                              "Sin tenant"
+                            )}
+                          </td>
 
-                        <td className="px-5 py-5 align-top">
-                          <select
-                            value={user.status}
-                            onChange={(e) =>
-                              updateUser(user.id, {
-                                status: e.target.value as UserItem["status"],
-                              })
-                            }
-                            disabled={savingId === user.id}
-                            className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-                          >
-                            <option value="pendiente">pendiente</option>
-                            <option value="activo">activo</option>
-                            <option value="suspendido">suspendido</option>
-                            <option value="rechazado">rechazado</option>
-                          </select>
-                        </td>
-
-                        <td className="px-5 py-5 align-top text-slate-700">
-                          <div>{user.operatorMode || "—"}</div>
-                          <div className="mt-1 text-slate-500">
-                            {user.dataSourceMode || "—"}
-                          </div>
-                        </td>
-
-                        <td className="px-5 py-5 align-top text-slate-700">
-                          {user.residenceCountryCode || "—"}
-                        </td>
-
-                        <td className="px-5 py-5 align-top text-slate-700">
-                          {new Date(user.createdAt).toLocaleDateString("es-CL")}
-                        </td>
-
-                        <td className="px-5 py-5 align-top">
-                          <div className="flex flex-col gap-2">
-                            <button
-                              onClick={() => updateUser(user.id, { status: "activo" })}
-                              disabled={savingId === user.id}
-                              className="rounded-2xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
-                            >
-                              Aprobar
-                            </button>
-
-                            <button
-                              onClick={() =>
-                                updateUser(user.id, { status: "suspendido" })
+                          <td className="px-5 py-5 align-top">
+                            <select
+                              value={user.role}
+                              onChange={(e) =>
+                                updateUser(user.id, {
+                                  role: e.target.value as UserItem["role"],
+                                })
                               }
-                              disabled={savingId === user.id}
-                              className="rounded-2xl bg-amber-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+                              disabled={isSavingThisUser || isCurrentUser}
+                              className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                             >
-                              Suspender
-                            </button>
+                              <option value="super_admin_global">
+                                super_admin_global
+                              </option>
+                              <option value="super_admin_cliente">
+                                super_admin_cliente
+                              </option>
+                              <option value="operador">operador</option>
+                            </select>
+                          </td>
 
-                            <button
-                              onClick={() =>
-                                updateUser(user.id, { status: "rechazado" })
+                          <td className="px-5 py-5 align-top">
+                            <select
+                              value={user.status}
+                              onChange={(e) =>
+                                updateUser(user.id, {
+                                  status: e.target.value as UserItem["status"],
+                                })
                               }
-                              disabled={savingId === user.id}
-                              className="rounded-2xl bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+                              disabled={isSavingThisUser || isCurrentUser}
+                              className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                             >
-                              Rechazar
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                              <option value="pendiente">pendiente</option>
+                              <option value="activo">activo</option>
+                              <option value="suspendido">suspendido</option>
+                              <option value="rechazado">rechazado</option>
+                            </select>
+                          </td>
+
+                          <td className="px-5 py-5 align-top text-slate-700">
+                            <div>{user.operatorMode || "—"}</div>
+                            <div className="mt-1 text-slate-500">
+                              {user.dataSourceMode || "—"}
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-5 align-top text-slate-700">
+                            {user.residenceCountryCode || "—"}
+                          </td>
+
+                          <td className="px-5 py-5 align-top text-slate-700">
+                            {new Date(user.createdAt).toLocaleDateString("es-CL")}
+                          </td>
+
+                          <td className="px-5 py-5 align-top">
+                            {isCurrentUser ? (
+                              <div className="text-xs font-medium text-slate-500">
+                                No puedes modificar tu propia cuenta desde este panel.
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-2">
+                                <button
+                                  onClick={() => updateUser(user.id, { status: "activo" })}
+                                  disabled={isSavingThisUser}
+                                  className="rounded-2xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                                >
+                                  Aprobar
+                                </button>
+
+                                <button
+                                  onClick={() =>
+                                    updateUser(user.id, { status: "suspendido" })
+                                  }
+                                  disabled={isSavingThisUser}
+                                  className="rounded-2xl bg-amber-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+                                >
+                                  Suspender
+                                </button>
+
+                                <button
+                                  onClick={() =>
+                                    updateUser(user.id, { status: "rechazado" })
+                                  }
+                                  disabled={isSavingThisUser}
+                                  className="rounded-2xl bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+                                >
+                                  Rechazar
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
