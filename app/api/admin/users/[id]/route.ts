@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-type Params = {
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+type RouteContext = {
   params: Promise<{
     id: string;
   }>;
 };
 
-export async function PATCH(req: Request, { params }: Params) {
+export async function PATCH(req: Request, context: RouteContext) {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
     const userId = Number(id);
 
     if (!userId || Number.isNaN(userId)) {
