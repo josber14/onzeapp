@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 export default function RegisterPage() {
@@ -9,12 +10,14 @@ export default function RegisterPage() {
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("");
   const [message, setMessage] = useState("");
+  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setMessage("");
+    setSuccess(false);
 
     try {
       const res = await fetch("/api/auth/register", {
@@ -34,114 +37,130 @@ export default function RegisterPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setMessage(data.error || "Error al crear la cuenta.");
+        setMessage(data.error || "Ocurrió un error inesperado.");
+        setSuccess(false);
         return;
       }
 
       setMessage("Cuenta creada con éxito. Ahora puedes iniciar sesión.");
+      setSuccess(true);
+
       setFullName("");
       setEmail("");
       setPassword("");
       setPhone("");
       setCountry("");
-    } catch (error) {
+    } catch {
       setMessage("Ocurrió un error inesperado.");
+      setSuccess(false);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
-        <h1 className="text-2xl font-bold text-center text-gray-900">
+    <main className="flex min-h-screen items-center justify-center bg-[#f3f4f6] px-4 py-10">
+      <div className="w-full max-w-3xl rounded-[28px] bg-white p-8 shadow-lg md:p-12">
+        <h1 className="text-center text-4xl font-bold text-slate-900">
           Crear cuenta
         </h1>
-        <p className="text-sm text-gray-500 text-center mt-2">
+        <p className="mt-4 text-center text-2xl text-slate-500">
           Regístrate para acceder a ONZE
         </p>
 
-        <form onSubmit={handleRegister} className="mt-6 space-y-4">
+        <form onSubmit={handleRegister} className="mt-12 space-y-8">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-3 block text-2xl text-slate-700">
               Nombre completo
             </label>
             <input
               type="text"
+              placeholder="Tu nombre completo"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="Tu nombre completo"
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-green-600"
-              required
+              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl outline-none transition focus:border-slate-400"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Correo
-            </label>
+            <label className="mb-3 block text-2xl text-slate-700">Correo</label>
             <input
               type="email"
+              placeholder="correo@ejemplo.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="correo@ejemplo.com"
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-green-600"
-              required
+              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl outline-none transition focus:border-slate-400"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-3 block text-2xl text-slate-700">
               Contraseña
             </label>
             <input
               type="password"
+              placeholder="********"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="********"
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-green-600"
-              required
+              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl outline-none transition focus:border-slate-400"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-3 block text-2xl text-slate-700">
               Teléfono
             </label>
             <input
               type="text"
+              placeholder="+56 9..."
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="+56 9..."
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-green-600"
+              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl outline-none transition focus:border-slate-400"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-3 block text-2xl text-slate-700">
               País de residencia
             </label>
             <input
               type="text"
+              placeholder="CL"
               value={country}
               onChange={(e) => setCountry(e.target.value)}
-              placeholder="CL"
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-green-600"
+              className="w-full rounded-[22px] border border-slate-300 px-8 py-6 text-2xl outline-none transition focus:border-slate-400"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-green-700 text-white py-3 font-semibold hover:bg-green-800 transition disabled:opacity-60"
+            className="w-full rounded-[22px] bg-[#0a8f3c] px-8 py-6 text-3xl font-bold text-white transition hover:bg-[#087a33] disabled:opacity-70"
           >
-            {loading ? "Creando cuenta..." : "Registrarme"}
+            {loading ? "Registrando..." : "Registrarme"}
           </button>
         </form>
 
-        {message && (
-          <p className="mt-4 text-sm text-center text-gray-700">{message}</p>
-        )}
+        {message ? (
+          <div className="mt-8 text-center">
+            <p
+              className={`text-2xl ${
+                success ? "text-slate-700" : "text-red-600"
+              }`}
+            >
+              {message}
+            </p>
+
+            {success ? (
+              <Link
+                href="/login"
+                className="mt-6 inline-flex items-center justify-center rounded-[18px] border border-slate-300 bg-white px-8 py-4 text-xl font-semibold text-slate-800 transition hover:bg-slate-100"
+              >
+                Ir a iniciar sesión
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </main>
   );
