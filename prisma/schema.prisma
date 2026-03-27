@@ -3,9 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
 }
 
 enum AccountRole {
@@ -65,22 +63,22 @@ model Plan {
   createdAt                  DateTime       @default(now())
   updatedAt                  DateTime       @updatedAt
 
-  tenants        Tenant[]
-  subscriptions  Subscription[]
+  tenants       Tenant[]
+  subscriptions Subscription[]
 }
 
 model Tenant {
-  id             Int              @id @default(autoincrement())
-  code           String           @unique
+  id             Int            @id @default(autoincrement())
+  code           String         @unique
   legalName      String?
   tradeName      String
   ownerUserId    Int?
   dataSourceMode DataSourceMode
   planId         Int?
-  isOnzeInternal Boolean          @default(false)
-  active         Boolean          @default(true)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  isOnzeInternal Boolean        @default(false)
+  active         Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   ownerUser     User?                 @relation("TenantOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   plan          Plan?                 @relation(fields: [planId], references: [id])
@@ -191,39 +189,39 @@ model DataSource {
 }
 
 model Country {
-  id                   Int                    @id @default(autoincrement())
-  code                 String                 @unique
-  name                 String
-  currencyCode         String
-  flagEmoji            String?
-  active               Boolean                @default(true)
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
+  id              Int                  @id @default(autoincrement())
+  code            String               @unique
+  name            String
+  currencyCode    String
+  flagEmoji       String?
+  active          Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
 
-  originPairs          TenantPair[]           @relation("OriginCountry")
-  destinationPairs     TenantPair[]           @relation("DestinationCountry")
-  originOperations     Operation[]            @relation("OperationOriginCountry")
-  destinationOps       Operation[]            @relation("OperationDestinationCountry")
-  profitBaseOps        Operation[]            @relation("OperationProfitBaseCountry")
-  convertedProfitOps   Operation[]            @relation("OperationConvertedProfitTargetCountry")
-  balances             TenantCountryBalance[]
+  originPairs      TenantPair[]           @relation("OriginCountry")
+  destinationPairs TenantPair[]           @relation("DestinationCountry")
+  originOperations Operation[]            @relation("OperationOriginCountry")
+  destinationOps   Operation[]            @relation("OperationDestinationCountry")
+  profitBaseOps    Operation[]            @relation("OperationProfitBaseCountry")
+  convertedProfitOps Operation[]          @relation("OperationConvertedProfitTargetCountry")
+  balances         TenantCountryBalance[]
 }
 
 model TenantPair {
-  id                   Int        @id @default(autoincrement())
+  id                   Int      @id @default(autoincrement())
   tenantId             Int
   originCountryId      Int
   destinationCountryId Int
   pairCode             String
-  active               Boolean    @default(true)
+  active               Boolean  @default(true)
   decimals             Int?
   notes                String?
-  createdAt            DateTime   @default(now())
-  updatedAt            DateTime   @updatedAt
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  tenant             Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  originCountry      Country          @relation("OriginCountry", fields: [originCountryId], references: [id])
-  destinationCountry Country          @relation("DestinationCountry", fields: [destinationCountryId], references: [id])
+  tenant             Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  originCountry      Country     @relation("OriginCountry", fields: [originCountryId], references: [id])
+  destinationCountry Country     @relation("DestinationCountry", fields: [destinationCountryId], references: [id])
   rates              TenantPairRate[]
 
   @@unique([tenantId, originCountryId, destinationCountryId])
@@ -231,17 +229,17 @@ model TenantPair {
 }
 
 model TenantPairRate {
-  id                    Int       @id @default(autoincrement())
-  tenantPairId          Int
-  buyOriginValue        Decimal?  @db.Decimal(18, 8)
-  sellDestinationValue  Decimal?  @db.Decimal(18, 8)
-  costRate              Decimal?  @db.Decimal(18, 8)
-  providerRate          Decimal?  @db.Decimal(18, 8)
-  retailRate            Decimal?  @db.Decimal(18, 8)
-  active                Boolean   @default(true)
-  sourceRowRef          String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  id                   Int      @id @default(autoincrement())
+  tenantPairId         Int
+  buyOriginValue       Decimal? @db.Decimal(18, 8)
+  sellDestinationValue Decimal? @db.Decimal(18, 8)
+  costRate             Decimal? @db.Decimal(18, 8)
+  providerRate         Decimal? @db.Decimal(18, 8)
+  retailRate           Decimal? @db.Decimal(18, 8)
+  active               Boolean  @default(true)
+  sourceRowRef         String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   tenantPair TenantPair @relation(fields: [tenantPairId], references: [id], onDelete: Cascade)
 
@@ -264,56 +262,56 @@ model OperatorCustomer {
 }
 
 model Operation {
-  id                               Int                @id @default(autoincrement())
-  tenantId                         Int
-  createdByUserId                  Int
-  operationNumber                  String
-  operationDate                    DateTime
-  operationTime                    DateTime           @default(now())
-  operationType                    String?
-  note                             String?
+  id                                 Int               @id @default(autoincrement())
+  tenantId                           Int
+  createdByUserId                    Int
+  operationNumber                    String
+  operationDate                      DateTime
+  operationTime                      DateTime          @default(now())
+  operationType                      String?
+  note                               String?
 
-  customerId                       Int?
-  customerNameSnapshot             String?
+  customerId                         Int?
+  customerNameSnapshot               String?
 
-  operatorMode                     OperatorMode
-  percentageRateSnapshot           Decimal?           @db.Decimal(8, 4)
-  partnerSharePercentSnapshot      Decimal?           @db.Decimal(8, 4)
+  operatorMode                       OperatorMode
+  percentageRateSnapshot             Decimal?          @db.Decimal(8, 4)
+  partnerSharePercentSnapshot        Decimal?          @db.Decimal(8, 4)
 
-  originCountryId                  Int
-  destinationCountryId             Int
-  originCurrencyCode               String
-  destinationCurrencyCode          String
+  originCountryId                    Int
+  destinationCountryId               Int
+  originCurrencyCode                 String
+  destinationCurrencyCode            String
 
-  amountOrigin                     Decimal            @db.Decimal(18, 8)
-  amountDestination                Decimal?           @db.Decimal(18, 8)
+  amountOrigin                       Decimal           @db.Decimal(18, 8)
+  amountDestination                  Decimal?          @db.Decimal(18, 8)
 
-  buyOriginValueSnapshot           Decimal?           @db.Decimal(18, 8)
-  sellDestinationValueSnapshot     Decimal?           @db.Decimal(18, 8)
-  costRateSnapshot                 Decimal?           @db.Decimal(18, 8)
-  providerRateSnapshot             Decimal?           @db.Decimal(18, 8)
-  retailRateSnapshot               Decimal?           @db.Decimal(18, 8)
-  userOperatingRateSnapshot        Decimal?           @db.Decimal(18, 8)
+  buyOriginValueSnapshot             Decimal?          @db.Decimal(18, 8)
+  sellDestinationValueSnapshot       Decimal?          @db.Decimal(18, 8)
+  costRateSnapshot                   Decimal?          @db.Decimal(18, 8)
+  providerRateSnapshot               Decimal?          @db.Decimal(18, 8)
+  retailRateSnapshot                 Decimal?          @db.Decimal(18, 8)
+  userOperatingRateSnapshot          Decimal?          @db.Decimal(18, 8)
 
-  profitBaseCountryId              Int?
-  profitBaseCurrencyCode           String?
-  profitTotalAmount                Decimal            @default(0) @db.Decimal(18, 8)
-  operatorProfitAmount             Decimal            @default(0) @db.Decimal(18, 8)
-  superAdminProfitAmount           Decimal            @default(0) @db.Decimal(18, 8)
+  profitBaseCountryId                Int?
+  profitBaseCurrencyCode             String?
+  profitTotalAmount                  Decimal           @default(0) @db.Decimal(18, 8)
+  operatorProfitAmount               Decimal           @default(0) @db.Decimal(18, 8)
+  superAdminProfitAmount             Decimal           @default(0) @db.Decimal(18, 8)
 
-  convertedProfit                  Boolean            @default(false)
-  convertedProfitTargetCountryId   Int?
-  convertedProfitTargetCurrencyCode String?
-  convertedProfitAmount            Decimal?           @db.Decimal(18, 8)
-  conversionProviderRateSnapshot   Decimal?           @db.Decimal(18, 8)
+  convertedProfit                    Boolean           @default(false)
+  convertedProfitTargetCountryId     Int?
+  convertedProfitTargetCurrencyCode  String?
+  convertedProfitAmount              Decimal?          @db.Decimal(18, 8)
+  conversionProviderRateSnapshot     Decimal?          @db.Decimal(18, 8)
 
-  payoutCurrencyMode               PayoutCurrencyMode?
-  payoutAmountToOperator           Decimal?           @db.Decimal(18, 8)
-  payoutCurrencyCode               String?
-  payoutUsdtAmount                 Decimal?           @db.Decimal(18, 8)
+  payoutCurrencyMode                 PayoutCurrencyMode?
+  payoutAmountToOperator             Decimal?          @db.Decimal(18, 8)
+  payoutCurrencyCode                 String?
+  payoutUsdtAmount                   Decimal?          @db.Decimal(18, 8)
 
-  createdAt                        DateTime           @default(now())
-  updatedAt                        DateTime           @updatedAt
+  createdAt                          DateTime          @default(now())
+  updatedAt                          DateTime          @updatedAt
 
   tenant                       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdByUser                User              @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
@@ -330,15 +328,15 @@ model Operation {
 }
 
 model TenantCountryBalance {
-  id                      Int      @id @default(autoincrement())
-  tenantId                Int
-  countryId               Int
-  balanceLocal            Decimal  @default(0) @db.Decimal(18, 8)
-  buyOriginValueSnapshot  Decimal? @db.Decimal(18, 8)
-  balanceUsdt             Decimal? @db.Decimal(18, 8)
-  sourceRef               String?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  id                     Int      @id @default(autoincrement())
+  tenantId               Int
+  countryId              Int
+  balanceLocal           Decimal  @default(0) @db.Decimal(18, 8)
+  buyOriginValueSnapshot Decimal? @db.Decimal(18, 8)
+  balanceUsdt            Decimal? @db.Decimal(18, 8)
+  sourceRef              String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   country Country @relation(fields: [countryId], references: [id])
@@ -362,17 +360,17 @@ model AuditLog {
 }
 
 model TenantSettings {
-  id                             Int      @id @default(autoincrement())
-  tenantId                       Int      @unique
-  allowInternalOperatorManagement Boolean @default(false)
-  allowPairCreation              Boolean  @default(false)
-  allowCountryCreation           Boolean  @default(false)
-  allowSheetSync                 Boolean  @default(true)
-  allowUsdtAnalysis              Boolean  @default(false)
-  allowKyc                       Boolean  @default(false)
-  themeOverrides                 Json?
-  createdAt                      DateTime @default(now())
-  updatedAt                      DateTime @updatedAt
+  id                              Int      @id @default(autoincrement())
+  tenantId                        Int      @unique
+  allowInternalOperatorManagement Boolean  @default(false)
+  allowPairCreation               Boolean  @default(false)
+  allowCountryCreation            Boolean  @default(false)
+  allowSheetSync                  Boolean  @default(true)
+  allowUsdtAnalysis               Boolean  @default(false)
+  allowKyc                        Boolean  @default(false)
+  themeOverrides                  Json?
+  createdAt                       DateTime @default(now())
+  updatedAt                       DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
