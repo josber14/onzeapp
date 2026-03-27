@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { verifySessionToken } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +14,27 @@ type RouteContext = {
 
 export async function PATCH(req: Request, context: RouteContext) {
   try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("onze_session")?.value || null;
+    const session = verifySessionToken(token);
+
+    if (!session) {
+      return NextResponse.json(
+        { error: "No autorizado." },
+        { status: 401 }
+      );
+    }
+
+    if (
+      session.role !== "super_admin_global" &&
+      session.role !== "super_admin_cliente"
+    ) {
+      return NextResponse.json(
+        { error: "No tienes permisos para actualizar usuarios." },
+        { status: 403 }
+      );
+    }
+
     const { id } = await context.params;
     const userId = Number(id);
 
@@ -29,6 +52,7 @@ export async function PATCH(req: Request, context: RouteContext) {
       role?: "super_admin_global" | "super_admin_cliente" | "operador";
       status?: "pendiente" | "activo" | "suspendido" | "rechazado";
       approvedAt?: Date | null;
+      approvedByUserId?: number | null;
     } = {};
 
     if (role) {
@@ -40,6 +64,12 @@ export async function PATCH(req: Request, context: RouteContext) {
 
       if (status === "activo") {
         data.approvedAt = new Date();
+        data.approvedByUserId = session.userId;
+      }
+
+      if (status !== "activo") {
+        data.approvedAt = null;
+        data.approvedByUserId = null;
       }
     }
 
