@@ -10,8 +10,8 @@ type UserItem = {
   residenceCountryCode?: string | null;
   role: "super_admin_global" | "super_admin_cliente" | "operador";
   status: "pendiente" | "activo" | "suspendido" | "rechazado";
-  operatorMode?: string | null;
-  dataSourceMode?: string | null;
+  operatorMode?: "porcentaje" | "libre" | "socio" | "proveedor" | "manual" | null;
+  dataSourceMode?: "base_onze" | "base_propia" | null;
   percentageRate?: string | number | null;
   partnerSharePercent?: string | number | null;
   canManageOperators: boolean;
@@ -105,6 +105,12 @@ export default function AdminPage() {
     payload: {
       role?: "super_admin_global" | "super_admin_cliente" | "operador";
       status?: "pendiente" | "activo" | "suspendido" | "rechazado";
+      operatorMode?: "porcentaje" | "libre" | "socio" | "proveedor" | "manual" | null;
+      dataSourceMode?: "base_onze" | "base_propia" | null;
+      percentageRate?: string | number | null;
+      partnerSharePercent?: string | number | null;
+      canManageOperators?: boolean;
+      canConnectOwnSheet?: boolean;
     }
   ) {
     try {
@@ -345,7 +351,7 @@ export default function AdminPage() {
                     <th className="px-5 py-4">Tenant</th>
                     <th className="px-5 py-4">Rol</th>
                     <th className="px-5 py-4">Estado</th>
-                    <th className="px-5 py-4">Modo</th>
+                    <th className="px-5 py-4">Modalidad</th>
                     <th className="px-5 py-4">País</th>
                     <th className="px-5 py-4">Creado</th>
                     <th className="px-5 py-4">Acciones</th>
@@ -442,10 +448,96 @@ export default function AdminPage() {
                             </select>
                           </td>
 
-                          <td className="px-5 py-5 align-top text-slate-700">
-                            <div>{user.operatorMode || "—"}</div>
-                            <div className="mt-1 text-slate-500">
-                              {user.dataSourceMode || "—"}
+                          <td className="px-5 py-5 align-top">
+                            <div className="space-y-2">
+                              <select
+                                value={user.operatorMode || ""}
+                                onChange={(e) =>
+                                  updateUser(user.id, {
+                                    operatorMode: (e.target.value || null) as UserItem["operatorMode"],
+                                  })
+                                }
+                                disabled={isSavingThisUser || isCurrentUser}
+                                className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                              >
+                                <option value="">Sin modalidad</option>
+                                <option value="porcentaje">porcentaje</option>
+                                <option value="libre">libre</option>
+                                <option value="socio">socio</option>
+                                <option value="proveedor">proveedor</option>
+                                <option value="manual">manual</option>
+                              </select>
+
+                              <select
+                                value={user.dataSourceMode || ""}
+                                onChange={(e) =>
+                                  updateUser(user.id, {
+                                    dataSourceMode: (e.target.value || null) as UserItem["dataSourceMode"],
+                                  })
+                                }
+                                disabled={isSavingThisUser || isCurrentUser}
+                                className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                              >
+                                <option value="">Sin fuente</option>
+                                <option value="base_onze">base_onze</option>
+                                <option value="base_propia">base_propia</option>
+                              </select>
+
+                              <input
+                                type="number"
+                                step="0.0001"
+                                placeholder="% operador"
+                                defaultValue={user.percentageRate ?? ""}
+                                onBlur={(e) =>
+                                  updateUser(user.id, {
+                                    percentageRate: e.target.value,
+                                  })
+                                }
+                                disabled={isSavingThisUser || isCurrentUser}
+                                className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                              />
+
+                              <input
+                                type="number"
+                                step="0.0001"
+                                placeholder="% socio"
+                                defaultValue={user.partnerSharePercent ?? ""}
+                                onBlur={(e) =>
+                                  updateUser(user.id, {
+                                    partnerSharePercent: e.target.value,
+                                  })
+                                }
+                                disabled={isSavingThisUser || isCurrentUser}
+                                className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                              />
+
+                              <label className="flex items-center gap-2 text-xs text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  checked={user.canManageOperators}
+                                  onChange={(e) =>
+                                    updateUser(user.id, {
+                                      canManageOperators: e.target.checked,
+                                    })
+                                  }
+                                  disabled={isSavingThisUser || isCurrentUser}
+                                />
+                                Puede gestionar operadores
+                              </label>
+
+                              <label className="flex items-center gap-2 text-xs text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  checked={user.canConnectOwnSheet}
+                                  onChange={(e) =>
+                                    updateUser(user.id, {
+                                      canConnectOwnSheet: e.target.checked,
+                                    })
+                                  }
+                                  disabled={isSavingThisUser || isCurrentUser}
+                                />
+                                Puede conectar base propia
+                              </label>
                             </div>
                           </td>
 

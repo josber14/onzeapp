@@ -53,11 +53,26 @@ export async function PATCH(req: Request, context: RouteContext) {
     }
 
     const body = await req.json();
-    const { role, status } = body;
+    const {
+      role,
+      status,
+      operatorMode,
+      dataSourceMode,
+      percentageRate,
+      partnerSharePercent,
+      canManageOperators,
+      canConnectOwnSheet,
+    } = body;
 
     const data: {
       role?: "super_admin_global" | "super_admin_cliente" | "operador";
       status?: "pendiente" | "activo" | "suspendido" | "rechazado";
+      operatorMode?: "porcentaje" | "libre" | "socio" | "proveedor" | "manual" | null;
+      dataSourceMode?: "base_onze" | "base_propia" | null;
+      percentageRate?: number | null;
+      partnerSharePercent?: number | null;
+      canManageOperators?: boolean;
+      canConnectOwnSheet?: boolean;
       approvedAt?: Date | null;
       approvedByUserId?: number | null;
     } = {};
@@ -80,6 +95,36 @@ export async function PATCH(req: Request, context: RouteContext) {
       }
     }
 
+    if (operatorMode !== undefined) {
+      data.operatorMode = operatorMode || null;
+    }
+
+    if (dataSourceMode !== undefined) {
+      data.dataSourceMode = dataSourceMode || null;
+    }
+
+    if (percentageRate !== undefined) {
+      data.percentageRate =
+        percentageRate === "" || percentageRate === null
+          ? null
+          : Number(percentageRate);
+    }
+
+    if (partnerSharePercent !== undefined) {
+      data.partnerSharePercent =
+        partnerSharePercent === "" || partnerSharePercent === null
+          ? null
+          : Number(partnerSharePercent);
+    }
+
+    if (typeof canManageOperators === "boolean") {
+      data.canManageOperators = canManageOperators;
+    }
+
+    if (typeof canConnectOwnSheet === "boolean") {
+      data.canConnectOwnSheet = canConnectOwnSheet;
+    }
+
     const updatedUser = await prisma.user.update({
       where: { id: userId },
       data,
@@ -89,6 +134,12 @@ export async function PATCH(req: Request, context: RouteContext) {
         email: true,
         role: true,
         status: true,
+        operatorMode: true,
+        dataSourceMode: true,
+        percentageRate: true,
+        partnerSharePercent: true,
+        canManageOperators: true,
+        canConnectOwnSheet: true,
         approvedAt: true,
       },
     });
