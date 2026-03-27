@@ -6,8 +6,8 @@ export default function HomePage() {
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,139,34,0.10),transparent_28%),radial-gradient(circle_at_top_right,rgba(16,24,40,0.08),transparent_32%)]" />
 
-        <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-6 py-8">
-          <header className="flex items-center justify-between">
+        <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-6 md:px-6 md:py-8">
+          <header className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#0f172a] text-lg font-bold text-white shadow-sm">
                 O
@@ -16,7 +16,7 @@ export default function HomePage() {
                 <div className="text-lg font-semibold tracking-tight text-slate-900">
                   ONZE
                 </div>
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500 sm:text-xs">
                   Plataforma financiera
                 </div>
               </div>
@@ -38,23 +38,38 @@ export default function HomePage() {
             </div>
           </header>
 
-          <div className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row md:hidden">
+            <Link
+              href="/login"
+              className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
+            >
+              Iniciar sesión
+            </Link>
+            <Link
+              href="/register"
+              className="inline-flex w-full items-center justify-center rounded-2xl bg-[#0a8f3c] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#087a33]"
+            >
+              Registrarse
+            </Link>
+          </div>
+
+          <div className="grid flex-1 items-center gap-10 py-8 md:py-10 lg:grid-cols-[1.15fr_0.85fr]">
             <div>
               <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700">
                 Infraestructura para operadores, clientes y equipos
               </div>
 
-              <h1 className="mt-7 max-w-5xl text-5xl font-semibold leading-[1.05] tracking-tight text-slate-950 md:text-6xl">
+              <h1 className="mt-6 max-w-5xl text-4xl font-semibold leading-[1.05] tracking-tight text-slate-950 sm:text-5xl md:mt-7 md:text-6xl">
                 La operación financiera de tu negocio, en una sola plataforma.
               </h1>
 
-              <p className="mt-6 max-w-3xl text-lg leading-8 text-slate-600">
+              <p className="mt-5 max-w-3xl text-base leading-7 text-slate-600 sm:text-lg sm:leading-8 md:mt-6">
                 ONZE te permite administrar accesos, operadores, clientes,
                 cálculo operativo y estructura de crecimiento con una
                 experiencia clara, profesional y preparada para escalar.
               </p>
 
-              <div className="mt-10 grid gap-4 sm:grid-cols-3">
+              <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="text-sm font-semibold text-slate-900">
                     Gestión de usuarios
@@ -75,7 +90,7 @@ export default function HomePage() {
                   </p>
                 </div>
 
-                <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:col-span-2 lg:col-span-1">
                   <div className="text-sm font-semibold text-slate-900">
                     Escalable por cliente
                   </div>
@@ -87,9 +102,9 @@ export default function HomePage() {
             </div>
 
             <div className="relative">
-              <div className="rounded-[32px] border border-slate-200 bg-white p-5 shadow-[0_20px_70px_rgba(15,23,42,0.10)]">
-                <div className="rounded-[28px] bg-[#07152f] p-6 text-white">
-                  <div className="flex items-center justify-between">
+              <div className="rounded-[32px] border border-slate-200 bg-white p-4 shadow-[0_20px_70px_rgba(15,23,42,0.10)] sm:p-5">
+                <div className="rounded-[28px] bg-[#07152f] p-5 text-white sm:p-6">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="text-xs uppercase tracking-[0.24em] text-emerald-300">
                         ONZE CORE
@@ -99,7 +114,7 @@ export default function HomePage() {
                       </div>
                     </div>
 
-                    <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-right">
+                    <div className="w-fit rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-right">
                       <div className="text-[11px] uppercase tracking-[0.2em] text-slate-300">
                         Estado
                       </div>
