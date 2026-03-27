@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 export default function LoginPage() {
@@ -32,13 +33,16 @@ export default function LoginPage() {
         return;
       }
 
-      if (data.user?.role === "ADMIN") {
+      if (
+        data.user?.role === "super_admin_global" ||
+        data.user?.role === "super_admin_cliente"
+      ) {
         window.location.href = "/admin";
         return;
       }
 
       window.location.href = "/dashboard";
-    } catch (error) {
+    } catch {
       setMessage("Ocurrió un error inesperado.");
     } finally {
       setLoading(false);
@@ -46,18 +50,18 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
-        <h1 className="text-2xl font-bold text-center text-gray-900">
+    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-8">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg md:p-8">
+        <h1 className="text-center text-2xl font-bold text-gray-900">
           Iniciar sesión
         </h1>
-        <p className="text-sm text-gray-500 text-center mt-2">
+        <p className="mt-2 text-center text-sm text-gray-500">
           Ingresa a tu cuenta ONZE
         </p>
 
         <form onSubmit={handleLogin} className="mt-6 space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700">
               Correo
             </label>
             <input
@@ -65,13 +69,13 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="correo@ejemplo.com"
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-green-600"
+              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-black placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-600"
               required
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700">
               Contraseña
             </label>
             <input
@@ -79,23 +83,42 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="********"
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:ring-2 focus:ring-green-600"
+              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-black placeholder:text-gray-400 outline-none focus:ring-2 focus:ring-green-600"
               required
             />
+          </div>
+
+          <div className="text-right">
+            <a
+              href="/forgot-password"
+              className="text-sm font-medium text-green-700 hover:text-green-800"
+            >
+              Olvidé mi contraseña
+            </a>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-green-700 text-white py-3 font-semibold hover:bg-green-800 transition disabled:opacity-60"
+            className="w-full rounded-xl bg-green-700 py-3 font-semibold text-white transition hover:bg-green-800 disabled:opacity-60"
           >
             {loading ? "Entrando..." : "Iniciar sesión"}
           </button>
         </form>
 
         {message && (
-          <p className="mt-4 text-sm text-center text-gray-700">{message}</p>
+          <p className="mt-4 text-center text-sm text-red-600">{message}</p>
         )}
+
+        <p className="mt-6 text-center text-sm text-gray-600">
+          ¿No tienes cuenta?{" "}
+          <Link
+            href="/register"
+            className="font-semibold text-green-700 hover:text-green-800"
+          >
+            Regístrate
+          </Link>
+        </p>
       </div>
     </main>
   );
