@@ -2,6 +2,14 @@
 
 import { useEffect, useState } from "react";
 
+type OwnerOption = {
+  id: number;
+  fullName: string;
+  email: string;
+  role: "super_admin_global" | "super_admin_cliente" | "operador";
+  tenantId?: number | null;
+};
+
 type TenantItem = {
   id: number;
   code: string;
@@ -26,6 +34,7 @@ type TenantItem = {
 
 export default function AdminTenantsPage() {
   const [tenants, setTenants] = useState<TenantItem[]>([]);
+  const [ownerOptions, setOwnerOptions] = useState<OwnerOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingTenantId, setSavingTenantId] = useState<number | null>(null);
@@ -55,6 +64,7 @@ export default function AdminTenantsPage() {
       }
 
       setTenants(data.tenants || []);
+      setOwnerOptions(data.users || []);
     } catch {
       setMessage("Ocurrió un error cargando los tenants.");
     } finally {
@@ -194,7 +204,7 @@ export default function AdminTenantsPage() {
         <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
           <h2 className="text-lg font-semibold text-slate-900">Crear nuevo tenant</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Define el cliente, su fuente de datos y si pertenece a la estructura interna de ONZE.
+            Define el cliente, su fuente de datos y selecciona su owner desde usuarios activos.
           </p>
 
           <form onSubmit={handleCreateTenant} className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -241,15 +251,20 @@ export default function AdminTenantsPage() {
 
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">
-                Owner User ID
+                Owner del tenant
               </label>
-              <input
-                type="number"
+              <select
                 value={ownerUserId}
                 onChange={(e) => setOwnerUserId(e.target.value)}
-                placeholder="Opcional"
-                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-500"
-              />
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none"
+              >
+                <option value="">Sin owner</option>
+                {ownerOptions.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.fullName} · {user.email}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -396,7 +411,7 @@ export default function AdminTenantsPage() {
                           {new Date(tenant.createdAt).toLocaleDateString("es-CL")}
                         </td>
                         <td className="px-5 py-5">
-                          <div className="grid gap-2 min-w-[240px]">
+                          <div className="grid gap-2 min-w-[260px]">
                             <input
                               type="text"
                               defaultValue={tenant.tradeName}
@@ -417,15 +432,21 @@ export default function AdminTenantsPage() {
                               className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100"
                             />
 
-                            <input
-                              type="number"
-                              defaultValue={tenant.ownerUserId || ""}
-                              onBlur={(e) =>
+                            <select
+                              value={tenant.ownerUserId ?? ""}
+                              onChange={(e) =>
                                 updateTenant(tenant.id, { ownerUserId: e.target.value })
                               }
                               disabled={isSavingThisTenant}
                               className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100"
-                            />
+                            >
+                              <option value="">Sin owner</option>
+                              {ownerOptions.map((user) => (
+                                <option key={user.id} value={user.id}>
+                                  {user.fullName} · {user.email}
+                                </option>
+                              ))}
+                            </select>
 
                             <select
                               value={tenant.dataSourceMode}

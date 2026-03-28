@@ -35,38 +35,55 @@ export async function GET() {
     const auth = await requireAdmin();
     if ("error" in auth) return auth.error;
 
-    const tenants = await prisma.tenant.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
-      select: {
-        id: true,
-        code: true,
-        legalName: true,
-        tradeName: true,
-        ownerUserId: true,
-        dataSourceMode: true,
-        isOnzeInternal: true,
-        active: true,
-        createdAt: true,
-        ownerUser: {
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
+    const [tenants, users] = await Promise.all([
+      prisma.tenant.findMany({
+        orderBy: {
+          createdAt: "desc",
+        },
+        select: {
+          id: true,
+          code: true,
+          legalName: true,
+          tradeName: true,
+          ownerUserId: true,
+          dataSourceMode: true,
+          isOnzeInternal: true,
+          active: true,
+          createdAt: true,
+          ownerUser: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          },
+          _count: {
+            select: {
+              users: true,
+              customers: true,
+              operations: true,
+            },
           },
         },
-        _count: {
-          select: {
-            users: true,
-            customers: true,
-            operations: true,
-          },
+      }),
+      prisma.user.findMany({
+        where: {
+          status: "activo",
         },
-      },
-    });
+        orderBy: {
+          fullName: "asc",
+        },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          role: true,
+          tenantId: true,
+        },
+      }),
+    ]);
 
-    return NextResponse.json({ ok: true, tenants });
+    return NextResponse.json({ ok: true, tenants, users });
   } catch (error) {
     console.error("ADMIN_TENANTS_GET_ERROR", error);
 
