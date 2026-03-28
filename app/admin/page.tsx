@@ -2,6 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+type TenantOption = {
+  id: number;
+  tradeName: string;
+  code: string;
+  active: boolean;
+};
+
 type UserItem = {
   id: number;
   fullName: string;
@@ -10,6 +17,7 @@ type UserItem = {
   residenceCountryCode?: string | null;
   role: "super_admin_global" | "super_admin_cliente" | "operador";
   status: "pendiente" | "activo" | "suspendido" | "rechazado";
+  tenantId?: number | null;
   operatorMode?: "porcentaje" | "libre" | "socio" | "proveedor" | "manual" | null;
   dataSourceMode?: "base_onze" | "base_propia" | null;
   percentageRate?: string | number | null;
@@ -49,6 +57,7 @@ function getStatusBadge(status: UserItem["status"]) {
 
 export default function AdminPage() {
   const [users, setUsers] = useState<UserItem[]>([]);
+  const [tenants, setTenants] = useState<TenantOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
@@ -75,6 +84,7 @@ export default function AdminPage() {
       }
 
       setUsers(data.users || []);
+      setTenants(data.tenants || []);
     } catch {
       setMessage("Ocurrió un error cargando los usuarios.");
     } finally {
@@ -120,6 +130,7 @@ export default function AdminPage() {
     payload: {
       role?: "super_admin_global" | "super_admin_cliente" | "operador";
       status?: "pendiente" | "activo" | "suspendido" | "rechazado";
+      tenantId?: string | number | null;
       operatorMode?: "porcentaje" | "libre" | "socio" | "proveedor" | "manual" | null;
       dataSourceMode?: "base_onze" | "base_propia" | null;
       percentageRate?: string | number | null;
@@ -201,7 +212,7 @@ export default function AdminPage() {
 
   return (
     <main className="min-h-screen bg-[#f4f7fb] px-4 py-6 text-slate-900 md:px-6 lg:px-8">
-      <div className="mx-auto max-w-[1600px] space-y-6">
+      <div className="mx-auto max-w-[1700px] space-y-6">
         <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_20px_70px_rgba(15,23,42,0.08)]">
           <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-900 px-6 py-8 text-white md:px-8">
             <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
@@ -215,7 +226,7 @@ export default function AdminPage() {
                 </h1>
 
                 <p className="mt-3 max-w-2xl text-sm text-slate-200 md:text-base">
-                  Gestiona usuarios, estados, modalidades operativas y estructura
+                  Gestiona usuarios, tenants, estados, modalidades operativas y estructura
                   de trabajo desde un solo lugar.
                 </p>
 
@@ -358,11 +369,11 @@ export default function AdminPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-[1500px] w-full">
+            <table className="min-w-[1700px] w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="px-5 py-4">Usuario</th>
-                  <th className="px-5 py-4">Tenant</th>
+                  <th className="px-5 py-4">Tenant asignado</th>
                   <th className="px-5 py-4">Rol</th>
                   <th className="px-5 py-4">Estado</th>
                   <th className="px-5 py-4">Modalidad</th>
@@ -415,15 +426,36 @@ export default function AdminPage() {
                           )}
                         </td>
 
-                        <td className="px-5 py-5 text-slate-700">
-                          {user.tenant ? (
-                            <div>
-                              <div className="font-medium">{user.tenant.tradeName}</div>
-                              <div className="mt-1 text-slate-500">{user.tenant.code}</div>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400">Sin tenant</span>
-                          )}
+                        <td className="px-5 py-5">
+                          <div className="space-y-2">
+                            <select
+                              value={user.tenantId ?? ""}
+                              onChange={(e) =>
+                                updateUser(user.id, {
+                                  tenantId: e.target.value,
+                                })
+                              }
+                              disabled={isSavingThisUser || isCurrentUser}
+                              className="w-full min-w-[220px] rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                            >
+                              <option value="">Sin tenant</option>
+                              {tenants.map((tenant) => (
+                                <option key={tenant.id} value={tenant.id}>
+                                  {tenant.tradeName} ({tenant.code})
+                                </option>
+                              ))}
+                            </select>
+
+                            {user.tenant ? (
+                              <div className="text-xs text-slate-500">
+                                Actual: {user.tenant.tradeName} · {user.tenant.code}
+                              </div>
+                            ) : (
+                              <div className="text-xs text-slate-400">
+                                Este usuario aún no tiene tenant asignado.
+                              </div>
+                            )}
+                          </div>
                         </td>
 
                         <td className="px-5 py-5">

@@ -56,6 +56,7 @@ export async function PATCH(req: Request, context: RouteContext) {
     const {
       role,
       status,
+      tenantId,
       operatorMode,
       dataSourceMode,
       percentageRate,
@@ -67,6 +68,7 @@ export async function PATCH(req: Request, context: RouteContext) {
     const data: {
       role?: "super_admin_global" | "super_admin_cliente" | "operador";
       status?: "pendiente" | "activo" | "suspendido" | "rechazado";
+      tenantId?: number | null;
       operatorMode?: "porcentaje" | "libre" | "socio" | "proveedor" | "manual" | null;
       dataSourceMode?: "base_onze" | "base_propia" | null;
       percentageRate?: number | null;
@@ -91,6 +93,37 @@ export async function PATCH(req: Request, context: RouteContext) {
         data.approvedAt = null;
         data.approvedByUserId = null;
       }
+    }
+
+    if (tenantId !== undefined) {
+      const normalizedTenantId =
+        tenantId === "" || tenantId === null ? null : Number(tenantId);
+
+      if (
+        normalizedTenantId !== null &&
+        (!normalizedTenantId || Number.isNaN(normalizedTenantId))
+      ) {
+        return NextResponse.json(
+          { error: "El tenant seleccionado no es válido." },
+          { status: 400 }
+        );
+      }
+
+      if (normalizedTenantId !== null) {
+        const tenantExists = await prisma.tenant.findUnique({
+          where: { id: normalizedTenantId },
+          select: { id: true },
+        });
+
+        if (!tenantExists) {
+          return NextResponse.json(
+            { error: "El tenant seleccionado no existe." },
+            { status: 400 }
+          );
+        }
+      }
+
+      data.tenantId = normalizedTenantId;
     }
 
     if (operatorMode !== undefined) {
@@ -162,6 +195,7 @@ export async function PATCH(req: Request, context: RouteContext) {
         email: true,
         role: true,
         status: true,
+        tenantId: true,
         operatorMode: true,
         dataSourceMode: true,
         percentageRate: true,

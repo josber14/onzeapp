@@ -29,37 +29,54 @@ export async function GET() {
       );
     }
 
-    const users = await prisma.user.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-        phone: true,
-        residenceCountryCode: true,
-        role: true,
-        status: true,
-        operatorMode: true,
-        dataSourceMode: true,
-        percentageRate: true,
-        partnerSharePercent: true,
-        canManageOperators: true,
-        canConnectOwnSheet: true,
-        createdAt: true,
-        tenant: {
-          select: {
-            id: true,
-            tradeName: true,
-            code: true,
-            active: true,
+    const [users, tenants] = await Promise.all([
+      prisma.user.findMany({
+        orderBy: {
+          createdAt: "desc",
+        },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          phone: true,
+          residenceCountryCode: true,
+          role: true,
+          status: true,
+          tenantId: true,
+          operatorMode: true,
+          dataSourceMode: true,
+          percentageRate: true,
+          partnerSharePercent: true,
+          canManageOperators: true,
+          canConnectOwnSheet: true,
+          createdAt: true,
+          tenant: {
+            select: {
+              id: true,
+              tradeName: true,
+              code: true,
+              active: true,
+            },
           },
         },
-      },
-    });
+      }),
+      prisma.tenant.findMany({
+        where: {
+          active: true,
+        },
+        orderBy: {
+          tradeName: "asc",
+        },
+        select: {
+          id: true,
+          tradeName: true,
+          code: true,
+          active: true,
+        },
+      }),
+    ]);
 
-    return NextResponse.json({ ok: true, users });
+    return NextResponse.json({ ok: true, users, tenants });
   } catch (error) {
     console.error("ADMIN_USERS_GET_ERROR", error);
 
