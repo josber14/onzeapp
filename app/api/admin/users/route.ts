@@ -29,8 +29,24 @@ export async function GET() {
       );
     }
 
+    const userWhere =
+      session.role === "super_admin_global"
+        ? {}
+        : {
+            tenantId: session.tenantId,
+          };
+
+    const tenantWhere =
+      session.role === "super_admin_global"
+        ? { active: true }
+        : {
+            id: session.tenantId ?? -1,
+            active: true,
+          };
+
     const [users, tenants] = await Promise.all([
       prisma.user.findMany({
+        where: userWhere,
         orderBy: {
           createdAt: "desc",
         },
@@ -61,9 +77,7 @@ export async function GET() {
         },
       }),
       prisma.tenant.findMany({
-        where: {
-          active: true,
-        },
+        where: tenantWhere,
         orderBy: {
           tradeName: "asc",
         },

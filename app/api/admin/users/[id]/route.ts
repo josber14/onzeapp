@@ -52,6 +52,31 @@ export async function PATCH(req: Request, context: RouteContext) {
       );
     }
 
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        tenantId: true,
+      },
+    });
+
+    if (!existingUser) {
+      return NextResponse.json(
+        { error: "El usuario no existe." },
+        { status: 404 }
+      );
+    }
+
+    if (
+      session.role === "super_admin_cliente" &&
+      existingUser.tenantId !== session.tenantId
+    ) {
+      return NextResponse.json(
+        { error: "No puedes editar usuarios de otro tenant." },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const {
       role,
@@ -80,6 +105,13 @@ export async function PATCH(req: Request, context: RouteContext) {
     } = {};
 
     if (role) {
+      if (session.role === "super_admin_cliente" && role === "super_admin_global") {
+        return NextResponse.json(
+          { error: "No puedes asignar el rol super_admin_global." },
+          { status: 403 }
+        );
+      }
+
       data.role = role;
     }
 
@@ -96,6 +128,13 @@ export async function PATCH(req: Request, context: RouteContext) {
     }
 
     if (tenantId !== undefined) {
+      if (session.role === "super_admin_cliente") {
+        return NextResponse.json(
+          { error: "No puedes reasignar usuarios entre tenants." },
+          { status: 403 }
+        );
+      }
+
       const normalizedTenantId =
         tenantId === "" || tenantId === null ? null : Number(tenantId);
 
