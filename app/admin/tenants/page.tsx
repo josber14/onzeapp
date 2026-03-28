@@ -28,6 +28,7 @@ export default function AdminTenantsPage() {
   const [tenants, setTenants] = useState<TenantItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingTenantId, setSavingTenantId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
 
   const [code, setCode] = useState("");
@@ -108,6 +109,46 @@ export default function AdminTenantsPage() {
     }
   }
 
+  async function updateTenant(
+    tenantId: number,
+    payload: {
+      code?: string;
+      tradeName?: string;
+      legalName?: string | null;
+      ownerUserId?: string | number | null;
+      dataSourceMode?: "base_onze" | "base_propia";
+      isOnzeInternal?: boolean;
+      active?: boolean;
+    }
+  ) {
+    try {
+      setSavingTenantId(tenantId);
+      setMessage("");
+
+      const res = await fetch(`/api/admin/tenants/${tenantId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMessage(data.error || "No se pudo actualizar el tenant.");
+        return;
+      }
+
+      setMessage("Tenant actualizado correctamente.");
+      await loadTenants();
+    } catch {
+      setMessage("Ocurrió un error actualizando el tenant.");
+    } finally {
+      setSavingTenantId(null);
+    }
+  }
+
   useEffect(() => {
     loadTenants();
   }, []);
@@ -126,7 +167,7 @@ export default function AdminTenantsPage() {
                   Gestión de clientes / tenants
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm text-slate-200 md:text-base">
-                  Crea y organiza la estructura base de clientes, cuentas propias y
+                  Crea, edita y organiza la estructura base de clientes, cuentas propias y
                   operación interna de ONZE.
                 </p>
               </div>
@@ -274,7 +315,7 @@ export default function AdminTenantsPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-[1100px] w-full">
+            <table className="min-w-[1400px] w-full">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                   <th className="px-5 py-4">Código</th>
@@ -287,71 +328,151 @@ export default function AdminTenantsPage() {
                   <th className="px-5 py-4">Clientes</th>
                   <th className="px-5 py-4">Operaciones</th>
                   <th className="px-5 py-4">Creado</th>
+                  <th className="px-5 py-4">Editar</th>
                 </tr>
               </thead>
 
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="px-5 py-10 text-center text-slate-500">
+                    <td colSpan={11} className="px-5 py-10 text-center text-slate-500">
                       Cargando tenants...
                     </td>
                   </tr>
                 ) : tenants.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-5 py-10 text-center text-slate-500">
+                    <td colSpan={11} className="px-5 py-10 text-center text-slate-500">
                       Todavía no hay tenants creados.
                     </td>
                   </tr>
                 ) : (
-                  tenants.map((tenant) => (
-                    <tr key={tenant.id} className="border-b border-slate-100 text-sm last:border-b-0">
-                      <td className="px-5 py-5 font-medium text-slate-900">{tenant.code}</td>
-                      <td className="px-5 py-5">
-                        <div className="font-medium text-slate-900">{tenant.tradeName}</div>
-                        <div className="mt-1 text-slate-500">{tenant.legalName || "Sin nombre legal"}</div>
-                      </td>
-                      <td className="px-5 py-5 text-slate-700">
-                        {tenant.ownerUser ? (
-                          <div>
-                            <div className="font-medium">{tenant.ownerUser.fullName}</div>
-                            <div className="mt-1 text-slate-500">{tenant.ownerUser.email}</div>
+                  tenants.map((tenant) => {
+                    const isSavingThisTenant = savingTenantId === tenant.id;
+
+                    return (
+                      <tr key={tenant.id} className="border-b border-slate-100 text-sm last:border-b-0">
+                        <td className="px-5 py-5 font-medium text-slate-900">{tenant.code}</td>
+                        <td className="px-5 py-5">
+                          <div className="font-medium text-slate-900">{tenant.tradeName}</div>
+                          <div className="mt-1 text-slate-500">{tenant.legalName || "Sin nombre legal"}</div>
+                        </td>
+                        <td className="px-5 py-5 text-slate-700">
+                          {tenant.ownerUser ? (
+                            <div>
+                              <div className="font-medium">{tenant.ownerUser.fullName}</div>
+                              <div className="mt-1 text-slate-500">{tenant.ownerUser.email}</div>
+                            </div>
+                          ) : (
+                            "Sin owner"
+                          )}
+                        </td>
+                        <td className="px-5 py-5 text-slate-700">{tenant.dataSourceMode}</td>
+                        <td className="px-5 py-5">
+                          {tenant.isOnzeInternal ? (
+                            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                              ONZE interno
+                            </span>
+                          ) : (
+                            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                              Cliente
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-5">
+                          {tenant.active ? (
+                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                              Activo
+                            </span>
+                          ) : (
+                            <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
+                              Inactivo
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-5 text-slate-700">{tenant._count?.users || 0}</td>
+                        <td className="px-5 py-5 text-slate-700">{tenant._count?.customers || 0}</td>
+                        <td className="px-5 py-5 text-slate-700">{tenant._count?.operations || 0}</td>
+                        <td className="px-5 py-5 text-slate-700">
+                          {new Date(tenant.createdAt).toLocaleDateString("es-CL")}
+                        </td>
+                        <td className="px-5 py-5">
+                          <div className="grid gap-2 min-w-[240px]">
+                            <input
+                              type="text"
+                              defaultValue={tenant.tradeName}
+                              onBlur={(e) =>
+                                updateTenant(tenant.id, { tradeName: e.target.value })
+                              }
+                              disabled={isSavingThisTenant}
+                              className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100"
+                            />
+
+                            <input
+                              type="text"
+                              defaultValue={tenant.legalName || ""}
+                              onBlur={(e) =>
+                                updateTenant(tenant.id, { legalName: e.target.value })
+                              }
+                              disabled={isSavingThisTenant}
+                              className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100"
+                            />
+
+                            <input
+                              type="number"
+                              defaultValue={tenant.ownerUserId || ""}
+                              onBlur={(e) =>
+                                updateTenant(tenant.id, { ownerUserId: e.target.value })
+                              }
+                              disabled={isSavingThisTenant}
+                              className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100"
+                            />
+
+                            <select
+                              value={tenant.dataSourceMode}
+                              onChange={(e) =>
+                                updateTenant(tenant.id, {
+                                  dataSourceMode: e.target.value as "base_onze" | "base_propia",
+                                })
+                              }
+                              disabled={isSavingThisTenant}
+                              className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100"
+                            >
+                              <option value="base_onze">base_onze</option>
+                              <option value="base_propia">base_propia</option>
+                            </select>
+
+                            <label className="flex items-center gap-2 text-xs text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={tenant.isOnzeInternal}
+                                onChange={(e) =>
+                                  updateTenant(tenant.id, {
+                                    isOnzeInternal: e.target.checked,
+                                  })
+                                }
+                                disabled={isSavingThisTenant}
+                              />
+                              Es ONZE interno
+                            </label>
+
+                            <label className="flex items-center gap-2 text-xs text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={tenant.active}
+                                onChange={(e) =>
+                                  updateTenant(tenant.id, {
+                                    active: e.target.checked,
+                                  })
+                                }
+                                disabled={isSavingThisTenant}
+                              />
+                              Tenant activo
+                            </label>
                           </div>
-                        ) : (
-                          "Sin owner"
-                        )}
-                      </td>
-                      <td className="px-5 py-5 text-slate-700">{tenant.dataSourceMode}</td>
-                      <td className="px-5 py-5">
-                        {tenant.isOnzeInternal ? (
-                          <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                            ONZE interno
-                          </span>
-                        ) : (
-                          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-                            Cliente
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-5 py-5">
-                        {tenant.active ? (
-                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                            Activo
-                          </span>
-                        ) : (
-                          <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700">
-                            Inactivo
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-5 py-5 text-slate-700">{tenant._count?.users || 0}</td>
-                      <td className="px-5 py-5 text-slate-700">{tenant._count?.customers || 0}</td>
-                      <td className="px-5 py-5 text-slate-700">{tenant._count?.operations || 0}</td>
-                      <td className="px-5 py-5 text-slate-700">
-                        {new Date(tenant.createdAt).toLocaleDateString("es-CL")}
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
