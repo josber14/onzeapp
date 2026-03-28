@@ -7,6 +7,7 @@ type SessionRole =
 
 type SessionPayload = {
   userId: number;
+  tenantId: number | null;
   email: string;
   fullName: string;
   role: SessionRole;

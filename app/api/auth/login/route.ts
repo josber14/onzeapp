@@ -44,6 +44,7 @@ export async function POST(req: Request) {
       where: { email },
       select: {
         id: true,
+        tenantId: true,
         email: true,
         fullName: true,
         role: true,
@@ -84,6 +85,7 @@ export async function POST(req: Request) {
 
     const token = createSessionToken({
       userId: user.id,
+      tenantId: user.tenantId ?? null,
       email: user.email,
       fullName: user.fullName,
       role: user.role,
@@ -93,6 +95,7 @@ export async function POST(req: Request) {
       ok: true,
       user: {
         id: user.id,
+        tenantId: user.tenantId,
         email: user.email,
         fullName: user.fullName,
         role: user.role,

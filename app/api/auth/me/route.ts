@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
       ok: true,
       user: {
         id: session.userId,
+        tenantId: session.tenantId,
         email: session.email,
         fullName: session.fullName,
         role: session.role,

@@ -7,6 +7,7 @@ export type SessionRole =
 
 export type SessionPayload = {
   userId: number;
+  tenantId: number | null;
   email: string;
   fullName: string;
   role: SessionRole;
@@ -36,6 +37,7 @@ function sign(value: string) {
 
 export function createSessionToken(data: {
   userId: number;
+  tenantId: number | null;
   email: string;
   fullName: string;
   role: SessionRole;
