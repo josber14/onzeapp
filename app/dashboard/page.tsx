@@ -14,6 +14,23 @@ export default async function DashboardPage() {
 
   let panelSrc = "/onze-panel.html";
 
+  let operatorMode = "";
+  let dataSourceMode = "";
+  let tenantId = session?.tenantId ?? "";
+
+  if (session?.userId) {
+    const user = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: {
+        operatorMode: true,
+        dataSourceMode: true,
+      },
+    });
+
+    operatorMode = user?.operatorMode || "";
+    dataSourceMode = user?.dataSourceMode || "";
+  }
+
   if (session?.tenantId) {
     const settings = await prisma.tenantSettings.findUnique({
       where: { tenantId: session.tenantId },
@@ -22,9 +39,30 @@ export default async function DashboardPage() {
       },
     });
 
+    const params = new URLSearchParams();
+
     if (settings?.sheetUrl) {
-      panelSrc = `/onze-panel.html?sheetUrl=${encodeURIComponent(settings.sheetUrl)}`;
+      params.set("sheetUrl", settings.sheetUrl);
     }
+
+    if (session?.role) {
+      params.set("role", session.role);
+    }
+
+    if (tenantId !== null && tenantId !== undefined && tenantId !== "") {
+      params.set("tenantId", String(tenantId));
+    }
+
+    if (operatorMode) {
+      params.set("operatorMode", operatorMode);
+    }
+
+    if (dataSourceMode) {
+      params.set("dataSourceMode", dataSourceMode);
+    }
+
+    const query = params.toString();
+    panelSrc = query ? `/onze-panel.html?${query}` : "/onze-panel.html";
   }
 
   return (

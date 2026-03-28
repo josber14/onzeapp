@@ -2242,6 +2242,84 @@
     const DEFAULT_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9Teo-_5ka3LKx7FXL3x3yV3uf4KhoI61ewnVJyJ90XRnksoObf4CDn-lJvrFKiQ/pub?gid=119557813&single=true&output=csv";
     const urlParams = new URLSearchParams(window.location.search);
     const CSV_URL = urlParams.get("sheetUrl") || DEFAULT_CSV_URL;
+
+    const CURRENT_USER_CONTEXT = {
+      role: urlParams.get("role") || "",
+      tenantId: urlParams.get("tenantId") || "",
+      operatorMode: urlParams.get("operatorMode") || "",
+      dataSourceMode: urlParams.get("dataSourceMode") || ""
+    };
+
+    window.currentUserContext = CURRENT_USER_CONTEXT;
+
+    function isGlobalAdmin(){
+      return CURRENT_USER_CONTEXT.role === "super_admin_global";
+    }
+
+    function isTenantAdmin(){
+      return CURRENT_USER_CONTEXT.role === "super_admin_cliente";
+    }
+
+    function isFixedPercentOperator(){
+      return CURRENT_USER_CONTEXT.operatorMode === "porcentaje";
+    }
+
+    function isPartnerOperator(){
+      return CURRENT_USER_CONTEXT.operatorMode === "socio";
+    }
+
+    function isFreeOperator(){
+      return CURRENT_USER_CONTEXT.operatorMode === "libre";
+    }
+
+    function canSeeCostRate(){
+      return isGlobalAdmin() || isTenantAdmin();
+    }
+
+    function canSeeRetailRate(){
+      return isGlobalAdmin() || isTenantAdmin() || isFixedPercentOperator() || isPartnerOperator();
+    }
+
+    function canSeeProviderRate(){
+      if(isGlobalAdmin() || isTenantAdmin()) return true;
+      if(isFreeOperator()) return true;
+      return false;
+    }
+
+    function getVisibleBaseRate(row){
+      if(!row) return null;
+
+      if(isGlobalAdmin() || isTenantAdmin()){
+        return {
+          type: "provider",
+          value: row.providerRate ?? row.value ?? null
+        };
+      }
+
+      if(isFixedPercentOperator() || isPartnerOperator()){
+        return {
+          type: "retail",
+          value: row.retailRate ?? null
+        };
+      }
+
+      if(isFreeOperator()){
+        return {
+          type: "provider",
+          value: row.providerRate ?? row.value ?? null
+        };
+      }
+
+      return {
+        type: "provider",
+        value: row.providerRate ?? row.value ?? row.value ?? null
+      };
+    }
+
+    window.canSeeCostRate = canSeeCostRate;
+    window.canSeeRetailRate = canSeeRetailRate;
+    window.canSeeProviderRate = canSeeProviderRate;
+    window.getVisibleBaseRate = getVisibleBaseRate;
     const STORAGE_KEY = "aki_transfer_operations_v2";
     const CLIENTS_KEY = "aki_transfer_clients_v1";
     const PROFILE_KEY = "onze_operator_profile_v1";
