@@ -235,6 +235,13 @@ export default function AdminPage() {
                   Ir a herramienta
                 </a>
 
+                <a
+                  href="/admin/tenants"
+                  className="inline-flex items-center justify-center rounded-2xl bg-violet-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-700"
+                >
+                  Ver tenants
+                </a>
+
                 <button
                   onClick={loadUsers}
                   className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
