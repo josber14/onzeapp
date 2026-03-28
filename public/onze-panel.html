@@ -2239,7 +2239,9 @@
   </div>
 
   <script>
-    const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9Teo-_5ka3LKx7FXL3x3yV3uf4KhoI61ewnVJyJ90XRnksoObf4CDn-lJvrFKiQ/pub?gid=119557813&single=true&output=csv";
+    const DEFAULT_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9Teo-_5ka3LKx7FXL3x3yV3uf4KhoI61ewnVJyJ90XRnksoObf4CDn-lJvrFKiQ/pub?gid=119557813&single=true&output=csv";
+    const urlParams = new URLSearchParams(window.location.search);
+    const CSV_URL = urlParams.get("sheetUrl") || DEFAULT_CSV_URL;
     const STORAGE_KEY = "aki_transfer_operations_v2";
     const CLIENTS_KEY = "aki_transfer_clients_v1";
     const PROFILE_KEY = "onze_operator_profile_v1";

@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
+import { prisma } from "@/lib/prisma";
 import LogoutButton from "@/components/logout-button";
 
 export default async function DashboardPage() {
@@ -10,6 +11,21 @@ export default async function DashboardPage() {
   const isAdmin =
     session?.role === "super_admin_global" ||
     session?.role === "super_admin_cliente";
+
+  let panelSrc = "/onze-panel.html";
+
+  if (session?.tenantId) {
+    const settings = await prisma.tenantSettings.findUnique({
+      where: { tenantId: session.tenantId },
+      select: {
+        sheetUrl: true,
+      },
+    });
+
+    if (settings?.sheetUrl) {
+      panelSrc = `/onze-panel.html?sheetUrl=${encodeURIComponent(settings.sheetUrl)}`;
+    }
+  }
 
   return (
     <main className="min-h-screen bg-[#f5f7fb]">
@@ -42,7 +58,7 @@ export default async function DashboardPage() {
       <div className="mx-auto w-full max-w-7xl px-4 py-4">
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
           <iframe
-            src="/onze-panel.html"
+            src={panelSrc}
             title="ONZE Panel"
             className="h-[calc(100vh-120px)] w-full"
           />
