@@ -362,6 +362,9 @@ model AuditLog {
 model TenantSettings {
   id                              Int      @id @default(autoincrement())
   tenantId                        Int      @unique
+  inviteCode                      String?
+  whatsappClosingNumber           String?
+  sheetUrl                        String?
   allowInternalOperatorManagement Boolean  @default(false)
   allowPairCreation               Boolean  @default(false)
   allowCountryCreation            Boolean  @default(false)
