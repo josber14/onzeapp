@@ -41,6 +41,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const auth = await requireAdmin();
     if ("error" in auth) return auth.error;
 
+    const { session } = auth;
     const { id } = await context.params;
     const tenantId = Number(id);
 
@@ -48,6 +49,30 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json(
         { error: "ID de tenant inválido." },
         { status: 400 }
+      );
+    }
+
+    const existingTenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!existingTenant) {
+      return NextResponse.json(
+        { error: "El tenant no existe." },
+        { status: 404 }
+      );
+    }
+
+    if (
+      session.role === "super_admin_cliente" &&
+      tenantId !== session.tenantId
+    ) {
+      return NextResponse.json(
+        { error: "No puedes editar un tenant que no es el tuyo." },
+        { status: 403 }
       );
     }
 
@@ -80,6 +105,13 @@ export async function PATCH(request: Request, context: RouteContext) {
         );
       }
 
+      if (session.role !== "super_admin_global") {
+        return NextResponse.json(
+          { error: "Solo el super admin global puede cambiar el código del tenant." },
+          { status: 403 }
+        );
+      }
+
       data.code = code.trim().toLowerCase();
     }
 
@@ -100,18 +132,47 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     if (ownerUserId !== undefined) {
-      data.ownerUserId =
+      const normalizedOwnerUserId =
         ownerUserId === "" || ownerUserId === null ? null : Number(ownerUserId);
 
       if (
-        data.ownerUserId !== null &&
-        (!data.ownerUserId || Number.isNaN(data.ownerUserId))
+        normalizedOwnerUserId !== null &&
+        (!normalizedOwnerUserId || Number.isNaN(normalizedOwnerUserId))
       ) {
         return NextResponse.json(
           { error: "El ownerUserId no es válido." },
           { status: 400 }
         );
       }
+
+      if (normalizedOwnerUserId !== null) {
+        const ownerUser = await prisma.user.findUnique({
+          where: { id: normalizedOwnerUserId },
+          select: {
+            id: true,
+            tenantId: true,
+          },
+        });
+
+        if (!ownerUser) {
+          return NextResponse.json(
+            { error: "El usuario owner no existe." },
+            { status: 400 }
+          );
+        }
+
+        if (
+          session.role === "super_admin_cliente" &&
+          ownerUser.tenantId !== session.tenantId
+        ) {
+          return NextResponse.json(
+            { error: "Solo puedes asignar owners de tu propio tenant." },
+            { status: 403 }
+          );
+        }
+      }
+
+      data.ownerUserId = normalizedOwnerUserId;
     }
 
     if (dataSourceMode !== undefined) {
@@ -126,6 +187,13 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     if (typeof isOnzeInternal === "boolean") {
+      if (session.role !== "super_admin_global") {
+        return NextResponse.json(
+          { error: "Solo el super admin global puede cambiar si es ONZE interno." },
+          { status: 403 }
+        );
+      }
+
       data.isOnzeInternal = isOnzeInternal;
     }
 
@@ -134,7 +202,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     if (data.code) {
-      const existingTenant = await prisma.tenant.findFirst({
+      const duplicatedCode = await prisma.tenant.findFirst({
         where: {
           code: data.code,
           NOT: {
@@ -146,7 +214,7 @@ export async function PATCH(request: Request, context: RouteContext) {
         },
       });
 
-      if (existingTenant) {
+      if (duplicatedCode) {
         return NextResponse.json(
           { error: "Ya existe otro tenant con ese código." },
           { status: 400 }

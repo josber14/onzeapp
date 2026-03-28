@@ -35,8 +35,28 @@ export async function GET() {
     const auth = await requireAdmin();
     if ("error" in auth) return auth.error;
 
+    const { session } = auth;
+
+    const tenantWhere =
+      session.role === "super_admin_global"
+        ? {}
+        : {
+            id: session.tenantId ?? -1,
+          };
+
+    const userWhere =
+      session.role === "super_admin_global"
+        ? {
+            status: "activo" as const,
+          }
+        : {
+            status: "activo" as const,
+            tenantId: session.tenantId,
+          };
+
     const [tenants, users] = await Promise.all([
       prisma.tenant.findMany({
+        where: tenantWhere,
         orderBy: {
           createdAt: "desc",
         },
@@ -67,9 +87,7 @@ export async function GET() {
         },
       }),
       prisma.user.findMany({
-        where: {
-          status: "activo",
-        },
+        where: userWhere,
         orderBy: {
           fullName: "asc",
         },
@@ -98,6 +116,15 @@ export async function POST(request: Request) {
   try {
     const auth = await requireAdmin();
     if ("error" in auth) return auth.error;
+
+    const { session } = auth;
+
+    if (session.role !== "super_admin_global") {
+      return NextResponse.json(
+        { error: "Solo el super admin global puede crear tenants." },
+        { status: 403 }
+      );
+    }
 
     const body = await request.json();
     const {
