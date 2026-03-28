@@ -32,6 +32,21 @@ type SessionUser = {
   role: "super_admin_global" | "super_admin_cliente" | "operador";
 };
 
+function getStatusBadge(status: UserItem["status"]) {
+  switch (status) {
+    case "activo":
+      return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    case "pendiente":
+      return "bg-amber-50 text-amber-700 border-amber-200";
+    case "suspendido":
+      return "bg-orange-50 text-orange-700 border-orange-200";
+    case "rechazado":
+      return "bg-red-50 text-red-700 border-red-200";
+    default:
+      return "bg-slate-50 text-slate-700 border-slate-200";
+  }
+}
+
 export default function AdminPage() {
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -175,8 +190,8 @@ export default function AdminPage() {
 
   if (checkingAccess) {
     return (
-      <main className="min-h-screen bg-[#f6f8fb] flex items-center justify-center px-4">
-        <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-lg">
+      <main className="flex min-h-screen items-center justify-center bg-[#f4f7fb] px-4">
+        <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-xl">
           <h1 className="text-2xl font-bold text-slate-900">Verificando acceso...</h1>
           <p className="mt-2 text-slate-600">Esperando validación de permisos.</p>
         </div>
@@ -185,143 +200,136 @@ export default function AdminPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f6f8fb] px-4 py-8 text-slate-900">
-      <div className="mx-auto max-w-7xl">
-        <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.06)]">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
-                ONZE Admin
-              </div>
+    <main className="min-h-screen bg-[#f4f7fb] px-4 py-6 text-slate-900 md:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1600px] space-y-6">
+        <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_20px_70px_rgba(15,23,42,0.08)]">
+          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-900 px-6 py-8 text-white md:px-8">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+              <div className="max-w-3xl">
+                <div className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-emerald-200">
+                  ONZE · Panel administrativo
+                </div>
 
-              <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">
-                Hola{sessionUser?.fullName ? `, ${sessionUser.fullName}` : ""}
-              </h1>
+                <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-4xl">
+                  Admin profesional y ordenado
+                </h1>
 
-              <p className="mt-2 text-slate-600">
-                Gestiona usuarios, roles, estados y estructura operativa desde un
-                solo panel.
-              </p>
-
-              {sessionUser && (
-                <p className="mt-2 text-sm text-slate-500">
-                  Sesión activa: {sessionUser.email} · Rol: {sessionUser.role}
+                <p className="mt-3 max-w-2xl text-sm text-slate-200 md:text-base">
+                  Gestiona usuarios, estados, modalidades operativas y estructura
+                  de trabajo desde un solo lugar.
                 </p>
-              )}
-            </div>
 
-            <div className="flex flex-wrap gap-3">
-              <a
-                href="/dashboard"
-                className="rounded-2xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-              >
-                Ir a herramienta
-              </a>
+                {sessionUser && (
+                  <p className="mt-3 text-sm text-slate-300">
+                    Sesión activa: <span className="font-medium text-white">{sessionUser.email}</span>{" "}
+                    · Rol: <span className="font-medium text-white">{sessionUser.role}</span>
+                  </p>
+                )}
+              </div>
 
-              <button
-                onClick={loadUsers}
-                className="rounded-2xl bg-[#0a8f3c] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#087a33]"
-              >
-                Actualizar
-              </button>
+              <div className="flex flex-wrap gap-3">
+                <a
+                  href="/dashboard"
+                  className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
+                >
+                  Ir a herramienta
+                </a>
 
-              <button
-                onClick={handleLogout}
-                className="rounded-2xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:bg-slate-100"
-              >
-                Cerrar sesión
-              </button>
+                <button
+                  onClick={loadUsers}
+                  className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+                >
+                  Actualizar
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  className="inline-flex items-center justify-center rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/15"
+                >
+                  Cerrar sesión
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="grid gap-4 px-6 py-6 md:grid-cols-2 xl:grid-cols-5 md:px-8">
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
               <div className="text-sm text-slate-500">Total usuarios</div>
-              <div className="mt-2 text-3xl font-semibold text-slate-950">
-                {stats.total}
-              </div>
+              <div className="mt-2 text-3xl font-semibold text-slate-950">{stats.total}</div>
             </div>
 
-            <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+            <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5">
               <div className="text-sm text-emerald-700">Activos</div>
-              <div className="mt-2 text-3xl font-semibold text-emerald-800">
-                {stats.activos}
-              </div>
+              <div className="mt-2 text-3xl font-semibold text-emerald-800">{stats.activos}</div>
             </div>
 
-            <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+            <div className="rounded-3xl border border-amber-200 bg-amber-50 p-5">
               <div className="text-sm text-amber-700">Pendientes</div>
-              <div className="mt-2 text-3xl font-semibold text-amber-800">
-                {stats.pendientes}
-              </div>
+              <div className="mt-2 text-3xl font-semibold text-amber-800">{stats.pendientes}</div>
             </div>
 
-            <div className="rounded-3xl border border-orange-200 bg-orange-50 p-5 shadow-sm">
+            <div className="rounded-3xl border border-orange-200 bg-orange-50 p-5">
               <div className="text-sm text-orange-700">Suspendidos</div>
-              <div className="mt-2 text-3xl font-semibold text-orange-800">
-                {stats.suspendidos}
-              </div>
+              <div className="mt-2 text-3xl font-semibold text-orange-800">{stats.suspendidos}</div>
             </div>
 
-            <div className="rounded-3xl border border-red-200 bg-red-50 p-5 shadow-sm">
+            <div className="rounded-3xl border border-red-200 bg-red-50 p-5">
               <div className="text-sm text-red-700">Rechazados</div>
-              <div className="mt-2 text-3xl font-semibold text-red-800">
-                {stats.rechazados}
-              </div>
+              <div className="mt-2 text-3xl font-semibold text-red-800">{stats.rechazados}</div>
             </div>
           </div>
+        </section>
 
-          <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-4">
-            <div className="grid gap-4 lg:grid-cols-[1.3fr_0.7fr_0.7fr]">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Buscar usuario
-                </label>
-                <input
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Nombre, correo, teléfono o tenant..."
-                  className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500"
-                />
-              </div>
+        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+          <div className="grid gap-4 xl:grid-cols-[1.4fr_0.8fr_0.8fr]">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Buscar usuario
+              </label>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Nombre, correo, teléfono o tenant..."
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              />
+            </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Filtrar por rol
-                </label>
-                <select
-                  value={roleFilter}
-                  onChange={(e) =>
-                    setRoleFilter(e.target.value as "todos" | UserItem["role"])
-                  }
-                  className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none"
-                >
-                  <option value="todos">Todos</option>
-                  <option value="super_admin_global">super_admin_global</option>
-                  <option value="super_admin_cliente">super_admin_cliente</option>
-                  <option value="operador">operador</option>
-                </select>
-              </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Filtrar por rol
+              </label>
+              <select
+                value={roleFilter}
+                onChange={(e) =>
+                  setRoleFilter(e.target.value as "todos" | UserItem["role"])
+                }
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none appearance-none"
+              >
+                <option value="todos">Todos</option>
+                <option value="super_admin_global">super_admin_global</option>
+                <option value="super_admin_cliente">super_admin_cliente</option>
+                <option value="operador">operador</option>
+              </select>
+            </div>
 
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Filtrar por estado
-                </label>
-                <select
-                  value={statusFilter}
-                  onChange={(e) =>
-                    setStatusFilter(e.target.value as "todos" | UserItem["status"])
-                  }
-                  className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none"
-                >
-                  <option value="todos">Todos</option>
-                  <option value="activo">activo</option>
-                  <option value="pendiente">pendiente</option>
-                  <option value="suspendido">suspendido</option>
-                  <option value="rechazado">rechazado</option>
-                </select>
-              </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-700">
+                Filtrar por estado
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value as "todos" | UserItem["status"])
+                }
+                className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none appearance-none"
+              >
+                <option value="todos">Todos</option>
+                <option value="activo">activo</option>
+                <option value="pendiente">pendiente</option>
+                <option value="suspendido">suspendido</option>
+                <option value="rechazado">rechazado</option>
+              </select>
             </div>
           </div>
 
@@ -330,107 +338,114 @@ export default function AdminPage() {
               {message}
             </div>
           )}
+        </section>
 
-          <div className="mt-6 rounded-3xl border border-slate-200 bg-white">
-            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Usuarios registrados
-                </h2>
-                <p className="text-sm text-slate-500">
-                  Mostrando {filteredUsers.length} de {users.length} usuarios
-                </p>
-              </div>
+        <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-2 border-b border-slate-200 px-6 py-5 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Usuarios registrados</h2>
+              <p className="text-sm text-slate-500">
+                Mostrando {filteredUsers.length} de {users.length} usuarios
+              </p>
             </div>
+          </div>
 
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-sm text-slate-500">
-                    <th className="px-5 py-4">Usuario</th>
-                    <th className="px-5 py-4">Tenant</th>
-                    <th className="px-5 py-4">Rol</th>
-                    <th className="px-5 py-4">Estado</th>
-                    <th className="px-5 py-4">Modalidad</th>
-                    <th className="px-5 py-4">País</th>
-                    <th className="px-5 py-4">Creado</th>
-                    <th className="px-5 py-4">Acciones</th>
+          <div className="overflow-x-auto">
+            <table className="min-w-[1500px] w-full">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-5 py-4">Usuario</th>
+                  <th className="px-5 py-4">Tenant</th>
+                  <th className="px-5 py-4">Rol</th>
+                  <th className="px-5 py-4">Estado</th>
+                  <th className="px-5 py-4">Modalidad</th>
+                  <th className="px-5 py-4">Permisos</th>
+                  <th className="px-5 py-4">País</th>
+                  <th className="px-5 py-4">Creado</th>
+                  <th className="px-5 py-4">Acciones</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={9} className="px-5 py-10 text-center text-slate-500">
+                      Cargando usuarios...
+                    </td>
                   </tr>
-                </thead>
+                ) : filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="px-5 py-10 text-center text-slate-500">
+                      No hay usuarios que coincidan con la búsqueda o filtros.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredUsers.map((user) => {
+                    const isCurrentUser = sessionUser?.id === user.id;
+                    const isSavingThisUser = savingId === user.id;
+                    const operatorMode = user.operatorMode || "";
+                    const dataSourceMode = user.dataSourceMode || "";
 
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan={8} className="px-5 py-10 text-center text-slate-500">
-                        Cargando usuarios...
-                      </td>
-                    </tr>
-                  ) : filteredUsers.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="px-5 py-10 text-center text-slate-500">
-                        No hay usuarios que coincidan con la búsqueda o filtros.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredUsers.map((user) => {
-                      const isCurrentUser = sessionUser?.id === user.id;
-                      const isSavingThisUser = savingId === user.id;
+                    const showPercentageRate = operatorMode === "porcentaje";
+                    const showPartnerShare = operatorMode === "socio";
+                    const disableAllModeInputs = isSavingThisUser || isCurrentUser;
 
-                      return (
-                        <tr
-                          key={user.id}
-                          className="border-b border-slate-100 text-sm last:border-b-0"
-                        >
-                          <td className="px-5 py-5 align-top">
-                            <div className="font-semibold text-slate-900">
-                              {user.fullName}
+                    return (
+                      <tr
+                        key={user.id}
+                        className="border-b border-slate-100 align-top text-sm last:border-b-0"
+                      >
+                        <td className="px-5 py-5">
+                          <div className="font-semibold text-slate-900">{user.fullName}</div>
+                          <div className="mt-1 text-slate-600">{user.email}</div>
+                          {user.phone && (
+                            <div className="mt-1 text-slate-500">{user.phone}</div>
+                          )}
+                          {isCurrentUser && (
+                            <div className="mt-3 inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                              Tu cuenta actual
                             </div>
-                            <div className="mt-1 text-slate-600">{user.email}</div>
-                            {user.phone && (
-                              <div className="mt-1 text-slate-500">{user.phone}</div>
-                            )}
-                            {isCurrentUser && (
-                              <div className="mt-2 inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                                Tu cuenta actual
-                              </div>
-                            )}
-                          </td>
+                          )}
+                        </td>
 
-                          <td className="px-5 py-5 align-top text-slate-700">
-                            {user.tenant ? (
-                              <div>
-                                <div className="font-medium">{user.tenant.tradeName}</div>
-                                <div className="mt-1 text-slate-500">
-                                  {user.tenant.code}
-                                </div>
-                              </div>
-                            ) : (
-                              "Sin tenant"
-                            )}
-                          </td>
+                        <td className="px-5 py-5 text-slate-700">
+                          {user.tenant ? (
+                            <div>
+                              <div className="font-medium">{user.tenant.tradeName}</div>
+                              <div className="mt-1 text-slate-500">{user.tenant.code}</div>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">Sin tenant</span>
+                          )}
+                        </td>
 
-                          <td className="px-5 py-5 align-top">
-                            <select
-                              value={user.role}
-                              onChange={(e) =>
-                                updateUser(user.id, {
-                                  role: e.target.value as UserItem["role"],
-                                })
-                              }
-                              disabled={isSavingThisUser || isCurrentUser}
-                              className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                        <td className="px-5 py-5">
+                          <select
+                            value={user.role}
+                            onChange={(e) =>
+                              updateUser(user.id, {
+                                role: e.target.value as UserItem["role"],
+                              })
+                            }
+                            disabled={isSavingThisUser || isCurrentUser}
+                            className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                          >
+                            <option value="super_admin_global">super_admin_global</option>
+                            <option value="super_admin_cliente">super_admin_cliente</option>
+                            <option value="operador">operador</option>
+                          </select>
+                        </td>
+
+                        <td className="px-5 py-5">
+                          <div className="space-y-3">
+                            <div
+                              className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadge(
+                                user.status
+                              )}`}
                             >
-                              <option value="super_admin_global">
-                                super_admin_global
-                              </option>
-                              <option value="super_admin_cliente">
-                                super_admin_cliente
-                              </option>
-                              <option value="operador">operador</option>
-                            </select>
-                          </td>
+                              {user.status}
+                            </div>
 
-                          <td className="px-5 py-5 align-top">
                             <select
                               value={user.status}
                               onChange={(e) =>
@@ -439,25 +454,30 @@ export default function AdminPage() {
                                 })
                               }
                               disabled={isSavingThisUser || isCurrentUser}
-                              className="rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                              className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                             >
                               <option value="pendiente">pendiente</option>
                               <option value="activo">activo</option>
                               <option value="suspendido">suspendido</option>
                               <option value="rechazado">rechazado</option>
                             </select>
-                          </td>
+                          </div>
+                        </td>
 
-                          <td className="px-5 py-5 align-top">
-                            <div className="space-y-2">
+                        <td className="px-5 py-5">
+                          <div className="space-y-3 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                            <div>
+                              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                Modo operador
+                              </label>
                               <select
-                                value={user.operatorMode || ""}
+                                value={operatorMode}
                                 onChange={(e) =>
                                   updateUser(user.id, {
                                     operatorMode: (e.target.value || null) as UserItem["operatorMode"],
                                   })
                                 }
-                                disabled={isSavingThisUser || isCurrentUser}
+                                disabled={disableAllModeInputs}
                                 className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                               >
                                 <option value="">Sin modalidad</option>
@@ -467,134 +487,167 @@ export default function AdminPage() {
                                 <option value="proveedor">proveedor</option>
                                 <option value="manual">manual</option>
                               </select>
+                            </div>
 
+                            <div>
+                              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                Fuente de datos
+                              </label>
                               <select
-                                value={user.dataSourceMode || ""}
+                                value={dataSourceMode}
                                 onChange={(e) =>
                                   updateUser(user.id, {
                                     dataSourceMode: (e.target.value || null) as UserItem["dataSourceMode"],
                                   })
                                 }
-                                disabled={isSavingThisUser || isCurrentUser}
+                                disabled={disableAllModeInputs}
                                 className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                               >
                                 <option value="">Sin fuente</option>
                                 <option value="base_onze">base_onze</option>
                                 <option value="base_propia">base_propia</option>
                               </select>
+                            </div>
 
+                            <div className={showPercentageRate ? "block" : "hidden"}>
+                              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                % operador
+                              </label>
                               <input
                                 type="number"
                                 step="0.0001"
-                                placeholder="% operador"
+                                placeholder="Ej: 2"
                                 defaultValue={user.percentageRate ?? ""}
                                 onBlur={(e) =>
                                   updateUser(user.id, {
                                     percentageRate: e.target.value,
                                   })
                                 }
-                                disabled={isSavingThisUser || isCurrentUser}
+                                disabled={disableAllModeInputs}
                                 className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                               />
+                            </div>
 
+                            <div className={showPartnerShare ? "block" : "hidden"}>
+                              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                % socio
+                              </label>
                               <input
                                 type="number"
                                 step="0.0001"
-                                placeholder="% socio"
+                                placeholder="Ej: 50"
                                 defaultValue={user.partnerSharePercent ?? ""}
                                 onBlur={(e) =>
                                   updateUser(user.id, {
                                     partnerSharePercent: e.target.value,
                                   })
                                 }
-                                disabled={isSavingThisUser || isCurrentUser}
+                                disabled={disableAllModeInputs}
                                 className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                               />
-
-                              <label className="flex items-center gap-2 text-xs text-slate-700">
-                                <input
-                                  type="checkbox"
-                                  checked={user.canManageOperators}
-                                  onChange={(e) =>
-                                    updateUser(user.id, {
-                                      canManageOperators: e.target.checked,
-                                    })
-                                  }
-                                  disabled={isSavingThisUser || isCurrentUser}
-                                />
-                                Puede gestionar operadores
-                              </label>
-
-                              <label className="flex items-center gap-2 text-xs text-slate-700">
-                                <input
-                                  type="checkbox"
-                                  checked={user.canConnectOwnSheet}
-                                  onChange={(e) =>
-                                    updateUser(user.id, {
-                                      canConnectOwnSheet: e.target.checked,
-                                    })
-                                  }
-                                  disabled={isSavingThisUser || isCurrentUser}
-                                />
-                                Puede conectar base propia
-                              </label>
                             </div>
-                          </td>
 
-                          <td className="px-5 py-5 align-top text-slate-700">
-                            {user.residenceCountryCode || "—"}
-                          </td>
-
-                          <td className="px-5 py-5 align-top text-slate-700">
-                            {new Date(user.createdAt).toLocaleDateString("es-CL")}
-                          </td>
-
-                          <td className="px-5 py-5 align-top">
-                            {isCurrentUser ? (
-                              <div className="text-xs font-medium text-slate-500">
-                                No puedes modificar tu propia cuenta desde este panel.
+                            {!showPercentageRate && !showPartnerShare && operatorMode ? (
+                              <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">
+                                Esta modalidad no requiere porcentajes.
                               </div>
-                            ) : (
-                              <div className="flex flex-col gap-2">
-                                <button
-                                  onClick={() => updateUser(user.id, { status: "activo" })}
-                                  disabled={isSavingThisUser}
-                                  className="rounded-2xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
-                                >
-                                  Aprobar
-                                </button>
+                            ) : null}
+                          </div>
+                        </td>
 
-                                <button
-                                  onClick={() =>
-                                    updateUser(user.id, { status: "suspendido" })
-                                  }
-                                  disabled={isSavingThisUser}
-                                  className="rounded-2xl bg-amber-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
-                                >
-                                  Suspender
-                                </button>
+                        <td className="px-5 py-5">
+                          <div className="space-y-3 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                            <label className="flex items-center gap-2 text-sm text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={user.canManageOperators}
+                                onChange={(e) =>
+                                  updateUser(user.id, {
+                                    canManageOperators: e.target.checked,
+                                  })
+                                }
+                                disabled={disableAllModeInputs}
+                              />
+                              Puede gestionar operadores
+                            </label>
 
-                                <button
-                                  onClick={() =>
-                                    updateUser(user.id, { status: "rechazado" })
-                                  }
-                                  disabled={isSavingThisUser}
-                                  className="rounded-2xl bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
-                                >
-                                  Rechazar
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                            <label className="flex items-center gap-2 text-sm text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={user.canConnectOwnSheet}
+                                onChange={(e) =>
+                                  updateUser(user.id, {
+                                    canConnectOwnSheet: e.target.checked,
+                                  })
+                                }
+                                disabled={disableAllModeInputs || dataSourceMode === "base_onze"}
+                              />
+                              Puede conectar base propia
+                            </label>
+
+                            <div className="text-xs text-slate-500">
+                              {dataSourceMode === "base_propia"
+                                ? "Con base propia, este permiso queda alineado automáticamente."
+                                : dataSourceMode === "base_onze"
+                                ? "Con base ONZE, la hoja propia queda desactivada."
+                                : "Define la fuente de datos para alinear permisos."}
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-5 text-slate-700">
+                          {user.residenceCountryCode || "—"}
+                        </td>
+
+                        <td className="px-5 py-5 text-slate-700">
+                          {new Date(user.createdAt).toLocaleDateString("es-CL")}
+                        </td>
+
+                        <td className="px-5 py-5">
+                          {isCurrentUser ? (
+                            <div className="max-w-[220px] text-xs font-medium text-slate-500">
+                              No puedes modificar tu propia cuenta desde este panel.
+                            </div>
+                          ) : (
+                            <div className="flex flex-col gap-2">
+                              <button
+                                onClick={() => updateUser(user.id, { status: "activo" })}
+                                disabled={isSavingThisUser}
+                                className="rounded-2xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                              >
+                                Aprobar
+                              </button>
+
+                              <button
+                                onClick={() =>
+                                  updateUser(user.id, { status: "suspendido" })
+                                }
+                                disabled={isSavingThisUser}
+                                className="rounded-2xl bg-amber-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-amber-600 disabled:opacity-60"
+                              >
+                                Suspender
+                              </button>
+
+                              <button
+                                onClick={() =>
+                                  updateUser(user.id, { status: "rechazado" })
+                                }
+                                disabled={isSavingThisUser}
+                                className="rounded-2xl bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+                              >
+                                Rechazar
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        </div>
+        </section>
       </div>
     </main>
   );
