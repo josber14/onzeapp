@@ -1513,23 +1513,28 @@
       }
 
       .calc-grid{
-        grid-template-columns:minmax(0,1.18fr) 34px minmax(0,1.18fr);
-        gap:6px;
+        grid-template-columns:1fr;
+        gap:8px;
+      }
+
+      .calc-mid{
+        display:flex;
+        justify-content:center;
       }
 
       .calc-input-wrap{
         height:46px;
-        padding:0 8px;
-        border-radius:14px;
+        padding:0 10px;
+        border-radius:12px;
         gap:6px;
       }
 
       .calc-input{
-        font-size:15px;
+        font-size:18px;
       }
 
       .calc-cur{
-        font-size:9px;
+        font-size:10px;
       }
 
       .calc-col-top{
@@ -1537,9 +1542,9 @@
       }
 
       .swap-btn{
-        width:34px;
-        height:34px;
-        border-radius:10px;
+        width:28px;
+        height:28px;
+        border-radius:8px;
       }
 
       .modal{
@@ -3706,12 +3711,7 @@
           originInput.autocomplete = "off";
           originInput.value = state.origin;
 
-          const leftCur = document.createElement("span");
-          leftCur.className = "calc-cur";
-          leftCur.textContent = curOrigin || "MON";
-
           leftWrap.appendChild(originInput);
-          leftWrap.appendChild(leftCur);
           leftCol.appendChild(leftWrap);
 
           const mid = document.createElement("div");
@@ -3741,12 +3741,7 @@
           destInput.autocomplete = "off";
           destInput.value = state.dest;
 
-          const rightCur = document.createElement("span");
-          rightCur.className = "calc-cur";
-          rightCur.textContent = destCur;
-
           rightWrap.appendChild(destInput);
-          rightWrap.appendChild(rightCur);
           rightCol.appendChild(rightWrap);
 
           leftWrap.classList.add("calc-copyable");
