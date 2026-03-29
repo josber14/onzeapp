@@ -16,6 +16,8 @@ export default async function DashboardPage() {
 
   let operatorMode = "";
   let dataSourceMode = "";
+  let percentageRate = "";
+  let partnerSharePercent = "";
   let tenantId = session?.tenantId ?? "";
 
   if (session?.userId) {
@@ -24,12 +26,24 @@ export default async function DashboardPage() {
       select: {
         operatorMode: true,
         dataSourceMode: true,
+        percentageRate: true,
+        partnerSharePercent: true,
       },
     });
 
     operatorMode = user?.operatorMode || "";
     dataSourceMode = user?.dataSourceMode || "";
+    percentageRate =
+      user?.percentageRate !== null && user?.percentageRate !== undefined
+        ? String(user.percentageRate)
+        : "";
+    partnerSharePercent =
+      user?.partnerSharePercent !== null && user?.partnerSharePercent !== undefined
+        ? String(user.partnerSharePercent)
+        : "";
   }
+
+  const params = new URLSearchParams();
 
   if (session?.tenantId) {
     const settings = await prisma.tenantSettings.findUnique({
@@ -39,31 +53,37 @@ export default async function DashboardPage() {
       },
     });
 
-    const params = new URLSearchParams();
-
     if (settings?.sheetUrl) {
       params.set("sheetUrl", settings.sheetUrl);
     }
-
-    if (session?.role) {
-      params.set("role", session.role);
-    }
-
-    if (tenantId !== null && tenantId !== undefined && tenantId !== "") {
-      params.set("tenantId", String(tenantId));
-    }
-
-    if (operatorMode) {
-      params.set("operatorMode", operatorMode);
-    }
-
-    if (dataSourceMode) {
-      params.set("dataSourceMode", dataSourceMode);
-    }
-
-    const query = params.toString();
-    panelSrc = query ? `/onze-panel.html?${query}` : "/onze-panel.html";
   }
+
+  if (session?.role) {
+    params.set("role", session.role);
+  }
+
+  if (tenantId !== null && tenantId !== undefined && tenantId !== "") {
+    params.set("tenantId", String(tenantId));
+  }
+
+  if (operatorMode) {
+    params.set("operatorMode", operatorMode);
+  }
+
+  if (dataSourceMode) {
+    params.set("dataSourceMode", dataSourceMode);
+  }
+
+  if (percentageRate) {
+    params.set("percentageRate", percentageRate);
+  }
+
+  if (partnerSharePercent) {
+    params.set("partnerSharePercent", partnerSharePercent);
+  }
+
+  const query = params.toString();
+  panelSrc = query ? `/onze-panel.html?${query}` : "/onze-panel.html";
 
   return (
     <main className="min-h-screen bg-[#f5f7fb]">

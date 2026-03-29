@@ -2144,7 +2144,8 @@
               <div class="summary-label">Ruta</div>
               <div class="summary-value" id="summaryRoute">—</div>
             </div>
-            <div class="summary-item">
+
+            <div class="summary-item" id="summaryProviderRateWrap">
               <div class="summary-label">Tasa proveedor</div>
               <div class="summary-value" id="summaryProviderRate">—</div>
             </div>
@@ -2163,6 +2164,39 @@
             <div class="summary-item">
               <div class="summary-label">Recibe</div>
               <div class="summary-value" id="summaryReceive">—</div>
+            </div>
+            <div class="summary-item" id="summaryProviderPayWrap" style="display:none;">
+              <div class="summary-label">Total a pagar proveedor</div>
+              <div class="summary-value" id="summaryProviderPay">—</div>
+            </div>
+          </div>
+
+          <div
+            id="registerPartnerSummary"
+            style="display:none; margin-top:14px; padding:14px; border-radius:14px; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);"
+          >
+            <div style="font-weight:800; font-size:14px; margin-bottom:10px;">
+              Resumen de utilidad
+            </div>
+
+            <div
+              id="registerPartnerSummaryGrid"
+              style="display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px;"
+            >
+              <div style="padding:10px 12px; border-radius:12px; background:rgba(255,255,255,.04);">
+                <div style="font-size:12px; opacity:.75;">Ganancia ONZE</div>
+                <div id="registerPartnerProfit" style="font-weight:800; font-size:18px;">—</div>
+              </div>
+
+              <div style="padding:10px 12px; border-radius:12px; background:rgba(255,255,255,.04);">
+                <div id="registerPartnerTotalLabel" style="font-size:12px; opacity:.75;">Ganancia socio</div>
+                <div id="registerPartnerTotal" style="font-weight:800; font-size:18px;">—</div>
+              </div>
+
+              <div id="registerPartnerCostWrap" style="display:none; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,.04);">
+                <div id="registerPartnerCostLabel" style="font-size:12px; opacity:.75;">Costo destino</div>
+                <div id="registerPartnerCost" style="font-weight:800; font-size:18px;">—</div>
+              </div>
             </div>
           </div>
         </div>
@@ -2196,6 +2230,20 @@
           <div class="field full">
             <label>Guardar ganancia en</label>
             <div class="radio-group" id="profitCurrencyGroup"></div>
+          </div>
+
+          <div class="field full" id="payerSideGroup" style="display:none;">
+            <label>¿Quién paga el destino?</label>
+            <div class="radio-group" id="payerSideChoices">
+              <label class="radio-pill active">
+                <input type="radio" name="payerSideChoice" value="onze" checked>
+                ONZE
+              </label>
+              <label class="radio-pill">
+                <input type="radio" name="payerSideChoice" value="socio">
+                Socio
+              </label>
+            </div>
           </div>
 
           <div class="field full" id="profitConvertQuestionGroup" style="display:none;">
@@ -2244,10 +2292,12 @@
     const CSV_URL = urlParams.get("sheetUrl") || DEFAULT_CSV_URL;
 
     const CURRENT_USER_CONTEXT = {
-      role: urlParams.get("role") || "",
+      role: (urlParams.get("role") || "").trim().toLowerCase(),
       tenantId: urlParams.get("tenantId") || "",
-      operatorMode: urlParams.get("operatorMode") || "",
-      dataSourceMode: urlParams.get("dataSourceMode") || ""
+      operatorMode: (urlParams.get("operatorMode") || "").trim().toLowerCase(),
+      dataSourceMode: (urlParams.get("dataSourceMode") || "").trim().toLowerCase(),
+      percentageRate: Number(urlParams.get("percentageRate") || 0),
+      partnerSharePercent: Number(urlParams.get("partnerSharePercent") || 0)
     };
 
     window.currentUserContext = CURRENT_USER_CONTEXT;
@@ -2268,8 +2318,92 @@
       return CURRENT_USER_CONTEXT.operatorMode === "socio";
     }
 
+    function isFiftyFiftyPartner(){
+      return CURRENT_USER_CONTEXT.operatorMode === "socio";
+    }
+
     function isFreeOperator(){
       return CURRENT_USER_CONTEXT.operatorMode === "libre";
+    }
+
+    function getFixedPercentValue(){
+      const value = Number(CURRENT_USER_CONTEXT.percentageRate || 0);
+      return Number.isFinite(value) ? value : 0;
+    }
+
+    function calcFixedPercentProfitFromOrigin(originAmount){
+      const amount = Number(originAmount || 0);
+      const pct = getFixedPercentValue();
+      if(!Number.isFinite(amount) || !Number.isFinite(pct)) return 0;
+      return amount * (pct / 100);
+    }
+
+    function parsePercentLike(value){
+      if(value === null || value === undefined || value === "") return 0;
+      if(typeof value === "number") return Number.isFinite(value) ? value : 0;
+      const n = parseHumanNumber(String(value));
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function calcOriginNetAfterCommission(originAmount, commissionPercent){
+      const amount = Number(originAmount || 0);
+      const pct = parsePercentLike(commissionPercent);
+      if(!Number.isFinite(amount) || !Number.isFinite(pct)) return 0;
+      return amount - (amount * (pct / 100));
+    }
+
+    function round2(value){
+      if(!Number.isFinite(value)) return 0;
+      return Math.round(value * 100) / 100;
+    }
+
+    function calcPartner5050Metrics({
+      originAmount,
+      receiveAmount,
+      originBuyRate,
+      destSellRate,
+      commissionPercent = 0
+    }){
+      const amountOrigin = Number(originAmount || 0);
+      const amountDest = Number(receiveAmount || 0);
+      const buyOrigin = Number(originBuyRate || 0);
+      const sellDest = Number(destSellRate || 0);
+      const commissionPct = parsePercentLike(commissionPercent);
+
+      if(
+        !Number.isFinite(amountOrigin) ||
+        !Number.isFinite(amountDest) ||
+        !Number.isFinite(buyOrigin) || buyOrigin <= 0 ||
+        !Number.isFinite(sellDest) || sellDest <= 0
+      ){
+        return null;
+      }
+
+      const originNet = calcOriginNetAfterCommission(amountOrigin, commissionPct);
+      const usdtOrigin = round2(originNet / buyOrigin);
+      const usdtDest = round2(amountDest / sellDest);
+      const totalProfit = round2(usdtOrigin - usdtDest);
+      const partnerProfit = round2(totalProfit / 2);
+      const onzeProfit = round2(totalProfit / 2);
+      const totalOnze = round2(usdtDest + onzeProfit);
+
+      return {
+        commissionPercent: commissionPct,
+        originNet,
+        usdtOrigin,
+        usdtDest,
+        totalProfit,
+        partnerProfit,
+        onzeProfit,
+        totalOnze
+      };
+    }
+
+    function parsePercentLike(value){
+      if(value === null || value === undefined || value === "") return 0;
+      if(typeof value === "number") return Number.isFinite(value) ? value : 0;
+      const n = parseHumanNumber(String(value));
+      return Number.isFinite(n) ? n : 0;
     }
 
     function canSeeCostRate(){
@@ -2341,6 +2475,35 @@
     const profitBtn = document.getElementById("profitBtn");
     const profitMenu = document.getElementById("profitMenu");
     const pctBadge = document.getElementById("pctBadge");
+
+    if(isFixedPercentOperator() || isPartnerOperator()){
+      const profitInfoRow = profitBtn ? profitBtn.closest(".muted") : null;
+      const popoverWrap = profitBtn ? profitBtn.closest(".popover") : null;
+
+      if(pctBadge){
+        pctBadge.textContent = "";
+        pctBadge.classList.remove("show");
+      }
+
+      if(profitInfoRow){
+        profitInfoRow.style.display = "none";
+      }
+
+      if(popoverWrap){
+        popoverWrap.style.display = "none";
+      }
+
+      if(profitBtn){
+        profitBtn.disabled = true;
+        profitBtn.style.display = "none";
+      }
+
+      if(profitMenu){
+        profitMenu.classList.remove("open");
+        profitMenu.style.display = "none";
+      }
+    }
+
     const toggleCalc = document.getElementById("toggleCalc");
     const calcState = document.getElementById("calcState");
     const customPct = document.getElementById("customPct");
@@ -2361,11 +2524,14 @@
     const saveOperationBtn = document.getElementById("saveOperationBtn");
 
     const summaryRoute = document.getElementById("summaryRoute");
+    const summaryProviderRateWrap = document.getElementById("summaryProviderRateWrap");
     const summaryProviderRate = document.getElementById("summaryProviderRate");
     const summaryClientRate = document.getElementById("summaryClientRate");
     const summaryMargin = document.getElementById("summaryMargin");
     const summarySend = document.getElementById("summarySend");
     const summaryReceive = document.getElementById("summaryReceive");
+    const summaryProviderPayWrap = document.getElementById("summaryProviderPayWrap");
+    const summaryProviderPay = document.getElementById("summaryProviderPay");
 
     const clientName = document.getElementById("clientName");
     const clientSuggestionsList = document.getElementById("clientSuggestionsList");
@@ -2373,6 +2539,8 @@
     const operationDate = document.getElementById("operationDate");
     const operationNote = document.getElementById("operationNote");
     const profitCurrencyGroup = document.getElementById("profitCurrencyGroup");
+    const payerSideGroup = document.getElementById("payerSideGroup");
+    const payerSideChoices = document.getElementById("payerSideChoices");
     const profitConvertQuestionGroup = document.getElementById("profitConvertQuestionGroup");
     const profitConvertQuestion = document.getElementById("profitConvertQuestion");
     const profitConvertTargetGroup = document.getElementById("profitConvertTargetGroup");
@@ -2399,6 +2567,7 @@
     let lastDataSnapshot = null;
     let showAllRates = false;
     let pendingRegisterData = null;
+    let COUNTRY_TRADE_RATES = {};
     const calcBidirectional = new Map();
 
     const currencyMapRaw = {
@@ -2593,15 +2762,20 @@
       if(str == null) return NaN;
       let s = String(str).trim();
       if(!s) return NaN;
+
       const low = s.toLowerCase();
       if(low.includes("error") || low.includes("#div/0") || low.includes("#n/a") || low.includes("#ref") || low.includes("#value")) return NaN;
+
+      s = s.replace(/\$/g, "").replace(/\s+/g, "");
+
       if(s.includes(",") && (s.lastIndexOf(",") > s.lastIndexOf("."))){
         s = s.replace(/\./g, "").replace(",", ".");
       }else{
         s = s.replace(/,/g, "");
       }
+
       const n = Number(s);
-      return isFinite(n) ? n : NaN;
+      return Number.isFinite(n) ? n : NaN;
     }
 
     const EXCEPTIONS_UP = new Set([
@@ -2618,6 +2792,8 @@
       const candid = ["origen","pais origen","origen pais","pais"];
       const candd = ["destino","pais destino","destino pais"];
       const candt = ["tasa","tasas","rate","valor","tipo de cambio","tipo cambio"];
+      const candCost = ["tasa costo","costo","coste","cost rate","provider cost"];
+      const candRetail = ["tasa detal","tasa detail","detail","retail","retail rate","tasa retail"];
       const cande = ["decimales","decimals","precision"];
       const candm = ["modo","ajuste","signo","sentido"];
       const cando = ["operacion","operación","calc","calculo","cálculo","op"];
@@ -2633,6 +2809,8 @@
             iOrigen,
             iDestino,
             iTasa,
+            iTasaCosto: hdr.findIndex(h => candCost.includes(h)),
+            iTasaDetal: hdr.findIndex(h => candRetail.includes(h)),
             iDecimales: hdr.findIndex(h => cande.includes(h)),
             iModo: hdr.findIndex(h => candm.includes(h)),
             iOperacion: hdr.findIndex(h => cando.includes(h))
@@ -2640,6 +2818,37 @@
         }
       }
       return null;
+    }
+
+    function buildCountryTradeRates(rows){
+      const map = {};
+      let started = false;
+
+      for(const row of rows){
+        const countryCell = String(row[6] || "").trim();
+        const buyCell = row[7];
+        const sellCell = row[8];
+        const countryNorm = norm(countryCell);
+
+        if(!started){
+          if(countryNorm === "pais" && norm(row[7] || "") === "compra" && norm(row[8] || "") === "venta"){
+            started = true;
+          }
+          continue;
+        }
+
+        if(!countryCell) continue;
+
+        const buy = parseRate(buyCell);
+        const sell = parseRate(sellCell);
+
+        map[norm(countryCell)] = {
+          buy: Number.isFinite(buy) ? buy : null,
+          sell: Number.isFinite(sell) ? sell : null
+        };
+      }
+
+      return map;
     }
 
     function buildDataRobust(rows){
@@ -2653,15 +2862,20 @@
         const origen = String(row[idx.iOrigen] || "").trim();
         const destino = String(row[idx.iDestino] || "").trim();
         const tasaText = row[idx.iTasa];
+        const tasaCostoText = idx.iTasaCosto >= 0 ? row[idx.iTasaCosto] : "";
+        const tasaDetalText = idx.iTasaDetal >= 0 ? row[idx.iTasaDetal] : "";
         if(!origen || !destino) continue;
 
         const rateNum = parseRate(tasaText);
+        const costRateNum = parseRate(tasaCostoText);
+        const retailRateNum = parseRate(tasaDetalText);
+
         let decimals = 0;
         if(idx.iDecimales >= 0){
           const d = Number(String(row[idx.iDecimales] || "").trim());
-          decimals = Number.isInteger(d) ? Math.max(0, Math.min(12, d)) : countDecimalsFromText(tasaText);
+          decimals = Number.isInteger(d) ? Math.max(0, Math.min(12, d)) : countDecimalsFromText(tasaDetalText || tasaText);
         }else{
-          decimals = countDecimalsFromText(tasaText);
+          decimals = countDecimalsFromText(tasaDetalText || tasaText);
         }
 
         let mode = "down";
@@ -2683,12 +2897,28 @@
         }
 
         if(!tmp[origen]) tmp[origen] = [];
-        tmp[origen].push({dest:destino, value:isFinite(rateNum)?rateNum:null, decimals, mode, op});
+        tmp[origen].push({
+          dest: destino,
+          value: isFinite(rateNum) ? rateNum : null,
+          providerRate: isFinite(rateNum) ? rateNum : null,
+          costRate: isFinite(costRateNum) ? costRateNum : null,
+          retailRate: isFinite(retailRateNum) ? retailRateNum : null,
+          decimals,
+          mode,
+          op
+        });
       }
 
       const origins = Object.keys(tmp).sort((a,b)=>a.localeCompare(b,"es",{sensitivity:"base"}));
       origins.forEach(o => tmp[o].sort((a,b)=>a.dest.localeCompare(b.dest,"es",{sensitivity:"base"})));
-      return {origins, data: tmp};
+      return {origins, data: tmp, countryTradeRates: buildCountryTradeRates(rows)};
+    }
+
+    function getCountryTradeRate(country, side){
+      const entry = COUNTRY_TRADE_RATES[norm(country || "")];
+      if(!entry) return null;
+      const value = side === "buy" ? entry.buy : entry.sell;
+      return Number.isFinite(value) ? value : null;
     }
 
     function populateCountries(origins, prevValue){
@@ -2732,6 +2962,8 @@
     }
 
     function rateForCalc(item){
+      const baseRate = item?.retailRate ?? null;
+      if(isFixedPercentOperator() || isPartnerOperator()) return baseRate;
       if(selectedProfit == null) return item.value;
       return adjustedValue(item.value, Number(selectedProfit), item.mode);
     }
@@ -2898,6 +3130,20 @@
 
     function getCurrentProfitBase(){
       if(!pendingRegisterData) return null;
+
+      if(pendingRegisterData.operatorMode === "socio"){
+        const payerSide = document.querySelector('input[name="payerSideChoice"]:checked')?.value || "onze";
+        const value = payerSide === "socio"
+          ? Number(pendingRegisterData.usdtDestValue || 0) + Number(pendingRegisterData.partnerProfitUsdt || 0)
+          : Number(pendingRegisterData.partnerProfitUsdt || 0);
+
+        return {
+          country: "USDT",
+          currency: "USDT",
+          value
+        };
+      }
+
       return {
         country: pendingRegisterData.originCountry,
         currency: pendingRegisterData.originCurrency,
@@ -2961,6 +3207,22 @@
       if(!shouldConvert || !targetCountry){
         profitConvertPreview.textContent = `${formatCalcValue(base.value, base.currency)} ${base.currency}`;
         if(rateNote) rateNote.textContent = '';
+        return;
+      }
+
+      if(pendingRegisterData?.operatorMode === "socio"){
+        const sellRate = getCountryTradeRate(targetCountry, "sell");
+        if(!Number.isFinite(sellRate)){
+          profitConvertPreview.textContent = `No hay tasa de venta para ${targetCountry}`;
+          if(rateNote) rateNote.textContent = '';
+          return;
+        }
+
+        const targetCurrency = getCurrencyFor(targetCountry);
+        const converted = Number(base.value || 0) * Number(sellRate || 0);
+        const rateTxt = fmtCL(sellRate, 2);
+        profitConvertPreview.textContent = `${formatCalcValue(converted, targetCurrency)} ${targetCurrency}`;
+        if(rateNote) rateNote.textContent = `Tasa venta usada: ${targetCountry} = ${rateTxt}`;
         return;
       }
 
@@ -3058,7 +3320,13 @@
           <td>${op.receiveAmountFormatted}</td>
           <td>${op.providerRateFormatted}</td>
           <td>${op.clientRateFormatted}</td>
-          <td><span class="pill green">${op.profitDisplay}</span></td>
+          <td>${
+            op.operatorMode === "socio" && Number(op.partnerPayoutDestCostUsdt || 0) > 0
+              ? `<div><span class="pill green">${op.profitDisplay}</span></div>
+                 <div style="font-size:12px; opacity:.78; margin-top:6px;">Costo destino: ${formatCalcValue(op.partnerPayoutDestCostUsdt || 0, "USDT")} USDT</div>
+                 <div style="font-size:12px; font-weight:700; margin-top:2px;">Total a pagar: ${formatCalcValue(op.partnerPayoutTotalUsdt || 0, "USDT")} USDT</div>`
+              : `<span class="pill green">${op.profitDisplay}</span>`
+          }</td>
           <td>${op.note || "—"}</td>
         `;
         historyBody.appendChild(tr);
@@ -3104,41 +3372,117 @@
     }
 
     function openRegisterModal(data){
-      pendingRegisterData = data;
-      window.pendingRegisterData = data;
+  pendingRegisterData = data;
+  window.pendingRegisterData = data;
 
-      summaryRoute.textContent = `${data.originCountry} → ${data.destCountry}`;
-      summaryProviderRate.textContent = data.providerRateFormatted;
-      summaryClientRate.textContent = data.clientRateFormatted;
-      summaryMargin.textContent = data.marginLabel;
-      summarySend.textContent = data.sendAmountFormatted;
-      summaryReceive.textContent = data.receiveAmountFormatted;
+  const partnerSummaryBox = document.getElementById("registerPartnerSummary");
+  const partnerProfitBox = document.getElementById("registerPartnerProfit");
+  const partnerTotalBox = document.getElementById("registerPartnerTotal");
+  const partnerTotalLabelBox = document.getElementById("registerPartnerTotalLabel");
+  const partnerCostWrapBox = document.getElementById("registerPartnerCostWrap");
+  const partnerCostBox = document.getElementById("registerPartnerCost");
 
-      clientName.value = "";
-      refreshClientSuggestions();
-      operationNumber.value = getNextOperationNumber();
-      operationDate.value = todayISO();
-      operationNote.value = "";
+  function refreshPartnerRegisterSummary(){
+    if(!partnerSummaryBox || !partnerProfitBox || !partnerTotalBox || !partnerTotalLabelBox) return;
 
-      const firstType = document.querySelector('input[name="operationType"][value="Cambio"]');
-      if(firstType) firstType.checked = true;
+    if(data.operatorMode === "socio"){
+      partnerSummaryBox.style.display = "";
+      partnerProfitBox.textContent = `${formatCalcValue(data.partnerProfitUsdt || 0, "USDT")} USDT`;
 
-      profitCurrencyGroup.innerHTML = `
-        <label class="radio-pill active">
-          <input type="radio" name="profitCurrencyChoice" value="origin" checked>
-          ${data.originCurrency}
-        </label>
-      `;
+      const payerChoice = document.querySelector('input[name="payerSideChoice"]:checked')?.value || "onze";
+      const partnerGain = Number(data.partnerProfitUsdt || 0);
 
-      if(profitConvertTarget) profitConvertTarget.innerHTML = '<option value="">Selecciona un país…</option>';
-      const convertNo = document.querySelector('input[name="profitConvertChoice"][value="no"]');
-      if(convertNo) convertNo.checked = true;
-      refreshProfitConvertUI();
+      partnerTotalLabelBox.textContent = "Ganancia socio";
+      partnerTotalBox.textContent = `${formatCalcValue(partnerGain, "USDT")} USDT`;
 
-      registerModal.classList.add("open");
-      registerModal.setAttribute("aria-hidden","false");
-      document.body.classList.add("noscroll");
+      const sendCost = Number(data.usdtDestValue || 0);
+      if(partnerCostWrapBox) partnerCostWrapBox.style.display = "";
+      if(partnerCostBox) partnerCostBox.textContent = `${formatCalcValue(sendCost, "USDT")} USDT`;
+    } else {
+      partnerSummaryBox.style.display = "none";
+      partnerProfitBox.textContent = "—";
+      partnerTotalLabelBox.textContent = "Ganancia socio";
+      partnerTotalBox.textContent = "—";
+      if(partnerCostWrapBox) partnerCostWrapBox.style.display = "none";
+      if(partnerCostBox) partnerCostBox.textContent = "—";
     }
+  }
+
+  summaryRoute.textContent = `${data.originCountry} → ${data.destCountry}`;
+
+  if(summaryProviderRateWrap && summaryProviderRate){
+    if(data.operatorMode === "porcentaje" || data.operatorMode === "socio"){
+      summaryProviderRateWrap.style.display = "none";
+      summaryProviderRate.textContent = "—";
+    } else {
+      summaryProviderRateWrap.style.display = "";
+      summaryProviderRate.textContent = data.providerRateFormatted;
+    }
+  }
+
+  summaryClientRate.textContent = data.clientRateFormatted;
+  summaryMargin.textContent = data.operatorMode === "socio" ? "50/50" : data.marginLabel;
+  summarySend.textContent = data.sendAmountFormatted;
+  summaryReceive.textContent = data.receiveAmountFormatted;
+
+  if(summaryProviderPayWrap && summaryProviderPay){
+    if(data.operatorMode === "porcentaje" && data.providerPayFormatted){
+      summaryProviderPayWrap.style.display = "";
+      summaryProviderPay.textContent = data.providerPayFormatted;
+    } else {
+      summaryProviderPayWrap.style.display = "none";
+      summaryProviderPay.textContent = "—";
+    }
+  }
+
+  clientName.value = "";
+  refreshClientSuggestions();
+  operationNumber.value = getNextOperationNumber();
+  operationDate.value = todayISO();
+  operationNote.value = "";
+
+  const firstType = document.querySelector('input[name="operationType"][value="Cambio"]');
+  if(firstType) firstType.checked = true;
+
+  if(data.operatorMode === "socio"){
+    profitCurrencyGroup.innerHTML = `
+      <label class="radio-pill active">
+        <input type="radio" name="profitCurrencyChoice" value="usdt" checked>
+        USDT
+      </label>
+    `;
+    if(payerSideGroup) payerSideGroup.style.display = "";
+    const payerOnze = document.querySelector('input[name="payerSideChoice"][value="onze"]');
+    if(payerOnze) payerOnze.checked = true;
+  } else {
+    profitCurrencyGroup.innerHTML = `
+      <label class="radio-pill active">
+        <input type="radio" name="profitCurrencyChoice" value="origin" checked>
+        ${data.originCurrency}
+      </label>
+    `;
+    if(payerSideGroup) payerSideGroup.style.display = "none";
+  }
+
+  if(profitConvertTarget) profitConvertTarget.innerHTML = '<option value="">Selecciona un país…</option>';
+  const convertNo = document.querySelector('input[name="profitConvertChoice"][value="no"]');
+  if(convertNo) convertNo.checked = true;
+  refreshProfitConvertUI();
+  refreshPartnerRegisterSummary();
+
+  if(data.operatorMode === "socio" && payerSideChoices){
+    payerSideChoices.querySelectorAll('input[name="payerSideChoice"]').forEach(input => {
+      input.onchange = () => {
+        refreshProfitConvertUI();
+        refreshPartnerRegisterSummary();
+      };
+    });
+  }
+
+  registerModal.classList.add("open");
+  registerModal.setAttribute("aria-hidden","false");
+  document.body.classList.add("noscroll");
+}
 
     function closeRegisterModal(){
       registerModal.classList.remove("open");
@@ -3164,17 +3508,53 @@
       const shouldConvertProfit = document.querySelector('input[name="profitConvertChoice"]:checked')?.value === "yes";
       const targetCountry = profitConvertTarget?.value || "";
 
+      if(pendingRegisterData?.operatorMode === "socio"){
+        const payerSide = document.querySelector('input[name="payerSideChoice"]:checked')?.value || "onze";
+
+        profitCountry = "USDT";
+        profitCurrency = "USDT";
+        profitValue = Number(pendingRegisterData.partnerProfitUsdt || 0);
+      }
+
       if(shouldConvertProfit && targetCountry){
-        const route = getProviderRoute(baseProfitCountry, targetCountry);
-        if(route && isFinite(route.value)){
-          profitCountry = targetCountry;
-          profitCurrency = getCurrencyFor(targetCountry);
-          profitValue = applyOp(Number(baseProfitValue || 0), Number(route.value), route.op);
+        if(pendingRegisterData?.operatorMode === "socio"){
+          const sellRate = getCountryTradeRate(targetCountry, "sell");
+          if(Number.isFinite(sellRate)){
+            profitCountry = targetCountry;
+            profitCurrency = getCurrencyFor(targetCountry);
+            profitValue = Number(profitValue || 0) * Number(sellRate || 0);
+          }
+        } else {
+          const route = getProviderRoute(baseProfitCountry, targetCountry);
+          if(route && isFinite(route.value)){
+            profitCountry = targetCountry;
+            profitCurrency = getCurrencyFor(targetCountry);
+            profitValue = applyOp(Number(baseProfitValue || 0), Number(route.value), route.op);
+          }
         }
       }
 
       const profitDisplay = `${formatCalcValue(Math.abs(profitValue), profitCurrency)} ${profitCurrency}`;
       const finalOperationNumber = operationNumber.value.trim() || getNextOperationNumber();
+
+      const opExtra = pendingRegisterData?.operatorMode === "socio"
+        ? {
+            payerSide: document.querySelector('input[name="payerSideChoice"]:checked')?.value || "onze",
+            usdtOriginValue: pendingRegisterData.usdtOriginValue,
+            usdtDestValue: pendingRegisterData.usdtDestValue,
+            totalProfitUsdt: pendingRegisterData.totalProfitUsdt,
+            partnerProfitUsdt: pendingRegisterData.partnerProfitUsdt,
+            onzeProfitUsdt: pendingRegisterData.onzeProfitUsdt,
+            totalOnzeUsdt: pendingRegisterData.totalOnzeUsdt,
+            partnerPayoutProfitUsdt: Number(pendingRegisterData.partnerProfitUsdt || 0),
+            partnerPayoutDestCostUsdt: (document.querySelector('input[name="payerSideChoice"]:checked')?.value || "onze") === "socio"
+              ? Number(pendingRegisterData.usdtDestValue || 0)
+              : 0,
+            partnerPayoutTotalUsdt: (document.querySelector('input[name="payerSideChoice"]:checked')?.value || "onze") === "socio"
+              ? Number(pendingRegisterData.usdtDestValue || 0) + Number(pendingRegisterData.partnerProfitUsdt || 0)
+              : Number(pendingRegisterData.partnerProfitUsdt || 0)
+          }
+        : {};
 
       const op = {
         id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2)),
@@ -3202,7 +3582,8 @@
         profitCurrency,
         profitCountry,
         profitValue,
-        profitDisplay
+        profitDisplay,
+        ...opExtra
       };
 
       rememberClient(op.clientName);
@@ -3254,9 +3635,17 @@
         const destCur = getCurrencyFor(item.dest);
         const providerRate = hasVal ? fmtCL(item.value, item.decimals) : "—";
         const clientRateNum = rateForCalc(item);
+        const visibleRateMeta = getVisibleBaseRate(item);
+        const visibleRateRaw = visibleRateMeta ? visibleRateMeta.value : null;
+        const visibleRateNum = (visibleRateRaw === null || visibleRateRaw === undefined || visibleRateRaw === "")
+          ? null
+          : Number(visibleRateRaw);
+        const visibleRate = (visibleRateNum !== null && Number.isFinite(visibleRateNum))
+          ? fmtCL(visibleRateNum, item.decimals)
+          : "—";
         const finalRate = hasVal && isFinite(clientRateNum)
           ? fmtCL(clientRateNum, item.decimals)
-          : "—";
+          : visibleRate;
 
         const rowKey = keyFor(pais, item.dest);
         const state = getCalcState(rowKey);
@@ -3270,7 +3659,9 @@
         const titleWrap = document.createElement("div");
         titleWrap.className = "rate-main";
 
-        if(perc == null){
+        if(isFixedPercentOperator() || isPartnerOperator()){
+          titleWrap.innerHTML = `<p class="rate-title">${pais.toUpperCase()} → ${item.dest.toUpperCase()}: ${visibleRate}</p>`;
+        }else if(perc == null){
           titleWrap.innerHTML = `<p class="rate-title">${pais.toUpperCase()} → ${item.dest.toUpperCase()}: ${providerRate}</p>`;
         }else{
           titleWrap.innerHTML = `
@@ -3285,7 +3676,7 @@
         copy.className = "copy-btn";
         copy.title = "Copiar tasa";
         copy.setAttribute("aria-label", "Copiar tasa");
-        copy.dataset.copy = `${pais} → ${item.dest}: ${finalRate}`;
+        copy.dataset.copy = `${pais} → ${item.dest}: ${isFixedPercentOperator() || isPartnerOperator() ? visibleRate : finalRate}`;
         copy.innerHTML = '<svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="9" width="11" height="11" rx="2" stroke-width="2"/><rect x="4" y="4" width="11" height="11" rx="2" stroke-width="2"/></svg>';
         if(!hasVal) copy.disabled = true;
 
@@ -3371,41 +3762,142 @@
           hint.textContent = "Toca el resultado para copiar";
           shell.appendChild(hint);
 
+          const calcNotice = document.createElement("div");
+          calcNotice.className = "calc-hint";
+          calcNotice.style.display = "none";
+          calcNotice.style.color = "#fca5a5";
+          calcNotice.style.fontWeight = "700";
+          shell.appendChild(calcNotice);
+
           const simBox = document.createElement("div");
           simBox.className = "sim-box";
-          simBox.innerHTML = `
-            <div class="sim-title">Simulador de utilidad</div>
-            <div class="sim-grid">
-              <div class="sim-item">
-                <div class="sim-label">Tasa proveedor</div>
-                <div class="sim-value" data-role="provider-rate">${providerRate}</div>
+          simBox.innerHTML = isFiftyFiftyPartner()
+            ? `
+              <div class="sim-title">Simulador de utilidad</div>
+              <div class="sim-grid">
+                <div class="sim-item">
+                  <div class="sim-label">Tasa detal</div>
+                  <div class="sim-value" data-role="client-rate">${finalRate}</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Margen aplicado</div>
+                  <div class="sim-value" data-role="margin">50/50</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Monto cliente</div>
+                  <div class="sim-value" data-role="client-amount">—</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">¿Aplicar comisión?</div>
+                  <div class="sim-value" data-role="partner-commission-control">
+                    <label style="display:flex; align-items:center; gap:8px; justify-content:flex-end;">
+                      <input type="checkbox" data-role="partner-commission-toggle" />
+                      <span>Sí</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Comisión operativa %</div>
+                  <div class="sim-value" data-role="partner-commission-wrap" style="display:none; gap:8px; align-items:center; justify-content:flex-end;">
+                    <input
+                      type="text"
+                      inputmode="decimal"
+                      placeholder="Ej: 1,5"
+                      data-role="partner-commission-input"
+                      style="width:120px; background:#10284b; border:1px solid rgba(255,255,255,.12); color:#fff; border-radius:10px; padding:8px 10px; text-align:right;"
+                    />
+                    <span data-role="partner-commission">0%</span>
+                  </div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Origen neto (${curOrigin || "MON"})</div>
+                  <div class="sim-value" data-role="origin-net">—</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">USDT origen</div>
+                  <div class="sim-value" data-role="usdt-origin">—</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">USDT destino</div>
+                  <div class="sim-value" data-role="usdt-dest">—</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Ganancia total USDT</div>
+                  <div class="sim-value profit" data-role="partner-total-profit">—</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Ganancia socio USDT</div>
+                  <div class="sim-value profit" data-role="partner-profit">—</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Ganancia ONZE USDT</div>
+                  <div class="sim-value profit" data-role="onze-profit">—</div>
+                </div>
+                <div class="sim-item" style="grid-column:1 / -1;">
+                  <div class="sim-label">Total para ONZE USDT</div>
+                  <div class="sim-value" data-role="onze-total">—</div>
+                </div>
               </div>
-              <div class="sim-item">
-                <div class="sim-label">Tu tasa</div>
-                <div class="sim-value" data-role="client-rate">${finalRate}</div>
+            `
+            : (isFixedPercentOperator() || isPartnerOperator())
+            ? `
+              <div class="sim-title">Simulador de utilidad</div>
+              <div class="sim-grid">
+                <div class="sim-item">
+                  <div class="sim-label">Tasa detal</div>
+                  <div class="sim-value" data-role="client-rate">${finalRate}</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Margen aplicado</div>
+                  <div class="sim-value" data-role="margin">${fmtPct(getFixedPercentValue())}%</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Monto cliente</div>
+                  <div class="sim-value" data-role="client-amount">—</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Total a pagar proveedor (${curOrigin || "MON"})</div>
+                  <div class="sim-value" data-role="provider-pay">—</div>
+                </div>
+                <div class="sim-item" style="grid-column:1 / -1;">
+                  <div class="sim-label">Ganancia estimada (${curOrigin || "MON"})</div>
+                  <div class="sim-value profit" data-role="profit-origin">—</div>
+                </div>
               </div>
-              <div class="sim-item">
-                <div class="sim-label">Margen aplicado</div>
-                <div class="sim-value" data-role="margin">${perc == null ? 'Base' : fmtPct(perc) + '%'}</div>
+            `
+            : `
+              <div class="sim-title">Simulador de utilidad</div>
+              <div class="sim-grid">
+                <div class="sim-item">
+                  <div class="sim-label">Tasa proveedor</div>
+                  <div class="sim-value" data-role="provider-rate">${providerRate}</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Tu tasa</div>
+                  <div class="sim-value" data-role="client-rate">${finalRate}</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Margen aplicado</div>
+                  <div class="sim-value" data-role="margin">${perc == null ? 'Base' : fmtPct(perc) + '%'}</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Costo proveedor</div>
+                  <div class="sim-value" data-role="provider-amount">—</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Monto cliente</div>
+                  <div class="sim-value" data-role="client-amount">—</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Ganancia estimada (${destCur})</div>
+                  <div class="sim-value profit" data-role="profit-dest">—</div>
+                </div>
+                <div class="sim-item" style="grid-column:1 / -1;">
+                  <div class="sim-label">Ganancia estimada (${curOrigin || "MON"})</div>
+                  <div class="sim-value profit" data-role="profit-origin">—</div>
+                </div>
               </div>
-              <div class="sim-item">
-                <div class="sim-label">Costo proveedor</div>
-                <div class="sim-value" data-role="provider-amount">—</div>
-              </div>
-              <div class="sim-item">
-                <div class="sim-label">Monto cliente</div>
-                <div class="sim-value" data-role="client-amount">—</div>
-              </div>
-              <div class="sim-item">
-                <div class="sim-label">Ganancia estimada (${destCur})</div>
-                <div class="sim-value profit" data-role="profit-dest">—</div>
-              </div>
-              <div class="sim-item" style="grid-column:1 / -1;">
-                <div class="sim-label">Ganancia estimada (${curOrigin || "MON"})</div>
-                <div class="sim-value profit" data-role="profit-origin">—</div>
-              </div>
-            </div>
-          `;
+            `;
 
           shell.appendChild(simBox);
 
@@ -3423,51 +3915,254 @@
 
           const providerAmountEl = simBox.querySelector('[data-role="provider-amount"]');
           const clientAmountEl = simBox.querySelector('[data-role="client-amount"]');
+          const providerPayEl = simBox.querySelector('[data-role="provider-pay"]');
           const profitDestEl = simBox.querySelector('[data-role="profit-dest"]');
           const profitOriginEl = simBox.querySelector('[data-role="profit-origin"]');
           const clientRateEl = simBox.querySelector('[data-role="client-rate"]');
           const marginEl = simBox.querySelector('[data-role="margin"]');
+          const partnerCommissionEl = simBox.querySelector('[data-role="partner-commission"]');
+          const partnerCommissionToggleEl = simBox.querySelector('[data-role="partner-commission-toggle"]');
+          const partnerCommissionInputEl = simBox.querySelector('[data-role="partner-commission-input"]');
+          const partnerCommissionWrapEl = simBox.querySelector('[data-role="partner-commission-wrap"]');
+          const originNetEl = simBox.querySelector('[data-role="origin-net"]');
+          const usdtOriginEl = simBox.querySelector('[data-role="usdt-origin"]');
+          const usdtDestEl = simBox.querySelector('[data-role="usdt-dest"]');
+          const partnerTotalProfitEl = simBox.querySelector('[data-role="partner-total-profit"]');
+          const partnerProfitEl = simBox.querySelector('[data-role="partner-profit"]');
+          const onzeProfitEl = simBox.querySelector('[data-role="onze-profit"]');
+          const onzeTotalEl = simBox.querySelector('[data-role="onze-total"]');
+          const calcNoticeEl = calcNotice;
 
           let currentRegisterPayload = null;
+          let partnerCommissionDraft = 0;
+
+          if(partnerCommissionToggleEl && partnerCommissionWrapEl){
+            partnerCommissionToggleEl.addEventListener("change", () => {
+              const enabled = !!partnerCommissionToggleEl.checked;
+              partnerCommissionWrapEl.style.display = enabled ? "flex" : "none";
+
+              if(!enabled){
+                partnerCommissionDraft = 0;
+                if(partnerCommissionInputEl) partnerCommissionInputEl.value = "";
+                if(partnerCommissionEl) partnerCommissionEl.textContent = "0%";
+              }
+
+              updateSimulator();
+            });
+          }
+
+          if(partnerCommissionInputEl){
+            partnerCommissionInputEl.addEventListener("input", () => {
+              const raw = String(partnerCommissionInputEl.value || "").trim().replace(",", ".");
+              const num = Number(raw);
+
+              partnerCommissionDraft = Number.isFinite(num) && num >= 0 ? num : 0;
+
+              if(partnerCommissionEl){
+                partnerCommissionEl.textContent = `${partnerCommissionDraft}%`;
+              }
+
+              updateSimulator();
+            });
+          }
 
           function updateSimulator(){
             const providerRateNum = item.value;
             const clientRateNumLocal = rateForCalc(item);
 
-            clientRateEl.textContent = isFinite(clientRateNumLocal) ? fmtCL(clientRateNumLocal, item.decimals) : "—";
-            marginEl.textContent = perc == null ? "Base" : fmtPct(perc) + "%";
+            clientRateEl.textContent = Number.isFinite(clientRateNumLocal) ? fmtCL(clientRateNumLocal, item.decimals) : "—";
+            marginEl.textContent = isFixedPercentOperator()
+              ? `${fmtPct(getFixedPercentValue())}%`
+              : (perc == null ? "Base" : fmtPct(perc) + "%");
+
+            const missingRetailRate =
+              (isFixedPercentOperator() || isPartnerOperator()) &&
+              !Number.isFinite(clientRateNumLocal);
+
+            if(missingRetailRate){
+              originInput.readOnly = true;
+              destInput.readOnly = true;
+              registerBtn.disabled = true;
+              registerBtn.style.opacity = "0.6";
+              registerBtn.style.cursor = "not-allowed";
+
+              if(calcNoticeEl){
+                calcNoticeEl.style.display = "block";
+                calcNoticeEl.textContent = "No existe tasa detal para esta ruta. No se puede calcular ni registrar la operación.";
+              }
+
+              if(clientRateEl) clientRateEl.textContent = "—";
+              if(clientAmountEl) clientAmountEl.textContent = "—";
+              if(providerAmountEl) providerAmountEl.textContent = "—";
+              if(providerPayEl) providerPayEl.textContent = "—";
+              if(profitDestEl) profitDestEl.textContent = "—";
+              if(profitOriginEl) profitOriginEl.textContent = "—";
+
+              destInput.value = "";
+              state.dest = "";
+              currentRegisterPayload = null;
+              registerBtn._payload = null;
+              return;
+            } else {
+              originInput.readOnly = false;
+              destInput.readOnly = false;
+              registerBtn.disabled = false;
+              registerBtn.style.opacity = "";
+              registerBtn.style.cursor = "";
+              if(calcNoticeEl){
+                calcNoticeEl.style.display = "none";
+                calcNoticeEl.textContent = "";
+              }
+            }
 
             let originAmount = parseHumanNumber(originInput.value);
 
             if(!isFinite(originAmount)){
               const destRaw = parseHumanNumber(destInput.value);
-              if(isFinite(destRaw) && isFinite(clientRateNumLocal)){
+              if(Number.isFinite(destRaw) && Number.isFinite(clientRateNumLocal)){
                 originAmount = invertOp(destRaw, clientRateNumLocal, item.op);
               }
             }
 
-            if(!isFinite(originAmount) || !isFinite(providerRateNum) || !isFinite(clientRateNumLocal)){
-              providerAmountEl.textContent = "—";
-              clientAmountEl.textContent = "—";
-              profitDestEl.textContent = "—";
-              profitOriginEl.textContent = "—";
+            if(!Number.isFinite(originAmount) || !Number.isFinite(clientRateNumLocal)){
+              if(providerAmountEl) providerAmountEl.textContent = "—";
+              if(clientAmountEl) clientAmountEl.textContent = "—";
+              if(providerPayEl) providerPayEl.textContent = "—";
+              if(profitDestEl) profitDestEl.textContent = "—";
+              if(profitOriginEl) profitOriginEl.textContent = "—";
+              currentRegisterPayload = null;
+              return;
+            }
+
+            const clientAmountDest = applyOp(originAmount, clientRateNumLocal, item.op);
+            if(clientAmountEl) clientAmountEl.textContent = `${formatCalcValue(clientAmountDest, destCur)} ${destCur}`;
+
+            if(isFiftyFiftyPartner()){
+              const commissionPct =
+                partnerCommissionToggleEl?.checked
+                  ? (Number.isFinite(partnerCommissionDraft) ? partnerCommissionDraft : 0)
+                  : 0;
+
+              const originBuyRate = getCountryTradeRate(pais, "buy");
+              const destSellRate = getCountryTradeRate(item.dest, "sell");
+
+              const metrics = calcPartner5050Metrics({
+                originAmount,
+                receiveAmount: clientAmountDest,
+                originBuyRate,
+                destSellRate,
+                commissionPercent: commissionPct
+              });
+
+              if(marginEl) marginEl.textContent = "50/50";
+              if(partnerCommissionEl) partnerCommissionEl.textContent = `${fmtPct(commissionPct)}%`;
+
+              if(!metrics){
+                if(originNetEl) originNetEl.textContent = "—";
+                if(usdtOriginEl) usdtOriginEl.textContent = "—";
+                if(usdtDestEl) usdtDestEl.textContent = "—";
+                if(partnerTotalProfitEl) partnerTotalProfitEl.textContent = "—";
+                if(partnerProfitEl) partnerProfitEl.textContent = "—";
+                if(onzeProfitEl) onzeProfitEl.textContent = "—";
+                if(onzeTotalEl) onzeTotalEl.textContent = "—";
+                currentRegisterPayload = null;
+                registerBtn._payload = null;
+                return;
+              }
+
+              if(originNetEl) originNetEl.textContent = `${formatCalcValue(metrics.originNet, curOrigin)} ${curOrigin}`;
+              if(usdtOriginEl) usdtOriginEl.textContent = `${formatCalcValue(metrics.usdtOrigin, "USDT")} USDT`;
+              if(usdtDestEl) usdtDestEl.textContent = `${formatCalcValue(metrics.usdtDest, "USDT")} USDT`;
+              if(partnerTotalProfitEl) partnerTotalProfitEl.textContent = `${formatCalcValue(metrics.totalProfit, "USDT")} USDT`;
+              if(partnerProfitEl) partnerProfitEl.textContent = `${formatCalcValue(metrics.partnerProfit, "USDT")} USDT`;
+              if(onzeProfitEl) onzeProfitEl.textContent = `${formatCalcValue(metrics.onzeProfit, "USDT")} USDT`;
+              if(onzeTotalEl) onzeTotalEl.textContent = `${formatCalcValue(metrics.totalOnze, "USDT")} USDT`;
+
+              currentRegisterPayload = {
+                originCountry: pais,
+                destCountry: item.dest,
+                originCurrency: curOrigin,
+                destCurrency: destCur,
+                providerRate: item.providerRate,
+                clientRate: clientRateNumLocal,
+                providerRateFormatted: Number.isFinite(item.providerRate) ? fmtCL(item.providerRate, item.decimals) : "—",
+                clientRateFormatted: fmtCL(clientRateNumLocal, item.decimals),
+                marginLabel: "50/50",
+                sendAmount: originAmount,
+                receiveAmount: clientAmountDest,
+                sendAmountFormatted: `${formatCalcValue(originAmount, curOrigin)} ${curOrigin}`,
+                receiveAmountFormatted: `${formatCalcValue(clientAmountDest, destCur)} ${destCur}`,
+                operatorMode: "socio",
+                partnerCommissionPercent: commissionPct,
+                originBuyRate,
+                destSellRate,
+                originNetValue: metrics.originNet,
+                usdtOriginValue: metrics.usdtOrigin,
+                usdtDestValue: metrics.usdtDest,
+                totalProfitUsdt: metrics.totalProfit,
+                partnerProfitUsdt: metrics.partnerProfit,
+                onzeProfitUsdt: metrics.onzeProfit,
+                totalOnzeUsdt: metrics.totalOnze
+              };
+              registerBtn._payload = currentRegisterPayload;
+              return;
+            }
+
+            if(isFixedPercentOperator()){
+              const fixedProfitOrigin = calcFixedPercentProfitFromOrigin(originAmount);
+
+              const providerPay = originAmount - fixedProfitOrigin;
+
+              if(providerAmountEl) providerAmountEl.textContent = "—";
+              if(providerPayEl) providerPayEl.textContent = `${formatCalcValue(providerPay, curOrigin)} ${curOrigin}`;
+              if(profitDestEl) profitDestEl.textContent = "—";
+              if(profitOriginEl){
+                profitOriginEl.textContent = `${formatCalcValue(Math.abs(fixedProfitOrigin), curOrigin)} ${curOrigin}`;
+              }
+
+              currentRegisterPayload = {
+                originCountry: pais,
+                destCountry: item.dest,
+                originCurrency: curOrigin,
+                destCurrency: destCur,
+                providerRate: providerRateNum,
+                clientRate: clientRateNumLocal,
+                providerRateFormatted: isFinite(providerRateNum) ? fmtCL(providerRateNum, item.decimals) : "—",
+                clientRateFormatted: fmtCL(clientRateNumLocal, item.decimals),
+                marginLabel: `${fmtPct(getFixedPercentValue())}%`,
+                sendAmount: originAmount,
+                receiveAmount: clientAmountDest,
+                sendAmountFormatted: `${formatCalcValue(originAmount, curOrigin)} ${curOrigin}`,
+                receiveAmountFormatted: `${formatCalcValue(clientAmountDest, destCur)} ${destCur}`,
+                profitOriginValue: fixedProfitOrigin,
+                profitDestValue: 0,
+                providerPayValue: providerPay,
+                providerPayFormatted: `${formatCalcValue(providerPay, curOrigin)} ${curOrigin}`,
+                operatorMode: "porcentaje"
+              };
+              registerBtn._payload = currentRegisterPayload;
+              return;
+            }
+
+            if(!isFinite(providerRateNum)){
+              if(providerAmountEl) providerAmountEl.textContent = "—";
+              if(profitDestEl) profitDestEl.textContent = "—";
+              if(profitOriginEl) profitOriginEl.textContent = "—";
               currentRegisterPayload = null;
               return;
             }
 
             const providerAmountDest = applyOp(originAmount, providerRateNum, item.op);
-            const clientAmountDest = applyOp(originAmount, clientRateNumLocal, item.op);
             const profitDest = providerAmountDest - clientAmountDest;
             const profitOrigin = invertOp(Math.abs(profitDest), providerRateNum, item.op);
 
-            providerAmountEl.textContent = `${formatCalcValue(providerAmountDest, destCur)} ${destCur}`;
-            clientAmountEl.textContent = `${formatCalcValue(clientAmountDest, destCur)} ${destCur}`;
+            if(providerAmountEl) providerAmountEl.textContent = `${formatCalcValue(providerAmountDest, destCur)} ${destCur}`;
 
             const signDest = profitDest >= 0 ? "+" : "-";
             const signOrigin = profitDest >= 0 ? "+" : "-";
 
-            profitDestEl.textContent = `${signDest} ${formatCalcValue(Math.abs(profitDest), destCur)} ${destCur}`;
-            profitOriginEl.textContent = `${signOrigin} ${formatCalcValue(Math.abs(profitOrigin), curOrigin)} ${curOrigin}`;
+            if(profitDestEl) profitDestEl.textContent = `${signDest} ${formatCalcValue(Math.abs(profitDest), destCur)} ${destCur}`;
+            if(profitOriginEl) profitOriginEl.textContent = `${signOrigin} ${formatCalcValue(Math.abs(profitOrigin), curOrigin)} ${curOrigin}`;
 
             currentRegisterPayload = {
               originCountry: pais,
@@ -3558,11 +4253,12 @@
           });
 
           registerBtn.addEventListener("click", ()=>{
-            if(!currentRegisterPayload){
+            const payload = registerBtn._payload || currentRegisterPayload;
+            if(!payload){
               showToast("Primero calcula una operación");
               return;
             }
-            openRegisterModal(currentRegisterPayload);
+            openRegisterModal(payload);
           });
 
           if(state.active === "dest" && state.dest) recomputeFromDest();
@@ -3621,7 +4317,9 @@
         const rows = parseCSV(txt);
         if(!rows.length) throw new Error("El CSV está vacío.");
 
-        const {origins, data} = buildDataRobust(rows);
+        const {origins, data, countryTradeRates} = buildDataRobust(rows);
+        COUNTRY_TRADE_RATES = countryTradeRates || {};
+        console.log("COUNTRY_TRADE_RATES", COUNTRY_TRADE_RATES);
         if(!origins.length) throw new Error("No se encontraron países.");
 
         populateCountries(origins, prevSelection);
@@ -3890,6 +4588,28 @@
         lines.push(`\u2022 ${formatCalcValue(g.total, g.currency)} ${g.currency}`);
       });
 
+      const socioOpsWithDestCost = ops.filter(op =>
+        op?.operatorMode === "socio" &&
+        op?.payerSide === "socio" &&
+        Number(op?.partnerPayoutDestCostUsdt || 0) > 0
+      );
+
+      if(socioOpsWithDestCost.length){
+        const totalDestCost = socioOpsWithDestCost.reduce(
+          (sum, op) => sum + Number(op.partnerPayoutDestCostUsdt || 0),
+          0
+        );
+        const totalSocioPayout = socioOpsWithDestCost.reduce(
+          (sum, op) => sum + Number(op.partnerPayoutTotalUsdt || 0),
+          0
+        );
+
+        lines.push("");
+        lines.push(`🤝 Pago a socios que cubrieron destino:`);
+        lines.push(`• Costo destino: ${formatCalcValue(totalDestCost, "USDT")} USDT`);
+        lines.push(`• Total a pagar al socio: ${formatCalcValue(totalSocioPayout, "USDT")} USDT`);
+      }
+
       return lines.join("\n");
     }
 
@@ -3904,7 +4624,18 @@
 
       document.getElementById("dashboardShareBtn").addEventListener("click", ()=>{
         if(!requireProfileForAction("Debes completar tu perfil antes de enviar el cierre por WhatsApp.")) return;
-        const text = buildWhatsappMessageStable();
+
+        const ops = (typeof loadOperations === "function") ? loadOperations() : [];
+        const hasSocioPayingDest = ops.some(op =>
+          op?.operatorMode === "socio" &&
+          op?.payerSide === "socio" &&
+          Number(op?.partnerPayoutDestCostUsdt || 0) > 0
+        );
+
+        const text = hasSocioPayingDest && typeof buildWhatsappMessageSocio === "function"
+          ? buildWhatsappMessageSocio()
+          : buildWhatsappMessageStable();
+
         window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`, "_blank", "noopener");
       });
     }
@@ -4761,6 +5492,28 @@
       lines.push(`• ${amount} ${g.currency}`);
     });
 
+    const socioOpsWithDestCost = ops.filter(op =>
+      op?.operatorMode === "socio" &&
+      op?.payerSide === "socio" &&
+      Number(op?.partnerPayoutDestCostUsdt || 0) > 0
+    );
+
+    if(socioOpsWithDestCost.length){
+      const totalDestCost = socioOpsWithDestCost.reduce(
+        (sum, op) => sum + Number(op.partnerPayoutDestCostUsdt || 0),
+        0
+      );
+      const totalSocioPayout = socioOpsWithDestCost.reduce(
+        (sum, op) => sum + Number(op.partnerPayoutTotalUsdt || 0),
+        0
+      );
+
+      lines.push("");
+      lines.push("🤝 Pago a socios que cubrieron destino:");
+      lines.push(`• Costo destino: ${formatCalcValue(totalDestCost, "USDT")} USDT`);
+      lines.push(`• Total a pagar al socio: ${formatCalcValue(totalSocioPayout, "USDT")} USDT`);
+    }
+
     return lines.join("\n");
   };
 
@@ -4802,6 +5555,57 @@
       a.country.localeCompare(b.country,"es",{sensitivity:"base"})
     );
   }
+
+
+  window.buildWhatsappMessageSocio = function(){
+    const profile = (typeof loadProfile === "function") ? loadProfile() : {};
+    const ops = (typeof loadOperations === "function") ? loadOperations() : [];
+
+    const today = new Intl.DateTimeFormat("es-CL", {
+      year:"numeric",
+      month:"2-digit",
+      day:"2-digit"
+    }).format(new Date());
+
+    const socioOps = ops.filter(op =>
+      op?.operatorMode === "socio" &&
+      op?.payerSide === "socio"
+    );
+
+    const totalProfit = socioOps.reduce(
+      (sum, op) => sum + Number(op.partnerPayoutProfitUsdt || 0),
+      0
+    );
+    const totalDestCost = socioOps.reduce(
+      (sum, op) => sum + Number(op.partnerPayoutDestCostUsdt || 0),
+      0
+    );
+    const totalSocioPayout = socioOps.reduce(
+      (sum, op) => sum + Number(op.partnerPayoutTotalUsdt || 0),
+      0
+    );
+
+    const lines = [
+      `✨ CIERRE DIARIO ONZE`,
+      ``,
+      `✳️ Fecha: ${today}`,
+      `⭐️ Operador: ${profile.fullName || "Operador ONZE"}`,
+      `▪️ Cantidad de órdenes: ${ops.length}`,
+      ``,
+      `❇️ Ganancia por país:`,
+      `• USDT: ${formatCalcValue(totalProfit, "USDT")} USDT`,
+      ``,
+      `✅ Total final a pagar:`,
+      `• ${formatCalcValue(totalProfit, "USDT")} USDT`,
+      ``,
+      `🤝 Pago a socios que cubrieron destino:`,
+      `• Ganancia socio: ${formatCalcValue(totalProfit, "USDT")} USDT`,
+      `• Costo destino: ${formatCalcValue(totalDestCost, "USDT")} USDT`,
+      `• Total a pagar al socio: ${formatCalcValue(totalSocioPayout, "USDT")} USDT`
+    ];
+
+    return lines.join("\n");
+  };
 
   window.buildWhatsappMessageStable = function(){
     const profile = (typeof loadProfile === "function") ? loadProfile() : {};
@@ -4852,6 +5656,28 @@
       lines.push(`• ${amount} ${g.currency}`);
     });
 
+    const socioOpsWithDestCost = ops.filter(op =>
+      op?.operatorMode === "socio" &&
+      op?.payerSide === "socio" &&
+      Number(op?.partnerPayoutDestCostUsdt || 0) > 0
+    );
+
+    if(socioOpsWithDestCost.length){
+      const totalDestCost = socioOpsWithDestCost.reduce(
+        (sum, op) => sum + Number(op.partnerPayoutDestCostUsdt || 0),
+        0
+      );
+      const totalSocioPayout = socioOpsWithDestCost.reduce(
+        (sum, op) => sum + Number(op.partnerPayoutTotalUsdt || 0),
+        0
+      );
+
+      lines.push("");
+      lines.push(`🤝 Pago a socios que cubrieron destino:`);
+      lines.push(`• Costo destino: ${formatCalcValue(totalDestCost, "USDT")} USDT`);
+      lines.push(`• Total a pagar al socio: ${formatCalcValue(totalSocioPayout, "USDT")} USDT`);
+    }
+
     return lines.join("\n");
   };
 
@@ -4867,7 +5693,17 @@
         const ok = requireProfileForAction("Debes completar tu perfil antes de enviar el cierre por WhatsApp.");
         if(!ok) return;
       }
-      const text = window.buildWhatsappMessageStable();
+      const ops = (typeof loadOperations === "function") ? loadOperations() : [];
+      const hasSocioPayingDest = ops.some(op =>
+        op?.operatorMode === "socio" &&
+        op?.payerSide === "socio" &&
+        Number(op?.partnerPayoutDestCostUsdt || 0) > 0
+      );
+
+      const text = hasSocioPayingDest && typeof window.buildWhatsappMessageSocio === "function"
+        ? window.buildWhatsappMessageSocio()
+        : window.buildWhatsappMessageStable();
+
       window.open(`https://wa.me/56951333777?text=${encodeURIComponent(text)}`, "_blank", "noopener");
     });
   }
