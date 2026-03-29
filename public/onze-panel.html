@@ -3422,10 +3422,16 @@
       const todayProfit = groupProfit(todayOps);
       const monthProfit = groupProfit(monthOps);
 
+      const sumUsdt = (items, field) => items.reduce((sum, op) => sum + Number(op?.[field] || 0), 0);
+      const todayCollectedUsdt = sumUsdt(todayOps, "amountCollectedUsdt");
+      const todayPendingUsdt = sumUsdt(todayOps, "amountPendingUsdt");
+      const monthCollectedUsdt = sumUsdt(monthOps, "amountCollectedUsdt");
+      const monthPendingUsdt = sumUsdt(monthOps, "amountPendingUsdt");
+
       dashProfitToday.textContent = todayProfit.amount;
-      dashProfitTodayCur.textContent = todayProfit.currency;
+      dashProfitTodayCur.textContent = `${todayProfit.currency} | Cobrado ${formatCalcValue(todayCollectedUsdt, "USDT")} USDT | Pendiente ${formatCalcValue(todayPendingUsdt, "USDT")} USDT`;
       dashProfitMonth.textContent = monthProfit.amount;
-      dashProfitMonthCur.textContent = monthProfit.currency;
+      dashProfitMonthCur.textContent = `${monthProfit.currency} | Cobrado ${formatCalcValue(monthCollectedUsdt, "USDT")} USDT | Pendiente ${formatCalcValue(monthPendingUsdt, "USDT")} USDT`;
     }
 
     function openRegisterModal(data){
