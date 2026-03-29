@@ -2278,6 +2278,24 @@
           </div>
 
           <div class="field full">
+            <label>Estado de cobro</label>
+            <div class="radio-group" id="paymentStatusChoices">
+              <label class="radio-pill active">
+                <input type="radio" name="paymentStatusChoice" value="paid" checked>
+                Pagada
+              </label>
+              <label class="radio-pill">
+                <input type="radio" name="paymentStatusChoice" value="pending">
+                Pendiente
+              </label>
+              <label class="radio-pill">
+                <input type="radio" name="paymentStatusChoice" value="partial">
+                Parcial
+              </label>
+            </div>
+          </div>
+
+          <div class="field full">
             <label for="operationNote">Observación</label>
             <textarea id="operationNote" placeholder="Comentario opcional"></textarea>
           </div>
@@ -2953,6 +2971,13 @@
       return Number.isFinite(value) ? value : null;
     }
 
+    function toUsdtFromCountryAmount(country, amount){
+      const buyRate = getCountryTradeRate(country, "buy");
+      const numericAmount = Number(amount);
+      if(!Number.isFinite(buyRate) || !Number.isFinite(numericAmount) || buyRate <= 0) return 0;
+      return numericAmount / buyRate;
+    }
+
     function populateCountries(origins, prevValue){
       sel.innerHTML = '<option value="" selected>Selecciona un país…</option>';
       origins.forEach(p=>{
@@ -3498,7 +3523,19 @@
 
   if(profitConvertTarget) profitConvertTarget.innerHTML = '<option value="">Selecciona un país…</option>';
   const convertNo = document.querySelector('input[name="profitConvertChoice"][value="no"]');
-  if(convertNo) convertNo.checked = true;
+  if(convertNo){
+    convertNo.checked = true;
+    document.querySelectorAll('#profitConvertQuestion .radio-pill').forEach(el => el.classList.remove('active'));
+    convertNo.closest('.radio-pill')?.classList.add('active');
+  }
+
+  const paymentPaid = document.querySelector('input[name="paymentStatusChoice"][value="paid"]');
+  if(paymentPaid){
+    paymentPaid.checked = true;
+    document.querySelectorAll('#paymentStatusChoices .radio-pill').forEach(el => el.classList.remove('active'));
+    paymentPaid.closest('.radio-pill')?.classList.add('active');
+  }
+
   refreshProfitConvertUI();
   refreshPartnerRegisterSummary();
 
@@ -3568,6 +3605,11 @@
 
       const profitDisplay = `${formatCalcValue(Math.abs(profitValue), profitCurrency)} ${profitCurrency}`;
       const finalOperationNumber = operationNumber.value.trim() || getNextOperationNumber();
+      const paymentStatus = document.querySelector('input[name="paymentStatusChoice"]:checked')?.value || "paid";
+      const operationUsdtBase = toUsdtFromCountryAmount(
+        pendingRegisterData.originCountry,
+        pendingRegisterData.sendAmount
+      );
 
       const opExtra = pendingRegisterData?.operatorMode === "socio"
         ? {
@@ -3595,6 +3637,10 @@
         clientName: clientName.value.trim(),
         operationNumber: finalOperationNumber,
         operationType: selectedType,
+        paymentStatus,
+        operationUsdtBase,
+        amountCollectedUsdt: paymentStatus === "paid" ? operationUsdtBase : 0,
+        amountPendingUsdt: paymentStatus === "pending" ? operationUsdtBase : (paymentStatus === "partial" ? operationUsdtBase : 0),
         note: operationNote.value.trim(),
         originCountry: pendingRegisterData.originCountry,
         destCountry: pendingRegisterData.destCountry,
