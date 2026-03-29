@@ -37,7 +37,6 @@ export async function POST(req: Request) {
     const residenceCountryCode = String(
       body.residenceCountryCode || ""
     ).trim();
-    const inviteCode = String(body.inviteCode || "").trim();
 
     if (!fullName || !email || !password) {
       return NextResponse.json(
@@ -65,38 +64,11 @@ export async function POST(req: Request) {
       );
     }
 
-    let tenantSettings = null;
-
-    if (inviteCode) {
-      tenantSettings = await prisma.tenantSettings.findFirst({
-        where: {
-          inviteCode,
-        },
-        select: {
-          tenantId: true,
-          tenant: {
-            select: {
-              id: true,
-              tradeName: true,
-              active: true,
-            },
-          },
-        },
-      });
-
-      if (!tenantSettings || !tenantSettings.tenant?.active) {
-        return NextResponse.json(
-          { error: "El código de invitación no es válido o el tenant no está activo." },
-          { status: 400 }
-        );
-      }
-    }
-
     const passwordHash = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
       data: {
-        tenantId: tenantSettings?.tenantId || null,
+        tenantId: null,
         fullName,
         email,
         passwordHash,
@@ -115,13 +87,9 @@ export async function POST(req: Request) {
       },
     });
 
-    const message = tenantSettings?.tenant?.tradeName
-      ? `Cuenta creada correctamente y vinculada a ${tenantSettings.tenant.tradeName}. Queda pendiente de aprobación.`
-      : "Cuenta creada correctamente. Queda pendiente de aprobación.";
-
     return NextResponse.json({
       ok: true,
-      message,
+      message: "Cuenta creada correctamente. Queda pendiente de aprobación.",
       user,
     });
   } catch (error) {

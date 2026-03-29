@@ -9,7 +9,6 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -32,7 +31,6 @@ export default function RegisterPage() {
           password,
           phone,
           residenceCountryCode: country,
-          inviteCode,
         }),
       });
 
@@ -52,7 +50,6 @@ export default function RegisterPage() {
       setPassword("");
       setPhone("");
       setCountry("");
-      setInviteCode("");
     } catch {
       setMessage("Ocurrió un error inesperado.");
       setSuccess(false);
@@ -138,23 +135,6 @@ export default function RegisterPage() {
               onChange={(e) => setCountry(e.target.value)}
               className="w-full rounded-xl border border-gray-300 px-4 py-3 text-base text-black placeholder:text-gray-400 outline-none transition focus:ring-2 focus:ring-green-600"
             />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Código de invitación
-            </label>
-            <input
-              type="text"
-              placeholder="Ej: FALCON-TEAM"
-              value={inviteCode}
-              onChange={(e) => setInviteCode(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-4 py-3 text-base text-black placeholder:text-gray-400 outline-none transition focus:ring-2 focus:ring-green-600"
-              required
-            />
-            <p className="mt-2 text-xs text-gray-500">
-              Este código conecta tu cuenta al equipo correcto y luego deberá ser aprobada por su admin.
-            </p>
           </div>
 
           <button
