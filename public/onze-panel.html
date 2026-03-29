@@ -2673,11 +2673,13 @@
     }
 
     function fmtCL(value, decimals){
-      const n = roundHalfUp(value, decimals);
-      return new Intl.NumberFormat("es-CL", {
+      const n = Number(value);
+      if(!Number.isFinite(n)) return "—";
+      return n.toLocaleString("es-CL", {
         minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals
-      }).format(n);
+        maximumFractionDigits: decimals,
+        useGrouping: false
+      });
     }
 
     function fmtPct(p){
@@ -2883,6 +2885,15 @@
           decimals = countDecimalsFromText(tasaDetalText || tasaText);
         }
 
+        if(keyFor(origen, destino) === keyFor("Chile","España")){
+          decimals = 4;
+          tasaText = String(parseRate(tasaText)).replace(".", ",");
+        }
+
+        if(keyFor(origen, destino) === keyFor("España","Venezuela")){
+          decimals = Math.min(decimals, 4);
+        }
+
         let mode = "down";
         if(idx.iModo >= 0){
           const raw = norm(row[idx.iModo] || "");
@@ -2901,13 +2912,30 @@
           op = "div";
         }
 
+        let displayValueText = String(tasaText ?? "").trim();
+        let displayProviderRateText = String(tasaText ?? "").trim();
+
+        if(keyFor(origen, destino) === keyFor("Chile","España") && Number.isFinite(rateNum)){
+          const fixedChileEspana = Number(rateNum).toLocaleString("es-CL", {
+            minimumFractionDigits: 4,
+            maximumFractionDigits: 4,
+            useGrouping: false
+          });
+          displayValueText = fixedChileEspana;
+          displayProviderRateText = fixedChileEspana;
+        }
+
         if(!tmp[origen]) tmp[origen] = [];
         tmp[origen].push({
           dest: destino,
           value: isFinite(rateNum) ? rateNum : null,
+          valueText: displayValueText,
           providerRate: isFinite(rateNum) ? rateNum : null,
+          providerRateText: displayProviderRateText,
           costRate: isFinite(costRateNum) ? costRateNum : null,
+          costRateText: String(tasaCostoText ?? "").trim(),
           retailRate: isFinite(retailRateNum) ? retailRateNum : null,
+          retailRateText: String(tasaDetalText ?? "").trim(),
           decimals,
           mode,
           op
@@ -3638,7 +3666,7 @@
       arr.forEach(item=>{
         const hasVal = item.value !== null && item.value !== undefined;
         const destCur = getCurrencyFor(item.dest);
-        const providerRate = hasVal ? fmtCL(item.value, item.decimals) : "—";
+        const providerRate = hasVal ? (item.providerRateText || fmtCL(item.value, item.decimals)) : "—";
         const clientRateNum = rateForCalc(item);
         const visibleRateMeta = getVisibleBaseRate(item);
         const visibleRateRaw = visibleRateMeta ? visibleRateMeta.value : null;
@@ -5132,7 +5160,16 @@
           if(d.value && isFinite(d.value)){
             const flag1 = typeof getFlagEmoji === 'function' ? getFlagEmoji(origin) : '';
             const flag2 = typeof getFlagEmoji === 'function' ? getFlagEmoji(d.dest) : '';
-            const valText = typeof fmtCL === 'function' ? fmtCL(d.value, d.decimals) : String(d.value);
+            let valText = (d.providerRateText || d.valueText || (typeof fmtCL === 'function' ? fmtCL(d.value, d.decimals) : String(d.value)));
+
+            if(keyFor(origin, d.dest) === keyFor("Chile","España") && Number.isFinite(d.value)){
+              valText = String(Math.trunc(Number(d.value)));
+            }
+
+            if(keyFor(origin, d.dest) === keyFor("España","Venezuela") && Number.isFinite(d.value)){
+              valText = String(Math.trunc(Number(d.value)));
+            }
+
             html += `<div class="news-stat-row"><span class="news-stat-label">${flag1} ${origin} → ${flag2} ${d.dest}</span><span class="news-stat-value">${valText}</span></div>`;
           }
         });
