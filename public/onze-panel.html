@@ -897,134 +897,6 @@
       line-height:1.55;
     }
 
-    /* Aliados section */
-    .aliados-filters{
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:12px;
-      margin-bottom:16px;
-    }
-
-    .aliados-grid{
-      display:grid;
-      grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));
-      gap:12px;
-    }
-
-    .aliado-card{
-      background:linear-gradient(180deg,#0a2346 0%, #0b2141 100%);
-      border:1px solid #1b3d6c;
-      border-radius:18px;
-      padding:16px;
-      position:relative;
-      transition:border-color .2s;
-    }
-
-    .aliado-card:hover{
-      border-color:#2b5a9a;
-    }
-
-    .aliado-header{
-      display:flex;
-      justify-content:space-between;
-      align-items:flex-start;
-      margin-bottom:8px;
-    }
-
-    .aliado-name{
-      font-size:15px;
-      font-weight:800;
-      color:#fff;
-      margin:0;
-    }
-
-    .aliado-role{
-      display:inline-block;
-      padding:3px 8px;
-      border-radius:999px;
-      font-size:10px;
-      font-weight:800;
-      text-transform:uppercase;
-      letter-spacing:.3px;
-    }
-
-    .aliado-role.recolector{background:rgba(37,99,235,.2);color:#a4c4ff;}
-    .aliado-role.distribuidor{background:rgba(16,185,129,.18);color:#9ef0c1;}
-    .aliado-role.operador{background:rgba(245,158,11,.18);color:#ffd36e;}
-    .aliado-role.proveedor{background:rgba(168,85,247,.18);color:#d8b4fe;}
-    .aliado-role.otro{background:rgba(255,255,255,.08);color:#9fb4d4;}
-
-    .aliado-info{
-      font-size:12px;
-      color:#9fb4d4;
-      margin:4px 0;
-      display:flex;
-      align-items:center;
-      gap:6px;
-    }
-
-    .aliado-currencies{
-      display:flex;
-      gap:4px;
-      flex-wrap:wrap;
-      margin-top:6px;
-    }
-
-    .aliado-cur-tag{
-      padding:2px 7px;
-      border-radius:6px;
-      font-size:10px;
-      font-weight:700;
-      background:rgba(37,99,235,.12);
-      color:#a4c4ff;
-    }
-
-    .aliado-actions{
-      display:flex;
-      gap:6px;
-      margin-top:10px;
-      padding-top:10px;
-      border-top:1px solid rgba(255,255,255,.06);
-    }
-
-    .aliado-actions button{
-      flex:1;
-      padding:7px 0;
-      border-radius:10px;
-      border:1px solid #2a538d;
-      background:#15315a;
-      color:#dce8fb;
-      font-size:11px;
-      font-weight:700;
-      cursor:pointer;
-      transition:background .15s;
-    }
-
-    .aliado-actions button:hover{
-      background:#1c3d6e;
-    }
-
-    .aliado-actions button.wa-btn{
-      background:#25d366;
-      border-color:#25d366;
-      color:#fff;
-    }
-
-    .aliado-actions button.wa-btn:hover{
-      background:#20bd5a;
-    }
-
-    .aliado-actions button.del-btn{
-      background:rgba(255,90,90,.12);
-      border-color:rgba(255,90,90,.25);
-      color:#ff9090;
-      flex:0 0 auto;
-      width:36px;
-    }
-
-    .aliado-actions button.del-btn:hover{
-      background:rgba(255,90,90,.22);
-    }
 
     /* Weekly chart */
     .weekly-chart{
@@ -1491,12 +1363,7 @@
       .filters-grid,
       .sim-grid,
       .modal-summary-grid,
-      .modal-form-grid,
-      .aliados-filters{
-        grid-template-columns:1fr;
-      }
-
-      .aliados-grid{
+      .modal-form-grid{
         grid-template-columns:1fr;
       }
 
@@ -1701,7 +1568,6 @@
         <button class="nav-btn" data-view-target="calculadora">Calculadora</button>
         <button class="nav-btn" data-view-target="dashboard">Dashboard</button>
         <button class="nav-btn" data-view-target="historial">Historial</button>
-        <button class="nav-btn" data-view-target="aliados">Aliados</button>
         <button class="nav-btn" data-view-target="noticias">Noticias</button>
       </nav>
     </aside>
@@ -1738,11 +1604,7 @@
             <button class="btn small" data-go-view="historial" type="button">Abrir</button>
           </div>
 
-          <div class="quick-card">
-            <h3>Aliados</h3>
-            <p>Gestiona tus recolectores y aliados por país para trabajar en conjunto.</p>
-            <button class="btn small" data-go-view="aliados" type="button">Abrir</button>
-          </div>
+
         </div>
       </section>
 
@@ -2088,82 +1950,7 @@
           <div class="empty-state" id="historyEmpty">Todavía no hay operaciones registradas.</div>
         </section>
       </section>
-
-      <section class="view" id="view-aliados">
-        <section class="section-card">
-          <div class="section-top">
-            <div>
-              <h2 class="section-title">Red de Aliados</h2>
-              <p class="section-text">Gestiona tus recolectores y aliados por país para coordinar operaciones.</p>
-            </div>
-            <button class="btn small" id="addAliadoBtn" type="button">+ Agregar aliado</button>
-          </div>
-
-          <div class="aliados-filters">
-            <div class="field">
-              <label for="aliadoFilterCountry">Filtrar por país</label>
-              <select id="aliadoFilterCountry">
-                <option value="">Todos los países</option>
-              </select>
-            </div>
-            <div class="field">
-              <input type="text" id="aliadoSearchInput" placeholder="Buscar por nombre..." />
-            </div>
-          </div>
-
-          <div id="aliadosGrid" class="aliados-grid"></div>
-          <div class="empty-state" id="aliadosEmpty">Aún no has agregado aliados. Presiona "+ Agregar aliado" para comenzar.</div>
-        </section>
       </section>
-
-      <div class="modal" id="aliadoModal" aria-hidden="true">
-        <div class="modal-dialog">
-          <div class="modal-card">
-            <div class="modal-head">
-              <h3 class="modal-title" id="aliadoModalTitle">Agregar aliado</h3>
-              <button class="close-btn" id="closeAliadoModalBtn" type="button">&times;</button>
-            </div>
-            <div class="modal-form-grid">
-              <div class="field full">
-                <label for="aliadoName">Nombre</label>
-                <input type="text" id="aliadoName" placeholder="Nombre del aliado" />
-              </div>
-              <div class="field">
-                <label for="aliadoPhone">Teléfono / WhatsApp</label>
-                <input type="text" id="aliadoPhone" placeholder="+56 9 1234 5678" />
-              </div>
-              <div class="field">
-                <label for="aliadoCountry">País</label>
-                <select id="aliadoCountry">
-                  <option value="">Selecciona un país...</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="aliadoRole">Rol</label>
-                <select id="aliadoRole">
-                  <option value="recolector">Recolector</option>
-                  <option value="distribuidor">Distribuidor</option>
-                  <option value="operador">Operador</option>
-                  <option value="proveedor">Proveedor de tasa</option>
-                  <option value="otro">Otro</option>
-                </select>
-              </div>
-              <div class="field full">
-                <label for="aliadoCurrencies">Monedas que maneja</label>
-                <input type="text" id="aliadoCurrencies" placeholder="Ej: USD, CLP, ARS" />
-              </div>
-              <div class="field full">
-                <label for="aliadoNote">Observaciones</label>
-                <textarea id="aliadoNote" placeholder="Notas sobre este aliado..."></textarea>
-              </div>
-            </div>
-            <input type="hidden" id="aliadoEditId" value="" />
-            <div class="modal-actions">
-              <button class="btn small ghost" id="cancelAliadoBtn" type="button">Cancelar</button>
-              <button class="btn small" id="saveAliadoBtn" type="button">Guardar aliado</button>
-            </div>
-          </div>
-        </div>
       </div>
 
       <section class="view" id="view-noticias">
@@ -5082,172 +4869,7 @@
   if(window.__onzeEnhancementsLoaded) return;
   window.__onzeEnhancementsLoaded = true;
 
-  const ALIADOS_KEY = 'onze_aliados_v1';
-  const NOTES_KEY = 'onze_operator_notes_v1';
-
-  /* --- Aliados CRUD --- */
-  function loadAliados(){
-    try{ const r = localStorage.getItem(ALIADOS_KEY); const d = r ? JSON.parse(r) : []; return Array.isArray(d) ? d : []; }catch{ return []; }
-  }
-  function saveAliados(list){ localStorage.setItem(ALIADOS_KEY, JSON.stringify(list)); }
-
-  function renderAliados(){
-    const grid = document.getElementById('aliadosGrid');
-    const empty = document.getElementById('aliadosEmpty');
-    const filterCountry = document.getElementById('aliadoFilterCountry')?.value || '';
-    const searchTerm = (document.getElementById('aliadoSearchInput')?.value || '').toLowerCase().trim();
-    if(!grid) return;
-
-    let aliados = loadAliados();
-    if(filterCountry) aliados = aliados.filter(a => a.country === filterCountry);
-    if(searchTerm) aliados = aliados.filter(a => (a.name || '').toLowerCase().includes(searchTerm));
-
-    if(!aliados.length){
-      grid.innerHTML = '';
-      if(empty) empty.style.display = 'block';
-      return;
-    }
-    if(empty) empty.style.display = 'none';
-
-    grid.innerHTML = aliados.map(a => {
-      const roleClass = a.role || 'otro';
-      const roleLabel = {recolector:'Recolector',distribuidor:'Distribuidor',operador:'Operador',proveedor:'Proveedor',otro:'Otro'}[roleClass] || roleClass;
-      const flag = typeof getFlagEmoji === 'function' ? getFlagEmoji(a.country) : '';
-      const currencies = (a.currencies || '').split(',').map(c => c.trim()).filter(Boolean);
-      const phone = (a.phone || '').replace(/\s+/g,'');
-      return `<div class="aliado-card" data-aliado-id="${a.id}">
-        <div class="aliado-header">
-          <h4 class="aliado-name">${esc(a.name)}</h4>
-          <span class="aliado-role ${roleClass}">${roleLabel}</span>
-        </div>
-        <div class="aliado-info">${flag} ${esc(a.country || 'Sin país')}</div>
-        ${a.phone ? `<div class="aliado-info">${esc(a.phone)}</div>` : ''}
-        ${currencies.length ? `<div class="aliado-currencies">${currencies.map(c => `<span class="aliado-cur-tag">${esc(c)}</span>`).join('')}</div>` : ''}
-        ${a.note ? `<div class="aliado-info" style="margin-top:6px;font-style:italic;">${esc(a.note)}</div>` : ''}
-        <div class="aliado-actions">
-          ${phone ? `<button class="wa-btn" onclick="window.open('https://wa.me/${phone.replace(/[^0-9]/g,'')}','_blank')">WhatsApp</button>` : ''}
-          <button onclick="window.editAliado('${a.id}')">Editar</button>
-          <button class="del-btn" onclick="window.deleteAliado('${a.id}')" title="Eliminar">&times;</button>
-        </div>
-      </div>`;
-    }).join('');
-  }
-
   function esc(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
-  function populateAliadoCountryFilter(){
-    const select = document.getElementById('aliadoFilterCountry');
-    if(!select) return;
-    const aliados = loadAliados();
-    const countries = [...new Set(aliados.map(a => a.country).filter(Boolean))].sort();
-    const current = select.value;
-    select.innerHTML = '<option value="">Todos los países</option>' + countries.map(c => {
-      const flag = typeof getFlagEmoji === 'function' ? getFlagEmoji(c) : '';
-      return `<option value="${c}">${flag} ${c}</option>`;
-    }).join('');
-    if(current) select.value = current;
-  }
-
-  function openAliadoModal(editId){
-    const modal = document.getElementById('aliadoModal');
-    const titleEl = document.getElementById('aliadoModalTitle');
-    const nameEl = document.getElementById('aliadoName');
-    const phoneEl = document.getElementById('aliadoPhone');
-    const countryEl = document.getElementById('aliadoCountry');
-    const roleEl = document.getElementById('aliadoRole');
-    const currEl = document.getElementById('aliadoCurrencies');
-    const noteEl = document.getElementById('aliadoNote');
-    const editIdEl = document.getElementById('aliadoEditId');
-    if(!modal) return;
-
-    if(countryEl && window.lastDataSnapshot){
-      const countries = Object.keys(window.lastDataSnapshot).sort((a,b) => a.localeCompare(b,'es',{sensitivity:'base'}));
-      countryEl.innerHTML = '<option value="">Selecciona un país...</option>' + countries.map(c => {
-        const flag = typeof getFlagEmoji === 'function' ? getFlagEmoji(c) : '';
-        return `<option value="${c}">${flag} ${c}</option>`;
-      }).join('');
-    }
-
-    if(editId){
-      const aliado = loadAliados().find(a => a.id === editId);
-      if(aliado){
-        if(titleEl) titleEl.textContent = 'Editar aliado';
-        if(nameEl) nameEl.value = aliado.name || '';
-        if(phoneEl) phoneEl.value = aliado.phone || '';
-        if(countryEl) countryEl.value = aliado.country || '';
-        if(roleEl) roleEl.value = aliado.role || 'otro';
-        if(currEl) currEl.value = aliado.currencies || '';
-        if(noteEl) noteEl.value = aliado.note || '';
-        if(editIdEl) editIdEl.value = editId;
-      }
-    } else {
-      if(titleEl) titleEl.textContent = 'Agregar aliado';
-      if(nameEl) nameEl.value = '';
-      if(phoneEl) phoneEl.value = '';
-      if(countryEl) countryEl.value = '';
-      if(roleEl) roleEl.value = 'recolector';
-      if(currEl) currEl.value = '';
-      if(noteEl) noteEl.value = '';
-      if(editIdEl) editIdEl.value = '';
-    }
-
-    modal.classList.add('open');
-    modal.setAttribute('aria-hidden','false');
-    document.body.classList.add('noscroll');
-  }
-
-  function closeAliadoModal(){
-    const modal = document.getElementById('aliadoModal');
-    if(modal){
-      modal.classList.remove('open');
-      modal.setAttribute('aria-hidden','true');
-    }
-    document.body.classList.remove('noscroll');
-  }
-
-  function saveAliado(){
-    const name = document.getElementById('aliadoName')?.value?.trim();
-    if(!name){ alert('El nombre es obligatorio.'); return; }
-
-    const editId = document.getElementById('aliadoEditId')?.value || '';
-    const aliados = loadAliados();
-
-    const data = {
-      id: editId || (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)),
-      name,
-      phone: document.getElementById('aliadoPhone')?.value?.trim() || '',
-      country: document.getElementById('aliadoCountry')?.value || '',
-      role: document.getElementById('aliadoRole')?.value || 'otro',
-      currencies: document.getElementById('aliadoCurrencies')?.value?.trim() || '',
-      note: document.getElementById('aliadoNote')?.value?.trim() || '',
-      updatedAt: new Date().toISOString()
-    };
-
-    if(editId){
-      const idx = aliados.findIndex(a => a.id === editId);
-      if(idx >= 0) aliados[idx] = { ...aliados[idx], ...data };
-      else aliados.push(data);
-    } else {
-      data.createdAt = new Date().toISOString();
-      aliados.push(data);
-    }
-
-    saveAliados(aliados);
-    closeAliadoModal();
-    populateAliadoCountryFilter();
-    renderAliados();
-    if(typeof showToast === 'function') showToast('Aliado guardado');
-  }
-
-  window.editAliado = function(id){ openAliadoModal(id); };
-  window.deleteAliado = function(id){
-    if(!confirm('¿Seguro que deseas eliminar este aliado?')) return;
-    const aliados = loadAliados().filter(a => a.id !== id);
-    saveAliados(aliados);
-    populateAliadoCountryFilter();
-    renderAliados();
-    if(typeof showToast === 'function') showToast('Aliado eliminado');
-  };
 
   /* --- CSV Export --- */
   function exportHistoryCSV(){
@@ -5421,7 +5043,6 @@
       const tips = [
         'Revisa tus tasas antes de iniciar el día para ajustar tu margen.',
         'Usa la función de exportar CSV para llevar control en Excel.',
-        'Agrega a tus aliados para coordinar operaciones más rápido.',
         'Registra todas las operaciones para un cierre diario preciso.',
         'Consulta el dashboard para identificar tus rutas más rentables.'
       ];
@@ -5436,12 +5057,10 @@
       const totalOps = ops.length;
       const uniqueClients = new Set(ops.map(o => (o.clientName || '').toLowerCase().trim()).filter(Boolean)).size;
       const uniqueRoutes = new Set(ops.map(o => `${o.originCountry}-${o.destCountry}`)).size;
-      const aliados = loadAliados().length;
       quickStats.innerHTML = `
         <div class="news-stat-row"><span class="news-stat-label">Total operaciones</span><span class="news-stat-value">${totalOps}</span></div>
         <div class="news-stat-row"><span class="news-stat-label">Clientes únicos</span><span class="news-stat-value">${uniqueClients}</span></div>
         <div class="news-stat-row"><span class="news-stat-label">Rutas activas</span><span class="news-stat-value">${uniqueRoutes}</span></div>
-        <div class="news-stat-row"><span class="news-stat-label">Aliados registrados</span><span class="news-stat-value">${aliados}</span></div>
       `;
     }
 
@@ -5506,13 +5125,12 @@
     try{
       const userId = getUserId();
       const operations = typeof loadOperations === 'function' ? loadOperations() : [];
-      const aliados = loadAliados();
       const profile = typeof loadProfile === 'function' ? loadProfile() : {};
 
       const resp = await fetch('/.netlify/functions/backup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, operations, aliados, profile })
+        body: JSON.stringify({ userId, operations, profile })
       });
       const data = await resp.json();
       if(data.ok){
@@ -5540,9 +5158,6 @@
       if(data.operations && Array.isArray(data.operations)){
         localStorage.setItem('aki_transfer_operations_v2', JSON.stringify(data.operations));
       }
-      if(data.aliados && Array.isArray(data.aliados)){
-        saveAliados(data.aliados);
-      }
       if(data.profile && typeof data.profile === 'object'){
         localStorage.setItem('onze_operator_profile_v1', JSON.stringify(data.profile));
       }
@@ -5551,7 +5166,6 @@
       if(typeof refreshHistoryUI === 'function') refreshHistoryUI();
       if(typeof refreshDashboard === 'function') refreshDashboard();
       if(typeof fillProfileForm === 'function') fillProfileForm();
-      renderAliados();
     }catch(e){
       alert('No se pudo conectar al servidor de respaldo.');
     }
@@ -5563,8 +5177,7 @@
     renderTopClients();
     renderTopRoutes();
     renderNewsSections();
-    populateAliadoCountryFilter();
-    renderAliados();
+
   }
 
   /* --- Monkey-patch refreshDashboard to also update enhanced sections --- */
@@ -5582,25 +5195,12 @@
   const origSwitchView = window.switchView;
   window.switchView = function(viewName){
     if(typeof origSwitchView === 'function') origSwitchView(viewName);
-    if(viewName === 'aliados'){ populateAliadoCountryFilter(); renderAliados(); }
     if(viewName === 'dashboard'){ renderWeeklyChart(); renderTopClients(); renderTopRoutes(); }
     if(viewName === 'noticias') renderNewsSections();
   };
 
   /* --- Bind events --- */
   function bindEnhancedEvents(){
-    const addAliadoBtn = document.getElementById('addAliadoBtn');
-    if(addAliadoBtn) addAliadoBtn.onclick = function(){ openAliadoModal(); };
-
-    const closeAliadoBtn = document.getElementById('closeAliadoModalBtn');
-    if(closeAliadoBtn) closeAliadoBtn.onclick = closeAliadoModal;
-
-    const cancelAliadoBtn = document.getElementById('cancelAliadoBtn');
-    if(cancelAliadoBtn) cancelAliadoBtn.onclick = closeAliadoModal;
-
-    const saveAliadoBtn = document.getElementById('saveAliadoBtn');
-    if(saveAliadoBtn) saveAliadoBtn.onclick = saveAliado;
-
     const exportCsvBtn = document.getElementById('exportCsvBtn');
     if(exportCsvBtn) exportCsvBtn.onclick = exportHistoryCSV;
 
@@ -5650,12 +5250,6 @@
     const restoreBtn = document.getElementById('restoreBtn');
     if(restoreBtn) restoreBtn.onclick = restoreFromCloud;
 
-    const filterCountry = document.getElementById('aliadoFilterCountry');
-    if(filterCountry) filterCountry.onchange = renderAliados;
-
-    const searchInput = document.getElementById('aliadoSearchInput');
-    if(searchInput) searchInput.oninput = renderAliados;
-
     const notesArea = document.getElementById('operatorNotes');
     if(notesArea) notesArea.value = loadOperatorNotes();
 
@@ -5666,15 +5260,6 @@
       if(typeof showToast === 'function') showToast('Notas guardadas');
     };
 
-    // Close aliado modal on backdrop click
-    const aliadoModal = document.getElementById('aliadoModal');
-    if(aliadoModal){
-      aliadoModal.addEventListener('click', function(e){
-        if(e.target === aliadoModal || e.target.classList.contains('modal-dialog')){
-          closeAliadoModal();
-        }
-      });
-    }
   }
 
   document.addEventListener('DOMContentLoaded', function(){
