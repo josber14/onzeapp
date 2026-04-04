@@ -1909,6 +1909,48 @@
               <div class="dash-value" id="dashOpsMonth">0</div>
               <div class="dash-sub">Control mensual</div>
             </div>
+
+            <div class="dash-card">
+              <div class="dash-label">USDT cobrado</div>
+              <div class="dash-value" id="dashUsdtCollected">0</div>
+              <div class="dash-sub">Cobrado real</div>
+            </div>
+
+            <div class="dash-card">
+              <div class="dash-label">USDT pendiente</div>
+              <div class="dash-value" id="dashUsdtPending">0</div>
+              <div class="dash-sub">Por cobrar</div>
+            </div>
+
+            <div class="dash-card">
+              <div class="dash-label">Capital total USDT</div>
+              <div class="dash-value" id="dashUsdtCapital">0</div>
+              <div class="dash-sub">Cobrado + pendiente</div>
+            </div>
+
+            <div class="dash-card">
+              <div class="dash-label">Gasto del mes</div>
+              <div class="dash-value" id="dashMonthExpenses">0</div>
+              <div class="dash-sub">Egresos registrados</div>
+            </div>
+
+            <div class="dash-card">
+              <div class="dash-label">Saldo neto</div>
+              <div class="dash-value" id="dashNetBalance">0</div>
+              <div class="dash-sub">Capital - gastos</div>
+            </div>
+
+            <div class="dash-card">
+              <div class="dash-label">Cuentas por cobrar</div>
+              <div class="dash-value" id="dashReceivablesCount">0</div>
+              <div class="dash-sub" id="dashReceivablesUsdt">0 USDT</div>
+            </div>
+
+            <div class="dash-card">
+              <div class="dash-label">Total dinero por país</div>
+              <div class="dash-value" id="dashCountriesTotal">0</div>
+              <div class="dash-sub" id="dashCountriesTotalUsdt">0 USDT</div>
+            </div>
           </div>
 
           <div id="profileIncompleteNotice" class="profile-inline-notice" style="display:none;">
@@ -2540,6 +2582,15 @@
     const dashProfitMonthCur = document.getElementById("dashProfitMonthCur");
     const dashOpsToday = document.getElementById("dashOpsToday");
     const dashOpsMonth = document.getElementById("dashOpsMonth");
+    const dashUsdtCollected = document.getElementById("dashUsdtCollected");
+    const dashUsdtPending = document.getElementById("dashUsdtPending");
+    const dashUsdtCapital = document.getElementById("dashUsdtCapital");
+    const dashMonthExpenses = document.getElementById("dashMonthExpenses");
+    const dashNetBalance = document.getElementById("dashNetBalance");
+    const dashReceivablesCount = document.getElementById("dashReceivablesCount");
+    const dashReceivablesUsdt = document.getElementById("dashReceivablesUsdt");
+    const dashCountriesTotal = document.getElementById("dashCountriesTotal");
+    const dashCountriesTotalUsdt = document.getElementById("dashCountriesTotalUsdt");
 
     const registerModal = document.getElementById("registerModal");
     const closeModalBtn = document.getElementById("closeModalBtn");
@@ -3428,10 +3479,38 @@
       const monthCollectedUsdt = sumUsdt(monthOps, "amountCollectedUsdt");
       const monthPendingUsdt = sumUsdt(monthOps, "amountPendingUsdt");
 
+      const capitalTotalUsdt = monthCollectedUsdt + monthPendingUsdt;
+      const monthExpensesUsdt = 0;
+      const netBalanceUsdt = capitalTotalUsdt - monthExpensesUsdt;
+
+      const receivablesOps = monthOps.filter(op => ["pending", "partial"].includes(String(op?.paymentStatus || "")));
+      const receivablesCount = receivablesOps.length;
+      const receivablesUsdt = receivablesOps.reduce((sum, op) => sum + Number(op?.amountPendingUsdt || 0), 0);
+
+      const countriesMap = new Map();
+      monthOps.forEach(op => {
+        if(!op || op.paymentStatus === "cancelled" || op.operationStatus === "cancelled") return;
+        const country = op.originCountry || "—";
+        const prev = countriesMap.get(country) || 0;
+        countriesMap.set(country, prev + Number(op.sendAmount || 0));
+      });
+      const countriesCount = countriesMap.size;
+      const countriesTotalUsdt = monthOps.reduce((sum, op) => sum + Number(op?.operationUsdtBase || 0), 0);
+
       dashProfitToday.textContent = todayProfit.amount;
-      dashProfitTodayCur.textContent = `${todayProfit.currency} | Cobrado ${formatCalcValue(todayCollectedUsdt, "USDT")} USDT | Pendiente ${formatCalcValue(todayPendingUsdt, "USDT")} USDT`;
+      dashProfitTodayCur.textContent = todayProfit.currency;
       dashProfitMonth.textContent = monthProfit.amount;
-      dashProfitMonthCur.textContent = `${monthProfit.currency} | Cobrado ${formatCalcValue(monthCollectedUsdt, "USDT")} USDT | Pendiente ${formatCalcValue(monthPendingUsdt, "USDT")} USDT`;
+      dashProfitMonthCur.textContent = monthProfit.currency;
+
+      if(dashUsdtCollected) dashUsdtCollected.textContent = `${formatCalcValue(monthCollectedUsdt, "USDT")}`;
+      if(dashUsdtPending) dashUsdtPending.textContent = `${formatCalcValue(monthPendingUsdt, "USDT")}`;
+      if(dashUsdtCapital) dashUsdtCapital.textContent = `${formatCalcValue(capitalTotalUsdt, "USDT")}`;
+      if(dashMonthExpenses) dashMonthExpenses.textContent = `${formatCalcValue(monthExpensesUsdt, "USDT")}`;
+      if(dashNetBalance) dashNetBalance.textContent = `${formatCalcValue(netBalanceUsdt, "USDT")}`;
+      if(dashReceivablesCount) dashReceivablesCount.textContent = String(receivablesCount);
+      if(dashReceivablesUsdt) dashReceivablesUsdt.textContent = `${formatCalcValue(receivablesUsdt, "USDT")} USDT`;
+      if(dashCountriesTotal) dashCountriesTotal.textContent = String(countriesCount);
+      if(dashCountriesTotalUsdt) dashCountriesTotalUsdt.textContent = `${formatCalcValue(countriesTotalUsdt, "USDT")} USDT`;
     }
 
     function openRegisterModal(data){
