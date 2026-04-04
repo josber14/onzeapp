@@ -2001,6 +2001,54 @@
             <div id="topRoutesGrid" class="top-routes-grid"></div>
             <div class="empty-state" id="topRoutesEmpty" style="display:none;">Sin operaciones registradas.</div>
           </div>
+
+          <div class="section-card">
+            <div class="section-top">
+              <div>
+                <h3 class="section-title" style="margin-bottom:6px;">Gastos del mes</h3>
+                <p class="section-text">Registra egresos para descontarlos del saldo neto.</p>
+              </div>
+              <button class="btn small" id="addExpenseBtn" type="button">+ Agregar gasto</button>
+            </div>
+
+            <div class="modal-form-grid" style="margin-bottom:16px;">
+              <div class="field">
+                <label for="expenseDate">Fecha</label>
+                <input type="date" id="expenseDate" />
+              </div>
+
+              <div class="field">
+                <label for="expenseCategory">Categoría</label>
+                <input type="text" id="expenseCategory" placeholder="Ej: Publicidad" />
+              </div>
+
+              <div class="field">
+                <label for="expenseAmount">Monto USDT</label>
+                <input type="number" id="expenseAmount" inputmode="decimal" min="0" step="0.01" placeholder="0.00" />
+              </div>
+
+              <div class="field full">
+                <label for="expenseNote">Observación</label>
+                <textarea id="expenseNote" placeholder="Comentario opcional"></textarea>
+              </div>
+            </div>
+
+            <div class="history-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Categoría</th>
+                    <th>Monto</th>
+                    <th>Observación</th>
+                  </tr>
+                </thead>
+                <tbody id="expensesBody"></tbody>
+              </table>
+            </div>
+
+            <div class="empty-state" id="expensesEmpty">Aún no hay gastos registrados.</div>
+          </div>
         </section>
       </section>
 
@@ -2576,6 +2624,13 @@
 
     const historyBody = document.getElementById("historyBody");
     const historyEmpty = document.getElementById("historyEmpty");
+    const addExpenseBtn = document.getElementById("addExpenseBtn");
+    const expenseDate = document.getElementById("expenseDate");
+    const expenseCategory = document.getElementById("expenseCategory");
+    const expenseAmount = document.getElementById("expenseAmount");
+    const expenseNote = document.getElementById("expenseNote");
+    const expensesBody = document.getElementById("expensesBody");
+    const expensesEmpty = document.getElementById("expensesEmpty");
     const dashProfitToday = document.getElementById("dashProfitToday");
     const dashProfitTodayCur = document.getElementById("dashProfitTodayCur");
     const dashProfitMonth = document.getElementById("dashProfitMonth");
@@ -3115,6 +3170,20 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(ops));
     }
 
+    function loadExpenses(){
+      try{
+        const raw = localStorage.getItem("onze_expenses_v1");
+        const data = raw ? JSON.parse(raw) : [];
+        return Array.isArray(data) ? data : [];
+      }catch{
+        return [];
+      }
+    }
+
+    function saveExpenses(expenses){
+      localStorage.setItem("onze_expenses_v1", JSON.stringify(expenses));
+    }
+
     function loadSavedClients(){
       try{
         const raw = localStorage.getItem(CLIENTS_KEY);
@@ -3127,6 +3196,31 @@
 
     function saveSavedClients(clients){
       localStorage.setItem(CLIENTS_KEY, JSON.stringify(clients));
+    }
+
+    function renderExpenses(){
+      if(!expensesBody || !expensesEmpty) return;
+
+      const expenses = loadExpenses().sort((a,b)=>new Date(b.date || b.createdAt || 0) - new Date(a.date || a.createdAt || 0));
+      expensesBody.innerHTML = "";
+
+      if(!expenses.length){
+        expensesEmpty.style.display = "block";
+        return;
+      }
+
+      expensesEmpty.style.display = "none";
+
+      expenses.forEach(exp => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${exp.date || "—"}</td>
+          <td>${exp.category || "—"}</td>
+          <td>${formatCalcValue(Number(exp.amountUsdt || 0), "USDT")} USDT</td>
+          <td>${exp.note || "—"}</td>
+        `;
+        expensesBody.appendChild(tr);
+      });
     }
 
     function rememberClient(name){
@@ -3480,7 +3574,9 @@
       const monthPendingUsdt = sumUsdt(monthOps, "amountPendingUsdt");
 
       const capitalTotalUsdt = monthCollectedUsdt + monthPendingUsdt;
-      const monthExpensesUsdt = 0;
+      const monthExpensesUsdt = loadExpenses()
+        .filter(exp => String(exp?.date || "").startsWith(currentMonth))
+        .reduce((sum, exp) => sum + Number(exp?.amountUsdt || 0), 0);
       const netBalanceUsdt = capitalTotalUsdt - monthExpensesUsdt;
 
       const receivablesOps = monthOps.filter(op => ["pending", "partial"].includes(String(op?.paymentStatus || "")));
@@ -4796,6 +4892,7 @@
     document.addEventListener("DOMContentLoaded", ()=>{
       fetchAndRender(true);
       refreshHistoryUI();
+      renderExpenses();
       refreshClientSuggestions();
       fillProfileForm();
       operationDate.value = todayISO();
@@ -5495,6 +5592,46 @@
 
     const exportCsvBtn = document.getElementById('exportCsvBtn');
     if(exportCsvBtn) exportCsvBtn.onclick = exportHistoryCSV;
+
+    if(addExpenseBtn){
+      addExpenseBtn.onclick = function(){
+        const date = (expenseDate?.value || todayISO()).trim();
+        const category = (expenseCategory?.value || "").trim();
+        const amountUsdt = Number(expenseAmount?.value || 0);
+        const note = (expenseNote?.value || "").trim();
+
+        if(!category){
+          if(typeof showToast === 'function') showToast('Agrega una categoría');
+          return;
+        }
+
+        if(!Number.isFinite(amountUsdt) || amountUsdt <= 0){
+          if(typeof showToast === 'function') showToast('Agrega un monto válido');
+          return;
+        }
+
+        const expenses = loadExpenses();
+        expenses.push({
+          id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2)),
+          date,
+          category,
+          amountUsdt,
+          note,
+          createdAt: new Date().toISOString()
+        });
+
+        saveExpenses(expenses);
+
+        if(expenseDate) expenseDate.value = todayISO();
+        if(expenseCategory) expenseCategory.value = "";
+        if(expenseAmount) expenseAmount.value = "";
+        if(expenseNote) expenseNote.value = "";
+
+        renderExpenses();
+        refreshDashboard();
+        if(typeof showToast === 'function') showToast('Gasto guardado ✅');
+      };
+    }
 
     const backupBtn = document.getElementById('backupBtn');
     if(backupBtn) backupBtn.onclick = backupToCloud;
