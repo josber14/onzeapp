@@ -2041,6 +2041,7 @@
                     <th>Categoría</th>
                     <th>Monto</th>
                     <th>Observación</th>
+                    <th>Acción</th>
                   </tr>
                 </thead>
                 <tbody id="expensesBody"></tbody>
@@ -3218,10 +3219,20 @@
           <td>${exp.category || "—"}</td>
           <td>${formatCalcValue(Number(exp.amountUsdt || 0), "USDT")} USDT</td>
           <td>${exp.note || "—"}</td>
+          <td><button class="btn small danger" type="button" onclick="deleteExpense('${exp.id}')">Eliminar</button></td>
         `;
         expensesBody.appendChild(tr);
       });
     }
+
+    window.deleteExpense = function(id){
+      if(!confirm("¿Seguro que deseas eliminar este gasto?")) return;
+      const expenses = loadExpenses().filter(exp => exp.id !== id);
+      saveExpenses(expenses);
+      renderExpenses();
+      refreshDashboard();
+      if(typeof showToast === 'function') showToast('Gasto eliminado');
+    };
 
     function rememberClient(name){
       const clean = String(name || "").trim();
