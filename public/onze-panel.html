@@ -1745,6 +1745,9 @@
               <h2 class="section-title">Dashboard</h2>
               <p class="section-text">Resumen general de tu operativa</p>
             </div>
+            <div>
+              <button class="btn small" type="button" id="openCapitalSetupBtn">Capital inicial</button>
+            </div>
           </div>
 
           <div class="dashboard-grid">
@@ -2358,6 +2361,13 @@
     const STORAGE_KEY = "aki_transfer_operations_v2";
     const CLIENTS_KEY = "aki_transfer_clients_v1";
     const PROFILE_KEY = "onze_operator_profile_v1";
+    const NOTES_KEY = "onze_operator_notes_v1";
+    const CAPITAL_KEY = "onze_initial_capital_v1";
+    const BALANCE_MOVEMENTS_KEY = "onze_balance_movements_v1";
+    const LIQUIDITY_ALERTS_KEY = "onze_liquidity_alerts_v1";
+    const INTERNAL_FUNDINGS_KEY = "onze_internal_fundings_v1";
+    const EARNINGS_KEY = "onze_earnings_movements_v1";
+    const COLLABORATOR_PAYMENTS_KEY = "onze_collaborator_payments_v1";
     const WHATSAPP_NUMBER = "56951333777";
 
     const sel = document.getElementById("country");
@@ -2434,6 +2444,7 @@
     const dashReceivablesUsdt = document.getElementById("dashReceivablesUsdt");
     const dashCountriesTotal = document.getElementById("dashCountriesTotal");
     const dashCountriesTotalUsdt = document.getElementById("dashCountriesTotalUsdt");
+    const openCapitalSetupBtn = document.getElementById("openCapitalSetupBtn");
 
     const registerModal = document.getElementById("registerModal");
     const closeModalBtn = document.getElementById("closeModalBtn");
@@ -2934,6 +2945,50 @@
       return calcBidirectional.get(rowKey);
     }
 
+    function getBalanceSummaryByCountry(){
+      const summaryMap = new Map();
+
+      const ensureEntry = (country, currency) => {
+        const key = `${String(country || "").trim()}__${String(currency || "").trim().toUpperCase()}`;
+        if(!summaryMap.has(key)){
+          summaryMap.set(key, {
+            country: String(country || "").trim(),
+            currency: String(currency || "").trim().toUpperCase(),
+            capitalInicial: 0,
+            entradas: 0,
+            salidas: 0,
+            saldoActual: 0,
+            saldoUsdt: 0
+          });
+        }
+        return summaryMap.get(key);
+      };
+
+      loadInitialCapital().forEach(item => {
+        const entry = ensureEntry(item.country, item.currency);
+        entry.capitalInicial += Number(item.amount || 0);
+      });
+
+      loadBalanceMovements().forEach(item => {
+        const entry = ensureEntry(item.country, item.currency);
+        const amount = Number(item.amount || 0);
+        if(item.direction === "entrada"){
+          entry.entradas += amount;
+        } else {
+          entry.salidas += amount;
+        }
+      });
+
+      const rows = Array.from(summaryMap.values()).map(entry => {
+        entry.saldoActual = Number(entry.capitalInicial || 0) + Number(entry.entradas || 0) - Number(entry.salidas || 0);
+        entry.saldoUsdt = toUsdtFromCountryAmount(entry.country, entry.saldoActual);
+        return entry;
+      });
+
+      rows.sort((a, b) => a.country.localeCompare(b.country, "es", { sensitivity: "base" }));
+      return rows;
+    }
+
     function currentFilteredArray(data){
       const pais = sel.value;
       const destino = destSel.value;
@@ -2956,6 +3011,90 @@
 
     function saveOperations(ops){
       localStorage.setItem(STORAGE_KEY, JSON.stringify(ops));
+    }
+
+    function loadInitialCapital(){
+      try{
+        const raw = localStorage.getItem(CAPITAL_KEY);
+        const data = raw ? JSON.parse(raw) : [];
+        return Array.isArray(data) ? data : [];
+      }catch{
+        return [];
+      }
+    }
+
+    function saveInitialCapital(items){
+      localStorage.setItem(CAPITAL_KEY, JSON.stringify(items));
+    }
+
+    function loadBalanceMovements(){
+      try{
+        const raw = localStorage.getItem(BALANCE_MOVEMENTS_KEY);
+        const data = raw ? JSON.parse(raw) : [];
+        return Array.isArray(data) ? data : [];
+      }catch{
+        return [];
+      }
+    }
+
+    function saveBalanceMovements(items){
+      localStorage.setItem(BALANCE_MOVEMENTS_KEY, JSON.stringify(items));
+    }
+
+    function loadLiquidityAlerts(){
+      try{
+        const raw = localStorage.getItem(LIQUIDITY_ALERTS_KEY);
+        const data = raw ? JSON.parse(raw) : [];
+        return Array.isArray(data) ? data : [];
+      }catch{
+        return [];
+      }
+    }
+
+    function saveLiquidityAlerts(items){
+      localStorage.setItem(LIQUIDITY_ALERTS_KEY, JSON.stringify(items));
+    }
+
+    function loadInternalFundings(){
+      try{
+        const raw = localStorage.getItem(INTERNAL_FUNDINGS_KEY);
+        const data = raw ? JSON.parse(raw) : [];
+        return Array.isArray(data) ? data : [];
+      }catch{
+        return [];
+      }
+    }
+
+    function saveInternalFundings(items){
+      localStorage.setItem(INTERNAL_FUNDINGS_KEY, JSON.stringify(items));
+    }
+
+    function loadEarningsMovements(){
+      try{
+        const raw = localStorage.getItem(EARNINGS_KEY);
+        const data = raw ? JSON.parse(raw) : [];
+        return Array.isArray(data) ? data : [];
+      }catch{
+        return [];
+      }
+    }
+
+    function saveEarningsMovements(items){
+      localStorage.setItem(EARNINGS_KEY, JSON.stringify(items));
+    }
+
+    function loadCollaboratorPayments(){
+      try{
+        const raw = localStorage.getItem(COLLABORATOR_PAYMENTS_KEY);
+        const data = raw ? JSON.parse(raw) : [];
+        return Array.isArray(data) ? data : [];
+      }catch{
+        return [];
+      }
+    }
+
+    function saveCollaboratorPayments(items){
+      localStorage.setItem(COLLABORATOR_PAYMENTS_KEY, JSON.stringify(items));
     }
 
     function loadExpenses(){
@@ -2984,6 +3123,91 @@
 
     function saveSavedClients(clients){
       localStorage.setItem(CLIENTS_KEY, JSON.stringify(clients));
+    }
+
+    function createSimpleId(prefix){
+      return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+    }
+
+    function getCountryBalanceSnapshot(countryName, currencyCode){
+      const targetCountry = String(countryName || "").trim();
+      const targetCurrency = String(currencyCode || "").trim().toUpperCase();
+
+      const capital = loadInitialCapital().filter(item =>
+        String(item.country || "").trim() === targetCountry &&
+        String(item.currency || "").trim().toUpperCase() === targetCurrency
+      );
+
+      const movements = loadBalanceMovements().filter(item =>
+        String(item.country || "").trim() === targetCountry &&
+        String(item.currency || "").trim().toUpperCase() === targetCurrency
+      );
+
+      const capitalTotal = capital.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      const movementNet = movements.reduce((sum, item) => {
+        const amount = Number(item.amount || 0);
+        return sum + (item.direction === "entrada" ? amount : -amount);
+      }, 0);
+
+      return {
+        country: targetCountry,
+        currency: targetCurrency,
+        capitalTotal,
+        movementNet,
+        balance: capitalTotal + movementNet
+      };
+    }
+
+    function addBalanceMovement({
+      operationId = "",
+      fundingId = "",
+      country = "",
+      currency = "",
+      direction = "entrada",
+      movementType = "ajuste_manual",
+      amount = 0,
+      note = ""
+    } = {}){
+      const movements = loadBalanceMovements();
+      movements.push({
+        id: createSimpleId("bal"),
+        createdAt: new Date().toISOString(),
+        operationId,
+        fundingId,
+        country,
+        currency: String(currency || "").trim().toUpperCase(),
+        direction,
+        movementType,
+        amount: Number(amount || 0),
+        note
+      });
+      saveBalanceMovements(movements);
+    }
+
+    function addLiquidityAlert({
+      operationId = "",
+      country = "",
+      currency = "",
+      availableAmount = 0,
+      requiredAmount = 0,
+      shortageAmount = 0,
+      note = ""
+    } = {}){
+      const alerts = loadLiquidityAlerts();
+      alerts.push({
+        id: createSimpleId("liq"),
+        createdAt: new Date().toISOString(),
+        resolvedAt: null,
+        status: "abierta",
+        operationId,
+        country,
+        currency: String(currency || "").trim().toUpperCase(),
+        availableAmount: Number(availableAmount || 0),
+        requiredAmount: Number(requiredAmount || 0),
+        shortageAmount: Number(shortageAmount || 0),
+        note
+      });
+      saveLiquidityAlerts(alerts);
     }
 
     function renderExpenses(){
@@ -3371,7 +3595,8 @@
       const monthCollectedUsdt = sumUsdt(monthOps, "amountCollectedUsdt");
       const monthPendingUsdt = sumUsdt(monthOps, "amountPendingUsdt");
 
-      const capitalTotalUsdt = monthCollectedUsdt + monthPendingUsdt;
+      const balanceSummary = getBalanceSummaryByCountry();
+      const capitalTotalUsdt = balanceSummary.reduce((sum, item) => sum + Number(item?.saldoUsdt || 0), 0);
       const monthExpensesUsdt = loadExpenses()
         .filter(exp => String(exp?.date || "").startsWith(currentMonth))
         .reduce((sum, exp) => sum + Number(exp?.amountUsdt || 0), 0);
@@ -3381,15 +3606,8 @@
       const receivablesCount = receivablesOps.length;
       const receivablesUsdt = receivablesOps.reduce((sum, op) => sum + Number(op?.amountPendingUsdt || 0), 0);
 
-      const countriesMap = new Map();
-      monthOps.forEach(op => {
-        if(!op || op.paymentStatus === "cancelled" || op.operationStatus === "cancelled") return;
-        const country = op.originCountry || "—";
-        const prev = countriesMap.get(country) || 0;
-        countriesMap.set(country, prev + Number(op.sendAmount || 0));
-      });
-      const countriesCount = countriesMap.size;
-      const countriesTotalUsdt = monthOps.reduce((sum, op) => sum + Number(op?.operationUsdtBase || 0), 0);
+      const countriesCount = balanceSummary.filter(item => Number(item?.saldoActual || 0) !== 0).length;
+      const countriesTotalUsdt = capitalTotalUsdt;
 
       dashProfitToday.textContent = todayProfit.amount;
       dashProfitTodayCur.textContent = todayProfit.currency;
@@ -3609,6 +3827,15 @@
           }
         : {};
 
+      const destinationSnapshot = getCountryBalanceSnapshot(
+        pendingRegisterData.destCountry,
+        pendingRegisterData.destCurrency
+      );
+      const availableDestBalance = Number(destinationSnapshot.balance || 0);
+      const requiredDestAmount = Number(pendingRegisterData.receiveAmount || 0);
+      const shortageAmount = Math.max(0, requiredDestAmount - availableDestBalance);
+      const needsFunding = shortageAmount > 0;
+
       const op = {
         id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2)),
         createdAt: new Date().toISOString(),
@@ -3640,6 +3867,12 @@
         profitCountry,
         profitValue,
         profitDisplay,
+        liquidityStatus: needsFunding ? "requiere_fondeo" : "ok",
+        needsFunding,
+        liquidityShortage: shortageAmount,
+        shortageCountry: needsFunding ? pendingRegisterData.destCountry : "",
+        shortageCurrency: needsFunding ? pendingRegisterData.destCurrency : "",
+        availableDestBalance,
         ...opExtra
       };
 
@@ -3648,6 +3881,38 @@
       const ops = loadOperations();
       ops.push(op);
       saveOperations(ops);
+
+      addBalanceMovement({
+        operationId: op.id,
+        country: op.originCountry,
+        currency: op.originCurrency,
+        direction: "entrada",
+        movementType: "operacion_entrada",
+        amount: Number(op.sendAmount || 0),
+        note: `Operación ${op.operationNumber}`
+      });
+
+      addBalanceMovement({
+        operationId: op.id,
+        country: op.destCountry,
+        currency: op.destCurrency,
+        direction: "salida",
+        movementType: "operacion_salida",
+        amount: Number(op.receiveAmount || 0),
+        note: `Operación ${op.operationNumber}`
+      });
+
+      if(needsFunding){
+        addLiquidityAlert({
+          operationId: op.id,
+          country: op.destCountry,
+          currency: op.destCurrency,
+          availableAmount: availableDestBalance,
+          requiredAmount: requiredDestAmount,
+          shortageAmount,
+          note: `Faltante detectado al registrar la operación ${op.operationNumber}`
+        });
+      }
       refreshHistoryUI();
       closeRegisterModal();
       switchView("dashboard");
@@ -5259,6 +5524,48 @@
       saveOperatorNotes(text);
       if(typeof showToast === 'function') showToast('Notas guardadas');
     };
+
+    if(openCapitalSetupBtn){
+      openCapitalSetupBtn.onclick = function(){
+        const country = prompt('País del capital inicial:');
+        if(country == null) return;
+
+        const currency = prompt('Moneda (ej: USDT, CLP, PEN, VES):');
+        if(currency == null) return;
+
+        const amountRaw = prompt('Monto inicial disponible:');
+        if(amountRaw == null) return;
+
+        const amount = Number(String(amountRaw).replace(',', '.'));
+
+        if(!String(country || '').trim()){
+          if(typeof showToast === 'function') showToast('Debes indicar un país');
+          return;
+        }
+
+        if(!String(currency || '').trim()){
+          if(typeof showToast === 'function') showToast('Debes indicar una moneda');
+          return;
+        }
+
+        if(!Number.isFinite(amount) || amount < 0){
+          if(typeof showToast === 'function') showToast('Monto inválido');
+          return;
+        }
+
+        const items = loadInitialCapital();
+        items.push({
+          id: createSimpleId('cap'),
+          createdAt: new Date().toISOString(),
+          country: String(country || '').trim(),
+          currency: String(currency || '').trim().toUpperCase(),
+          amount
+        });
+        saveInitialCapital(items);
+        refreshDashboard();
+        if(typeof showToast === 'function') showToast('Capital inicial guardado ✅');
+      };
+    }
 
   }
 
