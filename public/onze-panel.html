@@ -1917,7 +1917,7 @@
           <div class="section-card">
             <div class="section-top">
               <div>
-                <h3 class="section-title" style="margin-bottom:6px;">Capital inicial</h3>
+                <h3 class="section-title" style="margin-bottom:6px;">Capital</h3>
                 <p class="section-text">Carga y visualiza el saldo inicial por país para construir tu balance real.</p>
               </div>
             </div>
@@ -3048,12 +3048,21 @@
     function getBalanceSummaryByCountry(){
       const summaryMap = new Map();
 
+      const normalizeCountryLabel = (country) => {
+        const raw = String(country || "").trim();
+        if(!raw) return "";
+        if(norm(raw) === "usdt") return "USDT";
+        return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+      };
+
       const ensureEntry = (country, currency) => {
-        const key = `${String(country || "").trim()}__${String(currency || "").trim().toUpperCase()}`;
+        const normalizedCountry = normalizeCountryLabel(country);
+        const normalizedCurrency = String(currency || "").trim().toUpperCase();
+        const key = `${norm(normalizedCountry)}__${normalizedCurrency}`;
         if(!summaryMap.has(key)){
           summaryMap.set(key, {
-            country: String(country || "").trim(),
-            currency: String(currency || "").trim().toUpperCase(),
+            country: normalizedCountry,
+            currency: normalizedCurrency,
             capitalInicial: 0,
             entradas: 0,
             salidas: 0,
@@ -3230,16 +3239,16 @@
     }
 
     function getCountryBalanceSnapshot(countryName, currencyCode){
-      const targetCountry = String(countryName || "").trim();
+      const targetCountry = norm(countryName || "");
       const targetCurrency = String(currencyCode || "").trim().toUpperCase();
 
       const capital = loadInitialCapital().filter(item =>
-        String(item.country || "").trim() === targetCountry &&
+        norm(item.country || "") === targetCountry &&
         String(item.currency || "").trim().toUpperCase() === targetCurrency
       );
 
       const movements = loadBalanceMovements().filter(item =>
-        String(item.country || "").trim() === targetCountry &&
+        norm(item.country || "") === targetCountry &&
         String(item.currency || "").trim().toUpperCase() === targetCurrency
       );
 
