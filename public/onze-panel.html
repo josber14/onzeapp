@@ -2038,6 +2038,7 @@
                   <th>Tu tasa</th>
                   <th>Ganancia</th>
                   <th>Observación</th>
+                  <th>Acción</th>
                 </tr>
               </thead>
               <tbody id="historyBody"></tbody>
@@ -3407,6 +3408,25 @@
       if(typeof showToast === 'function') showToast('Gasto eliminado');
     };
 
+    window.deleteOperation = function(id){
+      if(!confirm("¿Seguro que deseas eliminar esta operación?")) return;
+
+      const ops = loadOperations().filter(op => op.id !== id);
+      saveOperations(ops);
+
+      const balanceMovements = loadBalanceMovements().filter(item => item.operationId !== id);
+      saveBalanceMovements(balanceMovements);
+
+      const liquidityAlerts = loadLiquidityAlerts().filter(item => item.operationId !== id);
+      saveLiquidityAlerts(liquidityAlerts);
+
+      const internalFundings = loadInternalFundings().filter(item => item.operationId !== id);
+      saveInternalFundings(internalFundings);
+
+      refreshHistoryUI();
+      if(typeof showToast === 'function') showToast('Operación eliminada');
+    };
+
     function rememberClient(name){
       const clean = String(name || "").trim();
       if(!clean) return;
@@ -3714,6 +3734,7 @@
               : `<span class="pill green">${op.profitDisplay}</span>`
           }</td>
           <td>${op.note || "—"}</td>
+          <td><button class="btn small danger" type="button" onclick="deleteOperation('${op.id}')">🗑️</button></td>
         `;
         historyBody.appendChild(tr);
       });
