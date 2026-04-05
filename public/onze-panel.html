@@ -3497,13 +3497,21 @@
     };
 
     window.deleteOperation = function(id){
-      if(!confirm("¿Seguro que deseas eliminar esta operación?")) return;
+      if(!confirm("¿Seguro que deseas anular esta operación? Quedará visible en historial pero no afectará el balance.")) return;
 
       const existingOps = loadOperations();
-      const ops = existingOps.filter(op => op.id !== id);
+      const ops = existingOps.map(op => {
+        if(op.id !== id) return op;
+        return {
+          ...op,
+          deleted: true,
+          deletedAt: new Date().toISOString(),
+          status: "eliminada"
+        };
+      });
       saveOperations(ops);
 
-      rebuildBalanceMovementsFromOperations(ops);
+      rebuildBalanceMovementsFromOperations(ops.filter(op => !op.deleted));
 
       const liquidityAlerts = loadLiquidityAlerts().filter(item => item.operationId !== id);
       saveLiquidityAlerts(liquidityAlerts);
@@ -3513,8 +3521,8 @@
 
       refreshHistoryUI();
       renderInitialCapital();
-      refreshDashboard();
-      if(typeof showToast === 'function') showToast('Operación eliminada y balance actualizado');
+      refreshDashboard(ops.filter(op => !op.deleted));
+      if(typeof showToast === 'function') showToast('Operación anulada');
     };
 
     function rememberClient(name){
@@ -3796,6 +3804,7 @@
 
     function refreshHistoryUI(){
       const ops = loadOperations().sort((a,b)=>new Date(b.createdAt) - new Date(a.createdAt));
+      const activeOps = ops.filter(op => !op.deleted);
       historyBody.innerHTML = "";
 
       if(!ops.length){
@@ -3805,32 +3814,48 @@
       }
 
       ops.forEach(op=>{
+        const isDeleted = !!op.deleted;
         const tr = document.createElement("tr");
+
+        if(isDeleted){
+          tr.style.opacity = "0.45";
+        }
+
+        const profitHtml =
+          op.operatorMode === "socio" && Number(op.partnerPayoutDestCostUsdt || 0) > 0
+            ? `<div><span class="pill green">${op.profitDisplay}</span></div>
+               <div style="font-size:12px; opacity:.78; margin-top:6px;">Costo destino: ${formatCalcValue(op.partnerPayoutDestCostUsdt || 0, "USDT")} USDT</div>
+               <div style="font-size:12px; font-weight:700; margin-top:2px;">Total a pagar: ${formatCalcValue(op.partnerPayoutTotalUsdt || 0, "USDT")} USDT</div>`
+            : `<span class="pill green">${op.profitDisplay}</span>`;
+
         tr.innerHTML = `
           <td>${formatDateTimeForTable(op.date, op.createdAt)}</td>
           <td>${op.clientName || "—"}</td>
           <td>${op.operationNumber || "—"}</td>
-          <td><span class="pill blue">${op.operationType}</span></td>
+          <td>${isDeleted ? `<span class="pill danger">Eliminada</span>` : `<span class="pill blue">${op.operationType}</span>`}</td>
           <td>${op.originCountry} → ${op.destCountry}</td>
           <td>${op.sendAmountFormatted}</td>
           <td>${op.receiveAmountFormatted}</td>
           <td>${op.providerRateFormatted}</td>
           <td>${op.clientRateFormatted}</td>
-          <td>${
-            op.operatorMode === "socio" && Number(op.partnerPayoutDestCostUsdt || 0) > 0
-              ? `<div><span class="pill green">${op.profitDisplay}</span></div>
-                 <div style="font-size:12px; opacity:.78; margin-top:6px;">Costo destino: ${formatCalcValue(op.partnerPayoutDestCostUsdt || 0, "USDT")} USDT</div>
-                 <div style="font-size:12px; font-weight:700; margin-top:2px;">Total a pagar: ${formatCalcValue(op.partnerPayoutTotalUsdt || 0, "USDT")} USDT</div>`
-              : `<span class="pill green">${op.profitDisplay}</span>`
-          }</td>
+          <td>${isDeleted ? `<span class="pill" style="background:rgba(239,68,68,.12);color:#fecaca;border:1px solid rgba(239,68,68,.25);">No contabiliza</span>` : profitHtml}</td>
           <td>${op.note || "—"}</td>
-          <td><button class="btn small danger" type="button" onclick="deleteOperation('${op.id}')">🗑️</button></td>
+          <td>${isDeleted ? `<span style="font-size:12px;opacity:.85;">Anulada</span>` : `<button class="btn small danger" type="button" onclick="deleteOperation('${op.id}')">🗑️</button>`}</td>
         `;
+
+        if(isDeleted){
+          Array.from(tr.children).forEach(td => {
+            td.style.textDecoration = "line-through";
+            td.style.textDecorationThickness = "2px";
+            td.style.textDecorationColor = "rgba(255,255,255,.75)";
+          });
+        }
+
         historyBody.appendChild(tr);
       });
 
-      refreshDashboard(ops);
-      renderCountryProfit(ops);
+      refreshDashboard(activeOps);
+      renderCountryProfit(activeOps);
       renderInitialCapital();
     }
 
