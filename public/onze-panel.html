@@ -312,6 +312,53 @@
       box-shadow:0 8px 18px rgba(0,0,0,.16);
     }
 
+    .capital-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+      gap:12px;
+    }
+
+    .capital-card{
+      background:linear-gradient(180deg,#0a2346 0%, #0b2141 100%);
+      border:1px solid #1b3d6c;
+      border-radius:16px;
+      padding:14px;
+      box-shadow:0 8px 18px rgba(0,0,0,.16);
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+
+    .capital-card-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:10px;
+    }
+
+    .capital-card-country{
+      margin:0;
+      color:#fff;
+      font-size:18px;
+      font-weight:800;
+      line-height:1.2;
+    }
+
+    .capital-card-currency{
+      color:#9fb4d4;
+      font-size:12px;
+      text-transform:uppercase;
+      font-weight:800;
+      letter-spacing:.4px;
+    }
+
+    .capital-card-amount{
+      color:#e8f0ff;
+      font-size:28px;
+      font-weight:900;
+      line-height:1.1;
+    }
+
     .dash-label{
       font-size:11px;
       text-transform:uppercase;
@@ -1896,7 +1943,7 @@
               </div>
             </div>
 
-            <div id="capitalInitialGrid" class="top-routes-grid"></div>
+            <div id="capitalInitialGrid" class="capital-grid"></div>
             <div class="empty-state" id="capitalInitialEmpty" style="display:none;">Aún no has cargado capital inicial.</div>
           </div>
 
@@ -3267,11 +3314,16 @@
 
       items.forEach(item => {
         const div = document.createElement("div");
-        div.className = "route-chip";
+        div.className = "capital-card";
         div.innerHTML = `
-          <strong>${item.country || "—"}</strong>
-          <span>${formatCalcValue(Number(item.amount || 0), item.currency || "")} ${item.currency || ""}</span>
-          <button class="btn small danger" type="button" onclick="deleteInitialCapital('${item.id}')">Eliminar</button>
+          <div class="capital-card-head">
+            <div>
+              <div class="capital-card-country">${item.country || "—"}</div>
+              <div class="capital-card-currency">${item.currency || ""}</div>
+            </div>
+            <button class="btn small danger" type="button" onclick="deleteInitialCapital('${item.id}')">Eliminar</button>
+          </div>
+          <div class="capital-card-amount">${formatCalcValue(Number(item.amount || 0), item.currency || "")}</div>
         `;
         capitalInitialGrid.appendChild(div);
       });
