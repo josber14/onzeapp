@@ -3365,12 +3365,59 @@
     }
 
     window.deleteInitialCapital = function(id){
-      if(!confirm("¿Seguro que deseas eliminar este capital inicial?")) return;
-      const items = loadInitialCapital().filter(item => item.id !== id);
-      saveInitialCapital(items);
-      renderInitialCapital();
-      refreshDashboard();
-      if(typeof showToast === 'function') showToast('Capital inicial eliminado');
+      const items = loadInitialCapital();
+      const current = items.find(item => item.id === id);
+      if(!current) return;
+
+      const normalizeText = value => String(value || "").trim().toLowerCase();
+
+      const action = prompt(
+        "Escribe una opción:\n\n1 = borrar tarjeta completa\n2 = reiniciar movimientos\nCualquier otra cosa = cancelar"
+      );
+
+      if(action !== "1" && action !== "2"){
+        if(typeof showToast === 'function') showToast('Acción cancelada');
+        return;
+      }
+
+      let movements = [];
+      try {
+        movements = JSON.parse(localStorage.getItem(BALANCE_MOVEMENTS_KEY) || "[]");
+      } catch(e) {
+        movements = [];
+      }
+
+      const sameCardMovement = item =>
+        normalizeText(item.country) === normalizeText(current.country) &&
+        normalizeText(item.currency) === normalizeText(current.currency);
+
+      if(action === "1"){
+        const confirmed = confirm("¿Seguro que deseas borrar la tarjeta completa? Esto eliminará capital inicial y movimientos relacionados.");
+        if(!confirmed) return;
+
+        const updatedItems = items.filter(item => item.id !== id);
+        saveInitialCapital(updatedItems);
+
+        const cleanedMovements = movements.filter(item => !sameCardMovement(item));
+        localStorage.setItem(BALANCE_MOVEMENTS_KEY, JSON.stringify(cleanedMovements));
+
+        renderInitialCapital();
+        refreshDashboard();
+        if(typeof showToast === 'function') showToast('Tarjeta completa eliminada');
+        return;
+      }
+
+      if(action === "2"){
+        const confirmed = confirm("¿Seguro que deseas reiniciar los movimientos? El capital inicial se conservará.");
+        if(!confirmed) return;
+
+        const cleanedMovements = movements.filter(item => !sameCardMovement(item));
+        localStorage.setItem(BALANCE_MOVEMENTS_KEY, JSON.stringify(cleanedMovements));
+
+        renderInitialCapital();
+        refreshDashboard();
+        if(typeof showToast === 'function') showToast('Movimientos reiniciados');
+      }
     };
 
     function renderExpenses(){
