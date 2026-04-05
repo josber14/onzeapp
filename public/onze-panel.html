@@ -1925,12 +1925,14 @@
             <div class="modal-form-grid" style="margin-bottom:16px;">
               <div class="field">
                 <label for="capitalCountry">País</label>
-                <input type="text" id="capitalCountry" placeholder="Ej: Venezuela" />
+                <select id="capitalCountry">
+                  <option value="">Selecciona un país…</option>
+                </select>
               </div>
 
               <div class="field">
                 <label for="capitalCurrency">Moneda</label>
-                <input type="text" id="capitalCurrency" placeholder="Ej: VES" />
+                <input type="text" id="capitalCurrency" placeholder="Moneda automática" readonly />
               </div>
 
               <div class="field">
@@ -5652,6 +5654,31 @@
       saveOperatorNotes(text);
       if(typeof showToast === 'function') showToast('Notas guardadas');
     };
+
+    if(capitalCountry){
+      const countries = Array.from(new Set(Object.keys(COUNTRY_TRADE_RATES || {})))
+        .map(key => String(key || "").trim())
+        .filter(Boolean)
+        .map(key => {
+          const original = Object.keys(currencyMapRaw).find(name => norm(name) === norm(key)) || key;
+          return original.charAt(0).toUpperCase() + original.slice(1);
+        })
+        .sort((a,b)=>a.localeCompare(b,"es",{sensitivity:"base"}));
+
+      capitalCountry.innerHTML = '<option value="">Selecciona un país…</option>';
+      countries.forEach(country => {
+        const opt = document.createElement('option');
+        opt.value = country;
+        opt.textContent = country;
+        capitalCountry.appendChild(opt);
+      });
+
+      capitalCountry.onchange = function(){
+        if(capitalCurrency){
+          capitalCurrency.value = capitalCountry.value ? getCurrencyFor(capitalCountry.value) : '';
+        }
+      };
+    }
 
     if(openCapitalSetupBtn){
       openCapitalSetupBtn.onclick = function(){
