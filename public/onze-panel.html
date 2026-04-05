@@ -3458,10 +3458,33 @@
     window.deleteOperation = function(id){
       if(!confirm("¿Seguro que deseas eliminar esta operación?")) return;
 
-      const ops = loadOperations().filter(op => op.id !== id);
+      const existingOps = loadOperations();
+      const currentOp = existingOps.find(op => op.id === id);
+      if(!currentOp) return;
+
+      const normalizeText = value => String(value || "").trim().toLowerCase();
+      const sameAmount = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) < 0.000001;
+
+      const ops = existingOps.filter(op => op.id !== id);
       saveOperations(ops);
 
-      const balanceMovements = loadBalanceMovements().filter(item => item.operationId !== id);
+      const balanceMovements = loadBalanceMovements().filter(item => {
+        if(item.operationId === id) return false;
+
+        const matchesOriginEntry =
+          normalizeText(item.country) === normalizeText(currentOp.originCountry) &&
+          normalizeText(item.currency) === normalizeText(currentOp.originCurrency) &&
+          String(item.direction || "").trim().toLowerCase() === "entrada" &&
+          sameAmount(item.amount, currentOp.sendAmount);
+
+        const matchesDestExit =
+          normalizeText(item.country) === normalizeText(currentOp.destCountry) &&
+          normalizeText(item.currency) === normalizeText(currentOp.destCurrency) &&
+          String(item.direction || "").trim().toLowerCase() === "salida" &&
+          sameAmount(item.amount, currentOp.receiveAmount);
+
+        return !(matchesOriginEntry || matchesDestExit);
+      });
       saveBalanceMovements(balanceMovements);
 
       const liquidityAlerts = loadLiquidityAlerts().filter(item => item.operationId !== id);
@@ -3471,7 +3494,9 @@
       saveInternalFundings(internalFundings);
 
       refreshHistoryUI();
-      if(typeof showToast === 'function') showToast('Operación eliminada');
+      renderInitialCapital();
+      refreshDashboard();
+      if(typeof showToast === 'function') showToast('Operación eliminada y balance actualizado');
     };
 
     function rememberClient(name){
