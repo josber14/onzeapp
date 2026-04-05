@@ -3459,33 +3459,46 @@
       if(!confirm("¿Seguro que deseas eliminar esta operación?")) return;
 
       const existingOps = loadOperations();
-      const currentOp = existingOps.find(op => op.id === id);
-      if(!currentOp) return;
-
-      const normalizeText = value => String(value || "").trim().toLowerCase();
-      const sameAmount = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) < 0.000001;
-
       const ops = existingOps.filter(op => op.id !== id);
       saveOperations(ops);
 
-      const balanceMovements = loadBalanceMovements().filter(item => {
-        if(item.operationId === id) return false;
+      const existingMovements = loadBalanceMovements();
 
-        const matchesOriginEntry =
-          normalizeText(item.country) === normalizeText(currentOp.originCountry) &&
-          normalizeText(item.currency) === normalizeText(currentOp.originCurrency) &&
-          String(item.direction || "").trim().toLowerCase() === "entrada" &&
-          sameAmount(item.amount, currentOp.sendAmount);
-
-        const matchesDestExit =
-          normalizeText(item.country) === normalizeText(currentOp.destCountry) &&
-          normalizeText(item.currency) === normalizeText(currentOp.destCurrency) &&
-          String(item.direction || "").trim().toLowerCase() === "salida" &&
-          sameAmount(item.amount, currentOp.receiveAmount);
-
-        return !(matchesOriginEntry || matchesDestExit);
+      const manualMovements = existingMovements.filter(item => {
+        const type = String(item.movementType || "").trim().toLowerCase();
+        return type !== "operacion_entrada" && type !== "operacion_salida";
       });
-      saveBalanceMovements(balanceMovements);
+
+      const rebuiltOperationMovements = [];
+      ops.forEach(op => {
+        rebuiltOperationMovements.push({
+          id: createSimpleId("bal"),
+          createdAt: op.createdAt || new Date().toISOString(),
+          operationId: op.id || "",
+          fundingId: "",
+          country: op.originCountry || "",
+          currency: String(op.originCurrency || "").trim().toUpperCase(),
+          direction: "entrada",
+          movementType: "operacion_entrada",
+          amount: Number(op.sendAmount || 0),
+          note: `Operación ${op.operationNumber || ""}`.trim()
+        });
+
+        rebuiltOperationMovements.push({
+          id: createSimpleId("bal"),
+          createdAt: op.createdAt || new Date().toISOString(),
+          operationId: op.id || "",
+          fundingId: "",
+          country: op.destCountry || "",
+          currency: String(op.destCurrency || "").trim().toUpperCase(),
+          direction: "salida",
+          movementType: "operacion_salida",
+          amount: Number(op.receiveAmount || 0),
+          note: `Operación ${op.operationNumber || ""}`.trim()
+        });
+      });
+
+      saveBalanceMovements([...manualMovements, ...rebuiltOperationMovements]);
 
       const liquidityAlerts = loadLiquidityAlerts().filter(item => item.operationId !== id);
       saveLiquidityAlerts(liquidityAlerts);
