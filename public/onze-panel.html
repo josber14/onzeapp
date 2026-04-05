@@ -5656,14 +5656,29 @@
     };
 
     if(capitalCountry){
-      const countries = Array.from(new Set(Object.keys(COUNTRY_TRADE_RATES || {})))
-        .map(key => String(key || "").trim())
-        .filter(Boolean)
-        .map(key => {
-          const original = Object.keys(currencyMapRaw).find(name => norm(name) === norm(key)) || key;
-          return original.charAt(0).toUpperCase() + original.slice(1);
-        })
-        .sort((a,b)=>a.localeCompare(b,"es",{sensitivity:"base"}));
+      const countries = [
+        "USDT",
+        "Argentina",
+        "Bolivia",
+        "Brasil",
+        "Chile",
+        "Colombia",
+        "Costa Rica",
+        "Ecuador",
+        "El Salvador",
+        "España",
+        "Estados Unidos",
+        "Guatemala",
+        "Honduras",
+        "México",
+        "Nicaragua",
+        "Panamá",
+        "Paraguay",
+        "Peru",
+        "República Dominicana",
+        "Uruguay",
+        "Venezuela"
+      ].sort((a,b)=>a.localeCompare(b,"es",{sensitivity:"base"}));
 
       capitalCountry.innerHTML = '<option value="">Selecciona un país…</option>';
       countries.forEach(country => {
@@ -5675,7 +5690,9 @@
 
       capitalCountry.onchange = function(){
         if(capitalCurrency){
-          capitalCurrency.value = capitalCountry.value ? getCurrencyFor(capitalCountry.value) : '';
+          capitalCurrency.value = capitalCountry.value
+            ? (capitalCountry.value === "USDT" ? "USDT" : getCurrencyFor(capitalCountry.value))
+            : '';
         }
       };
     }
