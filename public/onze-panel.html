@@ -1870,6 +1870,39 @@
           <div class="section-card">
             <div class="section-top">
               <div>
+                <h3 class="section-title" style="margin-bottom:6px;">Capital inicial</h3>
+                <p class="section-text">Carga y visualiza el saldo inicial por país para construir tu balance real.</p>
+              </div>
+            </div>
+
+            <div class="modal-form-grid" style="margin-bottom:16px;">
+              <div class="field">
+                <label for="capitalCountry">País</label>
+                <input type="text" id="capitalCountry" placeholder="Ej: Venezuela" />
+              </div>
+
+              <div class="field">
+                <label for="capitalCurrency">Moneda</label>
+                <input type="text" id="capitalCurrency" placeholder="Ej: VES" />
+              </div>
+
+              <div class="field">
+                <label for="capitalAmount">Monto inicial</label>
+                <input type="number" id="capitalAmount" inputmode="decimal" min="0" step="0.01" placeholder="0.00" />
+              </div>
+
+              <div class="field" style="display:flex;align-items:flex-end;">
+                <button class="btn small" id="saveCapitalBtn" type="button">Guardar capital</button>
+              </div>
+            </div>
+
+            <div id="capitalInitialGrid" class="top-routes-grid"></div>
+            <div class="empty-state" id="capitalInitialEmpty" style="display:none;">Aún no has cargado capital inicial.</div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-top">
+              <div>
                 <h3 class="section-title" style="margin-bottom:6px;">Gastos del mes</h3>
                 <p class="section-text">Registra egresos para descontarlos del saldo neto.</p>
               </div>
@@ -2445,6 +2478,12 @@
     const dashCountriesTotal = document.getElementById("dashCountriesTotal");
     const dashCountriesTotalUsdt = document.getElementById("dashCountriesTotalUsdt");
     const openCapitalSetupBtn = document.getElementById("openCapitalSetupBtn");
+    const capitalCountry = document.getElementById("capitalCountry");
+    const capitalCurrency = document.getElementById("capitalCurrency");
+    const capitalAmount = document.getElementById("capitalAmount");
+    const saveCapitalBtn = document.getElementById("saveCapitalBtn");
+    const capitalInitialGrid = document.getElementById("capitalInitialGrid");
+    const capitalInitialEmpty = document.getElementById("capitalInitialEmpty");
 
     const registerModal = document.getElementById("registerModal");
     const closeModalBtn = document.getElementById("closeModalBtn");
@@ -3208,6 +3247,33 @@
         note
       });
       saveLiquidityAlerts(alerts);
+    }
+
+    function renderInitialCapital(){
+      if(!capitalInitialGrid || !capitalInitialEmpty) return;
+
+      const items = loadInitialCapital().slice().sort((a, b) => {
+        return String(a.country || "").localeCompare(String(b.country || ""), "es", { sensitivity: "base" });
+      });
+
+      capitalInitialGrid.innerHTML = "";
+
+      if(!items.length){
+        capitalInitialEmpty.style.display = "block";
+        return;
+      }
+
+      capitalInitialEmpty.style.display = "none";
+
+      items.forEach(item => {
+        const div = document.createElement("div");
+        div.className = "route-chip";
+        div.innerHTML = `
+          <strong>${item.country || "—"}</strong>
+          <span>${formatCalcValue(Number(item.amount || 0), item.currency || "")} ${item.currency || ""}</span>
+        `;
+        capitalInitialGrid.appendChild(div);
+      });
     }
 
     function renderExpenses(){
@@ -5527,29 +5593,31 @@
 
     if(openCapitalSetupBtn){
       openCapitalSetupBtn.onclick = function(){
-        const country = prompt('País del capital inicial:');
-        if(country == null) return;
+        capitalCountry?.focus();
+      };
+    }
 
-        const currency = prompt('Moneda (ej: USDT, CLP, PEN, VES):');
-        if(currency == null) return;
+    if(saveCapitalBtn){
+      saveCapitalBtn.onclick = function(){
+        const country = String(capitalCountry?.value || '').trim();
+        const currency = String(capitalCurrency?.value || '').trim().toUpperCase();
+        const amount = Number(String(capitalAmount?.value || '').replace(',', '.'));
 
-        const amountRaw = prompt('Monto inicial disponible:');
-        if(amountRaw == null) return;
-
-        const amount = Number(String(amountRaw).replace(',', '.'));
-
-        if(!String(country || '').trim()){
+        if(!country){
           if(typeof showToast === 'function') showToast('Debes indicar un país');
+          capitalCountry?.focus();
           return;
         }
 
-        if(!String(currency || '').trim()){
+        if(!currency){
           if(typeof showToast === 'function') showToast('Debes indicar una moneda');
+          capitalCurrency?.focus();
           return;
         }
 
         if(!Number.isFinite(amount) || amount < 0){
           if(typeof showToast === 'function') showToast('Monto inválido');
+          capitalAmount?.focus();
           return;
         }
 
@@ -5557,11 +5625,17 @@
         items.push({
           id: createSimpleId('cap'),
           createdAt: new Date().toISOString(),
-          country: String(country || '').trim(),
-          currency: String(currency || '').trim().toUpperCase(),
+          country,
+          currency,
           amount
         });
         saveInitialCapital(items);
+
+        if(capitalCountry) capitalCountry.value = '';
+        if(capitalCurrency) capitalCurrency.value = '';
+        if(capitalAmount) capitalAmount.value = '';
+
+        renderInitialCapital();
         refreshDashboard();
         if(typeof showToast === 'function') showToast('Capital inicial guardado ✅');
       };
@@ -5571,6 +5645,7 @@
 
   document.addEventListener('DOMContentLoaded', function(){
     bindEnhancedEvents();
+    renderInitialCapital();
     refreshEnhancedUI();
   });
 
