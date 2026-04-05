@@ -4803,6 +4803,8 @@
         window.lastDataSnapshot = data;
         render(data);
         renderCountryProfit(loadOperations());
+        renderInitialCapital();
+        refreshDashboard();
         if(typeof populateCountrySelect === "function"){
           populateCountrySelect(profileResidenceCountry);
         }
