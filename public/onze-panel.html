@@ -3271,10 +3271,20 @@
         div.innerHTML = `
           <strong>${item.country || "—"}</strong>
           <span>${formatCalcValue(Number(item.amount || 0), item.currency || "")} ${item.currency || ""}</span>
+          <button class="btn small danger" type="button" onclick="deleteInitialCapital('${item.id}')">Eliminar</button>
         `;
         capitalInitialGrid.appendChild(div);
       });
     }
+
+    window.deleteInitialCapital = function(id){
+      if(!confirm("¿Seguro que deseas eliminar este capital inicial?")) return;
+      const items = loadInitialCapital().filter(item => item.id !== id);
+      saveInitialCapital(items);
+      renderInitialCapital();
+      refreshDashboard();
+      if(typeof showToast === 'function') showToast('Capital inicial eliminado');
+    };
 
     function renderExpenses(){
       if(!expensesBody || !expensesEmpty) return;
