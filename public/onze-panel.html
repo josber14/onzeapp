@@ -3335,7 +3335,7 @@
               <div class="capital-card-country">${item.country || "—"}</div>
               <div class="capital-card-currency">${item.currency || ""}</div>
             </div>
-            <button class="btn small danger" type="button" onclick="deleteInitialCapital('${item.id}')">Eliminar</button>
+            <button class="btn small danger" type="button" onclick="deleteInitialCapital('${item.id}')" title="Eliminar capital" aria-label="Eliminar capital">🗑️</button>
           </div>
           <div class="capital-card-amount">${formatCalcValue(Number(item.amount || 0), item.currency || "")}</div>
         `;
