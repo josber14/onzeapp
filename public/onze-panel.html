@@ -3294,6 +3294,47 @@
       saveBalanceMovements(movements);
     }
 
+
+    function rebuildBalanceMovementsFromOperations(ops = loadOperations()){
+      const existingMovements = loadBalanceMovements();
+
+      const manualMovements = existingMovements.filter(item => {
+        const type = String(item.movementType || "").trim().toLowerCase();
+        return type !== "operacion_entrada" && type !== "operacion_salida";
+      });
+
+      const rebuiltOperationMovements = [];
+      ops.forEach(op => {
+        rebuiltOperationMovements.push({
+          id: createSimpleId("bal"),
+          createdAt: op.createdAt || new Date().toISOString(),
+          operationId: op.id || "",
+          fundingId: "",
+          country: op.originCountry || "",
+          currency: String(op.originCurrency || "").trim().toUpperCase(),
+          direction: "entrada",
+          movementType: "operacion_entrada",
+          amount: Number(op.sendAmount || 0),
+          note: `Operación ${op.operationNumber || ""}`.trim()
+        });
+
+        rebuiltOperationMovements.push({
+          id: createSimpleId("bal"),
+          createdAt: op.createdAt || new Date().toISOString(),
+          operationId: op.id || "",
+          fundingId: "",
+          country: op.destCountry || "",
+          currency: String(op.destCurrency || "").trim().toUpperCase(),
+          direction: "salida",
+          movementType: "operacion_salida",
+          amount: Number(op.receiveAmount || 0),
+          note: `Operación ${op.operationNumber || ""}`.trim()
+        });
+      });
+
+      saveBalanceMovements([...manualMovements, ...rebuiltOperationMovements]);
+    }
+
     function addLiquidityAlert({
       operationId = "",
       country = "",
@@ -3462,43 +3503,7 @@
       const ops = existingOps.filter(op => op.id !== id);
       saveOperations(ops);
 
-      const existingMovements = loadBalanceMovements();
-
-      const manualMovements = existingMovements.filter(item => {
-        const type = String(item.movementType || "").trim().toLowerCase();
-        return type !== "operacion_entrada" && type !== "operacion_salida";
-      });
-
-      const rebuiltOperationMovements = [];
-      ops.forEach(op => {
-        rebuiltOperationMovements.push({
-          id: createSimpleId("bal"),
-          createdAt: op.createdAt || new Date().toISOString(),
-          operationId: op.id || "",
-          fundingId: "",
-          country: op.originCountry || "",
-          currency: String(op.originCurrency || "").trim().toUpperCase(),
-          direction: "entrada",
-          movementType: "operacion_entrada",
-          amount: Number(op.sendAmount || 0),
-          note: `Operación ${op.operationNumber || ""}`.trim()
-        });
-
-        rebuiltOperationMovements.push({
-          id: createSimpleId("bal"),
-          createdAt: op.createdAt || new Date().toISOString(),
-          operationId: op.id || "",
-          fundingId: "",
-          country: op.destCountry || "",
-          currency: String(op.destCurrency || "").trim().toUpperCase(),
-          direction: "salida",
-          movementType: "operacion_salida",
-          amount: Number(op.receiveAmount || 0),
-          note: `Operación ${op.operationNumber || ""}`.trim()
-        });
-      });
-
-      saveBalanceMovements([...manualMovements, ...rebuiltOperationMovements]);
+      rebuildBalanceMovementsFromOperations(ops);
 
       const liquidityAlerts = loadLiquidityAlerts().filter(item => item.operationId !== id);
       saveLiquidityAlerts(liquidityAlerts);
@@ -5085,7 +5090,10 @@
     clearHistoryBtn.addEventListener("click", ()=>{
       if(!confirm("¿Seguro que quieres borrar todo el historial?")) return;
       localStorage.removeItem(STORAGE_KEY);
+      rebuildBalanceMovementsFromOperations([]);
       refreshHistoryUI();
+      renderInitialCapital();
+      refreshDashboard();
       showToast("Historial borrado");
     });
 
