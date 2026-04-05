@@ -82,6 +82,8 @@ export default async function DashboardPage() {
     params.set("partnerSharePercent", partnerSharePercent);
   }
 
+  params.set("_v", String(Date.now()));
+
   const query = params.toString();
   panelSrc = query ? `/onze-panel.html?${query}` : "/onze-panel.html";
 

@@ -2111,6 +2111,48 @@
   <footer>ONZE © 2025</footer>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <div class="modal" id="capitalActionModal" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-card" style="width:min(520px,100%);">
+        <div class="modal-head">
+          <h3 class="modal-title">Gestionar tarjeta de capital</h3>
+          <button class="close-btn" id="closeCapitalActionModalBtn" type="button">×</button>
+        </div>
+
+        <div class="modal-summary">
+          <div class="summary-item" style="margin-bottom:10px;">
+            <div class="summary-label">País</div>
+            <div class="summary-value" id="capitalActionCountry">—</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-label">Moneda</div>
+            <div class="summary-value" id="capitalActionCurrency">—</div>
+          </div>
+        </div>
+
+        <div style="display:grid;gap:12px;margin-bottom:16px;">
+          <button class="btn" id="capitalResetMovementsBtn" type="button">
+            Reiniciar movimientos
+          </button>
+          <div style="font-size:13px;opacity:.8;margin-top:-6px;">
+            Conserva el capital inicial y deja entradas/salidas en cero.
+          </div>
+
+          <button class="btn danger" id="capitalDeleteCardBtn" type="button">
+            Eliminar tarjeta completa
+          </button>
+          <div style="font-size:13px;opacity:.8;margin-top:-6px;">
+            Elimina el capital inicial y también los movimientos relacionados.
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn small ghost" id="cancelCapitalActionModalBtn" type="button">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="registerModal" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-card">
@@ -2546,6 +2588,14 @@
     const saveCapitalBtn = document.getElementById("saveCapitalBtn");
     const capitalInitialGrid = document.getElementById("capitalInitialGrid");
     const capitalInitialEmpty = document.getElementById("capitalInitialEmpty");
+
+    const capitalActionModal = document.getElementById("capitalActionModal");
+    const closeCapitalActionModalBtn = document.getElementById("closeCapitalActionModalBtn");
+    const cancelCapitalActionModalBtn = document.getElementById("cancelCapitalActionModalBtn");
+    const capitalResetMovementsBtn = document.getElementById("capitalResetMovementsBtn");
+    const capitalDeleteCardBtn = document.getElementById("capitalDeleteCardBtn");
+    const capitalActionCountry = document.getElementById("capitalActionCountry");
+    const capitalActionCurrency = document.getElementById("capitalActionCurrency");
 
     const registerModal = document.getElementById("registerModal");
     const closeModalBtn = document.getElementById("closeModalBtn");
@@ -3405,21 +3455,41 @@
       });
     }
 
-    window.deleteInitialCapital = function(id){
+    let pendingCapitalActionId = null;
+
+    function closeCapitalActionModal(){
+      if(!capitalActionModal) return;
+      capitalActionModal.classList.remove("open");
+      capitalActionModal.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("noscroll");
+      pendingCapitalActionId = null;
+    }
+
+    function openCapitalActionModal(id){
       const items = loadInitialCapital();
       const current = items.find(item => item.id === id);
-      if(!current) return;
+      if(!current || !capitalActionModal) return;
 
-      const normalizeText = value => String(value || "").trim().toLowerCase();
+      pendingCapitalActionId = id;
+      if(capitalActionCountry) capitalActionCountry.textContent = current.country || "—";
+      if(capitalActionCurrency) capitalActionCurrency.textContent = current.currency || "—";
 
-      const action = prompt(
-        "Escribe una opción:\n\n1 = borrar tarjeta completa\n2 = reiniciar movimientos\nCualquier otra cosa = cancelar"
-      );
+      capitalActionModal.classList.add("open");
+      capitalActionModal.setAttribute("aria-hidden", "false");
+      document.body.classList.add("noscroll");
+    }
 
-      if(action !== "1" && action !== "2"){
-        if(typeof showToast === 'function') showToast('Acción cancelada');
+    function applyCapitalCardAction(action){
+      if(!pendingCapitalActionId) return;
+
+      const items = loadInitialCapital();
+      const current = items.find(item => item.id === pendingCapitalActionId);
+      if(!current) {
+        closeCapitalActionModal();
         return;
       }
+
+      const normalizeText = value => String(value || "").trim().toLowerCase();
 
       let movements = [];
       try {
@@ -3432,33 +3502,33 @@
         normalizeText(item.country) === normalizeText(current.country) &&
         normalizeText(item.currency) === normalizeText(current.currency);
 
-      if(action === "1"){
-        const confirmed = confirm("¿Seguro que deseas borrar la tarjeta completa? Esto eliminará capital inicial y movimientos relacionados.");
-        if(!confirmed) return;
-
-        const updatedItems = items.filter(item => item.id !== id);
+      if(action === "delete"){
+        const updatedItems = items.filter(item => item.id !== pendingCapitalActionId);
         saveInitialCapital(updatedItems);
 
         const cleanedMovements = movements.filter(item => !sameCardMovement(item));
         localStorage.setItem(BALANCE_MOVEMENTS_KEY, JSON.stringify(cleanedMovements));
 
+        closeCapitalActionModal();
         renderInitialCapital();
         refreshDashboard();
         if(typeof showToast === 'function') showToast('Tarjeta completa eliminada');
         return;
       }
 
-      if(action === "2"){
-        const confirmed = confirm("¿Seguro que deseas reiniciar los movimientos? El capital inicial se conservará.");
-        if(!confirmed) return;
-
+      if(action === "reset"){
         const cleanedMovements = movements.filter(item => !sameCardMovement(item));
         localStorage.setItem(BALANCE_MOVEMENTS_KEY, JSON.stringify(cleanedMovements));
 
+        closeCapitalActionModal();
         renderInitialCapital();
         refreshDashboard();
         if(typeof showToast === 'function') showToast('Movimientos reiniciados');
       }
+    }
+
+    window.deleteInitialCapital = function(id){
+      openCapitalActionModal(id);
     };
 
     function renderExpenses(){
@@ -5070,6 +5140,14 @@
     registerModal.addEventListener("click", (e)=>{
       if(e.target === registerModal) closeRegisterModal();
     });
+
+    if(closeCapitalActionModalBtn) closeCapitalActionModalBtn.addEventListener("click", closeCapitalActionModal);
+    if(cancelCapitalActionModalBtn) cancelCapitalActionModalBtn.addEventListener("click", closeCapitalActionModal);
+    if(capitalActionModal) capitalActionModal.addEventListener("click", (e)=>{
+      if(e.target === capitalActionModal) closeCapitalActionModal();
+    });
+    if(capitalResetMovementsBtn) capitalResetMovementsBtn.addEventListener("click", ()=>applyCapitalCardAction("reset"));
+    if(capitalDeleteCardBtn) capitalDeleteCardBtn.addEventListener("click", ()=>applyCapitalCardAction("delete"));
 
     saveOperationBtn.addEventListener("click", savePendingOperation);
 
