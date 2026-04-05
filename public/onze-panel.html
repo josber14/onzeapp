@@ -3313,9 +3313,11 @@
     function renderInitialCapital(){
       if(!capitalInitialGrid || !capitalInitialEmpty) return;
 
-      const items = loadInitialCapital().slice().sort((a, b) => {
-        return String(a.country || "").localeCompare(String(b.country || ""), "es", { sensitivity: "base" });
-      });
+      const items = getBalanceSummaryByCountry().filter(item =>
+        Number(item.capitalInicial || 0) !== 0 ||
+        Number(item.entradas || 0) !== 0 ||
+        Number(item.salidas || 0) !== 0
+      );
 
       capitalInitialGrid.innerHTML = "";
 
@@ -3327,6 +3329,12 @@
       capitalInitialEmpty.style.display = "none";
 
       items.forEach(item => {
+        const capitalRows = loadInitialCapital().filter(cap =>
+          String(cap.country || "").trim() === String(item.country || "").trim() &&
+          String(cap.currency || "").trim().toUpperCase() === String(item.currency || "").trim().toUpperCase()
+        );
+        const deleteId = capitalRows[0]?.id || "";
+
         const div = document.createElement("div");
         div.className = "capital-card";
         div.innerHTML = `
@@ -3335,9 +3343,12 @@
               <div class="capital-card-country">${item.country || "—"}</div>
               <div class="capital-card-currency">${item.currency || ""}</div>
             </div>
-            <button class="btn small danger" type="button" onclick="deleteInitialCapital('${item.id}')" title="Eliminar capital" aria-label="Eliminar capital">🗑️</button>
+            ${deleteId ? `<button class="btn small danger" type="button" onclick="deleteInitialCapital('${deleteId}')" title="Eliminar capital" aria-label="Eliminar capital">🗑️</button>` : ""}
           </div>
-          <div class="capital-card-amount">${formatCalcValue(Number(item.amount || 0), item.currency || "")}</div>
+          <div class="capital-card-amount">${formatCalcValue(Number(item.saldoActual || 0), item.currency || "")}</div>
+          <div class="dash-sub">Inicial: ${formatCalcValue(Number(item.capitalInicial || 0), item.currency || "")}</div>
+          <div class="dash-sub">Entradas: ${formatCalcValue(Number(item.entradas || 0), item.currency || "")}</div>
+          <div class="dash-sub">Salidas: ${formatCalcValue(Number(item.salidas || 0), item.currency || "")}</div>
         `;
         capitalInitialGrid.appendChild(div);
       });
