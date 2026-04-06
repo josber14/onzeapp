@@ -360,20 +360,21 @@
       letter-spacing:-.4px;
     }
 
-    .capital-breakdown{
+    .capital-metrics{
       display:grid;
-      grid-template-columns:repeat(3,minmax(0,1fr));
-      gap:8px;
+      grid-template-columns:repeat(2,minmax(0,1fr));
+      gap:10px;
     }
 
-    .capital-breakdown-item{
+    .capital-metric{
       background:rgba(255,255,255,.05);
       border:1px solid rgba(255,255,255,.08);
       border-radius:12px;
-      padding:10px;
+      padding:12px;
+      min-width:0;
     }
 
-    .capital-breakdown-label{
+    .capital-metric-label{
       font-size:10px;
       text-transform:uppercase;
       letter-spacing:.35px;
@@ -382,24 +383,30 @@
       margin-bottom:6px;
     }
 
-    .capital-breakdown-value{
-      font-size:14px;
-      font-weight:800;
-      color:#fff;
-      line-height:1.15;
+    .capital-metric-value{
+      font-size:18px;
+      font-weight:900;
+      line-height:1.1;
       word-break:break-word;
     }
 
-    .capital-breakdown-item.inicial .capital-breakdown-value{
-      color:#dbeafe;
-    }
-
-    .capital-breakdown-item.entrada .capital-breakdown-value{
+    .capital-metric.entrada .capital-metric-value{
       color:#86efac;
     }
 
-    .capital-breakdown-item.salida .capital-breakdown-value{
+    .capital-metric.salida .capital-metric-value{
       color:#fca5a5;
+    }
+
+    .capital-card-actions{
+      display:flex;
+      gap:8px;
+      justify-content:flex-end;
+      flex-wrap:wrap;
+    }
+
+    .capital-card-actions .btn{
+      min-width:44px;
     }
 
     .dash-label{
@@ -3487,25 +3494,24 @@
               <div class="capital-card-country">${item.country || "—"}</div>
               <div class="capital-card-currency">${item.currency || ""}</div>
             </div>
-            ${deleteId ? `<button class="btn small danger" type="button" onclick="deleteInitialCapital('${deleteId}')" title="Eliminar capital" aria-label="Eliminar capital">🗑️</button>` : ""}
           </div>
           <div>
             <div class="dash-label">Saldo actual</div>
             <div class="capital-card-amount">${formatCalcValue(Number(item.saldoActual || 0), item.currency || "")}</div>
           </div>
-          <div class="capital-breakdown">
-            <div class="capital-breakdown-item inicial">
-              <div class="capital-breakdown-label">Capital inicial</div>
-              <div class="capital-breakdown-value">${formatCalcValue(Number(item.capitalInicial || 0), item.currency || "")}</div>
+          <div class="capital-metrics">
+            <div class="capital-metric entrada">
+              <div class="capital-metric-label">Entradas</div>
+              <div class="capital-metric-value">${formatCalcValue(Number(item.entradas || 0), item.currency || "")}</div>
             </div>
-            <div class="capital-breakdown-item entrada">
-              <div class="capital-breakdown-label">Entradas</div>
-              <div class="capital-breakdown-value">${formatCalcValue(Number(item.entradas || 0), item.currency || "")}</div>
+            <div class="capital-metric salida">
+              <div class="capital-metric-label">Salidas</div>
+              <div class="capital-metric-value">${formatCalcValue(Number(item.salidas || 0), item.currency || "")}</div>
             </div>
-            <div class="capital-breakdown-item salida">
-              <div class="capital-breakdown-label">Salidas</div>
-              <div class="capital-breakdown-value">${formatCalcValue(Number(item.salidas || 0), item.currency || "")}</div>
-            </div>
+          </div>
+          <div class="capital-card-actions">
+            <button class="btn small ghost" type="button" title="Ver detalle" aria-label="Ver detalle">Detalle</button>
+            ${deleteId ? `<button class="btn small danger" type="button" onclick="deleteInitialCapital('${deleteId}')" title="Eliminar capital" aria-label="Eliminar capital">🗑️</button>` : ""}
           </div>
         `;
         capitalInitialGrid.appendChild(div);
