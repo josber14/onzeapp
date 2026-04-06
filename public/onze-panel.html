@@ -354,9 +354,52 @@
 
     .capital-card-amount{
       color:#e8f0ff;
-      font-size:28px;
+      font-size:30px;
       font-weight:900;
-      line-height:1.1;
+      line-height:1.05;
+      letter-spacing:-.4px;
+    }
+
+    .capital-breakdown{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:8px;
+    }
+
+    .capital-breakdown-item{
+      background:rgba(255,255,255,.05);
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:12px;
+      padding:10px;
+    }
+
+    .capital-breakdown-label{
+      font-size:10px;
+      text-transform:uppercase;
+      letter-spacing:.35px;
+      color:#9fb4d4;
+      font-weight:800;
+      margin-bottom:6px;
+    }
+
+    .capital-breakdown-value{
+      font-size:14px;
+      font-weight:800;
+      color:#fff;
+      line-height:1.15;
+      word-break:break-word;
+    }
+
+    .capital-breakdown-item.inicial .capital-breakdown-value{
+      color:#dbeafe;
+    }
+
+    .capital-breakdown-item.entrada .capital-breakdown-value{
+      color:#86efac;
+    }
+
+    .capital-breakdown-item.salida .capital-breakdown-value{
+      color:#fca5a5;
     }
 
     .dash-label{
@@ -3446,10 +3489,24 @@
             </div>
             ${deleteId ? `<button class="btn small danger" type="button" onclick="deleteInitialCapital('${deleteId}')" title="Eliminar capital" aria-label="Eliminar capital">🗑️</button>` : ""}
           </div>
-          <div class="capital-card-amount">${formatCalcValue(Number(item.saldoActual || 0), item.currency || "")}</div>
-          <div class="dash-sub">Inicial: ${formatCalcValue(Number(item.capitalInicial || 0), item.currency || "")}</div>
-          <div class="dash-sub">Entradas: ${formatCalcValue(Number(item.entradas || 0), item.currency || "")}</div>
-          <div class="dash-sub">Salidas: ${formatCalcValue(Number(item.salidas || 0), item.currency || "")}</div>
+          <div>
+            <div class="dash-label">Saldo actual</div>
+            <div class="capital-card-amount">${formatCalcValue(Number(item.saldoActual || 0), item.currency || "")}</div>
+          </div>
+          <div class="capital-breakdown">
+            <div class="capital-breakdown-item inicial">
+              <div class="capital-breakdown-label">Capital inicial</div>
+              <div class="capital-breakdown-value">${formatCalcValue(Number(item.capitalInicial || 0), item.currency || "")}</div>
+            </div>
+            <div class="capital-breakdown-item entrada">
+              <div class="capital-breakdown-label">Entradas</div>
+              <div class="capital-breakdown-value">${formatCalcValue(Number(item.entradas || 0), item.currency || "")}</div>
+            </div>
+            <div class="capital-breakdown-item salida">
+              <div class="capital-breakdown-label">Salidas</div>
+              <div class="capital-breakdown-value">${formatCalcValue(Number(item.salidas || 0), item.currency || "")}</div>
+            </div>
+          </div>
         `;
         capitalInitialGrid.appendChild(div);
       });
