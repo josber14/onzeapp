@@ -352,6 +352,14 @@
       letter-spacing:.4px;
     }
 
+    .capital-card-flag{
+      font-size:28px;
+      line-height:1;
+      flex:0 0 auto;
+      align-self:flex-start;
+      filter:saturate(1.05);
+    }
+
     .capital-card-amount{
       color:#e8f0ff;
       font-size:30px;
@@ -3494,6 +3502,7 @@
               <div class="capital-card-country">${item.country || "—"}</div>
               <div class="capital-card-currency">${item.currency || ""}</div>
             </div>
+            <div class="capital-card-flag">${getFlagEmoji(item.country || "")}</div>
           </div>
           <div>
             <div class="dash-label">Saldo actual</div>
