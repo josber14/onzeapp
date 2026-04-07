@@ -2211,6 +2211,78 @@
     </div>
   </div>
 
+  <div class="modal" id="countryDetailModal" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-card" style="width:min(860px,100%);">
+        <div class="modal-head">
+          <h3 class="modal-title">Detalle por país</h3>
+          <button class="close-btn" id="closeCountryDetailModalBtn" type="button">×</button>
+        </div>
+
+        <div class="modal-summary">
+          <div class="modal-form-grid" style="margin-bottom:0;">
+            <div class="field">
+              <label for="countryDetailSelect">Cambiar país</label>
+              <select id="countryDetailSelect">
+                <option value="">Selecciona un país…</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Moneda</label>
+              <div class="summary-item" style="height:44px;display:flex;align-items:center;">
+                <div class="summary-value" id="countryDetailCurrency">—</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-summary-grid" style="margin-top:14px;">
+            <div class="summary-item">
+              <div class="summary-label">Saldo actual</div>
+              <div class="summary-value" id="countryDetailBalance">—</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-label">Entradas</div>
+              <div class="summary-value" id="countryDetailEntries">—</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-label">Salidas</div>
+              <div class="summary-value" id="countryDetailExits">—</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-label">Movimientos</div>
+              <div class="summary-value" id="countryDetailCount">0</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+          <div style="font-weight:800;font-size:14px;color:#fff;" id="countryDetailTitle">Movimientos del país</div>
+          <button class="btn small ghost" id="cancelCountryDetailModalBtn" type="button">Cerrar</button>
+        </div>
+
+        <div style="overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:14px;">
+          <table style="width:100%;border-collapse:collapse;min-width:720px;">
+            <thead>
+              <tr style="background:rgba(255,255,255,.04);">
+                <th style="text-align:left;padding:10px;font-size:12px;">Fecha</th>
+                <th style="text-align:left;padding:10px;font-size:12px;">Cliente</th>
+                <th style="text-align:left;padding:10px;font-size:12px;">Tipo</th>
+                <th style="text-align:left;padding:10px;font-size:12px;">Ruta</th>
+                <th style="text-align:left;padding:10px;font-size:12px;">Monto</th>
+                <th style="text-align:left;padding:10px;font-size:12px;">Estado</th>
+              </tr>
+            </thead>
+            <tbody id="countryDetailBody"></tbody>
+          </table>
+        </div>
+
+        <div class="empty-state" id="countryDetailEmpty" style="display:none;margin-top:12px;">
+          No hay movimientos para este país.
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="registerModal" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-card">
@@ -2654,6 +2726,19 @@
     const capitalDeleteCardBtn = document.getElementById("capitalDeleteCardBtn");
     const capitalActionCountry = document.getElementById("capitalActionCountry");
     const capitalActionCurrency = document.getElementById("capitalActionCurrency");
+
+    const countryDetailModal = document.getElementById("countryDetailModal");
+    const closeCountryDetailModalBtn = document.getElementById("closeCountryDetailModalBtn");
+    const cancelCountryDetailModalBtn = document.getElementById("cancelCountryDetailModalBtn");
+    const countryDetailSelect = document.getElementById("countryDetailSelect");
+    const countryDetailCurrency = document.getElementById("countryDetailCurrency");
+    const countryDetailBalance = document.getElementById("countryDetailBalance");
+    const countryDetailEntries = document.getElementById("countryDetailEntries");
+    const countryDetailExits = document.getElementById("countryDetailExits");
+    const countryDetailCount = document.getElementById("countryDetailCount");
+    const countryDetailTitle = document.getElementById("countryDetailTitle");
+    const countryDetailBody = document.getElementById("countryDetailBody");
+    const countryDetailEmpty = document.getElementById("countryDetailEmpty");
 
     const registerModal = document.getElementById("registerModal");
     const closeModalBtn = document.getElementById("closeModalBtn");
@@ -3519,7 +3604,7 @@
             </div>
           </div>
           <div class="capital-card-actions">
-            <button class="btn small ghost" type="button" title="Ver detalle" aria-label="Ver detalle">Detalle</button>
+            <button class="btn small ghost" type="button" onclick="openCountryDetail('${item.country || ""}')" title="Ver detalle" aria-label="Ver detalle">Detalle</button>
             ${deleteId ? `<button class="btn small danger" type="button" onclick="deleteInitialCapital('${deleteId}')" title="Eliminar capital" aria-label="Eliminar capital">🗑️</button>` : ""}
           </div>
         `;
@@ -3602,6 +3687,104 @@
     window.deleteInitialCapital = function(id){
       openCapitalActionModal(id);
     };
+
+
+    let pendingCountryDetail = "";
+
+    function closeCountryDetailModal(){
+      if(!countryDetailModal) return;
+      countryDetailModal.classList.remove("open");
+      countryDetailModal.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("noscroll");
+      pendingCountryDetail = "";
+    }
+
+    function getCountryDetailRows(country){
+      const target = String(country || "").trim().toLowerCase();
+      if(!target) return [];
+
+      return loadOperations()
+        .filter(op =>
+          String(op.originCountry || "").trim().toLowerCase() === target ||
+          String(op.destCountry || "").trim().toLowerCase() === target
+        )
+        .sort((a,b)=>new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    }
+
+    function renderCountryDetail(country){
+      const selectedCountry = String(country || "").trim();
+      if(!selectedCountry) return;
+
+      pendingCountryDetail = selectedCountry;
+
+      const summary = getBalanceSummaryByCountry().find(
+        item => String(item.country || "").trim().toLowerCase() === selectedCountry.toLowerCase()
+      );
+
+      if(countryDetailSelect){
+        const countries = getBalanceSummaryByCountry().map(item => item.country).filter(Boolean);
+        countryDetailSelect.innerHTML =
+          '<option value="">Selecciona un país…</option>' +
+          countries.map(c => `<option value="${c}">${getFlagEmoji(c)} ${c}</option>`).join('');
+        countryDetailSelect.value = selectedCountry;
+      }
+
+      if(countryDetailTitle){
+        countryDetailTitle.textContent = `${getFlagEmoji(selectedCountry)} Movimientos de ${selectedCountry}`;
+      }
+      if(countryDetailCurrency) countryDetailCurrency.textContent = summary?.currency || "—";
+      if(countryDetailBalance) countryDetailBalance.textContent = summary ? formatCalcValue(Number(summary.saldoActual || 0), summary.currency || "") : "0";
+      if(countryDetailEntries) countryDetailEntries.textContent = summary ? formatCalcValue(Number(summary.entradas || 0), summary.currency || "") : "0";
+      if(countryDetailExits) countryDetailExits.textContent = summary ? formatCalcValue(Number(summary.salidas || 0), summary.currency || "") : "0";
+
+      const rows = getCountryDetailRows(selectedCountry);
+      if(countryDetailCount) countryDetailCount.textContent = String(rows.length);
+      if(countryDetailBody) countryDetailBody.innerHTML = "";
+
+      if(!rows.length){
+        if(countryDetailEmpty) countryDetailEmpty.style.display = "block";
+        return;
+      }
+
+      if(countryDetailEmpty) countryDetailEmpty.style.display = "none";
+
+      rows.forEach(op => {
+        const isOrigin = String(op.originCountry || "").trim().toLowerCase() === selectedCountry.toLowerCase();
+        const movementType = isOrigin ? "Entrada" : "Salida";
+        const movementAmount = isOrigin
+          ? (op.sendAmountFormatted || formatCalcValue(Number(op.sendAmount || 0), op.originCurrency || ""))
+          : (op.receiveAmountFormatted || formatCalcValue(Number(op.receiveAmount || 0), op.destCurrency || ""));
+        const stateHtml = op.deleted
+          ? '<span class="pill danger">Anulada</span>'
+          : '<span class="pill green">Activa</span>';
+
+        const tr = document.createElement("tr");
+        if(op.deleted) tr.style.opacity = "0.5";
+
+        tr.innerHTML = `
+          <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${formatDateTimeForTable(op.date, op.createdAt)}</td>
+          <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${op.clientName || "—"}</td>
+          <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${movementType}</td>
+          <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${op.originCountry || "—"} → ${op.destCountry || "—"}</td>
+          <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${movementAmount}</td>
+          <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${stateHtml}</td>
+        `;
+        countryDetailBody.appendChild(tr);
+      });
+    }
+
+    function openCountryDetailModal(country){
+      if(!countryDetailModal) return;
+      countryDetailModal.classList.add("open");
+      countryDetailModal.setAttribute("aria-hidden", "false");
+      document.body.classList.add("noscroll");
+      renderCountryDetail(country);
+    }
+
+    window.openCountryDetail = function(country){
+      openCountryDetailModal(country);
+    };
+
 
     function renderExpenses(){
       if(!expensesBody || !expensesEmpty) return;
@@ -5220,6 +5403,16 @@
     });
     if(capitalResetMovementsBtn) capitalResetMovementsBtn.addEventListener("click", ()=>applyCapitalCardAction("reset"));
     if(capitalDeleteCardBtn) capitalDeleteCardBtn.addEventListener("click", ()=>applyCapitalCardAction("delete"));
+
+    if(closeCountryDetailModalBtn) closeCountryDetailModalBtn.addEventListener("click", closeCountryDetailModal);
+    if(cancelCountryDetailModalBtn) cancelCountryDetailModalBtn.addEventListener("click", closeCountryDetailModal);
+    if(countryDetailModal) countryDetailModal.addEventListener("click", (e)=>{
+      if(e.target === countryDetailModal) closeCountryDetailModal();
+    });
+    if(countryDetailSelect) countryDetailSelect.addEventListener("change", (e)=>{
+      const value = e.target?.value || "";
+      if(value) renderCountryDetail(value);
+    });
 
     saveOperationBtn.addEventListener("click", savePendingOperation);
 
