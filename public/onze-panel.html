@@ -3794,9 +3794,7 @@
       if(!capitalInitialGrid || !capitalInitialEmpty) return;
 
       const items = getBalanceSummaryByCountry().filter(item =>
-        Number(item.capitalInicial || 0) !== 0 ||
-        Number(item.entradas || 0) !== 0 ||
-        Number(item.salidas || 0) !== 0
+        String(item.initialCapitalId || "").trim() !== ""
       );
 
       capitalInitialGrid.innerHTML = "";
