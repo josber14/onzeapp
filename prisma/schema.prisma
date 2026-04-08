@@ -71,6 +71,7 @@ enum BalanceMovementType {
   fondeo_interno_entrada
   fondeo_interno_salida
   ajuste_manual
+  gasto
   anulacion
 }
 
@@ -130,6 +131,7 @@ model Tenant {
   internalFundings     InternalFunding[]
   earningsMovements    EarningsMovement[]
   collaboratorPayments CollaboratorPayment[]
+  expenses             Expense[]
   settings             TenantSettings?
   auditLogs            AuditLog[]
 }
@@ -183,6 +185,7 @@ model User {
   ownedCustomers        OperatorCustomer[]
   earningsMovements    EarningsMovement[]
   collaboratorPayments CollaboratorPayment[]
+  expenses             Expense[]
   auditLogs            AuditLog[]
   kyc                  UserKyc?
 
@@ -251,6 +254,7 @@ model Country {
   balances            TenantCountryBalance[]
   initialCapitals     InitialCapital[]
   balanceMovements    BalanceMovement[]
+  expenses            Expense[]
   liquidityAlerts     LiquidityAlert[]
   fundingSourceLinks  InternalFunding[]   @relation("FundingSourceCountry")
   fundingTargetLinks  InternalFunding[]   @relation("FundingTargetCountry")
@@ -539,6 +543,28 @@ model CollaboratorPayment {
 
   @@index([tenantId])
   @@index([userId])
+}
+
+model Expense {
+  id           Int      @id @default(autoincrement())
+  tenantId     Int
+  expenseDate  DateTime
+  category     String
+  countryId    Int
+  currencyCode String
+  amount       Decimal  @db.Decimal(18, 8)
+  note         String?
+  createdByUserId Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  country      Country  @relation(fields: [countryId], references: [id])
+  createdByUser User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([countryId])
+  @@index([expenseDate])
 }
 
 model AuditLog {

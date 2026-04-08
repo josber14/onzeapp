@@ -3594,18 +3594,32 @@
       localStorage.setItem(COLLABORATOR_PAYMENTS_KEY, JSON.stringify(items));
     }
 
+    let expensesCache = [];
+
     function loadExpenses(){
-      try{
-        const raw = localStorage.getItem("onze_expenses_v1");
-        const data = raw ? JSON.parse(raw) : [];
-        return Array.isArray(data) ? data : [];
-      }catch{
-        return [];
-      }
+      return Array.isArray(expensesCache) ? expensesCache : [];
     }
 
     function saveExpenses(expenses){
-      localStorage.setItem("onze_expenses_v1", JSON.stringify(expenses));
+      expensesCache = Array.isArray(expenses) ? expenses : [];
+    }
+
+    async function fetchExpensesFromApi(){
+      try{
+        const res = await fetch("/api/expenses", { cache: "no-store" });
+        const data = await res.json().catch(()=>({}));
+
+        if(!res.ok){
+          throw new Error(data?.error || "No se pudieron cargar los gastos.");
+        }
+
+        const items = Array.isArray(data?.expenses) ? data.expenses : [];
+        saveExpenses(items);
+        return items;
+      }catch(error){
+        console.error("FETCH_EXPENSES_ERROR", error);
+        return loadExpenses();
+      }
     }
 
     function loadSavedClients(){
@@ -4034,20 +4048,29 @@
       });
     }
 
-    window.deleteExpense = function(id){
+    window.deleteExpense = async function(id){
       if(!confirm("¿Seguro que deseas eliminar este gasto?")) return;
-      const expenses = loadExpenses().filter(exp => exp.id !== id);
-      saveExpenses(expenses);
 
-      const cleanedMovements = loadBalanceMovements().filter(item =>
-        !(String(item.fundingId || "") === String(id) && String(item.movementType || "") === "gasto")
-      );
-      saveBalanceMovements(cleanedMovements);
+      try{
+        const res = await fetch(`/api/expenses/${id}`, { method: "DELETE" });
+        const data = await res.json().catch(()=>({}));
 
-      renderExpenses();
-      renderInitialCapital();
-      refreshDashboard();
-      if(typeof showToast === 'function') showToast('Gasto eliminado');
+        if(!res.ok){
+          throw new Error(data?.error || "No se pudo eliminar el gasto.");
+        }
+
+        await fetchExpensesFromApi();
+        renderExpenses();
+        renderInitialCapital();
+        refreshDashboard();
+        if(typeof pendingCountryDetail === "string" && pendingCountryDetail){
+          renderCountryDetail(pendingCountryDetail);
+        }
+        if(typeof showToast === 'function') showToast('Gasto eliminado');
+      }catch(error){
+        console.error("DELETE_EXPENSE_ERROR", error);
+        if(typeof showToast === 'function') showToast(error?.message || 'No se pudo eliminar el gasto');
+      }
     };
 
     window.deleteOperation = function(id){
@@ -5838,9 +5861,10 @@
       });
     }
 
-    document.addEventListener("DOMContentLoaded", ()=>{
+    document.addEventListener("DOMContentLoaded", async ()=>{
       fetchAndRender(true);
       refreshHistoryUI();
+      await fetchExpensesFromApi();
       renderExpenses();
       refreshClientSuggestions();
       fillProfileForm();
@@ -6356,7 +6380,7 @@
     if(exportCsvBtn) exportCsvBtn.onclick = exportHistoryCSV;
 
     if(addExpenseBtn){
-      addExpenseBtn.onclick = function(){
+      addExpenseBtn.onclick = async function(){
         const date = (expenseDate?.value || todayISO()).trim();
         const category = (expenseCategory?.value || "").trim();
         const country = String(expenseCountry?.value || "").trim();
@@ -6385,42 +6409,46 @@
           return;
         }
 
-        const expenseId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
-        const expenses = loadExpenses();
-        expenses.push({
-          id: expenseId,
-          date,
-          category,
-          country,
-          currency,
-          amount,
-          note,
-          createdAt: new Date().toISOString()
-        });
+        try{
+          const res = await fetch("/api/expenses", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              date,
+              category,
+              country,
+              currency,
+              amount,
+              note
+            })
+          });
 
-        saveExpenses(expenses);
+          const data = await res.json().catch(()=>({}));
 
-        addBalanceMovement({
-          fundingId: expenseId,
-          country,
-          currency,
-          direction: "salida",
-          movementType: "gasto",
-          amount: Number(amount || 0),
-          note: `Gasto: ${category}${note ? " · " + note : ""}`
-        });
+          if(!res.ok){
+            throw new Error(data?.error || "No se pudo guardar el gasto.");
+          }
 
-        if(expenseDate) expenseDate.value = todayISO();
-        if(expenseCategory) expenseCategory.value = "";
-        if(expenseCountry) expenseCountry.value = "";
-        if(expenseCurrency) expenseCurrency.value = "";
-        if(expenseAmount) expenseAmount.value = "";
-        if(expenseNote) expenseNote.value = "";
+          await fetchExpensesFromApi();
 
-        renderExpenses();
-        renderInitialCapital();
-        refreshDashboard();
-        if(typeof showToast === 'function') showToast('Gasto guardado ✅');
+          if(expenseDate) expenseDate.value = todayISO();
+          if(expenseCategory) expenseCategory.value = "";
+          if(expenseCountry) expenseCountry.value = "";
+          if(expenseCurrency) expenseCurrency.value = "";
+          if(expenseAmount) expenseAmount.value = "";
+          if(expenseNote) expenseNote.value = "";
+
+          renderExpenses();
+          renderInitialCapital();
+          refreshDashboard();
+          if(typeof pendingCountryDetail === "string" && pendingCountryDetail){
+            renderCountryDetail(pendingCountryDetail);
+          }
+          if(typeof showToast === 'function') showToast('Gasto guardado ✅');
+        }catch(error){
+          console.error("SAVE_EXPENSE_ERROR", error);
+          if(typeof showToast === 'function') showToast(error?.message || 'No se pudo guardar el gasto');
+        }
       };
     }
 
