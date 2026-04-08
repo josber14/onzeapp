@@ -3476,6 +3476,16 @@
         }
       });
 
+      loadExpenses().forEach(exp => {
+        const country = String(exp.country || "").trim();
+        const currency = String(exp.currency || "").trim().toUpperCase();
+        const amount = Number(exp.amount || 0);
+        if(!country || !currency || !Number.isFinite(amount) || amount <= 0) return;
+
+        const entry = ensureEntry(country, currency);
+        entry.salidas += amount;
+      });
+
       const rows = Array.from(summaryMap.values()).map(entry => {
         entry.saldoActual = Number(entry.capitalInicial || 0) + Number(entry.entradas || 0) - Number(entry.salidas || 0);
         entry.saldoUsdt = toUsdtFromCountryAmount(entry.country, entry.saldoActual);
