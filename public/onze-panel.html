@@ -3451,6 +3451,7 @@
           summaryMap.set(key, {
             country: normalizedCountry,
             currency: normalizedCurrency,
+            initialCapitalId: "",
             capitalInicial: 0,
             entradas: 0,
             salidas: 0,
@@ -3463,6 +3464,9 @@
 
       loadInitialCapital().forEach(item => {
         const entry = ensureEntry(item.country, item.currency);
+        if(!entry.initialCapitalId && item.id !== undefined && item.id !== null){
+          entry.initialCapitalId = String(item.id);
+        }
         entry.capitalInicial += Number(item.amount || 0);
       });
 
@@ -3805,11 +3809,7 @@
       capitalInitialEmpty.style.display = "none";
 
       items.forEach(item => {
-        const capitalRows = loadInitialCapital().filter(cap =>
-          String(cap.country || "").trim() === String(item.country || "").trim() &&
-          String(cap.currency || "").trim().toUpperCase() === String(item.currency || "").trim().toUpperCase()
-        );
-        const deleteId = capitalRows[0]?.id || "";
+        const deleteId = String(item.initialCapitalId || "");
 
         const div = document.createElement("div");
         div.className = "capital-card";
