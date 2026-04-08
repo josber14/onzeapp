@@ -2222,7 +2222,19 @@
               </div>
 
               <div class="field">
-                <label for="expenseAmount">Monto USDT</label>
+                <label for="expenseCountry">País</label>
+                <select id="expenseCountry">
+                  <option value="">Selecciona un país…</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="expenseCurrency">Moneda</label>
+                <input type="text" id="expenseCurrency" placeholder="Moneda automática" readonly />
+              </div>
+
+              <div class="field">
+                <label for="expenseAmount">Monto</label>
                 <input type="number" id="expenseAmount" inputmode="decimal" min="0" step="0.01" placeholder="0.00" />
               </div>
 
@@ -2873,6 +2885,8 @@
     const addExpenseBtn = document.getElementById("addExpenseBtn");
     const expenseDate = document.getElementById("expenseDate");
     const expenseCategory = document.getElementById("expenseCategory");
+    const expenseCountry = document.getElementById("expenseCountry");
+    const expenseCurrency = document.getElementById("expenseCurrency");
     const expenseAmount = document.getElementById("expenseAmount");
     const expenseNote = document.getElementById("expenseNote");
     const expensesBody = document.getElementById("expensesBody");
@@ -3993,8 +4007,8 @@
         tr.innerHTML = `
           <td>${exp.date || "—"}</td>
           <td>${exp.category || "—"}</td>
-          <td>${formatCalcValue(Number(exp.amountUsdt || 0), "USDT")} USDT</td>
-          <td>${exp.note || "—"}</td>
+          <td>${formatCalcValue(Number(exp.amount || 0), exp.currency || "USDT")} ${exp.currency || "USDT"}</td>
+          <td>${exp.country || "—"}${exp.note ? ` · ${exp.note}` : ""}</td>
           <td><button class="btn small danger" type="button" onclick="deleteExpense('${exp.id}')">Eliminar</button></td>
         `;
         expensesBody.appendChild(tr);
@@ -4005,7 +4019,14 @@
       if(!confirm("¿Seguro que deseas eliminar este gasto?")) return;
       const expenses = loadExpenses().filter(exp => exp.id !== id);
       saveExpenses(expenses);
+
+      const cleanedMovements = loadBalanceMovements().filter(item =>
+        !(String(item.fundingId || "") === String(id) && String(item.movementType || "") === "gasto")
+      );
+      saveBalanceMovements(cleanedMovements);
+
       renderExpenses();
+      renderInitialCapital();
       refreshDashboard();
       if(typeof showToast === 'function') showToast('Gasto eliminado');
     };
@@ -4412,7 +4433,12 @@
       const capitalTotalUsdt = balanceSummary.reduce((sum, item) => sum + Number(item?.saldoUsdt || 0), 0);
       const monthExpensesUsdt = loadExpenses()
         .filter(exp => String(exp?.date || "").startsWith(currentMonth))
-        .reduce((sum, exp) => sum + Number(exp?.amountUsdt || 0), 0);
+        .reduce((sum, exp) => {
+          const amount = Number(exp?.amount || exp?.amountUsdt || 0);
+          const country = String(exp?.country || exp?.currency || "USDT");
+          const converted = country === "USDT" ? amount : Number(toUsdtFromCountryAmount(country, amount) || 0);
+          return sum + converted;
+        }, 0);
       const netBalanceUsdt = capitalTotalUsdt - monthExpensesUsdt;
 
       const receivablesOps = monthOps.filter(op => ["pending", "partial"].includes(String(op?.paymentStatus || "")));
@@ -6314,7 +6340,9 @@
       addExpenseBtn.onclick = function(){
         const date = (expenseDate?.value || todayISO()).trim();
         const category = (expenseCategory?.value || "").trim();
-        const amountUsdt = Number(expenseAmount?.value || 0);
+        const country = String(expenseCountry?.value || "").trim();
+        const currency = String(expenseCurrency?.value || "").trim().toUpperCase();
+        const amount = Number(expenseAmount?.value || 0);
         const note = (expenseNote?.value || "").trim();
 
         if(!category){
@@ -6322,29 +6350,56 @@
           return;
         }
 
-        if(!Number.isFinite(amountUsdt) || amountUsdt <= 0){
+        if(!country){
+          if(typeof showToast === 'function') showToast('Selecciona un país');
+          expenseCountry?.focus();
+          return;
+        }
+
+        if(!currency){
+          if(typeof showToast === 'function') showToast('Moneda inválida');
+          return;
+        }
+
+        if(!Number.isFinite(amount) || amount <= 0){
           if(typeof showToast === 'function') showToast('Agrega un monto válido');
           return;
         }
 
+        const expenseId = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
         const expenses = loadExpenses();
         expenses.push({
-          id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2)),
+          id: expenseId,
           date,
           category,
-          amountUsdt,
+          country,
+          currency,
+          amount,
           note,
           createdAt: new Date().toISOString()
         });
 
         saveExpenses(expenses);
 
+        addBalanceMovement({
+          fundingId: expenseId,
+          country,
+          currency,
+          direction: "salida",
+          movementType: "gasto",
+          amount: Number(amount || 0),
+          note: `Gasto: ${category}${note ? " · " + note : ""}`
+        });
+
         if(expenseDate) expenseDate.value = todayISO();
         if(expenseCategory) expenseCategory.value = "";
+        if(expenseCountry) expenseCountry.value = "";
+        if(expenseCurrency) expenseCurrency.value = "";
         if(expenseAmount) expenseAmount.value = "";
         if(expenseNote) expenseNote.value = "";
 
         renderExpenses();
+        renderInitialCapital();
         refreshDashboard();
         if(typeof showToast === 'function') showToast('Gasto guardado ✅');
       };
@@ -6402,6 +6457,39 @@
     if(openCapitalSetupBtn){
       openCapitalSetupBtn.onclick = function(){
         capitalCountry?.focus();
+      };
+    }
+
+    if(expenseCountry){
+      const expenseCountries = [
+        "USDT",
+        "Argentina",
+        "Brasil",
+        "Chile",
+        "Colombia",
+        "Ecuador",
+        "España",
+        "México",
+        "Peru",
+        "Uruguay",
+        "USA",
+        "Venezuela"
+      ].sort((a,b)=>a.localeCompare(b,"es",{sensitivity:"base"}));
+
+      expenseCountry.innerHTML = '<option value="">Selecciona un país…</option>';
+      expenseCountries.forEach(country => {
+        const opt = document.createElement('option');
+        opt.value = country;
+        opt.textContent = country;
+        expenseCountry.appendChild(opt);
+      });
+
+      expenseCountry.onchange = function(){
+        if(expenseCurrency){
+          expenseCurrency.value = expenseCountry.value
+            ? (expenseCountry.value === "USDT" ? "USDT" : getCurrencyFor(expenseCountry.value))
+            : '';
+        }
       };
     }
 
