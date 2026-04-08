@@ -3520,18 +3520,32 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(ops));
     }
 
+    let capitalCache = [];
+
     function loadInitialCapital(){
-      try{
-        const raw = localStorage.getItem(CAPITAL_KEY);
-        const data = raw ? JSON.parse(raw) : [];
-        return Array.isArray(data) ? data : [];
-      }catch{
-        return [];
-      }
+      return Array.isArray(capitalCache) ? capitalCache : [];
     }
 
     function saveInitialCapital(items){
-      localStorage.setItem(CAPITAL_KEY, JSON.stringify(items));
+      capitalCache = Array.isArray(items) ? items : [];
+    }
+
+    async function fetchCapitalFromApi(){
+      try{
+        const res = await fetch("/api/capital", { cache: "no-store" });
+        const data = await res.json().catch(()=>({}));
+
+        if(!res.ok){
+          throw new Error(data?.error || "No se pudo cargar el capital inicial.");
+        }
+
+        const items = Array.isArray(data?.items) ? data.items : [];
+        saveInitialCapital(items);
+        return items;
+      }catch(error){
+        console.error("FETCH_CAPITAL_ERROR", error);
+        return loadInitialCapital();
+      }
     }
 
     function loadBalanceMovements(){
@@ -3842,7 +3856,7 @@
 
     function openCapitalActionModal(id){
       const items = loadInitialCapital();
-      const current = items.find(item => item.id === id);
+      const current = items.find(item => String(item.id) === String(id));
       if(!current || !capitalActionModal) return;
 
       pendingCapitalActionId = id;
@@ -3854,11 +3868,11 @@
       document.body.classList.add("noscroll");
     }
 
-    function applyCapitalCardAction(action){
+    async function applyCapitalCardAction(action){
       if(!pendingCapitalActionId) return;
 
       const items = loadInitialCapital();
-      const current = items.find(item => item.id === pendingCapitalActionId);
+      const current = items.find(item => String(item.id) === String(pendingCapitalActionId));
       if(!current) {
         closeCapitalActionModal();
         return;
@@ -3878,16 +3892,30 @@
         normalizeText(item.currency) === normalizeText(current.currency);
 
       if(action === "delete"){
-        const updatedItems = items.filter(item => item.id !== pendingCapitalActionId);
-        saveInitialCapital(updatedItems);
+        try{
+          const res = await fetch(`/api/capital/${pendingCapitalActionId}`, { method: "DELETE" });
+          const data = await res.json().catch(()=>({}));
 
-        const cleanedMovements = movements.filter(item => !sameCardMovement(item));
-        localStorage.setItem(BALANCE_MOVEMENTS_KEY, JSON.stringify(cleanedMovements));
+          if(!res.ok){
+            throw new Error(data?.error || "No se pudo eliminar el capital inicial.");
+          }
 
-        closeCapitalActionModal();
-        renderInitialCapital();
-        refreshDashboard();
-        if(typeof showToast === 'function') showToast('Tarjeta completa eliminada');
+          await fetchCapitalFromApi();
+
+          const cleanedMovements = movements.filter(item => !sameCardMovement(item));
+          localStorage.setItem(BALANCE_MOVEMENTS_KEY, JSON.stringify(cleanedMovements));
+
+          closeCapitalActionModal();
+          renderInitialCapital();
+          refreshDashboard();
+          if(typeof pendingCountryDetail === "string" && pendingCountryDetail){
+            renderCountryDetail(pendingCountryDetail);
+          }
+          if(typeof showToast === 'function') showToast('Tarjeta completa eliminada');
+        }catch(error){
+          console.error("DELETE_CAPITAL_ERROR", error);
+          if(typeof showToast === 'function') showToast(error?.message || 'No se pudo eliminar el capital inicial');
+        }
         return;
       }
 
@@ -3898,6 +3926,9 @@
         closeCapitalActionModal();
         renderInitialCapital();
         refreshDashboard();
+        if(typeof pendingCountryDetail === "string" && pendingCountryDetail){
+          renderCountryDetail(pendingCountryDetail);
+        }
         if(typeof showToast === 'function') showToast('Movimientos reiniciados');
       }
     }
@@ -5875,7 +5906,9 @@
       fetchAndRender(true);
       refreshHistoryUI();
       await fetchExpensesFromApi();
+      await fetchCapitalFromApi();
       renderExpenses();
+      renderInitialCapital();
       refreshClientSuggestions();
       fillProfileForm();
       operationDate.value = todayISO();
@@ -6551,7 +6584,7 @@
     }
 
     if(saveCapitalBtn){
-      saveCapitalBtn.onclick = function(){
+      saveCapitalBtn.onclick = async function(){
         const country = String(capitalCountry?.value || '').trim();
         const currency = String(capitalCurrency?.value || '').trim().toUpperCase();
         const amount = Number(String(capitalAmount?.value || '').replace(',', '.'));
@@ -6574,23 +6607,39 @@
           return;
         }
 
-        const items = loadInitialCapital();
-        items.push({
-          id: createSimpleId('cap'),
-          createdAt: new Date().toISOString(),
-          country,
-          currency,
-          amount
-        });
-        saveInitialCapital(items);
+        try{
+          const res = await fetch("/api/capital", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              country,
+              currency,
+              amount
+            })
+          });
 
-        if(capitalCountry) capitalCountry.value = '';
-        if(capitalCurrency) capitalCurrency.value = '';
-        if(capitalAmount) capitalAmount.value = '';
+          const data = await res.json().catch(()=>({}));
 
-        renderInitialCapital();
-        refreshDashboard();
-        if(typeof showToast === 'function') showToast('Capital inicial guardado ✅');
+          if(!res.ok){
+            throw new Error(data?.error || "No se pudo guardar el capital inicial.");
+          }
+
+          await fetchCapitalFromApi();
+
+          if(capitalCountry) capitalCountry.value = '';
+          if(capitalCurrency) capitalCurrency.value = '';
+          if(capitalAmount) capitalAmount.value = '';
+
+          renderInitialCapital();
+          refreshDashboard();
+          if(typeof pendingCountryDetail === "string" && pendingCountryDetail){
+            renderCountryDetail(pendingCountryDetail);
+          }
+          if(typeof showToast === 'function') showToast('Capital inicial guardado ✅');
+        }catch(error){
+          console.error("SAVE_CAPITAL_ERROR", error);
+          if(typeof showToast === 'function') showToast(error?.message || 'No se pudo guardar el capital inicial');
+        }
       };
     }
 
