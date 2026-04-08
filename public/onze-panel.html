@@ -3897,12 +3897,19 @@
       const target = String(country || "").trim().toLowerCase();
       if(!target) return [];
 
-      return loadOperations()
+      const operationRows = loadOperations()
         .filter(op =>
           String(op.originCountry || "").trim().toLowerCase() === target ||
           String(op.destCountry || "").trim().toLowerCase() === target
         )
-        .sort((a,b)=>new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+        .map(op => ({ kind: "operation", ...op }));
+
+      const expenseRows = loadExpenses()
+        .filter(exp => String(exp.country || "").trim().toLowerCase() === target)
+        .map(exp => ({ kind: "expense", ...exp }));
+
+      return [...operationRows, ...expenseRows]
+        .sort((a,b)=>new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
     }
 
     function renderCountryDetail(country){
@@ -3943,23 +3950,35 @@
       if(countryDetailEmpty) countryDetailEmpty.style.display = "none";
 
       rows.forEach(op => {
+        const isExpense = op.kind === "expense";
+
         const isOrigin = String(op.originCountry || "").trim().toLowerCase() === selectedCountry.toLowerCase();
-        const movementType = isOrigin ? "Entrada" : "Salida";
-        const movementAmount = isOrigin
-          ? (op.sendAmountFormatted || formatCalcValue(Number(op.sendAmount || 0), op.originCurrency || ""))
-          : (op.receiveAmountFormatted || formatCalcValue(Number(op.receiveAmount || 0), op.destCurrency || ""));
-        const stateHtml = op.deleted
-          ? '<span class="pill danger">Anulada</span>'
-          : '<span class="pill green">Activa</span>';
+        const movementType = isExpense ? "Gasto" : (isOrigin ? "Entrada" : "Salida");
+        const movementAmount = isExpense
+          ? `${formatCalcValue(Number(op.amount || 0), op.currency || "USDT")} ${op.currency || "USDT"}`
+          : (isOrigin
+              ? (op.sendAmountFormatted || formatCalcValue(Number(op.sendAmount || 0), op.originCurrency || ""))
+              : (op.receiveAmountFormatted || formatCalcValue(Number(op.receiveAmount || 0), op.destCurrency || "")));
+
+        const stateHtml = isExpense
+          ? '<span class="pill" style="background:rgba(245,158,11,.12);color:#fcd34d;border:1px solid rgba(245,158,11,.25);">Gasto</span>'
+          : (op.deleted
+              ? '<span class="pill danger">Anulada</span>'
+              : '<span class="pill green">Activa</span>');
+
+        const clientOrCategory = isExpense ? (op.category || "Gasto") : (op.clientName || "—");
+        const routeOrNote = isExpense
+          ? `${op.country || "—"}${op.note ? " · " + op.note : ""}`
+          : `${op.originCountry || "—"} → ${op.destCountry || "—"}`;
 
         const tr = document.createElement("tr");
         if(op.deleted) tr.style.opacity = "0.5";
 
         tr.innerHTML = `
           <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${formatDateTimeForTable(op.date, op.createdAt)}</td>
-          <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${op.clientName || "—"}</td>
+          <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${clientOrCategory}</td>
           <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${movementType}</td>
-          <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${op.originCountry || "—"} → ${op.destCountry || "—"}</td>
+          <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${routeOrNote}</td>
           <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${movementAmount}</td>
           <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${stateHtml}</td>
         `;
