@@ -4191,40 +4191,11 @@
       const receivablesUsdtCard = dashReceivablesUsdt?.closest(".dash-card");
       if(receivablesUsdtCard) receivablesUsdtCard.style.display = "none";
 
-      const opsTodayCard = dashOpsToday?.closest(".dash-card");
-      if(opsTodayCard) opsTodayCard.style.display = "none";
-
-      const opsMonthCard = dashOpsMonth?.closest(".dash-card");
-      if(opsMonthCard) opsMonthCard.style.display = "none";
-
-      const profitTodayCard = dashProfitToday?.closest(".dash-card");
-      if(profitTodayCard) profitTodayCard.style.display = "none";
-
-      const profitMonthCard = dashProfitMonth?.closest(".dash-card");
-      if(profitMonthCard) profitMonthCard.style.display = "none";
-
       const countriesTotalCard = dashCountriesTotal?.closest(".dash-card");
       if(countriesTotalCard) countriesTotalCard.style.display = "none";
 
       const countriesTotalUsdtCard = dashCountriesTotalUsdt?.closest(".dash-card");
       if(countriesTotalUsdtCard) countriesTotalUsdtCard.style.display = "none";
-
-      const sensitiveLabels = [
-        "USDT COBRADO",
-        "USDT PENDIENTE",
-        "CAPITAL TOTAL",
-        "GASTOS DEL MES",
-        "SALDO NETO",
-        "CUENTAS POR COBRAR",
-        "CAPITAL INICIAL"
-      ];
-
-      document.querySelectorAll(".dash-card, .section-card").forEach(card => {
-        const txt = String(card.textContent || "").toUpperCase();
-        if(sensitiveLabels.some(label => txt.includes(label))){
-          card.style.display = "none";
-        }
-      });
     }
 
     function rememberClient(name){
