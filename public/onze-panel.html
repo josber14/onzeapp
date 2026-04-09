@@ -4190,12 +4190,6 @@
 
       const receivablesUsdtCard = dashReceivablesUsdt?.closest(".dash-card");
       if(receivablesUsdtCard) receivablesUsdtCard.style.display = "none";
-
-      const countriesTotalCard = dashCountriesTotal?.closest(".dash-card");
-      if(countriesTotalCard) countriesTotalCard.style.display = "none";
-
-      const countriesTotalUsdtCard = dashCountriesTotalUsdt?.closest(".dash-card");
-      if(countriesTotalUsdtCard) countriesTotalUsdtCard.style.display = "none";
     }
 
     function rememberClient(name){
@@ -4818,6 +4812,7 @@
         createdAt: new Date().toISOString(),
         date: operationDate.value || todayISO(),
         clientName: clientName.value.trim(),
+        operatorMode: pendingRegisterData.operatorMode || CURRENT_USER_CONTEXT.operatorMode || "",
         operationNumber: finalOperationNumber,
         operationType: selectedType,
         paymentStatus,
