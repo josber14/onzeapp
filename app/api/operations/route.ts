@@ -69,8 +69,15 @@ export async function GET() {
       return NextResponse.json({ error: "No autorizado." }, { status: 401 });
     }
 
+    const isAdmin =
+      session.role === "super_admin_global" ||
+      session.role === "super_admin_cliente";
+
     const operations = await prisma.operation.findMany({
-      where: { tenantId: session.tenantId },
+      where: {
+        tenantId: session.tenantId,
+        ...(isAdmin ? {} : { createdByUserId: session.userId }),
+      },
       orderBy: [{ createdAt: "desc" }],
       include: {
         originCountry: { select: { name: true, code: true, currencyCode: true } },
