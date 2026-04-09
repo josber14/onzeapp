@@ -4166,6 +4166,9 @@
       const capitalSection = saveCapitalBtn?.closest(".section-card");
       if(capitalSection) capitalSection.style.display = "none";
 
+      const expensesSection = addExpenseBtn?.closest(".section-card");
+      if(expensesSection) expensesSection.style.display = "none";
+
       const openCapitalBtnCard = openCapitalSetupBtn?.closest(".dash-card");
       if(openCapitalBtnCard) openCapitalBtnCard.style.display = "none";
 
@@ -4177,6 +4180,24 @@
 
       const netBalanceCard = dashNetBalance?.closest(".dash-card");
       if(netBalanceCard) netBalanceCard.style.display = "none";
+
+      const receivablesCountCard = dashReceivablesCount?.closest(".dash-card");
+      if(receivablesCountCard) receivablesCountCard.style.display = "none";
+
+      const receivablesUsdtCard = dashReceivablesUsdt?.closest(".dash-card");
+      if(receivablesUsdtCard) receivablesUsdtCard.style.display = "none";
+
+      const opsTodayCard = dashOpsToday?.closest(".dash-card");
+      if(opsTodayCard) opsTodayCard.style.display = "none";
+
+      const opsMonthCard = dashOpsMonth?.closest(".dash-card");
+      if(opsMonthCard) opsMonthCard.style.display = "none";
+
+      const profitTodayCard = dashProfitToday?.closest(".dash-card");
+      if(profitTodayCard) profitTodayCard.style.display = "none";
+
+      const profitMonthCard = dashProfitMonth?.closest(".dash-card");
+      if(profitMonthCard) profitMonthCard.style.display = "none";
 
       const countriesTotalCard = dashCountriesTotal?.closest(".dash-card");
       if(countriesTotalCard) countriesTotalCard.style.display = "none";
@@ -5982,6 +6003,7 @@
       }
       renderExpenses();
       renderInitialCapital();
+      refreshDashboard();
       refreshClientSuggestions();
       fillProfileForm();
       operationDate.value = todayISO();
