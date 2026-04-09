@@ -3510,18 +3510,32 @@
       return [];
     }
 
+    let operationsCache = [];
+
     function loadOperations(){
-      try{
-        const raw = localStorage.getItem(STORAGE_KEY);
-        const data = raw ? JSON.parse(raw) : [];
-        return Array.isArray(data) ? data : [];
-      }catch{
-        return [];
-      }
+      return Array.isArray(operationsCache) ? operationsCache : [];
     }
 
     function saveOperations(ops){
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(ops));
+      operationsCache = Array.isArray(ops) ? ops : [];
+    }
+
+    async function fetchOperationsFromApi(){
+      try{
+        const res = await fetch("/api/operations", { cache: "no-store" });
+        const data = await res.json().catch(()=>({}));
+
+        if(!res.ok){
+          throw new Error(data?.error || "No se pudieron cargar las operaciones.");
+        }
+
+        const ops = Array.isArray(data?.operations) ? data.operations : [];
+        saveOperations(ops);
+        return ops;
+      }catch(error){
+        console.error("FETCH_OPERATIONS_ERROR", error);
+        return loadOperations();
+      }
     }
 
     let capitalCache = [];
@@ -4798,45 +4812,70 @@
 
       rememberClient(op.clientName);
 
-      const ops = loadOperations();
-      ops.push(op);
-      saveOperations(ops);
+      (async ()=>{
+        try{
+          const res = await fetch("/api/operations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              date: op.date,
+              operationNumber: op.operationNumber,
+              operationType: op.operationType,
+              note: op.note,
+              clientName: op.clientName,
+              operatorMode: op.operatorMode,
+              originCountry: op.originCountry,
+              destCountry: op.destCountry,
+              originCurrency: op.originCurrency,
+              destCurrency: op.destCurrency,
+              sendAmount: op.sendAmount,
+              receiveAmount: op.receiveAmount,
+              providerRate: op.providerRate,
+              clientRate: op.clientRate,
+              profitCountry: op.profitCountry,
+              profitCurrency: op.profitCurrency,
+              profitValue: op.profitValue,
+              liquidityStatus: op.liquidityStatus,
+              needsFunding: op.needsFunding,
+              liquidityShortage: op.liquidityShortage,
+              shortageCountry: op.shortageCountry,
+              shortageCurrency: op.shortageCurrency,
+              payoutCurrencyMode: op.payerSide === "socio" ? "usdt" : null,
+              payoutAmountToOperator: op.partnerPayoutTotalUsdt || op.partnerPayoutProfitUsdt || null,
+              payoutCurrencyCode: op.payerSide === "socio" ? "USDT" : null,
+              payoutUsdtAmount: op.partnerPayoutTotalUsdt || op.partnerPayoutProfitUsdt || null
+            })
+          });
 
-      addBalanceMovement({
-        operationId: op.id,
-        country: op.originCountry,
-        currency: op.originCurrency,
-        direction: "entrada",
-        movementType: "operacion_entrada",
-        amount: Number(op.sendAmount || 0),
-        note: `Operación ${op.operationNumber}`
-      });
+          const data = await res.json().catch(()=>({}));
 
-      addBalanceMovement({
-        operationId: op.id,
-        country: op.destCountry,
-        currency: op.destCurrency,
-        direction: "salida",
-        movementType: "operacion_salida",
-        amount: Number(op.receiveAmount || 0),
-        note: `Operación ${op.operationNumber}`
-      });
+          if(!res.ok){
+            throw new Error(data?.error || "No se pudo guardar la operación.");
+          }
 
-      if(needsFunding){
-        addLiquidityAlert({
-          operationId: op.id,
-          country: op.destCountry,
-          currency: op.destCurrency,
-          availableAmount: availableDestBalance,
-          requiredAmount: requiredDestAmount,
-          shortageAmount,
-          note: `Faltante detectado al registrar la operación ${op.operationNumber}`
-        });
-      }
-      refreshHistoryUI();
-      closeRegisterModal();
-      switchView("dashboard");
-      showToast("Operación guardada ✅");
+          await fetchOperationsFromApi();
+
+          if(needsFunding){
+            addLiquidityAlert({
+              operationId: String(data?.operation?.id || op.id || ""),
+              country: op.destCountry,
+              currency: op.destCurrency,
+              availableAmount: availableDestBalance,
+              requiredAmount: requiredDestAmount,
+              shortageAmount,
+              note: `Faltante detectado al registrar la operación ${op.operationNumber}`
+            });
+          }
+
+          refreshHistoryUI();
+          closeRegisterModal();
+          switchView("dashboard");
+          showToast("Operación guardada ✅");
+        }catch(error){
+          console.error("SAVE_OPERATION_ERROR", error);
+          showToast(error?.message || "No se pudo guardar la operación");
+        }
+      })();
     }
 
     function updateTitle(){
@@ -5902,6 +5941,7 @@
 
     document.addEventListener("DOMContentLoaded", async ()=>{
       fetchAndRender(true);
+      await fetchOperationsFromApi();
       refreshHistoryUI();
       await fetchExpensesFromApi();
       await fetchCapitalFromApi();
