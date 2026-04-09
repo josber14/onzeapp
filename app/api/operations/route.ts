@@ -46,8 +46,25 @@ async function resolveCountryByNameOrCode(input: string) {
 }
 
 function parseOperatorMode(value: string) {
-  const allowed = new Set(["porcentaje", "libre", "socio", "proveedor", "manual"]);
-  return allowed.has(value) ? (value as OperatorMode) : null;
+  const raw = String(value || "").trim().toLowerCase();
+
+  const aliases: Record<string, OperatorMode> = {
+    porcentaje: "porcentaje",
+    percentage: "porcentaje",
+    porcentaje_fijo: "porcentaje",
+    fixed_percentage: "porcentaje",
+    fixedpercent: "porcentaje",
+    libre: "libre",
+    own_rate: "libre",
+    libre_tasa: "libre",
+    socio: "socio",
+    partner: "socio",
+    proveedor: "proveedor",
+    provider: "proveedor",
+    manual: "manual",
+  };
+
+  return aliases[raw] || null;
 }
 
 function parseLiquidityStatus(value: string) {
