@@ -2039,7 +2039,7 @@
 
           <div class="dashboard-grid">
             <div class="dash-card">
-              <div class="dash-label">Ganancia hoy</div>
+              <div class="dash-label">Ganancia del mes</div>
               <div class="dash-value" id="dashProfitToday">0</div>
               <div class="dash-sub" id="dashProfitTodayCur">—</div>
             </div>
@@ -4190,6 +4190,15 @@
 
       const receivablesUsdtCard = dashReceivablesUsdt?.closest(".dash-card");
       if(receivablesUsdtCard) receivablesUsdtCard.style.display = "none";
+
+      const usdtCollectedCard = dashUsdtCollected?.closest(".dash-card");
+      if(usdtCollectedCard) usdtCollectedCard.style.display = "none";
+
+      const usdtPendingCard = dashUsdtPending?.closest(".dash-card");
+      if(usdtPendingCard) usdtPendingCard.style.display = "none";
+
+      const countriesTotalCard = dashCountriesTotal?.closest(".dash-card");
+      if(countriesTotalCard) countriesTotalCard.style.display = "none";
     }
 
     function rememberClient(name){
@@ -4460,10 +4469,19 @@
       }
 
       countryProfitGrid.innerHTML = groups.map(group => `
-        <div class="country-profit-item">
-          <div class="country-profit-row">
-            <div class="country-profit-label">${getFlagEmoji(group.profitCountry)} ${group.profitCountry.toUpperCase()}:</div>
-            <div class="country-profit-value-inline">${formatCalcValue(Number(group.total || 0), group.profitCurrency)} ${group.profitCurrency}</div>
+        <div class="country-profit-item" style="padding:18px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(67,124,255,.22);">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+            <div>
+              <div style="font-size:13px;letter-spacing:.4px;text-transform:uppercase;color:#9fb4d4;font-weight:800;">
+                ${getFlagEmoji(group.profitCountry)} ${group.profitCountry}
+              </div>
+              <div style="margin-top:10px;font-size:30px;font-weight:900;line-height:1;color:#fff;">
+                ${formatCalcValue(Number(group.total || 0), group.profitCurrency)}
+              </div>
+              <div style="margin-top:6px;font-size:13px;color:#8ea7cf;font-weight:700;">
+                ${group.profitCurrency}
+              </div>
+            </div>
           </div>
         </div>
       `).join("");
@@ -4552,7 +4570,7 @@
         };
       };
 
-      const todayProfit = groupProfit(todayOps);
+      const todayProfit = IS_ADMIN_ROLE ? groupProfit(todayOps) : groupProfit(monthOps);
       const monthProfit = groupProfit(monthOps);
 
       const sumUsdt = (items, field) => items.reduce((sum, op) => sum + Number(op?.[field] || 0), 0);
