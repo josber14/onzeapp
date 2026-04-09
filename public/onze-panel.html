@@ -6008,14 +6008,6 @@
       fillProfileForm();
       operationDate.value = todayISO();
       ensureDashboardWhatsappButton();
-
-      const sidebarProfileBtnNow = document.getElementById("sidebarProfileBtn");
-      if(sidebarProfileBtnNow && !isProfileComplete()){
-        sidebarProfileBtnNow.classList.add("profile-jump-start");
-        setTimeout(() => {
-          sidebarProfileBtnNow.classList.remove("profile-jump-start");
-        }, 4000);
-      }
     });
   </script>
 
