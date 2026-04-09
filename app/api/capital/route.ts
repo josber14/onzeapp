@@ -48,6 +48,14 @@ export async function GET() {
       return NextResponse.json({ error: "No autorizado." }, { status: 401 });
     }
 
+    const isAdmin =
+      session.role === "super_admin_global" ||
+      session.role === "super_admin_cliente";
+
+    if (!isAdmin) {
+      return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    }
+
     const capitals = await prisma.initialCapital.findMany({
       where: { tenantId: session.tenantId },
       orderBy: [{ createdAt: "asc" }],
@@ -91,6 +99,14 @@ export async function POST(req: NextRequest) {
 
     if (!session?.tenantId) {
       return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+    }
+
+    const isAdmin =
+      session.role === "super_admin_global" ||
+      session.role === "super_admin_cliente";
+
+    if (!isAdmin) {
+      return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     }
 
     const body = await req.json();

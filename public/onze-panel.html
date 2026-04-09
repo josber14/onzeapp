@@ -2829,6 +2829,11 @@
     const EARNINGS_KEY = "onze_earnings_movements_v1";
     const COLLABORATOR_PAYMENTS_KEY = "onze_collaborator_payments_v1";
     const WHATSAPP_NUMBER = "56951333777";
+    const PANEL_QUERY = new URLSearchParams(window.location.search);
+    const SESSION_ROLE = String(PANEL_QUERY.get("role") || "").trim();
+    const IS_ADMIN_ROLE =
+      SESSION_ROLE === "super_admin_global" ||
+      SESSION_ROLE === "super_admin_cliente";
 
     const sel = document.getElementById("country");
     const destSel = document.getElementById("destination");
@@ -4154,6 +4159,31 @@
       refreshDashboard(ops.filter(op => !op.deleted));
       if(typeof showToast === 'function') showToast('Operación anulada');
     };
+
+    function applyRoleUIRestrictions(){
+      if(IS_ADMIN_ROLE) return;
+
+      const capitalSection = saveCapitalBtn?.closest(".section-card");
+      if(capitalSection) capitalSection.style.display = "none";
+
+      const openCapitalBtnCard = openCapitalSetupBtn?.closest(".dash-card");
+      if(openCapitalBtnCard) openCapitalBtnCard.style.display = "none";
+
+      const capitalTotalCard = dashUsdtCapital?.closest(".dash-card");
+      if(capitalTotalCard) capitalTotalCard.style.display = "none";
+
+      const monthExpensesCard = dashMonthExpenses?.closest(".dash-card");
+      if(monthExpensesCard) monthExpensesCard.style.display = "none";
+
+      const netBalanceCard = dashNetBalance?.closest(".dash-card");
+      if(netBalanceCard) netBalanceCard.style.display = "none";
+
+      const countriesTotalCard = dashCountriesTotal?.closest(".dash-card");
+      if(countriesTotalCard) countriesTotalCard.style.display = "none";
+
+      const countriesTotalUsdtCard = dashCountriesTotalUsdt?.closest(".dash-card");
+      if(countriesTotalUsdtCard) countriesTotalUsdtCard.style.display = "none";
+    }
 
     function rememberClient(name){
       const clean = String(name || "").trim();
@@ -5940,11 +5970,16 @@
     }
 
     document.addEventListener("DOMContentLoaded", async ()=>{
+      applyRoleUIRestrictions();
       fetchAndRender(true);
       await fetchOperationsFromApi();
       refreshHistoryUI();
       await fetchExpensesFromApi();
-      await fetchCapitalFromApi();
+      if(IS_ADMIN_ROLE){
+        await fetchCapitalFromApi();
+      } else {
+        saveInitialCapital([]);
+      }
       renderExpenses();
       renderInitialCapital();
       refreshClientSuggestions();

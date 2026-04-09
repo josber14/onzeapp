@@ -23,6 +23,14 @@ export async function DELETE(
       return NextResponse.json({ error: "No autorizado." }, { status: 401 });
     }
 
+    const isAdmin =
+      session.role === "super_admin_global" ||
+      session.role === "super_admin_cliente";
+
+    if (!isAdmin) {
+      return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    }
+
     const { id } = await context.params;
     const capitalId = Number(id);
 
