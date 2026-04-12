@@ -259,6 +259,9 @@ export default function HomePage() {
               <a href="#soluciones" className="rounded-full px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-white">
                 Soluciones
               </a>
+              <a href="#planes" className="rounded-full px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-white">
+                Planes
+              </a>
               <a href="#compania" className="rounded-full px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-white">
                 Compañía
               </a>
@@ -358,6 +361,143 @@ export default function HomePage() {
         </div>
       </section>
 
+
+      <section className="border-t border-slate-200 bg-slate-50">
+        <div className="mx-auto w-full max-w-7xl px-5 py-16 md:px-6 md:py-20">
+          <div className="max-w-3xl">
+            <div className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              Servicios y soluciones
+            </div>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+              Servicios y soluciones en una misma estructura.
+            </h2>
+            <p className="mt-4 text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">
+              En ZINPLE integramos asesoría, capacitación y consultoría informática con soluciones tecnológicas orientadas al control operativo, la organización interna y el crecimiento de cada cliente. Nuestro enfoque puede implementarse mediante una herramienta propia o a través de una solución desarrollada según la necesidad de cada operación.
+            </p>
+          </div>
+
+          <div className="mt-10 grid gap-5 lg:grid-cols-4">
+            <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-lg font-semibold text-emerald-700">
+                A
+              </div>
+              <h3 className="mt-5 text-xl font-semibold text-slate-950">
+                Asesoría especializada
+              </h3>
+              <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
+                Acompañamiento para ordenar procesos, estructura interna y organización operativa.
+              </p>
+            </article>
+
+            <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-lg font-semibold text-sky-700">
+                C
+              </div>
+              <h3 className="mt-5 text-xl font-semibold text-slate-950">
+                Capacitación aplicada
+              </h3>
+              <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
+                Orientación práctica para adopción de herramientas, flujos de trabajo y uso interno.
+              </p>
+            </article>
+
+            <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50 text-lg font-semibold text-violet-700">
+                I
+              </div>
+              <h3 className="mt-5 text-xl font-semibold text-slate-950">
+                Consultoría informática
+              </h3>
+              <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
+                Apoyo en evaluación, implementación y mejora de soluciones digitales según cada necesidad.
+              </p>
+            </article>
+
+            <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-lg font-semibold text-amber-700">
+                Z
+              </div>
+              <h3 className="mt-5 text-xl font-semibold text-slate-950">
+                Herramienta propia o a medida
+              </h3>
+              <p className="mt-3 text-sm leading-7 text-slate-600 sm:text-base">
+                ZINPLE puede operar con plataforma propia o con una solución desarrollada para el cliente, según el tipo de servicio requerido.
+              </p>
+            </article>
+          </div>
+
+          <div id="planes" className="mt-12 rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+            <div className="max-w-2xl">
+              <div className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                Modalidades de servicio
+              </div>
+              <h3 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">
+                Planes pensados para continuidad y crecimiento.
+              </h3>
+              <p className="mt-4 text-base leading-7 text-slate-600 sm:text-lg sm:leading-8">
+                Cada modalidad puede contemplar acompañamiento, capacitación, consultoría y acceso a herramienta propia o desarrollada según la necesidad del cliente.
+              </p>
+            </div>
+
+            <div className="mt-10 grid gap-5 lg:grid-cols-3">
+              <article className="rounded-[28px] border border-slate-200 bg-slate-50 p-6">
+                <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Mensual
+                </div>
+                <div className="mt-4 text-4xl font-semibold tracking-tight text-slate-950">
+                  $120.000
+                </div>
+                <div className="mt-1 text-sm font-medium text-slate-500">
+                  CLP
+                </div>
+                <p className="mt-5 text-sm leading-7 text-slate-600 sm:text-base">
+                  Ideal para clientes que necesitan una base de acompañamiento, acceso y organización operativa.
+                </p>
+              </article>
+
+              <article className="rounded-[28px] border border-emerald-200 bg-emerald-50 p-6 shadow-sm">
+                <div className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                  6 meses
+                </div>
+                <div className="mt-4 text-4xl font-semibold tracking-tight text-slate-950">
+                  $630.000
+                </div>
+                <div className="mt-1 text-sm font-medium text-slate-500">
+                  CLP
+                </div>
+                <p className="mt-5 text-sm leading-7 text-slate-600 sm:text-base">
+                  Pensado para quienes buscan continuidad, mejor estructura de trabajo y mayor proyección operativa.
+                </p>
+              </article>
+
+              <article className="rounded-[28px] border border-slate-200 bg-slate-50 p-6">
+                <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Anual
+                </div>
+                <div className="mt-4 text-4xl font-semibold tracking-tight text-slate-950">
+                  $1.200.000
+                </div>
+                <div className="mt-1 text-sm font-medium text-slate-500">
+                  CLP
+                </div>
+                <p className="mt-5 text-sm leading-7 text-slate-600 sm:text-base">
+                  Una modalidad más sólida para clientes que desean estabilidad, soporte continuo y una solución alineada con su crecimiento.
+                </p>
+              </article>
+            </div>
+
+            <div className="mt-8 flex justify-center">
+              <a
+                href="mailto:zinple.cl@gmail.com?subject=Consulta%20sobre%20planes%20ZINPLE"
+                className="inline-flex items-center justify-center rounded-2xl bg-[#0a8f3c] px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#087a33]"
+              >
+                Contacta a un ejecutivo
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="border-y border-slate-200 bg-white">
         <div className="mx-auto grid w-full max-w-7xl items-center gap-12 px-5 py-16 md:px-6 md:py-20 lg:grid-cols-[0.92fr_1.08fr]">
           <div>
@@ -449,7 +589,7 @@ export default function HomePage() {
           <div>
             <div className="font-semibold text-slate-950">Ubicación</div>
             <p className="mt-3 leading-7">
-              Santiago, Chile
+              Agustinas 681 OF 905, Santiago
             </p>
           </div>
 
