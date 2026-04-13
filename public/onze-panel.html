@@ -441,8 +441,8 @@
 
     .toolbar{
       display:flex;
-      gap:8px;
-      align-items:center;
+      gap:12px;
+      align-items:flex-end;
       justify-content:space-between;
       margin-bottom:8px;
       flex-wrap:wrap;
@@ -1942,36 +1942,50 @@
         <section class="section-card">
           <div class="toolbar">
             <div class="toolbar-left">
-              <div class="muted" style="display:flex;align-items:center;gap:8px;">
-                <span>Calcula tu tasa aquí: presiona %</span>
-                <div class="popover">
-                  <button class="icon-btn" id="profitBtn" aria-haspopup="menu" aria-expanded="false" title="Elegir porcentaje" type="button">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M19 5L5 19" stroke-width="2" stroke-linecap="round"/>
-                      <circle cx="7.5" cy="7.5" r="2.5" stroke-width="2"/>
-                      <circle cx="16.5" cy="16.5" r="2.5" stroke-width="2"/>
-                    </svg>
-                    <span class="pct-badge" id="pctBadge"></span>
-                  </button>
+              <div class="muted" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                <div id="adminCalcModeWrap" style="display:none;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <span>Calculadora:</span>
+                  <select id="adminCalcMode" style="background:#081a33;color:#fff;border:1px solid #1f4b82;border-radius:10px;padding:8px 12px;font-weight:700;">
+                    <option value="onze">ONZE</option>
+                    <option value="libre">Libre</option>
+                    <option value="porcentaje">Por %</option>
+                    <option value="socio">Socio</option>
+                  </select>
+                </div>
 
-                  <div class="menu" id="profitMenu">
-                    <button type="button" data-mode="base">TASA PROVEDOR</button>
-                    <div class="sep"></div>
-                    <button type="button" data-p="2">2%</button>
-                    <button type="button" data-p="3">3%</button>
-                    <button type="button" data-p="4">4%</button>
-                    <button type="button" data-p="5">5%</button>
-                    <div class="sep"></div>
-                    <div class="label">Personalizar %</div>
-                    <div class="custom">
-                      <div class="input-group">
-                        <input id="customPct" type="number" inputmode="decimal" min="0" step="0.1" placeholder="Ej: 7.5" />
-                        <span>%</span>
+                <div id="profitControlWrap" style="display:flex;align-items:center;gap:8px;">
+                  <span>Calcula tu tasa aquí: presiona %</span>
+                  <div class="popover">
+                    <button class="icon-btn" id="profitBtn" aria-haspopup="menu" aria-expanded="false" title="Elegir porcentaje" type="button">
+                      <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M19 5L5 19" stroke-width="2" stroke-linecap="round"/>
+                        <circle cx="7.5" cy="7.5" r="2.5" stroke-width="2"/>
+                        <circle cx="16.5" cy="16.5" r="2.5" stroke-width="2"/>
+                      </svg>
+                      <span class="pct-badge" id="pctBadge"></span>
+                    </button>
+
+                    <div class="menu" id="profitMenu">
+                      <button type="button" data-mode="base">TASA PROVEDOR</button>
+                      <div class="sep"></div>
+                      <button type="button" data-p="2">2%</button>
+                      <button type="button" data-p="3">3%</button>
+                      <button type="button" data-p="4">4%</button>
+                      <button type="button" data-p="5">5%</button>
+                      <div class="sep"></div>
+                      <div class="label">Personalizar %</div>
+                      <div class="custom">
+                        <div class="input-group">
+                          <input id="customPct" type="number" inputmode="decimal" min="0" step="0.1" placeholder="Ej: 7.5" />
+                          <span>%</span>
+                        </div>
+                        <button id="applyCustom" type="button">Aplicar</button>
                       </div>
-                      <button id="applyCustom" type="button">Aplicar</button>
                     </div>
                   </div>
                 </div>
+
+
               </div>
             </div>
 
@@ -2004,20 +2018,44 @@
           <div class="h2-row">
             <h2 id="title">Centro de operaciones</h2>
 
-            <button id="toggleCalc" class="calc-toggle" aria-pressed="false" title="Mostrar/Ocultar calculadora por fila" type="button">
-              <svg class="ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <rect x="4" y="3" width="16" height="18" rx="3" stroke-width="2"/>
-                <rect x="7" y="6" width="10" height="3" rx="1.5" fill="#111827"/>
-                <circle cx="8.5" cy="12.5" r="1.5" fill="#111827"/>
-                <circle cx="12" cy="12.5" r="1.5" fill="#111827"/>
-                <circle cx="15.5" cy="12.5" r="1.5" fill="#111827"/>
-                <circle cx="8.5" cy="16.5" r="1.5" fill="#111827"/>
-                <circle cx="12" cy="16.5" r="1.5" fill="#111827"/>
-                <circle cx="15.5" cy="16.5" r="1.5" fill="#111827"/>
-              </svg>
-              <span>Calculadora</span>
-              <span class="state" id="calcState">OFF</span>
-            </button>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px;padding-right:34px;">
+              <div id="onzeImproveRateWrap" style="display:none;flex-direction:column;align-items:flex-end;gap:6px;min-width:190px;">
+                <span style="font-size:12px;color:#ffffff;font-weight:700;text-align:center;width:100%;display:block;margin:0 auto;padding-left:28px;">Mejorar tasa</span>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;width:100%;">
+                  <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;width:100%;">
+                    <input
+                      id="onzeImproveRatePct"
+                      type="number"
+                      inputmode="decimal"
+                      min="0"
+                      step="0.1"
+                      placeholder="Ej: 1.5"
+                      style="width:96px;background:#081a33;color:#fff;border:1px solid #1f4b82;border-radius:10px;padding:5px 8px;font-weight:700;"
+                    />
+                    <span>%</span>
+                  </div>
+                  <div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:nowrap;width:100%;">
+                    <button id="applyOnzeImproveRateBtn" type="button" class="btn small">Aplicar</button>
+                    <button id="resetOnzeImproveRateBtn" type="button" class="btn small ghost" title="Volver a tasa base" aria-label="Volver a tasa base" style="min-width:38px;padding:8px 10px;font-size:17px;line-height:1;">↺</button>
+                  </div>
+                </div>
+              </div>
+
+              <button id="toggleCalc" class="calc-toggle" aria-pressed="false" title="Mostrar/Ocultar calculadora por fila" type="button">
+                <svg class="ico" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="4" y="3" width="16" height="18" rx="3" stroke-width="2"/>
+                  <rect x="7" y="6" width="10" height="3" rx="1.5" fill="#111827"/>
+                  <circle cx="8.5" cy="12.5" r="1.5" fill="#111827"/>
+                  <circle cx="12" cy="12.5" r="1.5" fill="#111827"/>
+                  <circle cx="15.5" cy="12.5" r="1.5" fill="#111827"/>
+                  <circle cx="8.5" cy="16.5" r="1.5" fill="#111827"/>
+                  <circle cx="12" cy="16.5" r="1.5" fill="#111827"/>
+                  <circle cx="15.5" cy="16.5" r="1.5" fill="#111827"/>
+                </svg>
+                <span>Calculadora</span>
+                <span class="state" id="calcState">OFF</span>
+              </button>
+            </div>
           </div>
 
           <div id="rates"></div>
@@ -2674,20 +2712,31 @@
       return CURRENT_USER_CONTEXT.role === "super_admin_cliente";
     }
 
+    function getActiveCalculatorMode(){
+      if(isGlobalAdmin() || isTenantAdmin()){
+        return String(window.adminCalculatorMode || "onze").trim().toLowerCase();
+      }
+      return String(CURRENT_USER_CONTEXT.operatorMode || "").trim().toLowerCase();
+    }
+
+    function isOnzeCalculator(){
+      return getActiveCalculatorMode() === "onze";
+    }
+
     function isFixedPercentOperator(){
-      return CURRENT_USER_CONTEXT.operatorMode === "porcentaje";
+      return getActiveCalculatorMode() === "porcentaje";
     }
 
     function isPartnerOperator(){
-      return CURRENT_USER_CONTEXT.operatorMode === "socio";
+      return getActiveCalculatorMode() === "socio";
     }
 
     function isFiftyFiftyPartner(){
-      return CURRENT_USER_CONTEXT.operatorMode === "socio";
+      return getActiveCalculatorMode() === "socio";
     }
 
     function isFreeOperator(){
-      return CURRENT_USER_CONTEXT.operatorMode === "libre";
+      return getActiveCalculatorMode() === "libre";
     }
 
     function getFixedPercentValue(){
@@ -2789,8 +2838,8 @@
 
       if(isGlobalAdmin() || isTenantAdmin()){
         return {
-          type: "provider",
-          value: row.providerRate ?? row.value ?? null
+          type: "retail",
+          value: row.retailRate ?? null
         };
       }
 
@@ -2809,9 +2858,19 @@
       }
 
       return {
-        type: "provider",
-        value: row.providerRate ?? row.value ?? row.value ?? null
+        type: "retail",
+        value: row.retailRate ?? null
       };
+    }
+
+    function getOnzeImprovedRetailRate(row){
+      const retailRate = Number(row?.retailRate ?? null);
+      const improvePct = Number(window.onzeImproveRatePercent || 0);
+
+      if(!Number.isFinite(retailRate)) return null;
+      if(!Number.isFinite(improvePct) || improvePct <= 0) return retailRate;
+
+      return retailRate + (retailRate * (improvePct / 100));
     }
 
     window.canSeeCostRate = canSeeCostRate;
@@ -2851,8 +2910,130 @@
     const profitBtn = document.getElementById("profitBtn");
     const profitMenu = document.getElementById("profitMenu");
     const pctBadge = document.getElementById("pctBadge");
+    const adminCalcModeWrap = document.getElementById("adminCalcModeWrap");
+    const adminCalcMode = document.getElementById("adminCalcMode");
+    const profitControlWrap = document.getElementById("profitControlWrap");
+    const onzeImproveRateWrap = document.getElementById("onzeImproveRateWrap");
+    const onzeImproveRatePct = document.getElementById("onzeImproveRatePct");
+    const applyOnzeImproveRateBtn = document.getElementById("applyOnzeImproveRateBtn");
+    const resetOnzeImproveRateBtn = document.getElementById("resetOnzeImproveRateBtn");
 
-    if(isFixedPercentOperator() || isPartnerOperator()){
+    let adminCalculatorMode = "onze";
+    let onzeImproveRatePercent = 0;
+    let restoredCountry = "";
+    let restoredDestination = "";
+
+    function syncAdminCalculatorControls(){
+      const isAdminCalc = isGlobalAdmin() || isTenantAdmin();
+      const activeMode = isAdminCalc ? getActiveCalculatorMode() : "";
+
+      if(profitControlWrap){
+        if(isAdminCalc){
+          profitControlWrap.style.display = activeMode === "libre" ? "flex" : "none";
+        }else{
+          profitControlWrap.style.display = "flex";
+        }
+      }
+
+      if(onzeImproveRateWrap){
+        onzeImproveRateWrap.style.display = (isAdminCalc && activeMode === "onze") ? "flex" : "none";
+      }
+    }
+
+    if((isGlobalAdmin() || isTenantAdmin()) && adminCalcModeWrap && adminCalcMode){
+      adminCalcModeWrap.style.display = "flex";
+
+      try{
+        const savedMode = localStorage.getItem("onze_admin_calculator_mode");
+        if(savedMode) adminCalculatorMode = String(savedMode).trim().toLowerCase() || "onze";
+      }catch{}
+
+      try{
+        const savedImprove = localStorage.getItem("onze_admin_improve_rate_percent");
+        const parsedImprove = Number(savedImprove || 0);
+        onzeImproveRatePercent = Number.isFinite(parsedImprove) ? parsedImprove : 0;
+      }catch{}
+
+      try{
+        restoredCountry = String(localStorage.getItem("onze_selected_country") || "").trim();
+        restoredDestination = String(localStorage.getItem("onze_selected_destination") || "").trim();
+      }catch{}
+
+      if(onzeImproveRatePct){
+        onzeImproveRatePct.value = onzeImproveRatePercent ? String(onzeImproveRatePercent) : "";
+      }
+
+      adminCalcMode.value = adminCalculatorMode;
+      window.adminCalculatorMode = adminCalculatorMode;
+      window.onzeImproveRatePercent = onzeImproveRatePercent;
+      syncAdminCalculatorControls();
+
+      adminCalcMode.addEventListener("change", () => {
+        adminCalculatorMode = String(adminCalcMode.value || "onze").trim().toLowerCase();
+        window.adminCalculatorMode = adminCalculatorMode;
+
+        try{
+          localStorage.setItem("onze_admin_calculator_mode", adminCalculatorMode);
+          localStorage.removeItem("onze_selected_country");
+          localStorage.removeItem("onze_selected_destination");
+        }catch{}
+
+        restoredCountry = "";
+        restoredDestination = "";
+        if(sel) sel.value = "";
+        if(destSel){
+          destSel.value = "";
+          destSel.innerHTML = '<option value="" selected>Selecciona un destino…</option>';
+          destSel.disabled = true;
+        }
+
+        syncAdminCalculatorControls();
+
+        if(typeof renderAll === "function"){
+          renderAll();
+        }else{
+          location.reload();
+        }
+      });
+
+      if(applyOnzeImproveRateBtn){
+        applyOnzeImproveRateBtn.addEventListener("click", () => {
+          const val = Number(String(onzeImproveRatePct?.value || "").replace(",", "."));
+          onzeImproveRatePercent = Number.isFinite(val) && val >= 0 ? val : 0;
+          window.onzeImproveRatePercent = onzeImproveRatePercent;
+
+          try{
+            localStorage.setItem("onze_admin_improve_rate_percent", String(onzeImproveRatePercent));
+          }catch{}
+
+          if(typeof renderAll === "function"){
+            renderAll();
+          }else{
+            location.reload();
+          }
+        });
+      }
+
+      if(resetOnzeImproveRateBtn){
+        resetOnzeImproveRateBtn.addEventListener("click", () => {
+          onzeImproveRatePercent = 0;
+          window.onzeImproveRatePercent = 0;
+          if(onzeImproveRatePct) onzeImproveRatePct.value = "";
+
+          try{
+            localStorage.setItem("onze_admin_improve_rate_percent", "0");
+          }catch{}
+
+          if(typeof renderAll === "function"){
+            renderAll();
+          }else{
+            location.reload();
+          }
+        });
+      }
+    }
+
+    if(isFixedPercentOperator() || isPartnerOperator() || isOnzeCalculator()){
       const profitInfoRow = profitBtn ? profitBtn.closest(".muted") : null;
       const popoverWrap = profitBtn ? profitBtn.closest(".popover") : null;
 
@@ -2861,7 +3042,7 @@
         pctBadge.classList.remove("show");
       }
 
-      if(profitInfoRow){
+      if(profitInfoRow && !((isGlobalAdmin() || isTenantAdmin()) && adminCalcModeWrap)){
         profitInfoRow.style.display = "none";
       }
 
@@ -3043,6 +3224,10 @@
 
       const navBtn = document.querySelector(`.nav-btn[data-view-target="${viewName}"]`);
       if(navBtn) navBtn.classList.add("active");
+
+      try{
+        localStorage.setItem("onze_active_view", viewName);
+      }catch{}
 
       sidebar.classList.remove("open");
     }
@@ -3384,7 +3569,11 @@
         opt.textContent = p;
         sel.appendChild(opt);
       });
-      if(prevValue && origins.includes(prevValue)) sel.value = prevValue;
+
+      const preferredCountry = String(prevValue || restoredCountry || "").trim();
+      if(preferredCountry && origins.includes(preferredCountry)){
+        sel.value = preferredCountry;
+      }
     }
 
     function populateDestinations(data, origin, prevDest=""){
@@ -3405,8 +3594,9 @@
       destSel.disabled = false;
       viewAllBtn.disabled = false;
 
-      if(prevDest && data[origin].some(x => x.dest === prevDest)){
-        destSel.value = prevDest;
+      const preferredDest = String(prevDest || restoredDestination || "").trim();
+      if(preferredDest && data[origin].some(x => x.dest === preferredDest)){
+        destSel.value = preferredDest;
       }
     }
 
@@ -3417,10 +3607,18 @@
     }
 
     function rateForCalc(item){
-      const baseRate = item?.retailRate ?? null;
-      if(isFixedPercentOperator() || isPartnerOperator()) return baseRate;
-      if(selectedProfit == null) return item.value;
-      return adjustedValue(item.value, Number(selectedProfit), item.mode);
+      const retailRate = item?.retailRate ?? null;
+
+      if(isFreeOperator()){
+        if(selectedProfit == null) return item.value;
+        return adjustedValue(item.value, Number(selectedProfit), item.mode);
+      }
+
+      if(isOnzeCalculator()){
+        return getOnzeImprovedRetailRate(item);
+      }
+
+      return retailRate;
     }
 
     function applyOp(amount, rate, op){
@@ -3544,6 +3742,10 @@
 
           return {
             ...op,
+            onzeProfitOriginAmount: op.onzeProfitOriginAmount !== null && op.onzeProfitOriginAmount !== undefined
+              ? Number(op.onzeProfitOriginAmount)
+              : null,
+            onzeProfitOriginCurrencyCode: op.onzeProfitOriginCurrencyCode || originCurrency || "",
             sendAmountFormatted: `${formatCalcValue(Number(op.sendAmount || 0), originCurrency)} ${originCurrency}`.trim(),
             receiveAmountFormatted: `${formatCalcValue(Number(op.receiveAmount || 0), destCurrency)} ${destCurrency}`.trim(),
             providerRateFormatted: Number.isFinite(providerRate)
@@ -4463,8 +4665,12 @@
       const groups = new Map();
 
       ops.forEach(op => {
-        const profitCountry = inferProfitCountry(op);
-        const profitCurrency = op.profitCurrency || getCurrencyFor(profitCountry);
+        const profitCountry = op.originCountry || inferProfitCountry(op);
+        const profitCurrency = op.onzeProfitOriginCurrencyCode || op.originCurrency || getCurrencyFor(profitCountry);
+        const amount = op.onzeProfitOriginAmount !== null && op.onzeProfitOriginAmount !== undefined
+          ? Number(op.onzeProfitOriginAmount || 0)
+          : Number(op.profitValue || 0);
+
         const key = `${profitCountry}|${profitCurrency}`;
 
         if(!groups.has(key)){
@@ -4475,7 +4681,7 @@
           });
         }
 
-        groups.get(key).total += Number(op.profitValue || 0);
+        groups.get(key).total += amount;
       });
 
       return Array.from(groups.values()).sort((a,b)=>a.profitCountry.localeCompare(b.profitCountry,"es",{sensitivity:"base"}));
@@ -4568,12 +4774,14 @@
     }
 
     function refreshDashboard(ops = loadOperations()){
+      const activeOps = (Array.isArray(ops) ? ops : []).filter(op => !op?.deleted);
+
       const now = new Date();
       const today = todayISO();
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
 
-      const todayOps = ops.filter(op => (op.date || "").startsWith(today));
-      const monthOps = ops.filter(op => (op.date || "").startsWith(currentMonth));
+      const todayOps = activeOps.filter(op => (op.date || "").startsWith(today));
+      const monthOps = activeOps.filter(op => (op.date || "").startsWith(currentMonth));
 
       dashOpsToday.textContent = String(todayOps.length);
       dashOpsMonth.textContent = String(monthOps.length);
@@ -4863,6 +5071,9 @@
           }
         : {};
 
+      const originBuyRate = getCountryTradeRate(pendingRegisterData.originCountry, "buy");
+      const destSellRate = getCountryTradeRate(pendingRegisterData.destCountry, "sell");
+
       const destinationSnapshot = getCountryBalanceSnapshot(
         pendingRegisterData.destCountry,
         pendingRegisterData.destCurrency
@@ -4910,6 +5121,22 @@
         shortageCountry: needsFunding ? pendingRegisterData.destCountry : "",
         shortageCurrency: needsFunding ? pendingRegisterData.destCurrency : "",
         availableDestBalance,
+        buyOriginValue: Number.isFinite(originBuyRate) ? Number(originBuyRate) : null,
+        sellDestinationValue: Number.isFinite(destSellRate) ? Number(destSellRate) : null,
+        operatorProfitFinalAmount: Number(
+          opExtra.partnerPayoutTotalUsdt ||
+          opExtra.partnerPayoutProfitUsdt ||
+          profitValue ||
+          0
+        ),
+        operatorProfitFinalCurrencyCode: String(
+          opExtra.partnerPayoutTotalUsdt || opExtra.partnerPayoutProfitUsdt
+            ? "USDT"
+            : (profitCurrency || op.originCurrency || "")
+        ).trim().toUpperCase() || null,
+        operatorProfitConverted: Boolean(
+          opExtra.partnerPayoutTotalUsdt || opExtra.partnerPayoutProfitUsdt || (profitCurrency && profitCurrency !== op.originCurrency)
+        ),
         ...opExtra
       };
 
@@ -4935,6 +5162,11 @@
               receiveAmount: op.receiveAmount,
               providerRate: op.providerRate,
               clientRate: op.clientRate,
+              buyOriginValue: op.buyOriginValue,
+              sellDestinationValue: op.sellDestinationValue,
+              operatorProfitFinalAmount: op.operatorProfitFinalAmount,
+              operatorProfitFinalCurrencyCode: op.operatorProfitFinalCurrencyCode,
+              operatorProfitConverted: op.operatorProfitConverted,
               profitCountry: op.profitCountry,
               profitCurrency: op.profitCurrency,
               profitValue: op.profitValue,
@@ -5044,8 +5276,8 @@
         const titleWrap = document.createElement("div");
         titleWrap.className = "rate-main";
 
-        if(isFixedPercentOperator() || isPartnerOperator()){
-          titleWrap.innerHTML = `<p class="rate-title">${pais.toUpperCase()} → ${item.dest.toUpperCase()}: ${visibleRate}</p>`;
+        if(isFixedPercentOperator() || isPartnerOperator() || isOnzeCalculator()){
+          titleWrap.innerHTML = `<p class="rate-title">${pais.toUpperCase()} → ${item.dest.toUpperCase()}: ${finalRate}</p>`;
         }else if(perc == null){
           titleWrap.innerHTML = `<p class="rate-title">${pais.toUpperCase()} → ${item.dest.toUpperCase()}: ${providerRate}</p>`;
         }else{
@@ -5061,7 +5293,7 @@
         copy.className = "copy-btn";
         copy.title = "Copiar tasa";
         copy.setAttribute("aria-label", "Copiar tasa");
-        copy.dataset.copy = `${pais} → ${item.dest}: ${isFixedPercentOperator() || isPartnerOperator() ? visibleRate : finalRate}`;
+        copy.dataset.copy = `${pais} → ${item.dest}: ${(isFixedPercentOperator() || isPartnerOperator() || isOnzeCalculator()) ? finalRate : finalRate}`;
         copy.innerHTML = '<svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="9" width="11" height="11" rx="2" stroke-width="2"/><rect x="4" y="4" width="11" height="11" rx="2" stroke-width="2"/></svg>';
         if(!hasVal) copy.disabled = true;
 
@@ -5240,7 +5472,8 @@
                 </div>
               </div>
             `
-            : `
+            : isFreeOperator()
+            ? `
               <div class="sim-title">Simulador de utilidad</div>
               <div class="sim-grid">
                 <div class="sim-item">
@@ -5258,6 +5491,31 @@
                 <div class="sim-item">
                   <div class="sim-label">Costo proveedor</div>
                   <div class="sim-value" data-role="provider-amount">—</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Monto cliente</div>
+                  <div class="sim-value" data-role="client-amount">—</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Ganancia estimada (${destCur})</div>
+                  <div class="sim-value profit" data-role="profit-dest">—</div>
+                </div>
+                <div class="sim-item" style="grid-column:1 / -1;">
+                  <div class="sim-label">Ganancia estimada (${curOrigin || "MON"})</div>
+                  <div class="sim-value profit" data-role="profit-origin">—</div>
+                </div>
+              </div>
+            `
+            : `
+              <div class="sim-title">Simulador de utilidad</div>
+              <div class="sim-grid">
+                <div class="sim-item">
+                  <div class="sim-label">Tasa detal</div>
+                  <div class="sim-value" data-role="client-rate">${finalRate}</div>
+                </div>
+                <div class="sim-item">
+                  <div class="sim-label">Margen aplicado</div>
+                  <div class="sim-value" data-role="margin">Base</div>
                 </div>
                 <div class="sim-item">
                   <div class="sim-label">Monto cliente</div>
@@ -5342,7 +5600,9 @@
           }
 
           function updateSimulator(){
-            const providerRateNum = item.value;
+            const providerRateNum = isOnzeCalculator()
+              ? Number(item.costRate ?? item.value)
+              : item.value;
             const clientRateNumLocal = rateForCalc(item);
 
             clientRateEl.textContent = Number.isFinite(clientRateNumLocal) ? fmtCL(clientRateNumLocal, item.decimals) : "—";
@@ -5528,7 +5788,8 @@
             }
 
             const providerAmountDest = applyOp(originAmount, providerRateNum, item.op);
-            const profitDest = providerAmountDest - clientAmountDest;
+            const detailAmountDest = clientAmountDest;
+            const profitDest = providerAmountDest - detailAmountDest;
             const profitOrigin = invertOp(Math.abs(profitDest), providerRateNum, item.op);
 
             if(providerAmountEl) providerAmountEl.textContent = `${formatCalcValue(providerAmountDest, destCur)} ${destCur}`;
@@ -5904,14 +6165,11 @@
       if(!confirm("¿Seguro que quieres borrar todo el historial?")) return;
 
       try{
-        const ops = (await fetchOperationsFromApi()).filter(op => !op.deleted);
+        const res = await fetch("/api/operations", { method: "DELETE" });
+        const data = await res.json().catch(()=>({}));
 
-        for(const op of ops){
-          const res = await fetch(`/api/operations/${op.id}`, { method: "PATCH" });
-          const data = await res.json().catch(()=>({}));
-          if(!res.ok){
-            throw new Error(data?.error || `No se pudo anular la operación ${op.operationNumber || op.id}.`);
-          }
+        if(!res.ok){
+          throw new Error(data?.error || "No se pudo borrar el historial");
         }
 
         const latestOps = await fetchOperationsFromApi();
@@ -5944,6 +6202,29 @@
         switchView(target);
       });
     });
+
+    if(sel){
+      sel.addEventListener("change", ()=>{
+        try{
+          localStorage.setItem("onze_selected_country", sel.value || "");
+        }catch{}
+      });
+    }
+
+    if(destSel){
+      destSel.addEventListener("change", ()=>{
+        try{
+          localStorage.setItem("onze_selected_destination", destSel.value || "");
+        }catch{}
+      });
+    }
+
+    try{
+      const savedActiveView = localStorage.getItem("onze_active_view");
+      if(savedActiveView){
+        switchView(savedActiveView);
+      }
+    }catch{}
 
 
     if(registerOperationBtn){

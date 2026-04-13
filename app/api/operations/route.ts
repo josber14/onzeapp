@@ -143,6 +143,8 @@ export async function GET() {
         payoutAmountToOperator: op.payoutAmountToOperator !== null ? Number(op.payoutAmountToOperator) : null,
         payoutCurrencyCode: op.payoutCurrencyCode || null,
         payoutUsdtAmount: op.payoutUsdtAmount !== null ? Number(op.payoutUsdtAmount) : null,
+        onzeProfitOriginAmount: op.onzeProfitOriginAmount !== null ? Number(op.onzeProfitOriginAmount) : null,
+        onzeProfitOriginCurrencyCode: op.onzeProfitOriginCurrencyCode || null,
       })),
     });
   } catch (error) {
@@ -186,12 +188,22 @@ export async function POST(req: NextRequest) {
 
     const providerRate = toDecimalString(body?.providerRate);
     const clientRate = toDecimalString(body?.clientRate);
+    const buyOriginValue = toDecimalString(body?.buyOriginValue);
+    const sellDestinationValue = toDecimalString(body?.sellDestinationValue);
+    const operatorProfitFinalAmount = toDecimalString(body?.operatorProfitFinalAmount);
+    const operatorProfitFinalCurrencyCode = String(body?.operatorProfitFinalCurrencyCode || "").trim().toUpperCase() || null;
+    const operatorProfitConverted = Boolean(body?.operatorProfitConverted);
 
     console.log("RATE_DEBUG", {
       providerRateRaw: body?.providerRate,
       clientRateRaw: body?.clientRate,
       providerRateParsed: providerRate,
-      clientRateParsed: clientRate
+      clientRateParsed: clientRate,
+      buyOriginValueRaw: body?.buyOriginValue,
+      sellDestinationValueRaw: body?.sellDestinationValue,
+      operatorProfitFinalAmountRaw: body?.operatorProfitFinalAmount,
+      operatorProfitFinalCurrencyCode,
+      operatorProfitConverted
     });
 
     const profitCountryInput = String(body?.profitCountry || "").trim();
@@ -272,6 +284,37 @@ export async function POST(req: NextRequest) {
       operationNumber = String(maxNum + 1).padStart(3, "0");
     }
 
+    const amountDestinationNum = Number(amountDestination || 0);
+    const buyOriginValueNum = Number(buyOriginValue || 0);
+    const sellDestinationValueNum = Number(sellDestinationValue || 0);
+
+    let onzeProfitUsdt: string | null = null;
+    let onzeProfitOriginAmount: string | null = null;
+    let onzeProfitOriginCurrencyCode: string | null = originCurrency || null;
+
+    if (
+      Number.isFinite(amountDestinationNum) &&
+      amountDestinationNum > 0 &&
+      Number.isFinite(Number(providerRate || 0)) &&
+      Number(providerRate || 0) > 0 &&
+      Number.isFinite(buyOriginValueNum) &&
+      buyOriginValueNum > 0 &&
+      Number.isFinite(sellDestinationValueNum) &&
+      sellDestinationValueNum > 0
+    ) {
+      const originEquivalent = amountDestinationNum / Number(providerRate || 0);
+      const originUsdt = originEquivalent / buyOriginValueNum;
+      const destUsdt = amountDestinationNum / sellDestinationValueNum;
+      const onzeUsdtValue = originUsdt - destUsdt;
+
+      onzeProfitUsdt = String(onzeUsdtValue);
+      onzeProfitOriginAmount = String(onzeUsdtValue * buyOriginValueNum);
+    }
+
+    const operatorProfitPendingAmount = operatorProfitFinalAmount || null;
+    const operatorProfitPaidAmount = operatorProfitFinalAmount ? "0" : null;
+    const operatorPayoutStatus = operatorProfitFinalAmount ? "pending" : null;
+
     const created = await prisma.operation.create({
       data: {
         tenantId: session.tenantId,
@@ -288,13 +331,24 @@ export async function POST(req: NextRequest) {
         destinationCurrencyCode: destCurrency,
         amountOrigin,
         amountDestination,
+        buyOriginValueSnapshot: buyOriginValue,
+        sellDestinationValueSnapshot: sellDestinationValue,
         providerRateSnapshot: providerRate,
         retailRateSnapshot: clientRate,
         profitBaseCountryId: profitCountry?.id || null,
         profitBaseCurrencyCode: profitCurrency,
         profitTotalAmount: profitValue,
         operatorProfitAmount: profitValue,
-        superAdminProfitAmount: "0",
+        superAdminProfitAmount: onzeProfitUsdt || "0",
+        operatorProfitFinalAmount,
+        operatorProfitFinalCurrencyCode,
+        operatorProfitConverted,
+        operatorProfitPendingAmount,
+        operatorProfitPaidAmount,
+        operatorPayoutStatus,
+        onzeProfitUsdt,
+        onzeProfitOriginAmount,
+        onzeProfitOriginCurrencyCode,
         payoutCurrencyMode,
         payoutAmountToOperator,
         payoutCurrencyCode,
@@ -354,3 +408,64 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+export async function DELETE() {
+  try {
+    const session = await getSession();
+
+    if (!session?.tenantId) {
+      return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+    }
+
+    const isAdmin =
+      session.role === "super_admin_global" ||
+      session.role === "super_admin_cliente";
+
+    const whereClause = {
+      tenantId: session.tenantId,
+      ...(isAdmin ? {} : { createdByUserId: session.userId }),
+    };
+
+    const deleted = await prisma.$transaction(async (tx) => {
+      const operations = await tx.operation.findMany({
+        where: whereClause,
+        select: { id: true },
+      });
+
+      const operationIds = operations.map((op) => op.id);
+
+      if (operationIds.length) {
+        await tx.liquidityAlert.deleteMany({
+          where: { tenantId: session.tenantId, operationId: { in: operationIds } },
+        });
+
+        await tx.internalFunding.deleteMany({
+          where: { tenantId: session.tenantId, operationId: { in: operationIds } },
+        });
+
+        await tx.earningsMovement.deleteMany({
+          where: { tenantId: session.tenantId, operationId: { in: operationIds } },
+        });
+
+        await tx.balanceMovement.deleteMany({
+          where: { tenantId: session.tenantId, operationId: { in: operationIds } },
+        });
+      }
+
+      const result = await tx.operation.deleteMany({
+        where: whereClause,
+      });
+
+      return result.count;
+    });
+
+    return NextResponse.json({ ok: true, deleted });
+  } catch (error) {
+    console.error("OPERATIONS_DELETE_ERROR", error);
+    return NextResponse.json(
+      { error: "No se pudo borrar el historial de operaciones." },
+      { status: 500 }
+    );
+  }
+}
+

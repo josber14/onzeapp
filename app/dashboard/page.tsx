@@ -66,7 +66,7 @@ export default async function DashboardPage() {
     params.set("tenantId", String(tenantId));
   }
 
-  if (operatorMode) {
+  if (operatorMode && !isAdmin) {
     params.set("operatorMode", operatorMode);
   }
 
