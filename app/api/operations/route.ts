@@ -111,6 +111,9 @@ export async function GET() {
         id: op.id,
         createdAt: op.createdAt,
         updatedAt: op.updatedAt,
+        deleted: op.deleted,
+        deletedAt: op.deletedAt,
+        status: op.status,
         date: op.operationDate,
         operationNumber: op.operationNumber,
         operationType: op.operationType || "Cambio",
@@ -161,12 +164,17 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    const operationNumber = String(body?.operationNumber || "").trim();
+    let operationNumber = String(body?.operationNumber || "").trim();
     const operationType = String(body?.operationType || "").trim() || "Cambio";
     const note = String(body?.note || "").trim() || null;
     const clientName = String(body?.clientName || "").trim() || null;
     const operatorModeRaw = String(body?.operatorMode || "").trim();
     const operatorMode = parseOperatorMode(operatorModeRaw);
+    console.log("OPERATOR_MODE_DEBUG", {
+      operatorModeRaw,
+      parsedOperatorMode: operatorMode,
+      bodyOperatorMode: body?.operatorMode
+    });
 
     const originCountryInput = String(body?.originCountry || "").trim();
     const destCountryInput = String(body?.destCountry || "").trim();
@@ -178,6 +186,13 @@ export async function POST(req: NextRequest) {
 
     const providerRate = toDecimalString(body?.providerRate);
     const clientRate = toDecimalString(body?.clientRate);
+
+    console.log("RATE_DEBUG", {
+      providerRateRaw: body?.providerRate,
+      clientRateRaw: body?.clientRate,
+      providerRateParsed: providerRate,
+      clientRateParsed: clientRate
+    });
 
     const profitCountryInput = String(body?.profitCountry || "").trim();
     const profitCurrency = String(body?.profitCurrency || "").trim().toUpperCase() || null;
@@ -234,6 +249,28 @@ export async function POST(req: NextRequest) {
     const shortageCountry = shortageCountryInput
       ? await resolveCountryByNameOrCode(shortageCountryInput)
       : null;
+
+    const existingNumbers = await prisma.operation.findMany({
+      where: { tenantId: session.tenantId },
+      select: { operationNumber: true },
+    });
+
+    const usedNumbers = new Set(
+      existingNumbers.map((item) => String(item.operationNumber || "").trim())
+    );
+
+    if (!operationNumber || usedNumbers.has(operationNumber)) {
+      let maxNum = 0;
+
+      for (const item of existingNumbers) {
+        const parsed = parseInt(String(item.operationNumber || "").replace(/\D/g, ""), 10);
+        if (Number.isFinite(parsed)) {
+          maxNum = Math.max(maxNum, parsed);
+        }
+      }
+
+      operationNumber = String(maxNum + 1).padStart(3, "0");
+    }
 
     const created = await prisma.operation.create({
       data: {

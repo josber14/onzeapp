@@ -371,6 +371,9 @@ model Operation {
 
   createdAt                          DateTime          @default(now())
   updatedAt                          DateTime          @updatedAt
+  deleted                            Boolean           @default(false)
+  deletedAt                          DateTime?
+  status                             String?
 
   tenant                       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdByUser                User              @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)

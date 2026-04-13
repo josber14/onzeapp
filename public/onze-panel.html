@@ -3475,15 +3475,15 @@
         entry.capitalInicial += Number(item.amount || 0);
       });
 
-      loadBalanceMovements().forEach(item => {
-        const entry = ensureEntry(item.country, item.currency);
-        const amount = Number(item.amount || 0);
-        if(item.direction === "entrada"){
-          entry.entradas += amount;
-        } else {
-          entry.salidas += amount;
-        }
-      });
+      loadOperations()
+        .filter(op => !op.deleted)
+        .forEach(op => {
+          const originEntry = ensureEntry(op.originCountry, op.originCurrency);
+          originEntry.entradas += Number(op.sendAmount || 0);
+
+          const destEntry = ensureEntry(op.destCountry, op.destCurrency);
+          destEntry.salidas += Number(op.receiveAmount || 0);
+        });
 
       loadExpenses().forEach(exp => {
         const country = String(exp.country || "").trim();
@@ -3534,7 +3534,27 @@
           throw new Error(data?.error || "No se pudieron cargar las operaciones.");
         }
 
-        const ops = Array.isArray(data?.operations) ? data.operations : [];
+        const ops = (Array.isArray(data?.operations) ? data.operations : []).map(op => {
+          const originCurrency = op.originCurrency || "";
+          const destCurrency = op.destCurrency || "";
+          const profitCurrency = op.profitCurrency || originCurrency || "";
+          const providerRate = Number(op.providerRate);
+          const clientRate = Number(op.clientRate);
+          const profitValue = Number(op.profitValue || 0);
+
+          return {
+            ...op,
+            sendAmountFormatted: `${formatCalcValue(Number(op.sendAmount || 0), originCurrency)} ${originCurrency}`.trim(),
+            receiveAmountFormatted: `${formatCalcValue(Number(op.receiveAmount || 0), destCurrency)} ${destCurrency}`.trim(),
+            providerRateFormatted: Number.isFinite(providerRate)
+              ? fmtCL(providerRate, Math.abs(providerRate) < 1 ? 5 : 2)
+              : "—",
+            clientRateFormatted: Number.isFinite(clientRate)
+              ? fmtCL(clientRate, Math.abs(clientRate) < 1 ? 5 : 2)
+              : "—",
+            profitDisplay: `${formatCalcValue(Math.abs(profitValue), profitCurrency)} ${profitCurrency}`.trim()
+          };
+        });
         saveOperations(ops);
         return ops;
       }catch(error){
@@ -4131,33 +4151,36 @@
       }
     };
 
-    window.deleteOperation = function(id){
+    window.deleteOperation = async function(id){
       if(!confirm("¿Seguro que deseas anular esta operación? Quedará visible en historial pero no afectará el balance.")) return;
 
-      const existingOps = loadOperations();
-      const ops = existingOps.map(op => {
-        if(op.id !== id) return op;
-        return {
-          ...op,
-          deleted: true,
-          deletedAt: new Date().toISOString(),
-          status: "eliminada"
-        };
-      });
-      saveOperations(ops);
+      try{
+        const res = await fetch(`/api/operations/${id}`, { method: "PATCH" });
+        const data = await res.json().catch(()=>({}));
 
-      rebuildBalanceMovementsFromOperations(ops.filter(op => !op.deleted));
+        if(!res.ok){
+          throw new Error(data?.error || "No se pudo anular la operación.");
+        }
 
-      const liquidityAlerts = loadLiquidityAlerts().filter(item => item.operationId !== id);
-      saveLiquidityAlerts(liquidityAlerts);
+        const latestOps = await fetchOperationsFromApi();
+        saveOperations(latestOps);
 
-      const internalFundings = loadInternalFundings().filter(item => item.operationId !== id);
-      saveInternalFundings(internalFundings);
+        rebuildBalanceMovementsFromOperations((latestOps || []).filter(op => !op.deleted));
 
-      refreshHistoryUI();
-      renderInitialCapital();
-      refreshDashboard(ops.filter(op => !op.deleted));
-      if(typeof showToast === 'function') showToast('Operación anulada');
+        const liquidityAlerts = loadLiquidityAlerts().filter(item => String(item.operationId) !== String(id));
+        saveLiquidityAlerts(liquidityAlerts);
+
+        const internalFundings = loadInternalFundings().filter(item => String(item.operationId) !== String(id));
+        saveInternalFundings(internalFundings);
+
+        refreshHistoryUI();
+        renderInitialCapital();
+        refreshDashboard((latestOps || []).filter(op => !op.deleted));
+        if(typeof showToast === 'function') showToast('Operación anulada');
+      }catch(error){
+        console.error("DELETE_OPERATION_ERROR", error);
+        if(typeof showToast === 'function') showToast(error?.message || 'No se pudo anular la operación');
+      }
     };
 
     function applyRoleUIRestrictions(){
@@ -4615,8 +4638,21 @@
     }
 
     function openRegisterModal(data){
-  pendingRegisterData = data;
-  window.pendingRegisterData = data;
+  const normalizedOperatorMode = String(
+    data?.operatorMode ||
+    CURRENT_USER_CONTEXT?.operatorMode ||
+    ((isGlobalAdmin() || isTenantAdmin()) ? "libre" : "")
+  ).trim().toLowerCase();
+
+  const modalData = {
+    ...data,
+    operatorMode: ["libre", "porcentaje", "socio"].includes(normalizedOperatorMode)
+      ? normalizedOperatorMode
+      : "libre"
+  };
+
+  pendingRegisterData = modalData;
+  window.pendingRegisterData = modalData;
 
   const partnerSummaryBox = document.getElementById("registerPartnerSummary");
   const partnerProfitBox = document.getElementById("registerPartnerProfit");
@@ -4792,6 +4828,17 @@
       const profitDisplay = `${formatCalcValue(Math.abs(profitValue), profitCurrency)} ${profitCurrency}`;
       const finalOperationNumber = operationNumber.value.trim() || getNextOperationNumber();
       const paymentStatus = document.querySelector('input[name="paymentStatusChoice"]:checked')?.value || "paid";
+
+      const rawOperatorMode = String(
+        pendingRegisterData?.operatorMode ||
+        CURRENT_USER_CONTEXT?.operatorMode ||
+        ""
+      ).trim().toLowerCase();
+
+      const safeOperatorMode = ["libre", "porcentaje", "socio"].includes(rawOperatorMode)
+        ? rawOperatorMode
+        : "libre";
+
       const operationUsdtBase = toUsdtFromCountryAmount(
         pendingRegisterData.originCountry,
         pendingRegisterData.sendAmount
@@ -4830,7 +4877,7 @@
         createdAt: new Date().toISOString(),
         date: operationDate.value || todayISO(),
         clientName: clientName.value.trim(),
-        operatorMode: pendingRegisterData.operatorMode || CURRENT_USER_CONTEXT.operatorMode || "",
+        operatorMode: safeOperatorMode,
         operationNumber: finalOperationNumber,
         operationType: selectedType,
         paymentStatus,
@@ -4909,7 +4956,8 @@
             throw new Error(data?.error || "No se pudo guardar la operación.");
           }
 
-          await fetchOperationsFromApi();
+          const latestOps = await fetchOperationsFromApi();
+          rebuildBalanceMovementsFromOperations((latestOps || []).filter(op => !op.deleted));
 
           if(needsFunding){
             addLiquidityAlert({
@@ -5506,7 +5554,8 @@
               sendAmountFormatted: `${formatCalcValue(originAmount, curOrigin)} ${curOrigin}`,
               receiveAmountFormatted: `${formatCalcValue(clientAmountDest, destCur)} ${destCur}`,
               profitOriginValue: profitOrigin,
-              profitDestValue: profitDest
+              profitDestValue: profitDest,
+              operatorMode: "libre"
             };
             registerBtn._payload = currentRegisterPayload;
           }
@@ -5851,14 +5900,31 @@
       }
     });
 
-    clearHistoryBtn.addEventListener("click", ()=>{
+    clearHistoryBtn.addEventListener("click", async ()=>{
       if(!confirm("¿Seguro que quieres borrar todo el historial?")) return;
-      localStorage.removeItem(STORAGE_KEY);
-      rebuildBalanceMovementsFromOperations([]);
-      refreshHistoryUI();
-      renderInitialCapital();
-      refreshDashboard();
-      showToast("Historial borrado");
+
+      try{
+        const ops = (await fetchOperationsFromApi()).filter(op => !op.deleted);
+
+        for(const op of ops){
+          const res = await fetch(`/api/operations/${op.id}`, { method: "PATCH" });
+          const data = await res.json().catch(()=>({}));
+          if(!res.ok){
+            throw new Error(data?.error || `No se pudo anular la operación ${op.operationNumber || op.id}.`);
+          }
+        }
+
+        const latestOps = await fetchOperationsFromApi();
+        saveOperations(latestOps);
+        rebuildBalanceMovementsFromOperations((latestOps || []).filter(op => !op.deleted));
+        refreshHistoryUI();
+        renderInitialCapital();
+        refreshDashboard((latestOps || []).filter(op => !op.deleted));
+        showToast("Historial borrado");
+      }catch(error){
+        console.error("CLEAR_HISTORY_ERROR", error);
+        showToast(error?.message || "No se pudo borrar el historial");
+      }
     });
 
     menuToggleBtn.addEventListener("click", ()=>{

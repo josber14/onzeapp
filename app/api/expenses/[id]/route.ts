@@ -27,6 +27,13 @@ export async function DELETE(
     const { id } = await context.params;
     const expenseId = Number(id);
 
+    console.log("EXPENSE_DELETE_DEBUG", {
+      rawId: id,
+      parsedId: expenseId,
+      tenantId: session?.tenantId,
+      userId: session?.userId || null
+    });
+
     if (!Number.isInteger(expenseId) || expenseId <= 0) {
       return NextResponse.json({ error: "ID inválido." }, { status: 400 });
     }
