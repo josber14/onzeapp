@@ -46,42 +46,6 @@ enum PayoutCurrencyMode {
   moneda_convertida
 }
 
-
-enum LiquidityStatus {
-  ok
-  requiere_fondeo
-  fondeada
-}
-
-enum LiquidityAlertStatus {
-  abierta
-  resuelta
-  ignorada
-}
-
-enum BalanceMovementDirection {
-  entrada
-  salida
-}
-
-enum BalanceMovementType {
-  capital_inicial
-  operacion_entrada
-  operacion_salida
-  fondeo_interno_entrada
-  fondeo_interno_salida
-  ajuste_manual
-  gasto
-  anulacion
-}
-
-enum EarningsMovementType {
-  ganancia_operacion
-  pago_recibido
-  ajuste_manual
-  anulacion
-}
-
 model Plan {
   id                         Int            @id @default(autoincrement())
   code                       String         @unique
@@ -116,24 +80,17 @@ model Tenant {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
-  ownerUser            User?                 @relation("TenantOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  plan                 Plan?                 @relation(fields: [planId], references: [id])
-  users                User[]
-  subscriptions        Subscription[]
-  dataSources          DataSource[]
-  pairs                TenantPair[]
-  customers            OperatorCustomer[]
-  operations           Operation[]
-  balances             TenantCountryBalance[]
-  initialCapitals      InitialCapital[]
-  balanceMovements     BalanceMovement[]
-  liquidityAlerts      LiquidityAlert[]
-  internalFundings     InternalFunding[]
-  earningsMovements    EarningsMovement[]
-  collaboratorPayments CollaboratorPayment[]
-  expenses             Expense[]
-  settings             TenantSettings?
-  auditLogs            AuditLog[]
+  ownerUser     User?                 @relation("TenantOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  plan          Plan?                 @relation(fields: [planId], references: [id])
+  users         User[]
+  subscriptions Subscription[]
+  dataSources   DataSource[]
+  pairs         TenantPair[]
+  customers     OperatorCustomer[]
+  operations    Operation[]
+  balances      TenantCountryBalance[]
+  settings      TenantSettings?
+  auditLogs     AuditLog[]
 }
 
 model Subscription {
@@ -182,12 +139,9 @@ model User {
   ownedTenant       Tenant[]           @relation("TenantOwner")
   reviewedKycs      UserKyc[]          @relation("KycReviewer")
   createdOperations Operation[]
-  ownedCustomers        OperatorCustomer[]
-  earningsMovements    EarningsMovement[]
-  collaboratorPayments CollaboratorPayment[]
-  expenses             Expense[]
-  auditLogs            AuditLog[]
-  kyc                  UserKyc?
+  ownedCustomers    OperatorCustomer[]
+  auditLogs         AuditLog[]
+  kyc               UserKyc?
 
   @@index([tenantId])
   @@index([status])
@@ -244,20 +198,13 @@ model Country {
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
-  originPairs         TenantPair[]        @relation("OriginCountry")
-  destinationPairs    TenantPair[]        @relation("DestinationCountry")
-  originOperations    Operation[]         @relation("OperationOriginCountry")
-  destinationOps      Operation[]         @relation("OperationDestinationCountry")
-  profitBaseOps       Operation[]         @relation("OperationProfitBaseCountry")
-  convertedProfitOps  Operation[]         @relation("OperationConvertedProfitTargetCountry")
-  shortageOps         Operation[]         @relation("OperationShortageCountry")
-  balances            TenantCountryBalance[]
-  initialCapitals     InitialCapital[]
-  balanceMovements    BalanceMovement[]
-  expenses            Expense[]
-  liquidityAlerts     LiquidityAlert[]
-  fundingSourceLinks  InternalFunding[]   @relation("FundingSourceCountry")
-  fundingTargetLinks  InternalFunding[]   @relation("FundingTargetCountry")
+  originPairs      TenantPair[]           @relation("OriginCountry")
+  destinationPairs TenantPair[]           @relation("DestinationCountry")
+  originOperations Operation[]            @relation("OperationOriginCountry")
+  destinationOps   Operation[]            @relation("OperationDestinationCountry")
+  profitBaseOps    Operation[]            @relation("OperationProfitBaseCountry")
+  convertedProfitOps Operation[]          @relation("OperationConvertedProfitTargetCountry")
+  balances         TenantCountryBalance[]
 }
 
 model TenantPair {
@@ -363,28 +310,8 @@ model Operation {
   payoutCurrencyCode                 String?
   payoutUsdtAmount                   Decimal?          @db.Decimal(18, 8)
 
-  operatorProfitFinalAmount          Decimal?          @db.Decimal(18, 8)
-  operatorProfitFinalCurrencyCode    String?
-  operatorProfitConverted            Boolean           @default(false)
-  operatorProfitPendingAmount        Decimal?          @db.Decimal(18, 8)
-  operatorProfitPaidAmount           Decimal?          @db.Decimal(18, 8)
-  operatorPayoutStatus               String?           @default("pending")
-
-  onzeProfitUsdt                     Decimal?          @db.Decimal(18, 8)
-  onzeProfitOriginAmount             Decimal?          @db.Decimal(18, 8)
-  onzeProfitOriginCurrencyCode       String?
-
-  liquidityStatus                    LiquidityStatus   @default(ok)
-  needsFunding                       Boolean           @default(false)
-  liquidityShortage                  Decimal?          @db.Decimal(18, 8)
-  shortageCountryId                  Int?
-  shortageCurrencyCode               String?
-
   createdAt                          DateTime          @default(now())
   updatedAt                          DateTime          @updatedAt
-  deleted                            Boolean           @default(false)
-  deletedAt                          DateTime?
-  status                             String?
 
   tenant                       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   createdByUser                User              @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
@@ -393,11 +320,6 @@ model Operation {
   destinationCountry           Country           @relation("OperationDestinationCountry", fields: [destinationCountryId], references: [id])
   profitBaseCountry            Country?          @relation("OperationProfitBaseCountry", fields: [profitBaseCountryId], references: [id])
   convertedProfitTargetCountry Country?          @relation("OperationConvertedProfitTargetCountry", fields: [convertedProfitTargetCountryId], references: [id])
-  shortageCountry              Country?          @relation("OperationShortageCountry", fields: [shortageCountryId], references: [id])
-  balanceMovements             BalanceMovement[]
-  liquidityAlerts              LiquidityAlert[]
-  internalFundings             InternalFunding[]
-  earningsMovements            EarningsMovement[]
 
   @@unique([tenantId, operationNumber])
   @@index([tenantId, operationDate])
@@ -421,164 +343,6 @@ model TenantCountryBalance {
 
   @@unique([tenantId, countryId])
   @@index([tenantId])
-}
-
-
-model InitialCapital {
-  id            Int      @id @default(autoincrement())
-  tenantId      Int
-  countryId     Int
-  currencyCode  String
-  amount        Decimal  @db.Decimal(18, 8)
-  note          String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  country Country @relation(fields: [countryId], references: [id])
-
-  @@unique([tenantId, countryId, currencyCode])
-  @@index([tenantId])
-}
-
-model BalanceMovement {
-  id           Int                      @id @default(autoincrement())
-  tenantId     Int
-  operationId  Int?
-  fundingId    Int?
-  countryId    Int
-  currencyCode String
-  direction    BalanceMovementDirection
-  movementType BalanceMovementType
-  amount       Decimal                  @db.Decimal(18, 8)
-  note         String?
-  createdAt    DateTime                 @default(now())
-
-  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  operation Operation?       @relation(fields: [operationId], references: [id], onDelete: SetNull)
-  funding   InternalFunding? @relation(fields: [fundingId], references: [id], onDelete: SetNull)
-  country   Country          @relation(fields: [countryId], references: [id])
-
-  @@index([tenantId])
-  @@index([operationId])
-  @@index([fundingId])
-  @@index([countryId])
-}
-
-model LiquidityAlert {
-  id              Int                  @id @default(autoincrement())
-  tenantId        Int
-  operationId     Int
-  countryId       Int
-  currencyCode    String
-  availableAmount Decimal              @db.Decimal(18, 8)
-  requiredAmount  Decimal              @db.Decimal(18, 8)
-  shortageAmount  Decimal              @db.Decimal(18, 8)
-  status          LiquidityAlertStatus @default(abierta)
-  note            String?
-  createdAt       DateTime             @default(now())
-  resolvedAt      DateTime?
-
-  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  operation         Operation         @relation(fields: [operationId], references: [id], onDelete: Cascade)
-  country           Country           @relation(fields: [countryId], references: [id])
-  internalFundings  InternalFunding[]
-
-  @@index([tenantId])
-  @@index([operationId])
-  @@index([countryId])
-  @@index([status])
-}
-
-model InternalFunding {
-  id                 Int       @id @default(autoincrement())
-  tenantId           Int
-  operationId        Int?
-  liquidityAlertId   Int?
-  sourceCountryId    Int
-  sourceCurrencyCode String
-  sourceAmount       Decimal   @db.Decimal(18, 8)
-  targetCountryId    Int
-  targetCurrencyCode String
-  targetAmount       Decimal   @db.Decimal(18, 8)
-  referenceRate      Decimal?  @db.Decimal(18, 8)
-  executedRate       Decimal   @db.Decimal(18, 8)
-  costUsdt           Decimal?  @db.Decimal(18, 8)
-  note               String?
-  status             String    @default("completed")
-  createdAt          DateTime  @default(now())
-
-  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  operation        Operation?        @relation(fields: [operationId], references: [id], onDelete: SetNull)
-  liquidityAlert   LiquidityAlert?   @relation(fields: [liquidityAlertId], references: [id], onDelete: SetNull)
-  sourceCountry    Country           @relation("FundingSourceCountry", fields: [sourceCountryId], references: [id])
-  targetCountry    Country           @relation("FundingTargetCountry", fields: [targetCountryId], references: [id])
-  balanceMovements BalanceMovement[]
-
-  @@index([tenantId])
-  @@index([operationId])
-  @@index([liquidityAlertId])
-  @@index([sourceCountryId])
-  @@index([targetCountryId])
-}
-
-model EarningsMovement {
-  id           Int                  @id @default(autoincrement())
-  tenantId     Int
-  userId       Int
-  operationId  Int?
-  movementType EarningsMovementType
-  amount       Decimal              @db.Decimal(18, 8)
-  currencyCode String
-  note         String?
-  createdAt    DateTime             @default(now())
-
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  operation Operation? @relation(fields: [operationId], references: [id], onDelete: SetNull)
-
-  @@index([tenantId])
-  @@index([userId])
-  @@index([operationId])
-}
-
-model CollaboratorPayment {
-  id           Int      @id @default(autoincrement())
-  tenantId     Int
-  userId       Int
-  currencyCode String
-  amount       Decimal  @db.Decimal(18, 8)
-  paymentDate  DateTime
-  note         String?
-  createdAt    DateTime @default(now())
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId])
-  @@index([userId])
-}
-
-model Expense {
-  id           Int      @id @default(autoincrement())
-  tenantId     Int
-  expenseDate  DateTime
-  category     String
-  countryId    Int
-  currencyCode String
-  amount       Decimal  @db.Decimal(18, 8)
-  note         String?
-  createdByUserId Int?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  country      Country  @relation(fields: [countryId], references: [id])
-  createdByUser User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
-
-  @@index([tenantId])
-  @@index([countryId])
-  @@index([expenseDate])
 }
 
 model AuditLog {

@@ -426,6 +426,11 @@ export async function DELETE() {
       ...(isAdmin ? {} : { createdByUserId: session.userId }),
     };
 
+    const tenantId = session.tenantId;
+    if (!tenantId) {
+      return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+    }
+
     const deleted = await prisma.$transaction(async (tx) => {
       const operations = await tx.operation.findMany({
         where: whereClause,
@@ -436,19 +441,19 @@ export async function DELETE() {
 
       if (operationIds.length) {
         await tx.liquidityAlert.deleteMany({
-          where: { tenantId: session.tenantId, operationId: { in: operationIds } },
+          where: { tenantId, operationId: { in: operationIds } },
         });
 
         await tx.internalFunding.deleteMany({
-          where: { tenantId: session.tenantId, operationId: { in: operationIds } },
+          where: { tenantId, operationId: { in: operationIds } },
         });
 
         await tx.earningsMovement.deleteMany({
-          where: { tenantId: session.tenantId, operationId: { in: operationIds } },
+          where: { tenantId, operationId: { in: operationIds } },
         });
 
         await tx.balanceMovement.deleteMany({
-          where: { tenantId: session.tenantId, operationId: { in: operationIds } },
+          where: { tenantId, operationId: { in: operationIds } },
         });
       }
 
