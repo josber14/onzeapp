@@ -2077,7 +2077,7 @@
 
           <div class="dashboard-grid">
             <div class="dash-card">
-              <div class="dash-label">Ganancia del mes</div>
+              <div class="dash-label">Ganancia de hoy</div>
               <div class="dash-value" id="dashProfitToday">0</div>
               <div class="dash-sub" id="dashProfitTodayCur">—</div>
             </div>
@@ -4134,7 +4134,6 @@
         try{
           const res = await fetch(`/api/capital/${pendingCapitalActionId}`, { method: "DELETE" });
           const data = await res.json().catch(()=>({}));
-          alert("RESPUESTA FETCH: status " + res.status);
 
           if(!res.ok){
             throw new Error(data?.error || "No se pudo eliminar el capital inicial.");
@@ -4646,6 +4645,40 @@
       if(rateNote) rateNote.textContent = `Tasa proveedor usada: ${base.country} → ${targetCountry} = ${rateTxt}`;
     }
 
+    function getDashboardProfitMeta(op){
+      const mode = String(op?.operatorMode || "").trim().toLowerCase();
+
+      if(IS_ADMIN_ROLE){
+        if(mode === "manual" || mode === "libre"){
+          return {
+            country: op?.profitCountry || op?.originCountry || "—",
+            currency: op?.profitCurrency || op?.originCurrency || "MON",
+            amount: Number(op?.profitValue || 0)
+          };
+        }
+
+        if(op?.onzeProfitOriginAmount !== null && op?.onzeProfitOriginAmount !== undefined){
+          return {
+            country: op?.originCountry || op?.profitCountry || "—",
+            currency: op?.onzeProfitOriginCurrencyCode || op?.originCurrency || op?.profitCurrency || "MON",
+            amount: Number(op?.onzeProfitOriginAmount || 0)
+          };
+        }
+
+        return {
+          country: op?.profitCountry || op?.originCountry || "—",
+          currency: op?.profitCurrency || op?.originCurrency || "MON",
+          amount: Number(op?.profitValue || 0)
+        };
+      }
+
+      return {
+        country: op?.profitCountry || op?.originCountry || "—",
+        currency: op?.profitCurrency || op?.originCurrency || "MON",
+        amount: Number(op?.profitValue || 0)
+      };
+    }
+
     function getFlagEmoji(country){
       const map = {
         "Argentina":"🇦🇷","Bolivia":"🇧🇴","Brasil":"🇧🇷","Brazil":"🇧🇷","Chile":"🇨🇱","Colombia":"🇨🇴",
@@ -4666,11 +4699,10 @@
       const groups = new Map();
 
       ops.forEach(op => {
-        const profitCountry = op.originCountry || inferProfitCountry(op);
-        const profitCurrency = op.onzeProfitOriginCurrencyCode || op.originCurrency || getCurrencyFor(profitCountry);
-        const amount = op.onzeProfitOriginAmount !== null && op.onzeProfitOriginAmount !== undefined
-          ? Number(op.onzeProfitOriginAmount || 0)
-          : Number(op.profitValue || 0);
+        const meta = getDashboardProfitMeta(op);
+        const profitCountry = meta.country;
+        const profitCurrency = meta.currency;
+        const amount = Number(meta.amount || 0);
 
         const key = `${profitCountry}|${profitCurrency}`;
 
@@ -4790,9 +4822,10 @@
       const groupProfit = (items)=>{
         const totals = new Map();
         items.forEach(op=>{
-          const key = op.profitCurrency || "MON";
+          const meta = getDashboardProfitMeta(op);
+          const key = meta.currency || "MON";
           const prev = totals.get(key) || 0;
-          totals.set(key, prev + Number(op.profitValue || 0));
+          totals.set(key, prev + Number(meta.amount || 0));
         });
         if(!totals.size) return {amount:"0", currency:"—"};
         const [currency, value] = Array.from(totals.entries()).sort((a,b)=>Math.abs(b[1]) - Math.abs(a[1]))[0];
@@ -5005,12 +5038,10 @@
         });
 
         if(!requireProfileForAction("Debes completar tu perfil antes de registrar operaciones.")){
-          alert("Se bloqueó por perfil incompleto.");
           return;
         }
 
         if(!pendingRegisterData){
-          alert("No hay datos pendientes de la operación.");
           return;
         }
 
@@ -5168,7 +5199,6 @@
 
       (async ()=>{
         try{
-          alert("ANTES DEL FETCH");
           const res = await fetch("/api/operations", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -5218,7 +5248,6 @@
             throw new Error(data?.error || "No se pudo guardar la operación.");
           }
 
-          alert("GUARDADO OK");
           const latestOps = await fetchOperationsFromApi();
           rebuildBalanceMovementsFromOperations((latestOps || []).filter(op => !op.deleted));
 
@@ -5245,7 +5274,7 @@
       })();
       }catch(error){
         console.error("SAVE_PENDING_SYNC_ERROR", error);
-        alert("ERROR SAVE_PENDING_OPERATION: " + (error?.message || error));
+        showToast(error?.message || "No se pudo guardar la operación");
       }
     }
 
@@ -5324,33 +5353,6 @@
           `;
         }
 
-        if(
-          (pais === "Chile" && item.dest === "Venezuela") ||
-          (pais === "Peru" && item.dest === "Argentina") ||
-          (pais === "Perú" && item.dest === "Argentina") ||
-          (pais === "Venezuela" && item.dest === "Chile") ||
-          (pais === "Colombia" && item.dest === "Chile") ||
-          (pais === "Colombia" && item.dest === "España")
-        ){
-          alert(
-            "RATE_DEBUG_COMPARE\n" +
-            "pais: " + pais + "\n" +
-            "dest: " + item.dest + "\n" +
-            "selectedProfit: " + selectedProfit + "\n" +
-            "itemValue: " + item.value + "\n" +
-            "providerRate: " + item.providerRate + "\n" +
-            "retailRate: " + item.retailRate + "\n" +
-            "decimals: " + item.decimals + "\n" +
-            "mode: " + item.mode + "\n" +
-            "op: " + item.op + "\n" +
-            "visibleRate: " + visibleRate + "\n" +
-            "finalRate: " + finalRate + "\n" +
-            "finalValue: " + (function(){
-              const r = rateForCalc(item);
-              return Number.isFinite(r) ? r : null;
-            })()
-          );
-        }
 
         const copy = document.createElement("button");
         copy.className = "copy-btn";
@@ -6183,10 +6185,7 @@
       if(value) renderCountryDetail(value);
     });
 
-    saveOperationBtn.addEventListener("click", ()=>{
-      alert("CLICK EN GUARDAR");
-      savePendingOperation();
-    });
+    saveOperationBtn.addEventListener("click", savePendingOperation);
 
     if(saveProfileBtn){
       saveProfileBtn.addEventListener("click", ()=>{
