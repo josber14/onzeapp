@@ -4134,6 +4134,7 @@
         try{
           const res = await fetch(`/api/capital/${pendingCapitalActionId}`, { method: "DELETE" });
           const data = await res.json().catch(()=>({}));
+          alert("RESPUESTA FETCH: status " + res.status);
 
           if(!res.ok){
             throw new Error(data?.error || "No se pudo eliminar el capital inicial.");
@@ -4848,15 +4849,19 @@
     function openRegisterModal(data){
   const normalizedOperatorMode = String(
     data?.operatorMode ||
-    CURRENT_USER_CONTEXT?.operatorMode ||
-    ((isGlobalAdmin() || isTenantAdmin()) ? "libre" : "")
+    ((isGlobalAdmin() || isTenantAdmin()) ? getActiveCalculatorMode() : CURRENT_USER_CONTEXT?.operatorMode) ||
+    ""
   ).trim().toLowerCase();
+
+  const mappedOperatorMode = normalizedOperatorMode === "onze"
+    ? "manual"
+    : normalizedOperatorMode;
 
   const modalData = {
     ...data,
-    operatorMode: ["libre", "porcentaje", "socio"].includes(normalizedOperatorMode)
-      ? normalizedOperatorMode
-      : "libre"
+    operatorMode: ["libre", "porcentaje", "socio", "manual"].includes(mappedOperatorMode)
+      ? mappedOperatorMode
+      : "manual"
   };
 
   pendingRegisterData = modalData;
@@ -4991,10 +4996,25 @@
     }
 
     function savePendingOperation(){
-      if(!requireProfileForAction("Debes completar tu perfil antes de registrar operaciones.")) return;
-      if(!pendingRegisterData) return;
+      try{
+        console.log("SAVE_PENDING_START", {
+          hasPendingRegisterData: !!pendingRegisterData,
+          pendingRegisterData,
+          currentUserContext: CURRENT_USER_CONTEXT,
+          activeCalculatorMode: (typeof getActiveCalculatorMode === "function" ? getActiveCalculatorMode() : null)
+        });
 
-      const selectedType = document.querySelector('input[name="operationType"]:checked')?.value || "Cambio";
+        if(!requireProfileForAction("Debes completar tu perfil antes de registrar operaciones.")){
+          alert("Se bloqueó por perfil incompleto.");
+          return;
+        }
+
+        if(!pendingRegisterData){
+          alert("No hay datos pendientes de la operación.");
+          return;
+        }
+
+        const selectedType = document.querySelector('input[name="operationType"]:checked')?.value || "Cambio";
 
       const baseProfitCountry = pendingRegisterData.originCountry;
       const baseProfitCurrency = pendingRegisterData.originCurrency;
@@ -5039,13 +5059,17 @@
 
       const rawOperatorMode = String(
         pendingRegisterData?.operatorMode ||
-        CURRENT_USER_CONTEXT?.operatorMode ||
+        ((isGlobalAdmin() || isTenantAdmin()) ? getActiveCalculatorMode() : CURRENT_USER_CONTEXT?.operatorMode) ||
         ""
       ).trim().toLowerCase();
 
-      const safeOperatorMode = ["libre", "porcentaje", "socio"].includes(rawOperatorMode)
-        ? rawOperatorMode
-        : "libre";
+      const mappedOperatorMode = rawOperatorMode === "onze"
+        ? "manual"
+        : rawOperatorMode;
+
+      const safeOperatorMode = ["libre", "porcentaje", "socio", "manual"].includes(mappedOperatorMode)
+        ? mappedOperatorMode
+        : "manual";
 
       const operationUsdtBase = toUsdtFromCountryAmount(
         pendingRegisterData.originCountry,
@@ -5135,7 +5159,7 @@
             : (profitCurrency || op.originCurrency || "")
         ).trim().toUpperCase() || null,
         operatorProfitConverted: Boolean(
-          opExtra.partnerPayoutTotalUsdt || opExtra.partnerPayoutProfitUsdt || (profitCurrency && profitCurrency !== op.originCurrency)
+          opExtra.partnerPayoutTotalUsdt || opExtra.partnerPayoutProfitUsdt || (profitCurrency && profitCurrency !== pendingRegisterData.originCurrency)
         ),
         ...opExtra
       };
@@ -5144,6 +5168,7 @@
 
       (async ()=>{
         try{
+          alert("ANTES DEL FETCH");
           const res = await fetch("/api/operations", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -5185,9 +5210,15 @@
           const data = await res.json().catch(()=>({}));
 
           if(!res.ok){
+            console.error("SAVE_OPERATION_RESPONSE_ERROR", {
+              status: res.status,
+              data,
+              payload: op
+            });
             throw new Error(data?.error || "No se pudo guardar la operación.");
           }
 
+          alert("GUARDADO OK");
           const latestOps = await fetchOperationsFromApi();
           rebuildBalanceMovementsFromOperations((latestOps || []).filter(op => !op.deleted));
 
@@ -5212,6 +5243,10 @@
           showToast(error?.message || "No se pudo guardar la operación");
         }
       })();
+      }catch(error){
+        console.error("SAVE_PENDING_SYNC_ERROR", error);
+        alert("ERROR SAVE_PENDING_OPERATION: " + (error?.message || error));
+      }
     }
 
     function updateTitle(){
@@ -5287,6 +5322,34 @@
               <div class="rate-provider">Tasa proveedor: <strong>${providerRate}</strong></div>
             </div>
           `;
+        }
+
+        if(
+          (pais === "Chile" && item.dest === "Venezuela") ||
+          (pais === "Peru" && item.dest === "Argentina") ||
+          (pais === "Perú" && item.dest === "Argentina") ||
+          (pais === "Venezuela" && item.dest === "Chile") ||
+          (pais === "Colombia" && item.dest === "Chile") ||
+          (pais === "Colombia" && item.dest === "España")
+        ){
+          alert(
+            "RATE_DEBUG_COMPARE\n" +
+            "pais: " + pais + "\n" +
+            "dest: " + item.dest + "\n" +
+            "selectedProfit: " + selectedProfit + "\n" +
+            "itemValue: " + item.value + "\n" +
+            "providerRate: " + item.providerRate + "\n" +
+            "retailRate: " + item.retailRate + "\n" +
+            "decimals: " + item.decimals + "\n" +
+            "mode: " + item.mode + "\n" +
+            "op: " + item.op + "\n" +
+            "visibleRate: " + visibleRate + "\n" +
+            "finalRate: " + finalRate + "\n" +
+            "finalValue: " + (function(){
+              const r = rateForCalc(item);
+              return Number.isFinite(r) ? r : null;
+            })()
+          );
         }
 
         const copy = document.createElement("button");
@@ -6120,7 +6183,10 @@
       if(value) renderCountryDetail(value);
     });
 
-    saveOperationBtn.addEventListener("click", savePendingOperation);
+    saveOperationBtn.addEventListener("click", ()=>{
+      alert("CLICK EN GUARDAR");
+      savePendingOperation();
+    });
 
     if(saveProfileBtn){
       saveProfileBtn.addEventListener("click", ()=>{
