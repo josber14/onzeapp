@@ -97,6 +97,7 @@ export async function GET() {
       },
       orderBy: [{ createdAt: "desc" }],
       include: {
+        createdByUser: { select: { id: true, fullName: true, email: true } },
         originCountry: { select: { name: true, code: true, currencyCode: true } },
         destinationCountry: { select: { name: true, code: true, currencyCode: true } },
         profitBaseCountry: { select: { name: true, code: true, currencyCode: true } },
@@ -119,6 +120,9 @@ export async function GET() {
         operationType: op.operationType || "Cambio",
         note: op.note || "",
         clientName: op.customerNameSnapshot || "",
+        createdByUserId: op.createdByUserId,
+        createdByUserName: op.createdByUser?.fullName || op.createdByUser?.email || `Usuario ${op.createdByUserId}`,
+        createdByUserEmail: op.createdByUser?.email || "",
         operatorMode: op.operatorMode,
         originCountry: op.originCountry.name,
         destCountry: op.destinationCountry.name,
@@ -128,6 +132,8 @@ export async function GET() {
         receiveAmount: op.amountDestination !== null ? Number(op.amountDestination) : 0,
         providerRate: op.providerRateSnapshot !== null ? Number(op.providerRateSnapshot) : null,
         clientRate: op.retailRateSnapshot !== null ? Number(op.retailRateSnapshot) : null,
+        buyOriginValue: op.buyOriginValueSnapshot !== null ? Number(op.buyOriginValueSnapshot) : null,
+        sellDestinationValue: op.sellDestinationValueSnapshot !== null ? Number(op.sellDestinationValueSnapshot) : null,
         profitCountry: op.convertedProfitTargetCountry?.name || op.profitBaseCountry?.name || op.originCountry.name,
         profitCurrency: op.convertedProfitTargetCurrencyCode || op.profitBaseCurrencyCode || op.originCurrencyCode,
         profitValue:
@@ -143,6 +149,7 @@ export async function GET() {
         payoutAmountToOperator: op.payoutAmountToOperator !== null ? Number(op.payoutAmountToOperator) : null,
         payoutCurrencyCode: op.payoutCurrencyCode || null,
         payoutUsdtAmount: op.payoutUsdtAmount !== null ? Number(op.payoutUsdtAmount) : null,
+        onzeProfitUsdt: op.onzeProfitUsdt !== null ? Number(op.onzeProfitUsdt) : null,
         onzeProfitOriginAmount: op.onzeProfitOriginAmount !== null ? Number(op.onzeProfitOriginAmount) : null,
         onzeProfitOriginCurrencyCode: op.onzeProfitOriginCurrencyCode || null,
       })),
@@ -284,6 +291,7 @@ export async function POST(req: NextRequest) {
       operationNumber = String(maxNum + 1).padStart(3, "0");
     }
 
+    const amountOriginNum = Number(amountOrigin || 0);
     const amountDestinationNum = Number(amountDestination || 0);
     const buyOriginValueNum = Number(buyOriginValue || 0);
     const sellDestinationValueNum = Number(sellDestinationValue || 0);
@@ -293,17 +301,16 @@ export async function POST(req: NextRequest) {
     let onzeProfitOriginCurrencyCode: string | null = originCurrency || null;
 
     if (
+      Number.isFinite(amountOriginNum) &&
+      amountOriginNum > 0 &&
       Number.isFinite(amountDestinationNum) &&
       amountDestinationNum > 0 &&
-      Number.isFinite(Number(providerRate || 0)) &&
-      Number(providerRate || 0) > 0 &&
       Number.isFinite(buyOriginValueNum) &&
       buyOriginValueNum > 0 &&
       Number.isFinite(sellDestinationValueNum) &&
       sellDestinationValueNum > 0
     ) {
-      const originEquivalent = amountDestinationNum / Number(providerRate || 0);
-      const originUsdt = originEquivalent / buyOriginValueNum;
+      const originUsdt = amountOriginNum / buyOriginValueNum;
       const destUsdt = amountDestinationNum / sellDestinationValueNum;
       const onzeUsdtValue = originUsdt - destUsdt;
 

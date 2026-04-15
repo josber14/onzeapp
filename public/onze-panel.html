@@ -474,7 +474,7 @@
       margin-bottom:14px;
     }
 
-    select, input[type="text"], input[type="date"], textarea{
+    select, input[type="text"], input[type="date"], input[type="number"], textarea{
       width:100%;
       padding:12px;
       border:1px solid #27508a;
@@ -2070,7 +2070,8 @@
               <h2 class="section-title">Dashboard</h2>
               <p class="section-text">Resumen general de tu operativa</p>
             </div>
-            <div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <button class="btn small secondary" type="button" id="openOperatorProfitBtn">Ganancia operadores</button>
               <button class="btn small" type="button" id="openCapitalSetupBtn">Capital inicial</button>
             </div>
           </div>
@@ -2225,9 +2226,12 @@
                 <input type="text" id="capitalCurrency" placeholder="Moneda automática" readonly />
               </div>
 
-              <div class="field">
+              <div class="field capital-amount-field">
                 <label for="capitalAmount">Monto inicial</label>
-                <input type="number" id="capitalAmount" inputmode="decimal" min="0" step="0.01" placeholder="0.00" />
+                <div class="capital-amount-wrap">
+                  <span class="capital-amount-icon">💵</span>
+                  <input type="number" id="capitalAmount" inputmode="decimal" min="0" step="0.01" placeholder="0.00" />
+                </div>
               </div>
 
               <div class="field" style="display:flex;align-items:flex-end;">
@@ -2302,6 +2306,64 @@
         </section>
       </section>
 
+      <section class="view" id="view-operator-profit">
+        <section class="section-card">
+          <div class="section-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+            <div>
+              <h2 class="section-title">Ganancia de operadores</h2>
+              <p class="section-text">Aquí controlas lo que generan los operadores y lo que debes pagarles. Esto no entra a tu capital.</p>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <button class="btn small ghost" type="button" id="backToDashboardFromOperatorsBtn">Volver al dashboard</button>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px;">
+            <div class="dash-card" style="min-height:auto;">
+              <div class="dash-label">Operador seleccionado</div>
+              <div class="dash-value" id="operatorSelectedName" style="font-size:22px;">Todos</div>
+              <div class="dash-sub">Vista general</div>
+            </div>
+
+            <div class="dash-card" style="min-height:auto;">
+              <div class="dash-label">Ganancia total</div>
+              <div class="dash-value" id="operatorProfitTotal">0</div>
+              <div class="dash-sub" id="operatorProfitTotalCur">—</div>
+            </div>
+
+            <div class="dash-card" style="min-height:auto;">
+              <div class="dash-label">Pendiente por pagar</div>
+              <div class="dash-value" id="operatorProfitPending">0</div>
+              <div class="dash-sub" id="operatorProfitPendingCur">—</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
+            <select id="operatorProfitFilter" class="input" style="max-width:260px;">
+              <option value="">Todos los operadores</option>
+            </select>
+            <input id="operatorProfitDateFrom" class="input" type="date">
+            <input id="operatorProfitDateTo" class="input" type="date">
+            <button id="resetOperatorProfitFiltersBtn" class="btn secondary" type="button">Limpiar filtros</button>
+          </div>
+
+          <div style="margin-top:16px;overflow:auto;">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Operador</th>
+                  <th>Ganancia operador</th>
+                  <th>Ganancia ONZE</th>
+                  <th>Moneda</th>
+                </tr>
+              </thead>
+              <tbody id="operatorProfitBody"></tbody>
+            </table>
+            <div id="operatorProfitEmpty" class="empty-state" style="display:none;">Todavía no hay ganancias por operador.</div>
+          </div>
+        </section>
+      </section>
+
       <section class="view" id="view-historial">
         <section class="section-card">
           <div class="history-top">
@@ -2318,6 +2380,7 @@
               <thead>
                 <tr>
                   <th>Fecha</th>
+                  <th>Operador</th>
                   <th>Cliente</th>
                   <th>N° Operación</th>
                   <th>Tipo</th>
@@ -2326,7 +2389,8 @@
                   <th>Recibe</th>
                   <th>Tasa proveedor</th>
                   <th>Tu tasa</th>
-                  <th>Ganancia</th>
+                  <th>Ganancia operador</th>
+                  <th>Ganancia ONZE</th>
                   <th>Observación</th>
                   <th>Acción</th>
                 </tr>
@@ -2496,10 +2560,12 @@
             <thead>
               <tr style="background:rgba(255,255,255,.04);">
                 <th style="text-align:left;padding:10px;font-size:12px;">Fecha</th>
+                <th style="text-align:left;padding:10px;font-size:12px;">Operador</th>
                 <th style="text-align:left;padding:10px;font-size:12px;">Cliente</th>
                 <th style="text-align:left;padding:10px;font-size:12px;">Tipo</th>
                 <th style="text-align:left;padding:10px;font-size:12px;">Ruta</th>
                 <th style="text-align:left;padding:10px;font-size:12px;">Monto</th>
+                <th style="text-align:left;padding:10px;font-size:12px;">Ganancia ONZE</th>
                 <th style="text-align:left;padding:10px;font-size:12px;">Estado</th>
               </tr>
             </thead>
@@ -3150,6 +3216,19 @@
     const profitConvertPreviewGroup = document.getElementById("profitConvertPreviewGroup");
     const profitConvertPreview = document.getElementById("profitConvertPreview");
     const countryProfitGrid = document.getElementById("countryProfitGrid");
+    const operatorProfitFilter = document.getElementById("operatorProfitFilter");
+    const operatorProfitDateFrom = document.getElementById("operatorProfitDateFrom");
+    const operatorProfitDateTo = document.getElementById("operatorProfitDateTo");
+    const resetOperatorProfitFiltersBtn = document.getElementById("resetOperatorProfitFiltersBtn");
+    const operatorSelectedName = document.getElementById("operatorSelectedName");
+    const operatorProfitTotal = document.getElementById("operatorProfitTotal");
+    const operatorProfitTotalCur = document.getElementById("operatorProfitTotalCur");
+    const operatorProfitPaid = document.getElementById("operatorProfitPaid");
+    const operatorProfitPaidCur = document.getElementById("operatorProfitPaidCur");
+    const operatorProfitPending = document.getElementById("operatorProfitPending");
+    const operatorProfitPendingCur = document.getElementById("operatorProfitPendingCur");
+    const operatorProfitBody = document.getElementById("operatorProfitBody");
+    const operatorProfitEmpty = document.getElementById("operatorProfitEmpty");
     const profileFullName = document.getElementById("profileFullName");
     const profilePhone = document.getElementById("profilePhone");
     const profileResidenceCountry = document.getElementById("profileResidenceCountry");
@@ -3742,6 +3821,9 @@
 
           return {
             ...op,
+            onzeProfitUsdt: op.onzeProfitUsdt !== null && op.onzeProfitUsdt !== undefined
+              ? Number(op.onzeProfitUsdt)
+              : null,
             onzeProfitOriginAmount: op.onzeProfitOriginAmount !== null && op.onzeProfitOriginAmount !== undefined
               ? Number(op.onzeProfitOriginAmount)
               : null,
@@ -4265,15 +4347,25 @@
           ? `${op.country || "—"}${op.note ? " · " + op.note : ""}`
           : `${op.originCountry || "—"} → ${op.destCountry || "—"}`;
 
+        const operatorName = isExpense ? "—" : (getOperatorDisplayName(op) || "—");
+
+        let onzeProfitUsdtHtml = "—";
+        if(!isExpense && !op.deleted){
+          const roundedUsdt = Math.round(Number(op?.onzeProfitUsdt || 0) * 10) / 10;
+          onzeProfitUsdtHtml = `${formatCalcValue(roundedUsdt, "USDT")} USDT`;
+        }
+
         const tr = document.createElement("tr");
         if(op.deleted) tr.style.opacity = "0.5";
 
         tr.innerHTML = `
           <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${formatDateTimeForTable(op.date, op.createdAt)}</td>
+          <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${operatorName}</td>
           <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${clientOrCategory}</td>
           <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${movementType}</td>
           <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${routeOrNote}</td>
           <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${movementAmount}</td>
+          <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${isExpense ? "—" : (op.deleted ? '<span class="pill danger">No contabiliza</span>' : onzeProfitUsdtHtml)}</td>
           <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${stateHtml}</td>
         `;
 
@@ -4646,29 +4738,46 @@
     }
 
     function getDashboardProfitMeta(op){
-      const mode = String(op?.operatorMode || "").trim().toLowerCase();
-
       if(IS_ADMIN_ROLE){
-        if(mode === "manual" || mode === "libre"){
+        if(op?.onzeProfitUsdt !== null && op?.onzeProfitUsdt !== undefined){
+          const roundedUsdt = Math.round(Number(op?.onzeProfitUsdt || 0) * 10) / 10;
+          const originCountry = op?.originCountry || "—";
+          const originCurrency = op?.originCurrency || op?.onzeProfitOriginCurrencyCode || "MON";
+          const buyRate = Number(op?.buyOriginValue || 0);
+          let visualOriginAmount = Number.isFinite(buyRate) && buyRate > 0
+            ? roundedUsdt * buyRate
+            : Number(op?.onzeProfitOriginAmount || 0);
+
+          if(String(originCurrency).trim().toUpperCase() === "CLP"){
+            visualOriginAmount = Math.round(visualOriginAmount);
+          }
+
           return {
-            country: op?.profitCountry || op?.originCountry || "—",
-            currency: op?.profitCurrency || op?.originCurrency || "MON",
-            amount: Number(op?.profitValue || 0)
+            country: originCountry,
+            currency: originCurrency,
+            amount: visualOriginAmount
           };
         }
 
         if(op?.onzeProfitOriginAmount !== null && op?.onzeProfitOriginAmount !== undefined){
+          let amount = Number(op?.onzeProfitOriginAmount || 0);
+          const currency = op?.onzeProfitOriginCurrencyCode || op?.originCurrency || "MON";
+
+          if(String(currency).trim().toUpperCase() === "CLP"){
+            amount = Math.round(amount);
+          }
+
           return {
-            country: op?.originCountry || op?.profitCountry || "—",
-            currency: op?.onzeProfitOriginCurrencyCode || op?.originCurrency || op?.profitCurrency || "MON",
-            amount: Number(op?.onzeProfitOriginAmount || 0)
+            country: op?.originCountry || "—",
+            currency: currency,
+            amount: amount
           };
         }
 
         return {
-          country: op?.profitCountry || op?.originCountry || "—",
-          currency: op?.profitCurrency || op?.originCurrency || "MON",
-          amount: Number(op?.profitValue || 0)
+          country: "USDT",
+          currency: "USDT",
+          amount: 0
         };
       }
 
@@ -4749,7 +4858,143 @@
       `).join("");
     }
 
-    function refreshHistoryUI(){
+    
+
+// ===== OPERATOR PROFIT =====
+
+function getOperatorDisplayName(op){
+  return String(
+    op?.createdByUserName ||
+    op?.createdByName ||
+    op?.userName ||
+    op?.createdByUserEmail ||
+    "Sin operador"
+  ).trim();
+}
+
+function getOperatorProfitFilteredOps(ops = loadOperations()){
+  let items = Array.isArray(ops) ? [...ops] : [];
+
+  const selectedName = operatorProfitFilter?.value || "";
+  const dateFrom = operatorProfitDateFrom?.value || "";
+  const dateTo = operatorProfitDateTo?.value || "";
+
+  if(selectedName){
+    items = items.filter(op => getOperatorDisplayName(op) === selectedName);
+  }
+
+  if(dateFrom){
+    items = items.filter(op => String(op?.date || "").slice(0,10) >= dateFrom);
+  }
+
+  if(dateTo){
+    items = items.filter(op => String(op?.date || "").slice(0,10) <= dateTo);
+  }
+
+  return items;
+}
+
+function aggregateOperatorProfit(ops){
+  const groups = new Map();
+
+  ops.forEach(op=>{
+    const name = getOperatorDisplayName(op);
+    const meta = getDashboardProfitMeta(op);
+    const key = name + "|" + (meta.currency || "MON");
+
+    if(!groups.has(key)){
+      groups.set(key, {
+        name,
+        currency: meta.currency || "MON",
+        total: 0
+      });
+    }
+
+    groups.get(key).total += Number(meta.amount || 0);
+  });
+
+  return Array.from(groups.values()).sort((a,b)=>{
+    if(a.name !== b.name) return a.name.localeCompare(b.name, "es", { sensitivity:"base" });
+    return a.currency.localeCompare(b.currency, "es", { sensitivity:"base" });
+  });
+}
+
+function populateOperatorProfitFilter(ops = loadOperations()){
+  if(!operatorProfitFilter) return;
+
+  const currentValue = operatorProfitFilter.value || "";
+  const names = Array.from(new Set(
+    (Array.isArray(ops) ? ops : [])
+      .map(getOperatorDisplayName)
+      .filter(Boolean)
+  )).sort((a,b)=>a.localeCompare(b, "es", { sensitivity:"base" }));
+
+  operatorProfitFilter.innerHTML = '<option value="">Todos los operadores</option>' +
+    names.map(name => `<option value="${name}">${name}</option>`).join("");
+
+  if(names.includes(currentValue)){
+    operatorProfitFilter.value = currentValue;
+  }
+}
+
+function renderOperatorProfit(ops = loadOperations()){
+  if(!operatorProfitBody || !operatorProfitEmpty) return;
+
+  populateOperatorProfitFilter(ops);
+
+  const filteredOps = getOperatorProfitFilteredOps(ops);
+  const groups = aggregateOperatorProfit(filteredOps);
+
+  operatorProfitBody.innerHTML = "";
+
+  if(operatorSelectedName){
+    operatorSelectedName.textContent = operatorProfitFilter?.value || "Todos";
+  }
+
+  const totalSummary = aggregateOperatorProfit(filteredOps).sort((a,b)=>Math.abs(b.total) - Math.abs(a.total))[0] || null;
+
+  if(operatorProfitTotal){
+    operatorProfitTotal.textContent = totalSummary
+      ? formatCalcValue(Number(totalSummary.total || 0), totalSummary.currency)
+      : "0";
+  }
+
+  if(operatorProfitTotalCur){
+    operatorProfitTotalCur.textContent = totalSummary?.currency || "—";
+  }
+
+  if(operatorProfitPending){
+    operatorProfitPending.textContent = totalSummary
+      ? formatCalcValue(Number(totalSummary.total || 0), totalSummary.currency)
+      : "0";
+  }
+
+  if(operatorProfitPendingCur){
+    operatorProfitPendingCur.textContent = totalSummary?.currency || "—";
+  }
+
+  if(!groups.length){
+    operatorProfitEmpty.style.display = "block";
+    return;
+  }
+
+  operatorProfitEmpty.style.display = "none";
+
+  groups.forEach(group=>{
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>${group.name}</td>
+      <td>${formatCalcValue(Number(group.total || 0), group.currency)}</td>
+      <td>${group.currency}</td>
+    `;
+
+    operatorProfitBody.appendChild(tr);
+  });
+}
+
+
+function refreshHistoryUI(){
       const ops = loadOperations().sort((a,b)=>new Date(b.createdAt) - new Date(a.createdAt));
       const activeOps = ops.filter(op => !op.deleted);
       historyBody.innerHTML = "";
@@ -4768,15 +5013,46 @@
           tr.style.opacity = "0.45";
         }
 
-        const profitHtml =
-          op.operatorMode === "socio" && Number(op.partnerPayoutDestCostUsdt || 0) > 0
-            ? `<div><span class="pill green">${op.profitDisplay}</span></div>
-               <div style="font-size:12px; opacity:.78; margin-top:6px;">Costo destino: ${formatCalcValue(op.partnerPayoutDestCostUsdt || 0, "USDT")} USDT</div>
-               <div style="font-size:12px; font-weight:700; margin-top:2px;">Total a pagar: ${formatCalcValue(op.partnerPayoutTotalUsdt || 0, "USDT")} USDT</div>`
-            : `<span class="pill green">${op.profitDisplay}</span>`;
+        const operatorName = getOperatorDisplayName(op) || "—";
+        const isManualOnze = String(op?.operatorMode || "").trim().toLowerCase() === "manual";
+
+        const profitHtml = isManualOnze
+          ? `<span style="opacity:.55;">—</span>`
+          : (
+              op.operatorMode === "socio" && Number(op.partnerPayoutDestCostUsdt || 0) > 0
+                ? `<div><span class="pill green">${op.profitDisplay}</span></div>
+                   <div style="font-size:12px; opacity:.78; margin-top:4px;">Costo destino: ${formatCalcValue(op.partnerPayoutDestCostUsdt || 0, "USDT")} USDT</div>
+                   <div style="font-size:12px; font-weight:700; margin-top:2px;">Total a pagar: ${formatCalcValue(op.partnerPayoutTotalUsdt || 0, "USDT")} USDT</div>`
+                : `<div><span class="pill green">${op.profitDisplay}</span></div>`
+            );
+
+        let onzeProfitHtml = `<span class="pill" style="background:rgba(148,163,184,.12);color:#cbd5e1;border:1px solid rgba(148,163,184,.22);">—</span>`;
+
+        if(!isDeleted){
+          const rawUsdt = Number(op?.onzeProfitUsdt || 0);
+          const roundedUsdt = Math.round(rawUsdt * 10) / 10;
+          const buyRate = Number(op?.buyOriginValue || 0);
+          const originCurrency = String(op?.originCurrency || op?.onzeProfitOriginCurrencyCode || "").trim().toUpperCase();
+
+          let visualOriginAmount = Number.isFinite(buyRate) && buyRate > 0
+            ? roundedUsdt * buyRate
+            : Number(op?.onzeProfitOriginAmount || 0);
+
+          if(originCurrency === "CLP"){
+            visualOriginAmount = Math.round(visualOriginAmount);
+          }
+
+          if(Number.isFinite(rawUsdt) && rawUsdt !== 0){
+            onzeProfitHtml = `
+              <div><span class="pill green">${formatCalcValue(visualOriginAmount, originCurrency)} ${originCurrency || ""}</span></div>
+              <div style="margin-top:6px;"><span class="pill blue">${formatCalcValue(roundedUsdt, "USDT")} USDT</span></div>
+            `;
+          }
+        }
 
         tr.innerHTML = `
           <td>${formatDateTimeForTable(op.date, op.createdAt)}</td>
+          <td>${operatorName}</td>
           <td>${op.clientName || "—"}</td>
           <td>${op.operationNumber || "—"}</td>
           <td>${isDeleted ? `<span class="pill danger">Eliminada</span>` : `<span class="pill blue">${op.operationType}</span>`}</td>
@@ -4786,6 +5062,7 @@
           <td>${op.providerRateFormatted}</td>
           <td>${op.clientRateFormatted}</td>
           <td>${isDeleted ? `<span class="pill" style="background:rgba(239,68,68,.12);color:#fecaca;border:1px solid rgba(239,68,68,.25);">No contabiliza</span>` : profitHtml}</td>
+          <td>${isDeleted ? `<span class="pill" style="background:rgba(239,68,68,.12);color:#fecaca;border:1px solid rgba(239,68,68,.25);">No contabiliza</span>` : onzeProfitHtml}</td>
           <td>${op.note || "—"}</td>
           <td>${isDeleted ? `<span style="font-size:12px;opacity:.85;">Anulada</span>` : `<button class="btn small danger" type="button" onclick="deleteOperation('${op.id}')">🗑️</button>`}</td>
         `;
@@ -4803,6 +5080,7 @@
 
       refreshDashboard(activeOps);
       renderCountryProfit(activeOps);
+      renderOperatorProfit(activeOps);
       renderInitialCapital();
     }
 
@@ -4845,7 +5123,23 @@
       const monthPendingUsdt = sumUsdt(monthOps, "amountPendingUsdt");
 
       const balanceSummary = getBalanceSummaryByCountry();
-      const capitalTotalUsdt = balanceSummary.reduce((sum, item) => sum + Number(item?.saldoUsdt || 0), 0);
+
+      const initialCapitalUsdt = loadInitialCapital().reduce((sum, item) => {
+        const amount = Number(item?.amount || 0);
+        const country = String(item?.country || "").trim();
+        const currency = String(item?.currency || item?.currencyCode || "").trim().toUpperCase();
+        const converted = currency === "USDT"
+          ? amount
+          : Number(toUsdtFromCountryAmount(country, amount) || 0);
+        return sum + converted;
+      }, 0);
+
+      const onzeProfitTotalUsdt = activeOps.reduce((sum, op) => {
+        const rawUsdt = Number(op?.onzeProfitUsdt || 0);
+        const roundedUsdt = Math.round(rawUsdt * 10) / 10;
+        return sum + roundedUsdt;
+      }, 0);
+
       const monthExpensesUsdt = loadExpenses()
         .filter(exp => String(exp?.date || "").startsWith(currentMonth))
         .reduce((sum, exp) => {
@@ -4854,6 +5148,8 @@
           const converted = country === "USDT" ? amount : Number(toUsdtFromCountryAmount(country, amount) || 0);
           return sum + converted;
         }, 0);
+
+      const capitalTotalUsdt = initialCapitalUsdt + onzeProfitTotalUsdt;
       const netBalanceUsdt = capitalTotalUsdt - monthExpensesUsdt;
 
       const receivablesOps = monthOps.filter(op => ["pending", "partial"].includes(String(op?.paymentStatus || "")));
@@ -5881,7 +6177,7 @@
               receiveAmountFormatted: `${formatCalcValue(clientAmountDest, destCur)} ${destCur}`,
               profitOriginValue: profitOrigin,
               profitDestValue: profitDest,
-              operatorMode: "libre"
+              operatorMode: "manual"
             };
             registerBtn._payload = currentRegisterPayload;
           }
@@ -6217,6 +6513,18 @@
       });
     }
 
+    if(openOperatorProfitBtn){
+      openOperatorProfitBtn.addEventListener("click", ()=>{
+        switchView("operator-profit");
+      });
+    }
+
+    if(backToDashboardFromOperatorsBtn){
+      backToDashboardFromOperatorsBtn.addEventListener("click", ()=>{
+        switchView("dashboard");
+      });
+    }
+
     document.addEventListener("change", (e)=>{
       if(e.target && e.target.name === "profitConvertChoice"){
         refreshProfitConvertUI();
@@ -6407,11 +6715,26 @@
       });
     }
 
+    async function syncOperationsUiFromApi(){
+      try{
+        const latestOps = await fetchOperationsFromApi();
+        saveOperations(latestOps);
+        rebuildBalanceMovementsFromOperations((latestOps || []).filter(op => !op.deleted));
+        refreshHistoryUI();
+        renderInitialCapital();
+        refreshDashboard((latestOps || []).filter(op => !op.deleted));
+        if(typeof pendingCountryDetail === "string" && pendingCountryDetail){
+          renderCountryDetail(pendingCountryDetail);
+        }
+      }catch(error){
+        console.error("SYNC_OPERATIONS_UI_ERROR", error);
+      }
+    }
+
     document.addEventListener("DOMContentLoaded", async ()=>{
       applyRoleUIRestrictions();
       fetchAndRender(true);
-      await fetchOperationsFromApi();
-      refreshHistoryUI();
+      await syncOperationsUiFromApi();
       await fetchExpensesFromApi();
       if(IS_ADMIN_ROLE){
         await fetchCapitalFromApi();
@@ -6425,6 +6748,16 @@
       fillProfileForm();
       operationDate.value = todayISO();
       ensureDashboardWhatsappButton();
+    });
+
+    window.addEventListener("focus", ()=>{
+      syncOperationsUiFromApi();
+    });
+
+    document.addEventListener("visibilitychange", ()=>{
+      if(document.visibilityState === "visible"){
+        syncOperationsUiFromApi();
+      }
     });
   </script>
 
