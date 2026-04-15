@@ -2326,7 +2326,7 @@
             </div>
 
             <div class="dash-card" style="min-height:auto;">
-              <div class="dash-label">Ganancia total</div>
+              <div class="dash-label">Ganancia total USDT</div>
               <div class="dash-value" id="operatorProfitTotal">0</div>
               <div class="dash-sub" id="operatorProfitTotalCur">—</div>
             </div>
@@ -2352,14 +2352,21 @@
               <thead>
                 <tr>
                   <th>Operador</th>
-                  <th>Ganancia operador</th>
-                  <th>Ganancia ONZE</th>
+                  <th>Modalidad</th>
+                  <th>Total a pagar</th>
                   <th>Moneda</th>
                 </tr>
               </thead>
               <tbody id="operatorProfitBody"></tbody>
             </table>
             <div id="operatorProfitEmpty" class="empty-state" style="display:none;">Todavía no hay ganancias por operador.</div>
+          </div>
+
+          <div style="margin-top:18px;">
+            <h3 class="section-title" style="margin-bottom:6px;">Ganancia por país</h3>
+            <p class="section-text" style="margin-bottom:14px;">Resumen por país del pago acumulado a operadores.</p>
+            <div id="operatorProfitCountryGrid" class="country-profit-grid"></div>
+            <div id="operatorProfitCountryEmpty" class="empty-state" style="display:none;">Todavía no hay ganancias por país para este operador.</div>
           </div>
         </section>
       </section>
@@ -3229,6 +3236,8 @@
     const operatorProfitPendingCur = document.getElementById("operatorProfitPendingCur");
     const operatorProfitBody = document.getElementById("operatorProfitBody");
     const operatorProfitEmpty = document.getElementById("operatorProfitEmpty");
+    const operatorProfitCountryGrid = document.getElementById("operatorProfitCountryGrid");
+    const operatorProfitCountryEmpty = document.getElementById("operatorProfitCountryEmpty");
     const profileFullName = document.getElementById("profileFullName");
     const profilePhone = document.getElementById("profilePhone");
     const profileResidenceCountry = document.getElementById("profileResidenceCountry");
@@ -4478,6 +4487,16 @@
     };
 
     function applyRoleUIRestrictions(){
+      if(!IS_ADMIN_ROLE){
+        if(openOperatorProfitBtn){
+          openOperatorProfitBtn.style.display = "none";
+        }
+        const operatorProfitView = document.getElementById("view-operator-profit");
+        if(operatorProfitView){
+          operatorProfitView.style.display = "none";
+        }
+      }
+
       if(IS_ADMIN_ROLE) return;
 
       const capitalSection = saveCapitalBtn?.closest(".section-card");
@@ -4872,16 +4891,88 @@ function getOperatorDisplayName(op){
   ).trim();
 }
 
+function getOperatorModeLabel(op){
+  const mode = String(op?.operatorMode || "").trim().toLowerCase();
+
+  if(mode === "socio") return "Socio 50/50";
+  if(mode === "porcentaje"){
+    const raw = String(op?.marginLabel || "").trim();
+    return raw ? `Porcentaje ${raw}` : "Porcentaje";
+  }
+  if(mode === "libre") return "Libre";
+  if(mode === "manual") return "ONZE";
+  return "—";
+}
+
+function getOperatorPayMeta(op){
+  const amount = Number(
+    op?.operatorProfitFinalAmount ??
+    op?.payoutAmountToOperator ??
+    op?.payoutUsdtAmount ??
+    op?.profitValue ??
+    0
+  );
+
+  const currency = String(
+    op?.operatorProfitFinalCurrencyCode ||
+    op?.payoutCurrencyCode ||
+    op?.profitCurrency ||
+    op?.originCurrency ||
+    "MON"
+  ).trim().toUpperCase() || "MON";
+
+  return { amount, currency };
+}
+
+function getOperatorPayCountry(op){
+  const finalCurrency = String(
+    op?.operatorProfitFinalCurrencyCode ||
+    op?.payoutCurrencyCode ||
+    op?.profitCurrency ||
+    op?.originCurrency ||
+    ""
+  ).trim().toUpperCase();
+
+  const originCurrency = String(op?.originCurrency || "").trim().toUpperCase();
+  const profitCurrency = String(op?.profitCurrency || "").trim().toUpperCase();
+
+  if(finalCurrency === "USDT") return "USDT";
+  if(finalCurrency && profitCurrency && finalCurrency === profitCurrency && op?.profitCountry){
+    return op.profitCountry;
+  }
+  if(finalCurrency && originCurrency && finalCurrency === originCurrency && op?.originCountry){
+    return op.originCountry;
+  }
+  return op?.profitCountry || op?.originCountry || "";
+}
+
+function getOperatorPayUsdt(op){
+  const meta = getOperatorPayMeta(op);
+  const currency = String(meta.currency || "").trim().toUpperCase();
+  const amount = Number(meta.amount || 0);
+
+  if(!Number.isFinite(amount) || amount === 0) return 0;
+  if(currency === "USDT") return amount;
+
+  const country = getOperatorPayCountry(op);
+  return Number(toUsdtFromCountryAmount(country, amount) || 0);
+}
+
 function getOperatorProfitFilteredOps(ops = loadOperations()){
-  let items = Array.isArray(ops) ? [...ops] : [];
+  let items = (Array.isArray(ops) ? [...ops] : []).filter(op => {
+    const mode = String(op?.operatorMode || "").trim().toLowerCase();
+    return mode !== "manual";
+  });
 
   const selectedName = operatorProfitFilter?.value || "";
   const dateFrom = operatorProfitDateFrom?.value || "";
   const dateTo = operatorProfitDateTo?.value || "";
 
-  if(selectedName){
-    items = items.filter(op => getOperatorDisplayName(op) === selectedName);
+  if(!selectedName){
+    return [];
   }
+
+  items = items.filter(op => getOperatorDisplayName(op) === selectedName);
 
   if(dateFrom){
     items = items.filter(op => String(op?.date || "").slice(0,10) >= dateFrom);
@@ -4899,24 +4990,55 @@ function aggregateOperatorProfit(ops){
 
   ops.forEach(op=>{
     const name = getOperatorDisplayName(op);
-    const meta = getDashboardProfitMeta(op);
-    const key = name + "|" + (meta.currency || "MON");
+    const modeLabel = getOperatorModeLabel(op);
+    const payMeta = getOperatorPayMeta(op);
+    const key = `${name}|${modeLabel}|${payMeta.currency}`;
 
     if(!groups.has(key)){
       groups.set(key, {
         name,
-        currency: meta.currency || "MON",
+        modeLabel,
+        currency: payMeta.currency || "MON",
         total: 0
       });
     }
 
-    groups.get(key).total += Number(meta.amount || 0);
+    groups.get(key).total += Number(payMeta.amount || 0);
   });
 
   return Array.from(groups.values()).sort((a,b)=>{
     if(a.name !== b.name) return a.name.localeCompare(b.name, "es", { sensitivity:"base" });
+    if(a.modeLabel !== b.modeLabel) return a.modeLabel.localeCompare(b.modeLabel, "es", { sensitivity:"base" });
     return a.currency.localeCompare(b.currency, "es", { sensitivity:"base" });
   });
+}
+
+function aggregateOperatorProfitByCountry(ops){
+  const groups = new Map();
+
+  ops.forEach(op=>{
+    const payMeta = getOperatorPayMeta(op);
+    const country = getOperatorPayCountry(op);
+    const currency = String(payMeta.currency || "").trim().toUpperCase() || "MON";
+
+    if(!country) return;
+
+    const key = `${country}|${currency}`;
+
+    if(!groups.has(key)){
+      groups.set(key, {
+        country,
+        currency,
+        total: 0
+      });
+    }
+
+    groups.get(key).total += Number(payMeta.amount || 0);
+  });
+
+  return Array.from(groups.values()).sort((a,b)=>
+    a.country.localeCompare(b.country, "es", { sensitivity:"base" })
+  );
 }
 
 function populateOperatorProfitFilter(ops = loadOperations()){
@@ -4925,6 +5047,7 @@ function populateOperatorProfitFilter(ops = loadOperations()){
   const currentValue = operatorProfitFilter.value || "";
   const names = Array.from(new Set(
     (Array.isArray(ops) ? ops : [])
+      .filter(op => String(op?.operatorMode || "").trim().toLowerCase() !== "manual")
       .map(getOperatorDisplayName)
       .filter(Boolean)
   )).sort((a,b)=>a.localeCompare(b, "es", { sensitivity:"base" }));
@@ -4948,33 +5071,50 @@ function renderOperatorProfit(ops = loadOperations()){
   operatorProfitBody.innerHTML = "";
 
   if(operatorSelectedName){
-    operatorSelectedName.textContent = operatorProfitFilter?.value || "Todos";
+    operatorSelectedName.textContent = operatorProfitFilter?.value || "Selecciona";
   }
 
-  const totalSummary = aggregateOperatorProfit(filteredOps).sort((a,b)=>Math.abs(b.total) - Math.abs(a.total))[0] || null;
+  const totalUsdt = filteredOps.reduce((sum, op) => sum + getOperatorPayUsdt(op), 0);
 
   if(operatorProfitTotal){
-    operatorProfitTotal.textContent = totalSummary
-      ? formatCalcValue(Number(totalSummary.total || 0), totalSummary.currency)
-      : "0";
+    operatorProfitTotal.textContent = formatCalcValue(totalUsdt, "USDT");
   }
 
   if(operatorProfitTotalCur){
-    operatorProfitTotalCur.textContent = totalSummary?.currency || "—";
+    operatorProfitTotalCur.textContent = "USDT";
   }
 
   if(operatorProfitPending){
-    operatorProfitPending.textContent = totalSummary
-      ? formatCalcValue(Number(totalSummary.total || 0), totalSummary.currency)
-      : "0";
+    operatorProfitPending.textContent = "0";
   }
 
   if(operatorProfitPendingCur){
-    operatorProfitPendingCur.textContent = totalSummary?.currency || "—";
+    operatorProfitPendingCur.textContent = "—";
+  }
+
+  const operatorProfitPendingCard = operatorProfitPending?.closest(".dash-card");
+  if(operatorProfitPendingCard){
+    operatorProfitPendingCard.style.display = "none";
+  }
+
+  const operatorCardsGrid = operatorSelectedName?.closest(".dash-card")?.parentElement;
+  if(operatorCardsGrid){
+    operatorCardsGrid.style.gridTemplateColumns = "repeat(2,minmax(0,1fr))";
   }
 
   if(!groups.length){
     operatorProfitEmpty.style.display = "block";
+    operatorProfitEmpty.textContent = operatorProfitFilter?.value
+      ? "Todavía no hay datos para este operador."
+      : "Selecciona un operador para ver su detalle.";
+
+    if(operatorProfitCountryGrid) operatorProfitCountryGrid.innerHTML = "";
+    if(operatorProfitCountryEmpty){
+      operatorProfitCountryEmpty.style.display = "block";
+      operatorProfitCountryEmpty.textContent = operatorProfitFilter?.value
+        ? "Todavía no hay ganancias por país para este operador."
+        : "Selecciona un operador para ver su resumen por país.";
+    }
     return;
   }
 
@@ -4985,12 +5125,44 @@ function renderOperatorProfit(ops = loadOperations()){
 
     tr.innerHTML = `
       <td>${group.name}</td>
+      <td>${group.modeLabel}</td>
       <td>${formatCalcValue(Number(group.total || 0), group.currency)}</td>
       <td>${group.currency}</td>
     `;
 
     operatorProfitBody.appendChild(tr);
   });
+
+  const countryGroups = aggregateOperatorProfitByCountry(filteredOps);
+
+  if(operatorProfitCountryGrid){
+    if(countryGroups.length){
+      operatorProfitCountryGrid.innerHTML = countryGroups.map(group => `
+        <div class="country-profit-item" style="padding:18px;border-radius:18px;background:rgba(255,255,255,.04);border:1px solid rgba(67,124,255,.22);">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+            <div>
+              <div style="font-size:13px;letter-spacing:.4px;text-transform:uppercase;color:#9fb4d4;font-weight:800;">
+                ${getFlagEmoji(group.country)} ${group.country}
+              </div>
+              <div style="margin-top:10px;font-size:30px;font-weight:900;line-height:1;color:#fff;">
+                ${formatCalcValue(Number(group.total || 0), group.currency)}
+              </div>
+              <div style="margin-top:6px;font-size:13px;color:#8ea7cf;font-weight:700;">
+                ${group.currency}
+              </div>
+            </div>
+          </div>
+        </div>
+      `).join("");
+    }else{
+      operatorProfitCountryGrid.innerHTML = "";
+    }
+  }
+
+  if(operatorProfitCountryEmpty){
+    operatorProfitCountryEmpty.style.display = countryGroups.length ? "none" : "block";
+    operatorProfitCountryEmpty.textContent = "Todavía no hay ganancias por país para este operador.";
+  }
 }
 
 
@@ -4998,6 +5170,46 @@ function refreshHistoryUI(){
       const ops = loadOperations().sort((a,b)=>new Date(b.createdAt) - new Date(a.createdAt));
       const activeOps = ops.filter(op => !op.deleted);
       historyBody.innerHTML = "";
+
+      const historyThead = document.querySelector('#view-historial thead');
+
+      if(historyThead){
+        historyThead.innerHTML = IS_ADMIN_ROLE
+          ? `
+                <tr>
+                  <th>Fecha</th>
+                  <th>Operador</th>
+                  <th>Cliente</th>
+                  <th>N° Operación</th>
+                  <th>Tipo</th>
+                  <th>Ruta</th>
+                  <th>Envía</th>
+                  <th>Recibe</th>
+                  <th>Tasa proveedor</th>
+                  <th>Tu tasa</th>
+                  <th>Ganancia operador</th>
+                  <th>Ganancia ONZE</th>
+                  <th>Observación</th>
+                  <th>Acción</th>
+                </tr>
+              `
+          : `
+                <tr>
+                  <th>Fecha</th>
+                  <th>Cliente</th>
+                  <th>N° Operación</th>
+                  <th>Tipo</th>
+                  <th>Ruta</th>
+                  <th>Envía</th>
+                  <th>Recibe</th>
+                  <th>Tasa proveedor</th>
+                  <th>Tu tasa</th>
+                  <th>Ganancia</th>
+                  <th>Observación</th>
+                  <th>Acción</th>
+                </tr>
+              `;
+      }
 
       if(!ops.length){
         historyEmpty.style.display = "block";
@@ -5016,14 +5228,14 @@ function refreshHistoryUI(){
         const operatorName = getOperatorDisplayName(op) || "—";
         const isManualOnze = String(op?.operatorMode || "").trim().toLowerCase() === "manual";
 
-        const profitHtml = isManualOnze
+        const operatorProfitHtml = isManualOnze
           ? `<span style="opacity:.55;">—</span>`
           : (
               op.operatorMode === "socio" && Number(op.partnerPayoutDestCostUsdt || 0) > 0
-                ? `<div><span class="pill green">${op.profitDisplay}</span></div>
+                ? `<div><span class="${IS_ADMIN_ROLE ? "" : "pill green"}" style="${IS_ADMIN_ROLE ? "display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:800;line-height:1;background:rgba(148,163,184,.16);color:#dbeafe;border:1px solid rgba(148,163,184,.20);box-shadow:none;" : ""}">${op.profitDisplay}</span></div>
                    <div style="font-size:12px; opacity:.78; margin-top:4px;">Costo destino: ${formatCalcValue(op.partnerPayoutDestCostUsdt || 0, "USDT")} USDT</div>
                    <div style="font-size:12px; font-weight:700; margin-top:2px;">Total a pagar: ${formatCalcValue(op.partnerPayoutTotalUsdt || 0, "USDT")} USDT</div>`
-                : `<div><span class="pill green">${op.profitDisplay}</span></div>`
+                : `<div><span class="${IS_ADMIN_ROLE ? "" : "pill green"}" style="${IS_ADMIN_ROLE ? "display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;padding:6px 10px;border-radius:999px;font-size:11px;font-weight:800;line-height:1;background:rgba(148,163,184,.16);color:#dbeafe;border:1px solid rgba(148,163,184,.20);box-shadow:none;" : ""}">${op.profitDisplay}</span></div>`
             );
 
         let onzeProfitHtml = `<span class="pill" style="background:rgba(148,163,184,.12);color:#cbd5e1;border:1px solid rgba(148,163,184,.22);">—</span>`;
@@ -5050,22 +5262,39 @@ function refreshHistoryUI(){
           }
         }
 
-        tr.innerHTML = `
-          <td>${formatDateTimeForTable(op.date, op.createdAt)}</td>
-          <td>${operatorName}</td>
-          <td>${op.clientName || "—"}</td>
-          <td>${op.operationNumber || "—"}</td>
-          <td>${isDeleted ? `<span class="pill danger">Eliminada</span>` : `<span class="pill blue">${op.operationType}</span>`}</td>
-          <td>${op.originCountry} → ${op.destCountry}</td>
-          <td>${op.sendAmountFormatted}</td>
-          <td>${op.receiveAmountFormatted}</td>
-          <td>${op.providerRateFormatted}</td>
-          <td>${op.clientRateFormatted}</td>
-          <td>${isDeleted ? `<span class="pill" style="background:rgba(239,68,68,.12);color:#fecaca;border:1px solid rgba(239,68,68,.25);">No contabiliza</span>` : profitHtml}</td>
-          <td>${isDeleted ? `<span class="pill" style="background:rgba(239,68,68,.12);color:#fecaca;border:1px solid rgba(239,68,68,.25);">No contabiliza</span>` : onzeProfitHtml}</td>
-          <td>${op.note || "—"}</td>
-          <td>${isDeleted ? `<span style="font-size:12px;opacity:.85;">Anulada</span>` : `<button class="btn small danger" type="button" onclick="deleteOperation('${op.id}')">🗑️</button>`}</td>
-        `;
+        if(IS_ADMIN_ROLE){
+          tr.innerHTML = `
+            <td>${formatDateTimeForTable(op.date, op.createdAt)}</td>
+            <td>${operatorName}</td>
+            <td>${op.clientName || "—"}</td>
+            <td>${op.operationNumber || "—"}</td>
+            <td>${isDeleted ? `<span class="pill danger">Eliminada</span>` : `<span class="pill blue">${op.operationType}</span>`}</td>
+            <td>${op.originCountry} → ${op.destCountry}</td>
+            <td>${op.sendAmountFormatted}</td>
+            <td>${op.receiveAmountFormatted}</td>
+            <td>${op.providerRateFormatted}</td>
+            <td>${op.clientRateFormatted}</td>
+            <td>${isDeleted ? `<span class="pill" style="background:rgba(239,68,68,.12);color:#fecaca;border:1px solid rgba(239,68,68,.25);">No contabiliza</span>` : operatorProfitHtml}</td>
+            <td>${isDeleted ? `<span class="pill" style="background:rgba(239,68,68,.12);color:#fecaca;border:1px solid rgba(239,68,68,.25);">No contabiliza</span>` : onzeProfitHtml}</td>
+            <td>${op.note || "—"}</td>
+            <td>${isDeleted ? `<span style="font-size:12px;opacity:.85;">Anulada</span>` : `<button class="btn small danger" type="button" onclick="deleteOperation('${op.id}')">🗑️</button>`}</td>
+          `;
+        }else{
+          tr.innerHTML = `
+            <td>${formatDateTimeForTable(op.date, op.createdAt)}</td>
+            <td>${op.clientName || "—"}</td>
+            <td>${op.operationNumber || "—"}</td>
+            <td>${isDeleted ? `<span class="pill danger">Eliminada</span>` : `<span class="pill blue">${op.operationType}</span>`}</td>
+            <td>${op.originCountry} → ${op.destCountry}</td>
+            <td>${op.sendAmountFormatted}</td>
+            <td>${op.receiveAmountFormatted}</td>
+            <td>${op.providerRateFormatted}</td>
+            <td>${op.clientRateFormatted}</td>
+            <td>${isDeleted ? `<span class="pill" style="background:rgba(239,68,68,.12);color:#fecaca;border:1px solid rgba(239,68,68,.25);">No contabiliza</span>` : operatorProfitHtml}</td>
+            <td>${op.note || "—"}</td>
+            <td>${isDeleted ? `<span style="font-size:12px;opacity:.85;">Anulada</span>` : `<button class="btn small danger" type="button" onclick="deleteOperation('${op.id}')">🗑️</button>`}</td>
+          `;
+        }
 
         if(isDeleted){
           Array.from(tr.children).forEach(td => {
@@ -6177,7 +6406,7 @@ function refreshHistoryUI(){
               receiveAmountFormatted: `${formatCalcValue(clientAmountDest, destCur)} ${destCur}`,
               profitOriginValue: profitOrigin,
               profitDestValue: profitDest,
-              operatorMode: "manual"
+              operatorMode: (isGlobalAdmin() || isTenantAdmin()) ? (isOnzeCalculator() ? "manual" : "libre") : (String(CURRENT_USER_CONTEXT.operatorMode || "").trim().toLowerCase() || "libre")
             };
             registerBtn._payload = currentRegisterPayload;
           }
@@ -6522,6 +6751,33 @@ function refreshHistoryUI(){
     if(backToDashboardFromOperatorsBtn){
       backToDashboardFromOperatorsBtn.addEventListener("click", ()=>{
         switchView("dashboard");
+      });
+    }
+
+    if(operatorProfitFilter){
+      operatorProfitFilter.addEventListener("change", ()=>{
+        renderOperatorProfit(loadOperations());
+      });
+    }
+
+    if(operatorProfitDateFrom){
+      operatorProfitDateFrom.addEventListener("change", ()=>{
+        renderOperatorProfit(loadOperations());
+      });
+    }
+
+    if(operatorProfitDateTo){
+      operatorProfitDateTo.addEventListener("change", ()=>{
+        renderOperatorProfit(loadOperations());
+      });
+    }
+
+    if(resetOperatorProfitFiltersBtn){
+      resetOperatorProfitFiltersBtn.addEventListener("click", ()=>{
+        if(operatorProfitFilter) operatorProfitFilter.value = "";
+        if(operatorProfitDateFrom) operatorProfitDateFrom.value = "";
+        if(operatorProfitDateTo) operatorProfitDateTo.value = "";
+        renderOperatorProfit(loadOperations());
       });
     }
 
