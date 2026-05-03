@@ -602,6 +602,9 @@ export default function HomePage() {
               <Link href="/register" className="transition hover:text-slate-950">
                 Registrarse
               </Link>
+              <Link href="/terminos-y-condiciones" className="transition hover:text-slate-950">
+                Términos y Condiciones
+              </Link>
             </div>
           </div>
         </div>
