@@ -2396,6 +2396,7 @@
               <div class="dash-label">Cierres abiertos</div>
               <div class="dash-value" id="providersOpenClosings" style="font-size:28px;">0</div>
               <div class="dash-sub">Pendientes por revisar</div>
+              <button class="btn small secondary" id="viewProviderPendingBtn" type="button" style="margin-top:12px;">Ver pendientes</button>
             </div>
 
             <div class="dash-card" style="min-height:auto;">
@@ -2403,6 +2404,45 @@
               <div class="dash-value" id="providersLastClosing" style="font-size:20px;">—</div>
               <div class="dash-sub">Resumen proveedor</div>
             </div>
+          </div>
+
+          <div id="providerPendingPanel" style="display:none;margin-top:18px;">
+            <h3 class="section-title" style="margin-bottom:6px;">Pendientes por asignar proveedor</h3>
+            <p class="section-text" style="margin-bottom:14px;">Selecciona a qué proveedor corresponde cada movimiento pendiente.</p>
+            <div id="providerPendingList" style="display:grid;gap:10px;"></div>
+          </div>
+
+          <div id="providerDetailPanel" style="display:none;margin-top:18px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:14px;">
+              <div>
+                <h3 class="section-title" id="providerDetailTitle" style="margin-bottom:6px;">Control proveedor</h3>
+                <p class="section-text" id="providerDetailSubtitle">Resumen diario del proveedor.</p>
+              </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <button class="btn small secondary" id="shareProviderSummaryBtn" type="button">Compartir resumen</button>
+                <button class="btn small ghost" id="closeProviderDetailBtn" type="button">Cerrar</button>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:14px;">
+              <div class="dash-card" style="min-height:auto;">
+                <div class="dash-label">Recibido por proveedor</div>
+                <div class="dash-value" id="providerReceivedTotal" style="font-size:24px;">0</div>
+                <div class="dash-sub" id="providerReceivedCount">0 movimientos</div>
+              </div>
+              <div class="dash-card" style="min-height:auto;">
+                <div class="dash-label">Pagado por proveedor</div>
+                <div class="dash-value" id="providerPaidTotal" style="font-size:24px;">0</div>
+                <div class="dash-sub" id="providerPaidCount">0 movimientos</div>
+              </div>
+              <div class="dash-card" style="min-height:auto;">
+                <div class="dash-label">Resultado final</div>
+                <div class="dash-value" id="providerFinalResult" style="font-size:20px;">—</div>
+                <div class="dash-sub">Cuadre operativo</div>
+              </div>
+            </div>
+
+            <div id="providerDetailList" style="display:grid;gap:10px;"></div>
           </div>
 
           <div style="margin-top:18px;">
@@ -3270,6 +3310,22 @@
     const providersActiveCount = document.getElementById("providersActiveCount");
     const providersOpenClosings = document.getElementById("providersOpenClosings");
     const providersLastClosing = document.getElementById("providersLastClosing");
+    const viewProviderPendingBtn = document.getElementById("viewProviderPendingBtn");
+    const providerPendingPanel = document.getElementById("providerPendingPanel");
+    const providerPendingList = document.getElementById("providerPendingList");
+    const providerDetailPanel = document.getElementById("providerDetailPanel");
+    const providerDetailTitle = document.getElementById("providerDetailTitle");
+    const providerDetailSubtitle = document.getElementById("providerDetailSubtitle");
+    const shareProviderSummaryBtn = document.getElementById("shareProviderSummaryBtn");
+    const closeProviderDetailBtn = document.getElementById("closeProviderDetailBtn");
+    const providerReceivedTotal = document.getElementById("providerReceivedTotal");
+    const providerReceivedCount = document.getElementById("providerReceivedCount");
+    const providerPaidTotal = document.getElementById("providerPaidTotal");
+    const providerPaidCount = document.getElementById("providerPaidCount");
+    const providerFinalResult = document.getElementById("providerFinalResult");
+    const providerDetailList = document.getElementById("providerDetailList");
+    let currentProviderDetailId = null;
+    let currentProviderSummaryText = "";
     const providerModal = document.getElementById("providerModal");
     const providerModalTitle = document.getElementById("providerModalTitle");
     const closeProviderModalBtn = document.getElementById("closeProviderModalBtn");
@@ -5174,6 +5230,119 @@ function populateOperatorProfitFilter(ops = loadOperations()){
   }
 }
 
+const PROVIDER_MOVEMENTS_KEY = "onzeProviderMovements";
+
+function loadProviderMovements(){
+      try{
+        const raw = localStorage.getItem(PROVIDER_MOVEMENTS_KEY);
+        const data = raw ? JSON.parse(raw) : [];
+        return Array.isArray(data) ? data : [];
+      }catch(e){
+        return [];
+      }
+    }
+
+    function saveProviderMovements(items){
+      localStorage.setItem(PROVIDER_MOVEMENTS_KEY, JSON.stringify(items || []));
+    }
+
+    function getActiveProvidersByCountry(country){
+      const cleanCountry = String(country || "").trim().toLowerCase();
+      if(!cleanCountry) return [];
+
+      return loadProviders().filter(provider =>
+        String(provider.country || "").trim().toLowerCase() === cleanCountry &&
+        (provider.status || "active") === "active"
+      );
+    }
+
+    function buildProviderMovementFromOperation(op, savedOperationId){
+      if(!op) return null;
+
+      const originCountry = String(op.originCountry || "").trim();
+      const destCountry = String(op.destCountry || "").trim();
+
+      if(!originCountry && !destCountry) return null;
+
+      const providers = loadProviders();
+      const normalize = value => String(value || "").trim().toLowerCase();
+
+      const originProviders = providers.filter(p => normalize(p.country) === normalize(originCountry));
+      const destProviders = providers.filter(p => normalize(p.country) === normalize(destCountry));
+
+      let country = "";
+      let movementType = "";
+      let amount = 0;
+      let currency = "";
+
+      if(originProviders.length){
+        country = originCountry;
+        movementType = "received";
+        amount = Number(op.sendAmount || 0);
+        currency = op.originCurrency || "";
+      }else if(destProviders.length){
+        country = destCountry;
+        movementType = "paid";
+        amount = Number(op.receiveAmount || 0);
+        currency = op.destCurrency || "";
+      }else{
+        return null;
+      }
+
+      const activeProviders = getActiveProvidersByCountry(country);
+
+      let providerId = null;
+      let providerName = "";
+      let status = "pending";
+
+      if(activeProviders.length === 1){
+        providerId = activeProviders[0].id;
+        providerName = activeProviders[0].name || "";
+        status = "assigned";
+      }
+
+      return {
+        id: "pmov_" + Date.now() + "_" + Math.random().toString(16).slice(2),
+        operationId: String(savedOperationId || op.id || ""),
+        operationNumber: op.operationNumber || "",
+        date: op.date || new Date().toISOString().slice(0,10),
+        country,
+        movementType,
+        movementLabel: movementType === "received" ? "Recibido por proveedor" : "Pagado por proveedor",
+        providerId,
+        providerName,
+        status,
+        source: "operation",
+        originCountry,
+        destCountry,
+        originCurrency: op.originCurrency || "",
+        destCurrency: op.destCurrency || "",
+        amount,
+        currency,
+        sendAmount: Number(op.sendAmount || 0),
+        receiveAmount: Number(op.receiveAmount || 0),
+        providerRate: Number(movementType === "received" ? (op.buyOriginValue || op.providerRate || 0) : (op.sellDestinationValue || op.providerRate || 0)),
+        clientRate: Number(op.clientRate || 0),
+        createdAt: new Date().toISOString()
+      };
+    }
+
+    function registerProviderMovementFromOperation(op, savedOperationId){
+      const movement = buildProviderMovementFromOperation(op, savedOperationId);
+      if(!movement) return;
+
+      const movements = loadProviderMovements();
+      const exists = movements.some(item =>
+        String(item.operationId || "") === String(movement.operationId || "") &&
+        String(item.operationNumber || "") === String(movement.operationNumber || "")
+      );
+
+      if(exists) return;
+
+      movements.push(movement);
+      saveProviderMovements(movements);
+    }
+
 function updateProviderCurrencyFromCountry(){
       if(!providerCountryInput || !providerCurrencyInput) return;
 
@@ -5203,7 +5372,8 @@ function loadProviders(){
       }
 
       if(providersOpenClosings){
-        providersOpenClosings.textContent = "0";
+        const pendingProviderMovements = loadProviderMovements().filter(item => (item.status || "pending") === "pending");
+        providersOpenClosings.textContent = pendingProviderMovements.length;
       }
 
       if(providersLastClosing){
@@ -5274,7 +5444,7 @@ function loadProviders(){
           ${provider.note ? `<div class="dash-sub" style="margin-top:6px;">Nota: ${provider.note}</div>` : ""}
 
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-            <button class="btn small secondary" type="button" disabled>Ver control</button>
+            <button class="btn small secondary" type="button" onclick="openProviderControlDetail('${provider.id}')">Ver control</button>
             <button class="btn small ghost" type="button" onclick="openEditProviderModal('${provider.id}')">Editar</button>
           </div>
         `;
@@ -5282,6 +5452,229 @@ function loadProviders(){
         providersGrid.appendChild(card);
       });
     }
+
+    window.openProviderPendingMovements = function(){
+      if(!providerPendingPanel || !providerPendingList) return;
+
+      const pending = loadProviderMovements()
+        .filter(item => (item.status || "pending") === "pending")
+        .sort((a,b)=> new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
+
+      providerPendingList.innerHTML = "";
+
+      if(!pending.length){
+        providerPendingPanel.style.display = "block";
+        providerPendingList.innerHTML = `<div class="empty-state">No hay movimientos pendientes por asignar proveedor.</div>`;
+        return;
+      }
+
+      const providers = loadProviders();
+
+      pending.forEach(item=>{
+        const type = item.movementLabel || (item.movementType === "received" ? "Recibido por proveedor" : "Pagado por proveedor");
+        const amount = Number(item.amount || 0);
+        const currency = item.currency || "";
+        const opNumber = item.operationNumber || "Sin número";
+        const route = `${item.originCountry || "—"} → ${item.destCountry || "—"}`;
+        const country = item.country || "";
+
+        const countryProviders = providers.filter(provider =>
+          String(provider.country || "").trim().toLowerCase() === String(country || "").trim().toLowerCase()
+        );
+
+        const providerOptions = countryProviders.map(provider=>{
+          const status = (provider.status || "active") === "active" ? "Activo" : "Inactivo";
+          return `<option value="${provider.id}">${provider.name} · ${status}</option>`;
+        }).join("");
+
+        const card = document.createElement("div");
+        card.className = "dash-card";
+        card.style.minHeight = "auto";
+
+        card.innerHTML = `
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+            <div>
+              <div class="dash-label">${country || "País sin definir"}</div>
+              <div class="dash-value" style="font-size:20px;">${opNumber}</div>
+              <div class="dash-sub">${route}</div>
+              <div class="dash-sub" style="margin-top:6px;">${type}</div>
+              <div class="dash-sub" style="margin-top:6px;"><strong>${amount.toLocaleString("es-CL")} ${currency}</strong></div>
+            </div>
+
+            <div style="min-width:240px;display:grid;gap:8px;">
+              <select class="input" id="pendingProviderSelect_${item.id}">
+                <option value="">Selecciona proveedor...</option>
+                ${providerOptions}
+              </select>
+              <button class="btn small" type="button" onclick="assignPendingProviderMovement('${item.id}')">Asignar proveedor</button>
+            </div>
+          </div>
+        `;
+
+        providerPendingList.appendChild(card);
+      });
+
+      providerPendingPanel.style.display = "block";
+    };
+
+    window.assignPendingProviderMovement = function(movementId){
+      const select = document.getElementById(`pendingProviderSelect_${movementId}`);
+      const providerId = select ? select.value : "";
+
+      if(!providerId){
+        alert("Debes seleccionar un proveedor.");
+        return;
+      }
+
+      const providers = loadProviders();
+      const provider = providers.find(p => String(p.id) === String(providerId));
+
+      if(!provider){
+        alert("No encontré el proveedor seleccionado.");
+        return;
+      }
+
+      const movements = loadProviderMovements();
+      const movement = movements.find(item => String(item.id) === String(movementId));
+
+      if(!movement){
+        alert("No encontré el movimiento pendiente.");
+        return;
+      }
+
+      movement.providerId = provider.id;
+      movement.providerName = provider.name || "";
+      movement.status = "assigned";
+      movement.assignedAt = new Date().toISOString();
+
+      saveProviderMovements(movements);
+      renderProvidersView();
+      openProviderPendingMovements();
+
+      if(typeof showToast === "function"){
+        showToast("Movimiento asignado correctamente");
+      }
+    };
+
+    window.openProviderControlDetail = function(id){
+      const providers = loadProviders();
+      const provider = providers.find(p => String(p.id) === String(id));
+
+      if(!provider){
+        alert("No encontré este proveedor.");
+        return;
+      }
+
+      currentProviderDetailId = id;
+
+      const movements = loadProviderMovements()
+        .filter(item => String(item.providerId || "") === String(id))
+        .sort((a,b)=> new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
+
+      if(providerDetailPanel) providerDetailPanel.style.display = "block";
+      if(providerDetailTitle) providerDetailTitle.textContent = `Control proveedor: ${provider.name}`;
+      if(providerDetailSubtitle) providerDetailSubtitle.textContent = `${provider.country || "—"} · ${provider.currency || "—"} · Movimientos asignados`;
+
+      if(!providerDetailList) return;
+
+      providerDetailList.innerHTML = "";
+
+      if(!movements.length){
+        if(providerReceivedTotal) providerReceivedTotal.textContent = "0";
+        if(providerReceivedCount) providerReceivedCount.textContent = "0 movimientos";
+        if(providerPaidTotal) providerPaidTotal.textContent = "0";
+        if(providerPaidCount) providerPaidCount.textContent = "0 movimientos";
+        if(providerFinalResult) providerFinalResult.textContent = "Sin movimientos";
+
+        currentProviderSummaryText = `CIERRE PROVEEDOR - ${provider.name}\nPaís: ${provider.country || "—"}\n\nSin movimientos asignados.`;
+
+        providerDetailList.innerHTML = `<div class="empty-state">Aún no hay movimientos asignados a este proveedor.</div>`;
+        return;
+      }
+
+      const received = movements.filter(item => item.movementType === "received");
+      const paid = movements.filter(item => item.movementType === "paid");
+
+      const totalReceived = received.reduce((sum,item)=>sum + Number(item.amount || 0), 0);
+      const totalPaid = paid.reduce((sum,item)=>sum + Number(item.amount || 0), 0);
+      const currency = provider.currency || movements[0]?.currency || "";
+
+      const totalReceivedUsdt = received.reduce((sum,item)=>{
+        const rate = Number(item.providerRate || 0);
+        return sum + (rate > 0 ? Number(item.amount || 0) / rate : 0);
+      }, 0);
+
+      const totalPaidUsdt = paid.reduce((sum,item)=>{
+        const rate = Number(item.providerRate || 0);
+        return sum + (rate > 0 ? Number(item.amount || 0) / rate : 0);
+      }, 0);
+
+      const diffUsdt = totalReceivedUsdt - totalPaidUsdt;
+
+      let resultText = "Saldo cero";
+      if(Math.abs(diffUsdt) >= 0.01){
+        resultText = diffUsdt > 0
+          ? `${provider.name} paga a ONZE: ${diffUsdt.toFixed(2)} USDT`
+          : `ONZE paga a ${provider.name}: ${Math.abs(diffUsdt).toFixed(2)} USDT`;
+      }
+
+      if(providerReceivedTotal) providerReceivedTotal.textContent = `${totalReceived.toLocaleString("es-CL")} ${currency}`;
+      if(providerReceivedCount) providerReceivedCount.textContent = `${received.length} movimientos`;
+      if(providerPaidTotal) providerPaidTotal.textContent = `${totalPaid.toLocaleString("es-CL")} ${currency}`;
+      if(providerPaidCount) providerPaidCount.textContent = `${paid.length} movimientos`;
+      if(providerFinalResult) providerFinalResult.textContent = resultText;
+
+      const summaryLines = [
+        `CIERRE PROVEEDOR - ${String(provider.name || "").toUpperCase()}`,
+        `País: ${provider.country || "—"}`,
+        `Fecha: ${new Date().toLocaleDateString("es-CL")}`,
+        "",
+        `RECIBIDO POR ${String(provider.name || "PROVEEDOR").toUpperCase()}`,
+        `Movimientos: ${received.length}`,
+        `Total: ${totalReceived.toLocaleString("es-CL")} ${currency}`,
+        `Total estimado USDT: ${totalReceivedUsdt.toFixed(2)} USDT`,
+        "",
+        `PAGADO POR ${String(provider.name || "PROVEEDOR").toUpperCase()}`,
+        `Movimientos: ${paid.length}`,
+        `Total: ${totalPaid.toLocaleString("es-CL")} ${currency}`,
+        `Total estimado USDT: ${totalPaidUsdt.toFixed(2)} USDT`,
+        "",
+        `RESULTADO FINAL`,
+        resultText
+      ];
+
+      currentProviderSummaryText = summaryLines.join("\n");
+
+      movements.forEach(item=>{
+        const type = item.movementLabel || (item.movementType === "received" ? "Recibido por proveedor" : "Pagado por proveedor");
+        const amount = Number(item.amount || 0);
+        const itemCurrency = item.currency || currency || "";
+        const opNumber = item.operationNumber || "Sin número";
+        const route = `${item.originCountry || "—"} → ${item.destCountry || "—"}`;
+        const rate = Number(item.providerRate || 0);
+        const usdt = rate > 0 ? amount / rate : 0;
+
+        const card = document.createElement("div");
+        card.className = "dash-card";
+        card.style.minHeight = "auto";
+
+        card.innerHTML = `
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+            <div>
+              <div class="dash-label">${type}</div>
+              <div class="dash-value" style="font-size:20px;">${opNumber}</div>
+              <div class="dash-sub">${item.date || "Sin fecha"} · ${route}</div>
+            </div>
+            <div style="text-align:right;">
+              <div class="dash-value" style="font-size:20px;">${amount.toLocaleString("es-CL")} ${itemCurrency}</div>
+              <div class="dash-sub">${rate > 0 ? `${usdt.toFixed(2)} USDT · tasa ${rate}` : "Sin tasa USDT"}</div>
+            </div>
+          </div>
+        `;
+
+        providerDetailList.appendChild(card);
+      });
+    };
 
     window.openEditProviderModal = function(id){
       const providers = loadProviders();
@@ -6033,6 +6426,8 @@ function refreshHistoryUI(){
             });
             throw new Error(data?.error || "No se pudo guardar la operación.");
           }
+
+          registerProviderMovementFromOperation(op, data?.operation?.id || op.id);
 
           const latestOps = await fetchOperationsFromApi();
           rebuildBalanceMovementsFromOperations((latestOps || []).filter(op => !op.deleted));
@@ -7024,6 +7419,41 @@ function refreshHistoryUI(){
 
     if(providerCountryInput){
   providerCountryInput.addEventListener("change", updateProviderCurrencyFromCountry);
+}
+
+if(shareProviderSummaryBtn){
+  shareProviderSummaryBtn.addEventListener("click", async ()=>{
+    if(!currentProviderSummaryText){
+      alert("No hay resumen para compartir.");
+      return;
+    }
+
+    try{
+      await navigator.clipboard.writeText(currentProviderSummaryText);
+      if(typeof showToast === "function"){
+        showToast("Resumen copiado para compartir");
+      }else{
+        alert("Resumen copiado para compartir.");
+      }
+    }catch(e){
+      alert(currentProviderSummaryText);
+    }
+  });
+}
+
+if(closeProviderDetailBtn){
+  closeProviderDetailBtn.addEventListener("click", ()=>{
+    currentProviderDetailId = null;
+    currentProviderSummaryText = "";
+
+    if(providerDetailPanel){
+      providerDetailPanel.style.display = "none";
+    }
+  });
+}
+
+if(viewProviderPendingBtn){
+  viewProviderPendingBtn.addEventListener("click", openProviderPendingMovements);
 }
 
 if(addProviderBtn){
