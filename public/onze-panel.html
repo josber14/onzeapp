@@ -2516,6 +2516,58 @@
   <footer>ONZE © 2025</footer>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <div class="modal" id="providerModal" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-card" style="width:min(620px,100%);">
+        <div class="modal-head">
+          <h3 class="modal-title" id="providerModalTitle">Agregar proveedor</h3>
+          <button class="close-btn" id="closeProviderModalBtn" type="button">×</button>
+        </div>
+
+        <div class="modal-summary">
+          <div class="modal-form-grid" style="margin-bottom:0;">
+            <label class="field">
+              <span>Nombre del proveedor</span>
+              <input class="input" id="providerNameInput" type="text" placeholder="Ejemplo: Matías">
+            </label>
+
+            <label class="field">
+              <span>País</span>
+              <select class="input" id="providerCountryInput">
+                <option value="">Selecciona un país...</option>
+                <option value="Colombia" data-currency="COP">Colombia</option>
+                <option value="Chile" data-currency="CLP">Chile</option>
+                <option value="Perú" data-currency="PEN">Perú</option>
+                <option value="Venezuela" data-currency="VES">Venezuela</option>
+                <option value="España" data-currency="EUR">España</option>
+                <option value="Estados Unidos" data-currency="USD">Estados Unidos</option>
+                <option value="Argentina" data-currency="ARS">Argentina</option>
+                <option value="Brasil" data-currency="BRL">Brasil</option>
+                <option value="Ecuador" data-currency="USD">Ecuador</option>
+                <option value="México" data-currency="MXN">México</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Moneda</span>
+              <input class="input" id="providerCurrencyInput" type="text" placeholder="Se completa automáticamente" readonly>
+            </label>
+
+            <label class="field">
+              <span>Nota interna</span>
+              <input class="input" id="providerNoteInput" type="text" placeholder="Ejemplo: recibe y paga en Colombia">
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn small ghost" id="cancelProviderModalBtn" type="button">Cancelar</button>
+          <button class="btn small" id="saveProviderBtn" type="button">Guardar proveedor</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="capitalActionModal" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-card" style="width:min(520px,100%);">
@@ -3218,6 +3270,16 @@
     const providersActiveCount = document.getElementById("providersActiveCount");
     const providersOpenClosings = document.getElementById("providersOpenClosings");
     const providersLastClosing = document.getElementById("providersLastClosing");
+    const providerModal = document.getElementById("providerModal");
+    const providerModalTitle = document.getElementById("providerModalTitle");
+    const closeProviderModalBtn = document.getElementById("closeProviderModalBtn");
+    const cancelProviderModalBtn = document.getElementById("cancelProviderModalBtn");
+    const saveProviderBtn = document.getElementById("saveProviderBtn");
+    const providerNameInput = document.getElementById("providerNameInput");
+    const providerCountryInput = document.getElementById("providerCountryInput");
+    const providerCurrencyInput = document.getElementById("providerCurrencyInput");
+    const providerNoteInput = document.getElementById("providerNoteInput");
+    let editingProviderId = null;
     const capitalCountry = document.getElementById("capitalCountry");
     const capitalCurrency = document.getElementById("capitalCurrency");
     const capitalAmount = document.getElementById("capitalAmount");
@@ -5112,6 +5174,15 @@ function populateOperatorProfitFilter(ops = loadOperations()){
   }
 }
 
+function updateProviderCurrencyFromCountry(){
+      if(!providerCountryInput || !providerCurrencyInput) return;
+
+      const selected = providerCountryInput.options[providerCountryInput.selectedIndex];
+      const currency = selected ? (selected.dataset.currency || "") : "";
+
+      providerCurrencyInput.value = currency;
+    }
+
 function loadProviders(){
       try{
         return JSON.parse(localStorage.getItem("onzeProviders") || "[]");
@@ -5161,18 +5232,94 @@ function loadProviders(){
         const status = provider.status || "active";
 
         card.innerHTML = `
-          <div class="dash-label">${country}</div>
-          <div class="dash-value" style="font-size:22px;">${name}</div>
-          <div class="dash-sub">Moneda: ${currency} · Estado: ${status === "active" ? "Activo" : "Inactivo"}</div>
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
+            <div>
+              <div class="dash-label">${country}</div>
+              <div class="dash-value" style="font-size:22px;">${name}</div>
+              <div class="dash-sub">Moneda: ${currency}</div>
+            </div>
+
+            <button
+              type="button"
+              onclick="toggleProviderStatus('${provider.id}')"
+              style="
+                width:52px;
+                height:30px;
+                border:none;
+                border-radius:999px;
+                padding:3px;
+                background:${status === "active" ? "#22c55e" : "#94a3b8"};
+                cursor:pointer;
+                display:flex;
+                justify-content:${status === "active" ? "flex-end" : "flex-start"};
+                align-items:center;
+              "
+              title="${status === "active" ? "Desactivar proveedor" : "Activar proveedor"}"
+            >
+              <span style="
+                width:24px;
+                height:24px;
+                border-radius:50%;
+                background:#fff;
+                display:block;
+                box-shadow:0 2px 6px rgba(0,0,0,.22);
+              "></span>
+            </button>
+          </div>
+
+          <div class="dash-sub" style="margin-top:10px;">
+            Estado: <strong>${status === "active" ? "Activo" : "Inactivo"}</strong>
+          </div>
+
+          ${provider.note ? `<div class="dash-sub" style="margin-top:6px;">Nota: ${provider.note}</div>` : ""}
+
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
             <button class="btn small secondary" type="button" disabled>Ver control</button>
-            <button class="btn small ghost" type="button" disabled>Editar</button>
+            <button class="btn small ghost" type="button" onclick="openEditProviderModal('${provider.id}')">Editar</button>
           </div>
         `;
 
         providersGrid.appendChild(card);
       });
     }
+
+    window.openEditProviderModal = function(id){
+      const providers = loadProviders();
+      const provider = providers.find(p => p.id === id);
+
+      if(!provider) return;
+
+      editingProviderId = id;
+
+      if(providerModalTitle) providerModalTitle.textContent = "Editar proveedor";
+      if(providerNameInput) providerNameInput.value = provider.name || "";
+      if(providerCountryInput) providerCountryInput.value = provider.country || "";
+      if(providerCurrencyInput) providerCurrencyInput.value = provider.currency || "";
+      if(providerNoteInput) providerNoteInput.value = provider.note || "";
+      if(saveProviderBtn) saveProviderBtn.textContent = "Guardar cambios";
+
+      if(providerModal){
+        providerModal.classList.add("open");
+        providerModal.setAttribute("aria-hidden", "false");
+      }
+    };
+
+    window.toggleProviderStatus = function(id){
+      const providers = loadProviders();
+      const provider = providers.find(p => p.id === id);
+
+      if(!provider) return;
+
+      provider.status = (provider.status || "active") === "active" ? "inactive" : "active";
+      provider.updatedAt = new Date().toISOString();
+
+      saveProviders(providers);
+      renderProvidersView();
+
+      if(typeof showToast === "function"){
+        showToast(provider.status === "active" ? "Proveedor activado" : "Proveedor desactivado");
+      }
+    };
 
     function renderOperatorProfit(ops = loadOperations()){
   if(!operatorProfitBody || !operatorProfitEmpty) return;
@@ -6875,32 +7022,99 @@ function refreshHistoryUI(){
       });
     }
 
-    if(addProviderBtn){
+    if(providerCountryInput){
+  providerCountryInput.addEventListener("change", updateProviderCurrencyFromCountry);
+}
+
+if(addProviderBtn){
       addProviderBtn.addEventListener("click", ()=>{
-        const name = prompt("Nombre del proveedor. Ejemplo: Matías");
-        if(!name) return;
+        editingProviderId = null;
 
-        const country = prompt("País del proveedor. Ejemplo: Colombia");
-        if(!country) return;
+        if(providerModalTitle) providerModalTitle.textContent = "Agregar proveedor";
+        if(providerNameInput) providerNameInput.value = "";
+        if(providerCountryInput) providerCountryInput.value = "";
+        if(providerCurrencyInput) providerCurrencyInput.value = "";
+        if(providerNoteInput) providerNoteInput.value = "";
+        if(saveProviderBtn) saveProviderBtn.textContent = "Guardar proveedor";
 
-        const currency = prompt("Moneda del país. Ejemplo: COP");
-        if(!currency) return;
+        if(providerModal){
+          providerModal.classList.add("open");
+          providerModal.setAttribute("aria-hidden", "false");
+        }
+      });
+    }
+
+    function closeProviderModal(){
+      editingProviderId = null;
+
+      if(providerModal){
+        providerModal.classList.remove("open");
+        providerModal.setAttribute("aria-hidden", "true");
+      }
+    }
+
+    if(closeProviderModalBtn){
+      closeProviderModalBtn.addEventListener("click", closeProviderModal);
+    }
+
+    if(cancelProviderModalBtn){
+      cancelProviderModalBtn.addEventListener("click", closeProviderModal);
+    }
+
+    if(saveProviderBtn){
+      saveProviderBtn.addEventListener("click", ()=>{
+        const name = providerNameInput ? providerNameInput.value.trim() : "";
+        const country = providerCountryInput ? providerCountryInput.value.trim() : "";
+        const currency = providerCurrencyInput ? providerCurrencyInput.value.trim().toUpperCase() : "";
+        const note = providerNoteInput ? providerNoteInput.value.trim() : "";
+
+        if(!name){
+          alert("Debes ingresar el nombre del proveedor.");
+          return;
+        }
+
+        if(!country){
+          alert("Debes seleccionar el país del proveedor.");
+          return;
+        }
+
+        if(!currency){
+          alert("No se pudo cargar la moneda del país seleccionado.");
+          return;
+        }
 
         const providers = loadProviders();
-        providers.push({
-          id: "prov_" + Date.now(),
-          name: name.trim(),
-          country: country.trim(),
-          currency: currency.trim().toUpperCase(),
-          status: "active",
-          createdAt: new Date().toISOString()
-        });
+
+        if(editingProviderId){
+          const provider = providers.find(p => p.id === editingProviderId);
+
+          if(provider){
+            provider.name = name;
+            provider.country = country;
+            provider.currency = currency;
+            provider.note = note;
+            provider.updatedAt = new Date().toISOString();
+          }
+        }else{
+          providers.push({
+            id: "prov_" + Date.now(),
+            name,
+            country,
+            currency,
+            note,
+            status: "active",
+            createdAt: new Date().toISOString()
+          });
+        }
+
+        const wasEditingProvider = !!editingProviderId;
 
         saveProviders(providers);
         renderProvidersView();
+        closeProviderModal();
 
         if(typeof showToast === "function"){
-          showToast("Proveedor agregado correctamente");
+          showToast(wasEditingProvider ? "Proveedor actualizado correctamente" : "Proveedor agregado correctamente");
         }
       });
     }
