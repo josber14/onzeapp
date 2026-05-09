@@ -2072,6 +2072,7 @@
             </div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
               <button class="btn small secondary" type="button" id="openOperatorProfitBtn">Ganancia operadores</button>
+              <button class="btn small secondary" type="button" id="openProviderControlBtn">Control proveedores</button>
               <button class="btn small" type="button" id="openCapitalSetupBtn">Capital inicial</button>
             </div>
           </div>
@@ -2367,6 +2368,49 @@
             <p class="section-text" style="margin-bottom:14px;">Resumen por país del pago acumulado a operadores.</p>
             <div id="operatorProfitCountryGrid" class="country-profit-grid"></div>
             <div id="operatorProfitCountryEmpty" class="empty-state" style="display:none;">Todavía no hay ganancias por país para este operador.</div>
+          </div>
+        </section>
+      </section>
+
+      <section class="view" id="view-provider-control">
+        <section class="section-card">
+          <div class="section-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+            <div>
+              <h2 class="section-title">Control proveedores</h2>
+              <p class="section-text">Administra proveedores por país y controla los movimientos diarios recibidos y pagados.</p>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+              <button class="btn small ghost" type="button" id="backToDashboardFromProvidersBtn">Volver al dashboard</button>
+              <button class="btn small" type="button" id="addProviderBtn">+ Agregar proveedor</button>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px;">
+            <div class="dash-card" style="min-height:auto;">
+              <div class="dash-label">Proveedores activos</div>
+              <div class="dash-value" id="providersActiveCount" style="font-size:28px;">0</div>
+              <div class="dash-sub">Registrados en ONZE</div>
+            </div>
+
+            <div class="dash-card" style="min-height:auto;">
+              <div class="dash-label">Cierres abiertos</div>
+              <div class="dash-value" id="providersOpenClosings" style="font-size:28px;">0</div>
+              <div class="dash-sub">Pendientes por revisar</div>
+            </div>
+
+            <div class="dash-card" style="min-height:auto;">
+              <div class="dash-label">Último cierre</div>
+              <div class="dash-value" id="providersLastClosing" style="font-size:20px;">—</div>
+              <div class="dash-sub">Resumen proveedor</div>
+            </div>
+          </div>
+
+          <div style="margin-top:18px;">
+            <h3 class="section-title" style="margin-bottom:6px;">Proveedores</h3>
+            <p class="section-text" style="margin-bottom:14px;">Agrega proveedores como Matías / Colombia y luego entra a su control diario.</p>
+
+            <div id="providersGrid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;"></div>
+            <div id="providersEmpty" class="empty-state">Aún no hay proveedores registrados.</div>
           </div>
         </section>
       </section>
@@ -3166,6 +3210,14 @@
     const dashCountriesTotal = document.getElementById("dashCountriesTotal");
     const dashCountriesTotalUsdt = document.getElementById("dashCountriesTotalUsdt");
     const openCapitalSetupBtn = document.getElementById("openCapitalSetupBtn");
+    const openProviderControlBtn = document.getElementById("openProviderControlBtn");
+    const backToDashboardFromProvidersBtn = document.getElementById("backToDashboardFromProvidersBtn");
+    const addProviderBtn = document.getElementById("addProviderBtn");
+    const providersGrid = document.getElementById("providersGrid");
+    const providersEmpty = document.getElementById("providersEmpty");
+    const providersActiveCount = document.getElementById("providersActiveCount");
+    const providersOpenClosings = document.getElementById("providersOpenClosings");
+    const providersLastClosing = document.getElementById("providersLastClosing");
     const capitalCountry = document.getElementById("capitalCountry");
     const capitalCurrency = document.getElementById("capitalCurrency");
     const capitalAmount = document.getElementById("capitalAmount");
@@ -5060,7 +5112,69 @@ function populateOperatorProfitFilter(ops = loadOperations()){
   }
 }
 
-function renderOperatorProfit(ops = loadOperations()){
+function loadProviders(){
+      try{
+        return JSON.parse(localStorage.getItem("onzeProviders") || "[]");
+      }catch(e){
+        return [];
+      }
+    }
+
+    function saveProviders(items){
+      localStorage.setItem("onzeProviders", JSON.stringify(items || []));
+    }
+
+    function renderProvidersView(){
+      const providers = loadProviders();
+
+      if(providersActiveCount){
+        providersActiveCount.textContent = providers.filter(p => (p.status || "active") === "active").length;
+      }
+
+      if(providersOpenClosings){
+        providersOpenClosings.textContent = "0";
+      }
+
+      if(providersLastClosing){
+        providersLastClosing.textContent = "—";
+      }
+
+      if(!providersGrid || !providersEmpty) return;
+
+      providersGrid.innerHTML = "";
+
+      if(!providers.length){
+        providersEmpty.style.display = "block";
+        return;
+      }
+
+      providersEmpty.style.display = "none";
+
+      providers.forEach(provider=>{
+        const card = document.createElement("div");
+        card.className = "dash-card";
+        card.style.minHeight = "auto";
+
+        const name = provider.name || "Proveedor";
+        const country = provider.country || "—";
+        const currency = provider.currency || "—";
+        const status = provider.status || "active";
+
+        card.innerHTML = `
+          <div class="dash-label">${country}</div>
+          <div class="dash-value" style="font-size:22px;">${name}</div>
+          <div class="dash-sub">Moneda: ${currency} · Estado: ${status === "active" ? "Activo" : "Inactivo"}</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+            <button class="btn small secondary" type="button" disabled>Ver control</button>
+            <button class="btn small ghost" type="button" disabled>Editar</button>
+          </div>
+        `;
+
+        providersGrid.appendChild(card);
+      });
+    }
+
+    function renderOperatorProfit(ops = loadOperations()){
   if(!operatorProfitBody || !operatorProfitEmpty) return;
 
   populateOperatorProfitFilter(ops);
@@ -6745,6 +6859,49 @@ function refreshHistoryUI(){
     if(openOperatorProfitBtn){
       openOperatorProfitBtn.addEventListener("click", ()=>{
         switchView("operator-profit");
+      });
+    }
+
+    if(openProviderControlBtn){
+      openProviderControlBtn.addEventListener("click", ()=>{
+        switchView("provider-control");
+        renderProvidersView();
+      });
+    }
+
+    if(backToDashboardFromProvidersBtn){
+      backToDashboardFromProvidersBtn.addEventListener("click", ()=>{
+        switchView("dashboard");
+      });
+    }
+
+    if(addProviderBtn){
+      addProviderBtn.addEventListener("click", ()=>{
+        const name = prompt("Nombre del proveedor. Ejemplo: Matías");
+        if(!name) return;
+
+        const country = prompt("País del proveedor. Ejemplo: Colombia");
+        if(!country) return;
+
+        const currency = prompt("Moneda del país. Ejemplo: COP");
+        if(!currency) return;
+
+        const providers = loadProviders();
+        providers.push({
+          id: "prov_" + Date.now(),
+          name: name.trim(),
+          country: country.trim(),
+          currency: currency.trim().toUpperCase(),
+          status: "active",
+          createdAt: new Date().toISOString()
+        });
+
+        saveProviders(providers);
+        renderProvidersView();
+
+        if(typeof showToast === "function"){
+          showToast("Proveedor agregado correctamente");
+        }
       });
     }
 
