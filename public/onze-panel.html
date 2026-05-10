@@ -3663,6 +3663,14 @@
         viewName = "inicio";
       }
 
+      if(viewName === "provider-pending"){
+        setTimeout(()=>{
+          if(typeof renderProviderPendingFullView === "function"){
+            renderProviderPendingFullView();
+          }
+        }, 120);
+      }
+
       document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
       document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
 
@@ -5681,6 +5689,34 @@ function loadProviders(){
     function renderProviderPendingFullView(){
       if(!providerPendingFullList) return;
 
+      function formatPendingDateTime(value){
+        if(!value) return "Sin fecha";
+
+        const raw = String(value).trim();
+
+        // Si viene solo fecha YYYY-MM-DD, mostrar solo fecha.
+        if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){
+          const [y,m,d] = raw.split("-");
+          return `${d}/${m}/${y}`;
+        }
+
+        // Si viene con hora ISO, convertir a hora local de Chile.
+        const parsed = new Date(raw);
+        if(!Number.isNaN(parsed.getTime())){
+          return parsed.toLocaleString("es-CL", {
+            timeZone: "America/Santiago",
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false
+          });
+        }
+
+        return raw;
+      }
+
       const pending = loadProviderMovements()
         .filter(item => (item.status || "pending") === "pending")
         .sort((a,b)=> new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
@@ -5704,82 +5740,156 @@ function loadProviders(){
       const providers = loadProviders();
 
       pending.forEach(item=>{
-        const type = item.movementLabel || (item.movementType === "received" ? "Recibido por proveedor" : "Pagado por proveedor");
-        const amount = Number(item.amount || 0);
-        const currency = item.currency || "";
-        const rate = Number(item.providerRate || 0);
-        const usdt = rate > 0 ? amount / rate : 0;
-        const opNumber = item.operationNumber || "Sin número";
-        const route = `${item.originCountry || "—"} → ${item.destCountry || "—"}`;
-        const country = item.country || "";
-        const date = item.date || "Sin fecha";
+        try{
+          const type = item.movementLabel || (item.movementType === "received" ? "Recibido por proveedor" : "Pagado por proveedor");
+          const amount = Number(item.amount || 0);
+          const currency = item.currency || "";
+          const rate = Number(item.providerRate || 0);
+          const usdt = rate > 0 ? amount / rate : 0;
+          const opNumber = item.operationNumber || "Sin número";
+          const route = `${item.originCountry || "—"} → ${item.destCountry || "—"}`;
+          const country = item.country || "";
+          const pendingDateText = formatPendingDateTime(item.createdAt || item.date || "");
 
-        const countryProviders = providers.filter(provider =>
-          String(provider.country || "").trim().toLowerCase() === String(country || "").trim().toLowerCase()
-        );
+          let operatorText = "";
+          if(typeof getProviderMovementOperatorName === "function"){
+            operatorText = getProviderMovementOperatorName(item);
+          }
 
-        const providerOptions = countryProviders.map(provider=>{
-          const status = (provider.status || "active") === "active" ? "Activo" : "Inactivo";
-          return `<option value="${provider.id}">${provider.name} · ${status}</option>`;
-        }).join("");
+          if(!operatorText || operatorText === "No disponible"){
+            try{
+              const ops = typeof loadOperations === "function" ? loadOperations() : [];
+              const foundOp = ops.find(op =>
+                String(op.id || "") === String(item.operationId || "") ||
+                (
+                  String(op.operationNumber || "") &&
+                  String(op.operationNumber || "") === String(item.operationNumber || "")
+                )
+              );
 
-        const card = document.createElement("div");
-        card.className = "dash-card";
-        card.style.minHeight = "auto";
+              if(foundOp && typeof getOperatorDisplayName === "function"){
+                operatorText = getOperatorDisplayName(foundOp);
+              }
 
-        card.innerHTML = `
-          <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start;">
-            <div>
-              <div class="dash-label">${country || "País sin definir"} · ${type}</div>
-              <div class="dash-value" style="font-size:22px;">${opNumber}</div>
+              if((!operatorText || operatorText === "No disponible") && foundOp){
+                operatorText =
+                  foundOp.operatorName ||
+                  foundOp.createdByName ||
+                  foundOp.registeredByName ||
+                  foundOp.createdByFullName ||
+                  foundOp.registeredByFullName ||
+                  foundOp.fullName ||
+                  foundOp.profileFullName ||
+                  foundOp.displayName ||
+                  foundOp.userName ||
+                  foundOp.operatorEmail ||
+                  foundOp.createdByEmail ||
+                  foundOp.registeredByEmail ||
+                  foundOp.email ||
+                  "";
+              }
+            }catch(e){}
+          }
 
-              <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px;">
-                <div class="modal-summary">
-                  <div class="dash-label">Fecha</div>
-                  <div class="dash-sub"><strong>${date}</strong></div>
+          if(!operatorText || operatorText === "No disponible"){
+            try{
+              if(typeof loadProfile === "function"){
+                const profile = loadProfile();
+                operatorText =
+                  profile.fullName ||
+                  profile.profileFullName ||
+                  profile.displayName ||
+                  profile.name ||
+                  profile.userName ||
+                  profile.email ||
+                  "";
+              }
+            }catch(e){}
+          }
+
+          operatorText = operatorText || "No disponible";
+
+          const noDecimals = ["CLP","COP","PYG"].includes(String(currency || "").toUpperCase());
+          const amountText = Number(amount || 0).toLocaleString("es-CL", {
+            minimumFractionDigits: noDecimals ? 0 : 2,
+            maximumFractionDigits: noDecimals ? 0 : 2
+          }) + (currency ? ` ${currency}` : "");
+
+          const countryProviders = providers.filter(provider =>
+            String(provider.country || "").trim().toLowerCase() === String(country || "").trim().toLowerCase()
+          );
+
+          const providerOptions = countryProviders.map(provider=>{
+            const status = (provider.status || "active") === "active" ? "Activo" : "Inactivo";
+            return `<option value="${provider.id}">${provider.name} · ${status}</option>`;
+          }).join("");
+
+          const card = document.createElement("div");
+          card.className = "dash-card";
+          card.style.minHeight = "auto";
+          card.style.marginTop = "12px";
+
+          card.innerHTML = `
+            <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start;">
+              <div>
+                <div class="dash-label">${country || "País sin definir"} · ${type}</div>
+                <div class="dash-value" style="font-size:22px;">Operación ${opNumber}</div>
+
+                <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px;">
+                  <div class="modal-summary">
+                    <div class="dash-label">Fecha</div>
+                    <div class="dash-sub"><strong>${pendingDateText}</strong></div>
+                  </div>
+
+                  <div class="modal-summary">
+                    <div class="dash-label">Ruta</div>
+                    <div class="dash-sub"><strong>${route}</strong></div>
+                  </div>
+
+                  <div class="modal-summary">
+                    <div class="dash-label">Monto</div>
+                    <div class="dash-sub"><strong>${amountText}</strong></div>
+                  </div>
+
+                  <div class="modal-summary">
+                    <div class="dash-label">Tasa tomada</div>
+                    <div class="dash-sub"><strong>${rate > 0 ? rate : "Sin tasa"}</strong></div>
+                  </div>
+
+                  <div class="modal-summary">
+                    <div class="dash-label">Equivalente estimado</div>
+                    <div class="dash-sub"><strong>${rate > 0 ? usdt.toFixed(2) + " USDT" : "—"}</strong></div>
+                  </div>
+
+                  <div class="modal-summary">
+                    <div class="dash-label">Registrado por</div>
+                    <div class="dash-sub"><strong>${operatorText}</strong></div>
+                  </div>
                 </div>
-                <div class="modal-summary">
-                  <div class="dash-label">Ruta</div>
-                  <div class="dash-sub"><strong>${route}</strong></div>
-                </div>
-                <div class="modal-summary">
-                  <div class="dash-label">Monto</div>
-                  <div class="dash-sub"><strong>${amount.toLocaleString("es-CL")} ${currency}</strong></div>
-                </div>
-                <div class="modal-summary">
-                  <div class="dash-label">Tasa tomada</div>
-                  <div class="dash-sub"><strong>${rate > 0 ? rate : "Sin tasa"}</strong></div>
-                </div>
-                <div class="modal-summary">
-                  <div class="dash-label">Equivalente estimado</div>
-                  <div class="dash-sub"><strong>${rate > 0 ? usdt.toFixed(2) + " USDT" : "—"}</strong></div>
-                </div>
-                <div class="modal-summary">
-                  <div class="dash-label">Registrado por</div>
-                  <div class="dash-sub"><strong>${item.operatorName || item.createdByName || item.userName || "No disponible"}</strong></div>
+              </div>
+
+              <div style="display:grid;gap:10px;">
+                <label class="field">
+                  <span>Asignar proveedor</span>
+                  <select class="input" id="pendingProviderSelect_${item.id}">
+                    <option value="">Selecciona proveedor...</option>
+                    ${providerOptions}
+                  </select>
+                </label>
+
+                <button class="btn small" type="button" onclick="assignPendingProviderMovement('${item.id}')">Asignar proveedor</button>
+
+                <div class="dash-sub">
+                  ${countryProviders.length ? `${countryProviders.length} proveedores disponibles para ${country}` : `No hay proveedores creados para ${country}`}
                 </div>
               </div>
             </div>
+          `;
 
-            <div style="display:grid;gap:10px;">
-              <label class="field">
-                <span>Asignar proveedor</span>
-                <select class="input" id="pendingProviderSelect_${item.id}">
-                  <option value="">Selecciona proveedor...</option>
-                  ${providerOptions}
-                </select>
-              </label>
-
-              <button class="btn small" type="button" onclick="assignPendingProviderMovement('${item.id}')">Asignar proveedor</button>
-
-              <div class="dash-sub">
-                ${countryProviders.length ? `${countryProviders.length} proveedores disponibles para ${country}` : `No hay proveedores creados para ${country}`}
-              </div>
-            </div>
-          </div>
-        `;
-
-        providerPendingFullList.appendChild(card);
+          providerPendingFullList.appendChild(card);
+        }catch(error){
+          console.error("ERROR_RENDER_PENDING_PROVIDER_CARD", error, item);
+        }
       });
     }
 
@@ -5894,7 +6004,6 @@ function loadProviders(){
         alert("No encontré este proveedor.");
         return;
       }
-
 
     function formatProviderMoney(value, currency){
       const cur = String(currency || "").trim().toUpperCase();
@@ -6045,6 +6154,65 @@ function loadProviders(){
       }catch(e){}
 
       return "No disponible";
+    }
+
+    function formatProviderDateTime(value){
+      if(!value) return "Sin fecha";
+
+      const raw = String(value).trim();
+
+      if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){
+        const [y,m,d] = raw.split("-");
+        return `${d}/${m}/${y}`;
+      }
+
+      const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+      if(isoMatch){
+        const [, y, m, d, hh, mm] = isoMatch;
+        return `${d}/${m}/${y} ${hh}:${mm}`;
+      }
+
+      const date = new Date(raw);
+      if(Number.isNaN(date.getTime())) return raw;
+
+      return date.toLocaleString("es-CL", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      });
+    }
+
+    function formatProviderDateTimeClean(value){
+      if(!value) return "Sin fecha";
+
+      const raw = String(value).trim();
+
+      // YYYY-MM-DD
+      if(/^\d{4}-\d{2}-\d{2}$/.test(raw)){
+        const [y,m,d] = raw.split("-");
+        return `${d}/${m}/${y}`;
+      }
+
+      // YYYY-MM-DDTHH:mm:ss.000Z
+      const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+      if(iso){
+        const [, y, m, d, hh, mm] = iso;
+        return `${d}/${m}/${y} ${hh}:${mm}`;
+      }
+
+      const parsed = new Date(raw);
+      if(Number.isNaN(parsed.getTime())) return raw;
+
+      const dd = String(parsed.getDate()).padStart(2, "0");
+      const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+      const yy = parsed.getFullYear();
+      const hh = String(parsed.getHours()).padStart(2, "0");
+      const mi = String(parsed.getMinutes()).padStart(2, "0");
+
+      return `${dd}/${mm}/${yy} ${hh}:${mi}`;
     }
 
     function formatProviderDate(value){
