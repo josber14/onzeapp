@@ -10846,7 +10846,7 @@ if(addProviderBtn){
 
       .p2p-dashboard-two{
         display:grid;
-        grid-template-columns:1fr 1fr;
+        grid-template-columns:1fr;
         gap:16px;
         margin-top:18px;
       }
@@ -12659,7 +12659,7 @@ if(addProviderBtn){
         <td style="padding:8px; color:#fff;">${order.orderNumber.slice(-8)}</td>
         <td style="padding:8px; text-align:right; color:#00ff00;">${order.amount.toFixed(2)}</td>
         <td style="padding:8px; text-align:right; color:#00ff00;">${Math.round(order.totalPrice).toLocaleString('es-CL')}</td>
-        <td style="padding:8px; text-align:right; color:#fff;">${order.unitPrice.toFixed(0)}</td>
+        <td style="padding:8px; text-align:right; color:#fff;">${order.unitPrice.toFixed(2)}</td>
         <td style="padding:8px; text-align:center; color:#aaa; font-size:11px;">${order.orderStatus}</td>
       `;
       tbody.appendChild(row);
