@@ -54,3 +54,7 @@ next-env.d.ts
 .env.*.local
 .env.bak
 *.env
+
+# Backups locales del panel
+public/*.bak*
+public/*backup*
