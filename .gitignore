@@ -47,3 +47,10 @@ next-env.d.ts
 .env.local
 .env.*.local
 .env.bak
+
+# ===== SECRETOS LOCALES - NO SUBIR =====
+.env
+.env.local
+.env.*.local
+.env.bak
+*.env
