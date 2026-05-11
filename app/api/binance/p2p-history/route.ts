@@ -10,8 +10,13 @@ function signQuery(query: string, secret: string) {
 }
 
 async function fetchBinanceC2CHistory(tradeType: "BUY" | "SELL") {
-  const apiKey = process.env.BINANCE_API_KEY;
-  const secretKey = process.env.BINANCE_SECRET_KEY;
+  const apiKey =
+    process.env.BINANCE_API_KEY ||
+    process.env.BINANCE_KEY;
+
+  const secretKey =
+    process.env.BINANCE_SECRET_KEY ||
+    process.env.BINANCE_SECRET;
 
   if (!apiKey || !secretKey) {
     throw new Error("Faltan variables Binance. Configura BINANCE_API_KEY/BINANCE_SECRET_KEY o BINANCE_KEY/BINANCE_SECRET en Netlify.");
