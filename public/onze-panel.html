@@ -12622,7 +12622,7 @@ if(addProviderBtn){
   }
 
   function saveBinanceSales(orders){
-    localStorage.setItem('onze_binance_sales', JSON.stringify(orders));
+    localStorage.setItem('onze_p2p_binance_orders', JSON.stringify(orders));
   }
   function getBinanceSales(){
     try{
@@ -12679,6 +12679,9 @@ if(addProviderBtn){
         if(data.ok && data.orders){
           saveBinanceSales(data.orders);
           renderBinanceSalesTable();
+          if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
+          if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
+          if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
           if(typeof showToast === 'function'){
             showToast(`✅ ${data.total} operaciones Binance sincronizadas`);
           }else{
