@@ -14,7 +14,7 @@ async function fetchBinanceC2CHistory(tradeType: "BUY" | "SELL") {
   const secretKey = process.env.BINANCE_SECRET_KEY;
 
   if (!apiKey || !secretKey) {
-    throw new Error("Faltan BINANCE_API_KEY o BINANCE_SECRET_KEY en variables de entorno.");
+    throw new Error("Faltan variables Binance. Configura BINANCE_API_KEY/BINANCE_SECRET_KEY o BINANCE_KEY/BINANCE_SECRET en Netlify.");
   }
 
   const params = new URLSearchParams({
