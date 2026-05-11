@@ -135,6 +135,7 @@ model Tenant {
   settings             TenantSettings?
   auditLogs            AuditLog[]
   binanceCredentials BinanceCredentials?
+  binanceOrders BinanceOrder[]
 }
 
 model Subscription {
@@ -640,3 +641,23 @@ model BinanceCredentials {
 }
 
 
+
+model BinanceOrder {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int
+  orderNumber String   @unique
+  tradeType   String
+  asset       String
+  fiat        String
+  amount      Decimal  @db.Decimal(18, 8)
+  totalPrice  Decimal  @db.Decimal(18, 8)
+  unitPrice   Decimal  @db.Decimal(18, 8)
+  commission  Decimal  @db.Decimal(18, 8)
+  orderStatus String
+  createTime  BigInt
+  createdAt   DateTime
+  syncedAt    DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId])
+  @@index([createTime])
+}
