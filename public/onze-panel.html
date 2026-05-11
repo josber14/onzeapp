@@ -12681,7 +12681,7 @@ if(addProviderBtn){
         btn.textContent = oldText;
       });
   }
-  function initBinanceSalesSync(){
+  window.initBinanceSalesSync = function initBinanceSalesSync(){
     const btn = document.getElementById('btn-sync-binance-sales');
     if(btn){
       btn.addEventListener('click', syncBinanceSales);
