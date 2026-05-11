@@ -10956,8 +10956,23 @@ if(addProviderBtn){
 
           <div class="p2p-dashboard-panel">
             <h3 class="section-title" style="margin-bottom:8px;">Ventas Binance</h3>
-            <p class="section-text" style="margin-bottom:14px;">Ventas P2P de hoy en CLP posteriores a la última orden VES de hoy.</p>
-            <div class="p2p-dashboard-empty">Sin operaciones P2P registradas todavía.</div>
+            <p class="section-text" style="margin-bottom:14px;">Ventas P2P de hoy en CLP.</p>
+            <div style="margin-bottom:12px;">
+              <button id="btn-sync-binance-sales" style="padding:8px 16px; background:#007bff; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold;">Sincronizar Binance</button>
+            </div>
+            <div id="binance-sales-container" class="p2p-dashboard-empty">Sin ventas Binance sincronizadas.</div>
+            <table id="binance-sales-table" style="width:100%; margin-top:12px; display:none; border-collapse:collapse;">
+              <thead>
+                <tr style="border-bottom:1px solid #2a4a6a;">
+                  <th style="padding:8px; text-align:left; color:#00d4ff; font-size:12px;">Orden</th>
+                  <th style="padding:8px; text-align:right; color:#00d4ff; font-size:12px;">USDT</th>
+                  <th style="padding:8px; text-align:right; color:#00d4ff; font-size:12px;">CLP</th>
+                  <th style="padding:8px; text-align:right; color:#00d4ff; font-size:12px;">Precio</th>
+                  <th style="padding:8px; text-align:center; color:#00d4ff; font-size:12px;">Estado</th>
+                </tr>
+              </thead>
+              <tbody id="binance-sales-tbody" style="font-size:12px;"></tbody>
+            </table>
           </div>
         </div>
       </section>
