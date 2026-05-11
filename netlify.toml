@@ -1,0 +1,20 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[functions]
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+[context.production.environment]
+  BINANCE_API_KEY = "@binance_api_key"
+  BINANCE_SECRET_KEY = "@binance_secret_key"
+  BINANCE_KEY = "@binance_key"
+  BINANCE_SECRET = "@binance_secret"
+  DATABASE_URL = "@database_url"
+  NETLIFY_DATABASE_URL = "@netlify_database_url"
+  NETLIFY_DATABASE_URL_UNPOOLED = "@netlify_database_url_unpooled"

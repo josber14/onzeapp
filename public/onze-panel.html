@@ -1856,6 +1856,7 @@
         <button class="nav-btn" data-view-target="dashboard">Dashboard</button>
         <button class="nav-btn" data-view-target="historial">Historial</button>
         <button class="nav-btn" data-view-target="noticias">Noticias</button>
+        <button class="nav-btn" data-view-target="ajustes">Ajustes</button>
       </nav>
     </aside>
 
@@ -2588,6 +2589,39 @@
             </div>
           </div>
         </section>
+      <section class="view" id="view-ajustes">
+        <div style="max-width:600px; margin:0 auto; padding:24px;">
+          <h2 style="color:#00d4ff; margin-bottom:8px;">Ajustes</h2>
+          <p style="color:#aaa; margin-bottom:24px;">Configuración de integraciones y credenciales.</p>
+
+          <!-- Binance Credentials -->
+          <div style="background:#0d2137; border:1px solid #1a3a5a; border-radius:12px; padding:24px; margin-bottom:24px;">
+            <h3 style="color:#fff; margin-bottom:4px;">🔑 Credenciales Binance P2P</h3>
+            <p style="color:#aaa; font-size:13px; margin-bottom:16px;">Ingresa tu API Key y Secret Key de Binance para conectar tus operaciones P2P.</p>
+            
+            <div id="binance-creds-status" style="margin-bottom:16px; padding:10px; border-radius:8px; background:#1a3a5a; font-size:13px; color:#aaa;">
+              Verificando estado...
+            </div>
+
+            <div style="margin-bottom:12px;">
+              <label style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">API Key</label>
+              <input id="input-binance-api-key" type="password" placeholder="Ingresa tu Binance API Key" 
+                style="width:100%; padding:10px; background:#071828; border:1px solid #1a3a5a; border-radius:6px; color:#fff; font-size:13px; box-sizing:border-box;">
+            </div>
+
+            <div style="margin-bottom:16px;">
+              <label style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">Secret Key</label>
+              <input id="input-binance-secret-key" type="password" placeholder="Ingresa tu Binance Secret Key"
+                style="width:100%; padding:10px; background:#071828; border:1px solid #1a3a5a; border-radius:6px; color:#fff; font-size:13px; box-sizing:border-box;">
+            </div>
+
+            <button id="btn-save-binance-creds" 
+              style="padding:10px 20px; background:#007bff; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:14px;">
+              Guardar credenciales
+            </button>
+          </div>
+        </div>
+      </section>
       </section>
     </main>
   </div>
@@ -10977,6 +11011,7 @@ if(addProviderBtn){
     addP2PDashboardStyles();
     buildP2PDashboardView();
     addP2PDashboardNavButton();
+    setTimeout(initBinanceSalesSync, 500);
   }
 
   if(document.readyState === "loading"){
@@ -12570,6 +12605,91 @@ if(addProviderBtn){
     }
   }
 
+  function saveBinanceSales(orders){
+    localStorage.setItem('onze_binance_sales', JSON.stringify(orders));
+  }
+  function getBinanceSales(){
+    try{
+      const data = localStorage.getItem('onze_binance_sales');
+      return data ? JSON.parse(data) : [];
+    }catch(e){
+      return [];
+    }
+  }
+  function renderBinanceSalesTable(){
+    const orders = getBinanceSales();
+    const table = document.getElementById('binance-sales-table');
+    const container = document.getElementById('binance-sales-container');
+    const tbody = document.getElementById('binance-sales-tbody');
+    
+    if(!tbody) return;
+    
+    tbody.innerHTML = '';
+    
+    if(orders.length === 0){
+      table.style.display = 'none';
+      container.style.display = 'block';
+      container.textContent = 'Sin operaciones Binance sincronizadas.';
+      return;
+    }
+    
+    container.style.display = 'none';
+    table.style.display = 'table';
+    
+    orders.forEach(order => {
+      const row = document.createElement('tr');
+      row.style.borderBottom = '1px solid #1a3a5a';
+      row.innerHTML = `
+        <td style="padding:8px; color:#fff;">${order.orderNumber.slice(-8)}</td>
+        <td style="padding:8px; text-align:right; color:#00ff00;">${order.amount.toFixed(2)}</td>
+        <td style="padding:8px; text-align:right; color:#00ff00;">${Math.round(order.totalPrice).toLocaleString('es-CL')}</td>
+        <td style="padding:8px; text-align:right; color:#fff;">${order.unitPrice.toFixed(0)}</td>
+        <td style="padding:8px; text-align:center; color:#aaa; font-size:11px;">${order.orderStatus}</td>
+      `;
+      tbody.appendChild(row);
+    });
+  }
+  function syncBinanceSales(){
+    const btn = document.getElementById('btn-sync-binance-sales');
+    if(!btn) return;
+    
+    const oldText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Sincronizando...';
+    
+    fetch('/api/binance/p2p-history')
+      .then(res => res.json())
+      .then(data => {
+        if(data.ok && data.orders){
+          saveBinanceSales(data.orders);
+          renderBinanceSalesTable();
+          if(typeof showToast === 'function'){
+            showToast(`✅ ${data.total} operaciones Binance sincronizadas`);
+          }else{
+            alert(`✅ ${data.total} operaciones Binance sincronizadas`);
+          }
+        }else{
+          throw new Error(data.error || 'Error sincronizando');
+        }
+      })
+      .catch(error => {
+        alert('❌ Error: ' + error.message);
+      })
+      .finally(() => {
+        btn.disabled = false;
+        btn.textContent = oldText;
+      });
+  }
+  function initBinanceSalesSync(){
+    const btn = document.getElementById('btn-sync-binance-sales');
+    if(btn){
+      btn.addEventListener('click', syncBinanceSales);
+    }
+    renderBinanceSalesTable();
+    // Auto-sync cada 60 segundos
+    setInterval(syncBinanceSales, 60000);
+  }
+
   function initP2PCapacity(){
     addP2PCapacityStyles();
     ensureP2PCapacityModal();
@@ -12600,6 +12720,99 @@ if(addProviderBtn){
     setTimeout(initP2PCapacity, 1800);
   }
 })();
+
+<script>
+(function(){
+  function checkBinanceCredentials(){
+    const statusEl = document.getElementById('binance-creds-status');
+    if(!statusEl) return;
+    fetch('/api/binance/credentials')
+      .then(r => r.json())
+      .then(data => {
+        if(data.configured){
+          statusEl.style.background = '#0a3a1a';
+          statusEl.style.color = '#00ff88';
+          statusEl.innerHTML = '✅ Credenciales configuradas' + 
+            (data.updatedAt ? ' · Última actualización: ' + new Date(data.updatedAt).toLocaleDateString('es-CL') : '');
+        } else {
+          statusEl.style.background = '#3a1a0a';
+          statusEl.style.color = '#ff8800';
+          statusEl.innerHTML = '⚠️ Credenciales no configuradas. Ingresa tu API Key y Secret Key.';
+        }
+      })
+      .catch(() => {
+        statusEl.style.color = '#ff4444';
+        statusEl.innerHTML = '❌ Error verificando credenciales';
+      });
+  }
+
+  function saveBinanceCredentials(){
+    const apiKey = document.getElementById('input-binance-api-key')?.value?.trim();
+    const secretKey = document.getElementById('input-binance-secret-key')?.value?.trim();
+    const btn = document.getElementById('btn-save-binance-creds');
+
+    if(!apiKey || !secretKey){
+      alert('⚠️ Debes ingresar API Key y Secret Key');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+
+    fetch('/api/binance/credentials', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiKey, secretKey })
+    })
+    .then(r => r.json())
+    .then(data => {
+      if(data.ok){
+        document.getElementById('input-binance-api-key').value = '';
+        document.getElementById('input-binance-secret-key').value = '';
+        checkBinanceCredentials();
+        if(typeof showToast === 'function'){
+          showToast('✅ Credenciales Binance guardadas correctamente');
+        } else {
+          alert('✅ Credenciales guardadas correctamente');
+        }
+      } else {
+        alert('❌ Error: ' + (data.error || 'No se pudo guardar'));
+      }
+    })
+    .catch(() => alert('❌ Error de conexión'))
+    .finally(() => {
+      btn.disabled = false;
+      btn.textContent = 'Guardar credenciales';
+    });
+  }
+
+  function initAjustes(){
+    const btn = document.getElementById('btn-save-binance-creds');
+    if(btn) btn.addEventListener('click', saveBinanceCredentials);
+
+    // Verificar estado cuando se abre la vista
+    document.querySelectorAll('.nav-btn').forEach(navBtn => {
+      navBtn.addEventListener('click', function(){
+        if(this.getAttribute('data-view-target') === 'ajustes'){
+          setTimeout(checkBinanceCredentials, 300);
+        }
+      });
+    });
+
+    // Verificar al cargar si ya estamos en ajustes
+    if(document.getElementById('view-ajustes')?.classList.contains('active')){
+      checkBinanceCredentials();
+    }
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initAjustes);
+  } else {
+    initAjustes();
+  }
+})();
+</script>
+
 </script>
 
 </body>

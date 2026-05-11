@@ -134,6 +134,7 @@ model Tenant {
   expenses             Expense[]
   settings             TenantSettings?
   auditLogs            AuditLog[]
+  binanceCredentials BinanceCredentials?
 }
 
 model Subscription {
@@ -624,3 +625,18 @@ model PasswordResetCode {
   @@index([email])
   @@index([code])
 }
+model BinanceCredentials {
+  id               Int      @id @default(autoincrement())
+  tenantId         Int      @unique
+  apiKey           String   @db.Text
+  secretKey        String   @db.Text
+  isActive         Boolean  @default(true)
+  lastTestedAt     DateTime?
+  testStatus       String?  // "success" o "failed"
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId])
+}
+
+
