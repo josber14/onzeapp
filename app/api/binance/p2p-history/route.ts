@@ -6,7 +6,7 @@ import { verifySessionToken } from "@/lib/session";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const BINANCE_BASE_URL = "https://api.binance.com";
+const BINANCE_BASE_URL = "https://onze-binance-proxy.josber14.workers.dev";
 
 async function getSession() {
   const cookieStore = await cookies();
