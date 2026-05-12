@@ -654,6 +654,8 @@ model BinanceOrder {
   unitPrice   Decimal  @db.Decimal(18, 8)
   commission  Decimal  @db.Decimal(18, 8)
   orderStatus String
+  payMethodName String?
+  counterPartNickName String?
   createTime  BigInt
   createdAt   DateTime
   syncedAt    DateTime @default(now())

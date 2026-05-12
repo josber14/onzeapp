@@ -66,6 +66,8 @@ async function syncOrders() {
           unitPrice: parseFloat(o.unitPrice || 0),
           commission: parseFloat(o.commission || 0),
           orderStatus: o.orderStatus || "",
+          payMethodName: o.payMethodName || null,
+          counterPartNickName: o.counterPartNickName || null,
           createTime: BigInt(o.createTime || 0),
           createdAt: new Date(Number(o.createTime || 0)),
         },
