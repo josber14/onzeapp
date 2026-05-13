@@ -136,6 +136,7 @@ model Tenant {
   auditLogs            AuditLog[]
   binanceCredentials BinanceCredentials?
   binanceOrders BinanceOrder[]
+  p2pCapacities P2PCapacity[]
 }
 
 model Subscription {
@@ -662,4 +663,28 @@ model BinanceOrder {
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   @@index([tenantId])
   @@index([createTime])
+}
+
+model P2PCapacity {
+  id                    String   @id
+  tenantId              Int
+  provider              String
+  capacityClp           Decimal  @db.Decimal(18, 2)
+  buyPrice              Decimal  @db.Decimal(18, 4)
+  usdtAmount            Decimal  @db.Decimal(18, 8)
+  date                  String   // YYYY-MM-DD
+  status                String   @default("active") // active | finished
+  finishedAt            DateTime?
+  finalSoldUsdt         Decimal? @db.Decimal(18, 8)
+  finalClpReceived      Decimal? @db.Decimal(18, 2)
+  finalCommissionUsdt   Decimal? @db.Decimal(18, 8)
+  finalCommissionClp    Decimal? @db.Decimal(18, 2)
+  finalSaleParts        Json?
+  manualPaymentClp      Decimal? @db.Decimal(18, 2)
+  manualPaymentsClp     Decimal? @db.Decimal(18, 2)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId])
+  @@index([status])
 }

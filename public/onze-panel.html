@@ -11464,17 +11464,58 @@ if(addProviderBtn){
     return loadP2POwnCapital().reduce((sum, item)=> sum + Number(item.usdtAmount || 0), 0);
   }
 
+  // Cache en memoria sincronizada con la base de datos
+  window.__p2pCapacityCache = (() => {
+    try { return JSON.parse(localStorage.getItem(CAPACITY_KEY) || "[]"); } catch(e) { return []; }
+  })();
+
   window.loadP2PCapacity = function loadP2PCapacity(){
-    try{
-      return JSON.parse(localStorage.getItem(CAPACITY_KEY) || "[]");
-    }catch(e){
-      return [];
+    return Array.isArray(window.__p2pCapacityCache) ? window.__p2pCapacityCache : [];
+  };
+
+  function saveP2PCapacity(items){
+    const arr = Array.isArray(items) ? items : [];
+    const previous = window.__p2pCapacityCache || [];
+    const newIds = new Set(arr.map(p => p.id));
+    window.__p2pCapacityCache = arr;
+    localStorage.setItem(CAPACITY_KEY, JSON.stringify(arr));
+    for (const item of arr) {
+      const prev = previous.find(p => p.id === item.id);
+      if (!prev || JSON.stringify(prev) !== JSON.stringify(item)) {
+        fetch('/api/p2p/capacity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ item })
+        }).catch(e => console.warn('Error sync capacity:', e));
+      }
+    }
+    for (const oldItem of previous) {
+      if (!newIds.has(oldItem.id)) {
+        fetch('/api/p2p/capacity?id=' + encodeURIComponent(oldItem.id), { method: 'DELETE' })
+          .catch(e => console.warn('Error delete capacity:', e));
+      }
     }
   }
 
-  function saveP2PCapacity(items){
-    localStorage.setItem(CAPACITY_KEY, JSON.stringify(Array.isArray(items) ? items : []));
-  }
+  window.syncP2PCapacityFromServer = async function syncP2PCapacityFromServer(){
+    try {
+      const res = await fetch('/api/p2p/capacity');
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (data?.ok && Array.isArray(data.items)) {
+        const previous = window.__p2pCapacityCache || [];
+        const changed = JSON.stringify(previous) !== JSON.stringify(data.items);
+        window.__p2pCapacityCache = data.items;
+        localStorage.setItem(CAPACITY_KEY, JSON.stringify(data.items));
+        if (changed) {
+          if (typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
+          if (typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
+        }
+        return true;
+      }
+    } catch(e) { console.warn('Error sync from server:', e); }
+    return false;
+  };
 
   window.isTodayChileFromTs = function isTodayChileFromTs(ts){
     if(!ts) return false;
@@ -13604,6 +13645,19 @@ if(addProviderBtn){
     addP2PCapacityStyles();
     ensureP2PCapacityModal();
     ensureP2PCapacityDetailModal();
+    // Cargar capacities desde la base de datos al iniciar
+    if(typeof window.syncP2PCapacityFromServer === 'function'){
+      window.syncP2PCapacityFromServer().then(()=>{
+        renderP2PCapacityPanel();
+        updateP2PDashboardWithCapacity();
+      });
+      // Auto-refresh cada 30 segundos para detectar cambios de otros dispositivos
+      if(!window.__p2pCapacitySyncInterval){
+        window.__p2pCapacitySyncInterval = setInterval(()=>{
+          window.syncP2PCapacityFromServer();
+        }, 30000);
+      }
+    }
     renderP2PCapacityPanel();
     updateP2PDashboardWithCapacity();
 
