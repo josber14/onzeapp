@@ -14,7 +14,7 @@ export async function GET() {
   }
   const items = await prisma.p2PCapacity.findMany({
     where: { tenantId: session.tenantId },
-    orderBy: { createdAt: "asc" },
+    orderBy: { id: "asc" },
   });
   const normalized = items.map((it: any) => ({
     id: it.id,
