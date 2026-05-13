@@ -88,14 +88,14 @@ export default async function DashboardPage() {
   panelSrc = query ? `/onze-panel.html?${query}` : "/onze-panel.html";
 
   return (
-    <main className="min-h-screen bg-[#f5f7fb]">
-      <div className="border-b bg-white px-4 py-4 shadow-sm">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between">
+    <main className="min-h-screen" style={{background: "linear-gradient(180deg, #020617 0%, #071828 100%)"}}>
+      <div className="px-6 py-4" style={{background: "linear-gradient(90deg, rgba(7,24,40,0.95) 0%, rgba(13,33,55,0.95) 100%)", borderBottom: "1px solid rgba(0,212,255,0.15)"}}>
+        <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-xl font-bold" style={{color: "#f8fafc", letterSpacing: "0.5px"}}>
               Panel de control de ONZE
             </h1>
-            <p className="text-sm text-gray-600">
+            <p className="text-xs" style={{color: "#8aa0ba"}}>
               Calculadora y panel operativo
             </p>
           </div>
@@ -104,7 +104,7 @@ export default async function DashboardPage() {
             {isAdmin && (
               <a
                 href="/admin"
-                className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-100 transition"
+                className="rounded-lg px-4 py-2 text-sm font-semibold transition" style={{background: "rgba(0,212,255,0.1)", border: "1px solid rgba(0,212,255,0.3)", color: "#00d4ff"}}
               >
                 Ir a admin
               </a>
@@ -115,8 +115,8 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-7xl px-4 py-4">
-        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg">
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-4">
+        <div className="overflow-hidden rounded-2xl" style={{border: "1px solid rgba(0,212,255,0.15)", background: "transparent", boxShadow: "0 10px 40px rgba(0,0,0,0.5)"}}>
           <iframe
             src={panelSrc}
             title="ONZE Panel"

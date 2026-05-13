@@ -20,7 +20,8 @@ export default function LogoutButton() {
       type="button"
       onClick={handleLogout}
       disabled={loading}
-      className="rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-100 transition disabled:opacity-60"
+      className="rounded-lg px-4 py-2 text-sm font-semibold transition disabled:opacity-60"
+      style={{background: "rgba(251,113,133,0.1)", border: "1px solid rgba(251,113,133,0.3)", color: "#fb7185"}}
     >
       {loading ? "Saliendo..." : "Cerrar sesión"}
     </button>

@@ -11393,11 +11393,7 @@ if(addProviderBtn){
       saveP2PBinanceOrders(data.orders || []);
       renderP2PDashboardFromBinance();
 
-      if(typeof showToast === "function"){
-        showToast(`Binance P2P sincronizado: ${data.total || 0} operaciones`);
-      }else{
-        alert(`Binance P2P sincronizado: ${data.total || 0} operaciones`);
-      }
+
     }catch(error){
       alert(error.message || "Error sincronizando Binance P2P.");
     }finally{
@@ -13564,7 +13560,7 @@ if(addProviderBtn){
       tbody.appendChild(row);
     });
   }
-  window.syncBinanceSales = function syncBinanceSales(){
+  window.syncBinanceSales = function syncBinanceSales(silent = false){
     const btn = document.getElementById('btn-sync-binance-sales');
     if(!btn) return;
 
@@ -13581,17 +13577,13 @@ if(addProviderBtn){
           if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
           if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
           if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
-          if(typeof showToast === 'function'){
-            showToast(`✅ ${data.total} operaciones Binance sincronizadas`);
-          }else{
-            alert(`✅ ${data.total} operaciones Binance sincronizadas`);
-          }
+
         }else{
           throw new Error(data.error || 'Error sincronizando');
         }
       })
       .catch(error => {
-        alert('❌ Error: ' + error.message);
+        if(!silent) alert('❌ Error: ' + error.message);
       })
       .finally(() => {
         btn.disabled = false;
@@ -13605,7 +13597,7 @@ if(addProviderBtn){
     }
     renderBinanceSalesTable();
     // Auto-sync cada 60 segundos
-    setInterval(syncBinanceSales, 60000);
+    setInterval(() => syncBinanceSales(true), 60000);
   }
 
   function initP2PCapacity(){
