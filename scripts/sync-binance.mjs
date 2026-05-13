@@ -48,6 +48,20 @@ async function syncOrders() {
   console.log("🔄 Sincronizando órdenes Binance...");
   const orders = await fetchBinanceSellCLP();
   console.log(`📦 ${orders.length} órdenes encontradas`);
+  // Filtrar solo ventas del día actual en Chile (UTC-4)
+  const now = new Date();
+  const chileToday = new Intl.DateTimeFormat('en-CA', {timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit'}).format(now);
+  const [yr, mo, dt] = chileToday.split('-').map(Number);
+  const startToday = new Date(Date.UTC(yr, mo-1, dt, 4, 0, 0, 0)).getTime();
+  const endToday = new Date(Date.UTC(yr, mo-1, dt+1, 4, 0, 0, 0)).getTime();
+  const ordersBeforeFilter = orders.length;
+  const filtered = orders.filter(o => {
+    const t = Number(o.createTime || 0);
+    return t >= startToday && t < endToday;
+  });
+  console.log(`✅ ${filtered.length} órdenes son de hoy (${chileToday})`);
+  orders.length = 0;
+  orders.push(...filtered);
 
   let nuevas = 0;
   for (const o of orders) {
