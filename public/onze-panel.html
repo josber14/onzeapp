@@ -15581,6 +15581,77 @@ if(addProviderBtn){
     });
   }
 
+  function openGeneratedRateImageForMobile(dataUrl, fileName) {
+    const win = window.open("", "_blank");
+
+    const html = `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${escapeHtml(fileName || "tasa-del-dia.png")}</title>
+  <style>
+    body{
+      margin:0;
+      min-height:100vh;
+      background:#00122c;
+      color:#fff;
+      font-family:Arial,Helvetica,sans-serif;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:14px;
+      padding:16px;
+      box-sizing:border-box;
+    }
+    .hint{
+      max-width:420px;
+      background:#0d2950;
+      border:1px solid #2b5a9a;
+      border-radius:16px;
+      padding:14px;
+      line-height:1.4;
+      font-size:15px;
+      text-align:center;
+    }
+    img{
+      width:100%;
+      max-width:420px;
+      height:auto;
+      border-radius:18px;
+      background:#fff;
+      display:block;
+    }
+    a{
+      color:#fff;
+      background:#2563eb;
+      text-decoration:none;
+      font-weight:800;
+      padding:12px 16px;
+      border-radius:12px;
+      display:inline-block;
+    }
+  </style>
+</head>
+<body>
+  <div class="hint">
+    Imagen lista. En iPhone mantén presionada la imagen y elige <strong>Guardar en Fotos</strong>.
+  </div>
+  <img src="${dataUrl}" alt="Imagen de tasas del día" />
+  <a href="${dataUrl}" download="${escapeHtml(fileName || "tasa-del-dia.png")}">Intentar descargar</a>
+</body>
+</html>`;
+
+    if (win) {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      return true;
+    }
+
+    return false;
+  }
+
   async function downloadRateImagePNG() {
     const node = document.getElementById("rateListImageCanvas");
 
@@ -15616,40 +15687,57 @@ if(addProviderBtn){
         .replace(/^-+|-+$/g, "") || "tasa-del-dia";
 
       const fileName = safeName + ".png";
+      const dataUrl = canvas.toDataURL("image/png", 1);
+
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+        || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
       const blob = await new Promise(function(resolve) {
         canvas.toBlob(resolve, "image/png", 1);
       });
 
-      if (!blob) {
-        throw new Error("No se pudo generar el PNG.");
-      }
-
-      const file = new File([blob], fileName, { type: "image/png" });
-
-      // En iPhone/Safari es más confiable abrir Compartir para guardar la imagen.
-      if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
-        await navigator.share({
-          files: [file],
-          title: fileName,
-          text: "Imagen de tasas del día"
-        });
+      // iPhone/Safari: mostrar imagen en una pestaña/pantalla guardable.
+      if (isIOS) {
+        openGeneratedRateImageForMobile(dataUrl, fileName);
         return;
       }
 
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.download = fileName;
-      link.href = blobUrl;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      if (blob) {
+        try {
+          const file = new File([blob], fileName, { type: "image/png" });
 
-      setTimeout(function() {
-        URL.revokeObjectURL(blobUrl);
-      }, 3000);
+          if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+            await navigator.share({
+              files: [file],
+              title: fileName,
+              text: "Imagen de tasas del día"
+            });
+            return;
+          }
+        } catch (shareErr) {
+          console.warn("No se pudo compartir archivo, uso descarga normal:", shareErr);
+        }
+
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.download = fileName;
+        link.href = blobUrl;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+
+        setTimeout(function() {
+          URL.revokeObjectURL(blobUrl);
+        }, 3000);
+
+        return;
+      }
+
+      // Último respaldo: abrir imagen base64 guardable.
+      openGeneratedRateImageForMobile(dataUrl, fileName);
     } catch (err) {
       console.error("Error descargando PNG:", err);
-      alert("No pude descargar la imagen. Revisa la consola y me mandas el error si vuelve a pasar.");
+      alert("No pude preparar la imagen. Intenta actualizar la vista y descargar otra vez.");
     } finally {
       if (btn) {
         btn.disabled = false;
