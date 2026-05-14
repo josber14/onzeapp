@@ -1853,6 +1853,7 @@
       <nav class="nav">
         <button class="nav-btn active" data-view-target="inicio">Inicio</button>
         <button class="nav-btn" data-view-target="calculadora">Calculadora</button>
+        <button class="nav-btn" data-view-target="tasa-del-dia">Crea tu tasa del día</button>
         <button class="nav-btn" data-view-target="dashboard">Dashboard</button>
         <button class="nav-btn" data-view-target="historial">Historial</button>
         <button class="nav-btn" data-view-target="noticias">Noticias</button>
@@ -2063,6 +2064,241 @@
           <div id="errorBox" class="err"></div>
         </section>
       </section>
+
+      <section class="view" id="view-tasa-del-dia">
+        <div class="section-card">
+          <div class="section-header">
+            <div>
+              <h2 class="section-title">Crea tu tasa del día</h2>
+              <p class="section-text">Arma tus listas de pares con tu % de ganancia y genera la imagen lista para publicar.</p>
+            </div>
+            <button class="btn primary" id="newRateListBtn" type="button">+ Nueva lista</button>
+          </div>
+
+                    <div class="rate-day-mode-switch-card">
+            <div>
+              <div class="rate-day-list-kicker">Vista de creador</div>
+              <p id="rateDayModeDescription">Crea tu imagen oficial ONZE con las tasas del día listas para compartir.</p>
+            </div>
+
+            <div class="rate-day-mode-switch">
+              <button class="rate-day-mode-btn is-active" id="rateDayModeOnzeBtn" type="button" data-mode="official_onze">
+                Mi imagen ONZE
+              </button>
+              <button class="rate-day-mode-btn" id="rateDayModeOperatorBtn" type="button" data-mode="operator_percent">
+                Operador con % propio
+              </button>
+            </div>
+          </div>
+
+<div id="rateListsContainer" class="rate-lists-container">
+            <div class="empty-state" id="rateListsEmpty" style="display:block;">
+              Todavía no tienes listas creadas. Haz clic en <strong>"+ Nueva lista"</strong> para empezar.
+              <div style="margin-top:12px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+                <button class="btn primary" id="createOnzeDefaultRateListBtn" type="button">Crear lista ONZE default</button>
+              </div>
+            </div>
+            <div class="rate-lists-grid" id="rateListsGrid" style="display:none;"></div>
+          </div>
+
+          <div class="rate-day-modal-backdrop" id="rateDayNewListModal" style="display:none;">
+            <div class="rate-day-modal">
+              <div class="rate-day-modal-header">
+                <div>
+                  <div class="rate-day-list-kicker">Nueva lista</div>
+                  <h3>Crear tasa del día</h3>
+                  <p>Configura la lista, el tipo de ganancia y la identidad que aparecerá en la imagen.</p>
+                </div>
+                <button class="rate-day-modal-close" id="rateDayNewListCloseBtn" type="button" aria-label="Cerrar">×</button>
+              </div>
+
+              <div class="rate-day-modal-grid">
+                <div class="form-row rate-day-modal-full">
+                  <label for="rateDayNewListName">Nombre de la lista</label>
+                  <input type="text" id="rateDayNewListName" placeholder="Ej: Tasas Chile" />
+                </div>
+
+                <div class="form-row">
+                  <label for="rateDayNewListProfit">Ganancia global (%)</label>
+                  <input type="number" id="rateDayNewListProfit" step="0.01" min="0" placeholder="4" value="4" />
+                </div>
+
+                <div class="form-row">
+                  <label for="rateDayNewListCompany">Nombre empresa / marca</label>
+                  <input type="text" id="rateDayNewListCompany" placeholder="Ej: ONZE, AKI Transfer, Mi Empresa" />
+                </div>
+
+                <div class="rate-day-modal-full">
+                  <label class="rate-day-modal-label">Tipo de ganancia</label>
+                  <div class="rate-day-choice-grid">
+                    <label class="rate-day-choice-card">
+                      <input type="radio" name="rateDayProfitMode" value="fixed" checked />
+                      <span>
+                        <strong>% fijo para todos</strong>
+                        <small>Todos los pares usan el mismo porcentaje. No se muestra edición individual.</small>
+                      </span>
+                    </label>
+                    <label class="rate-day-choice-card">
+                      <input type="radio" name="rateDayProfitMode" value="custom" />
+                      <span>
+                        <strong>% editable por par</strong>
+                        <small>Cada par puede tener su propio porcentaje si lo necesitas.</small>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="form-row rate-day-modal-full">
+                  <label for="rateDayNewListLogo">Logo opcional para la imagen</label>
+                  <input type="file" id="rateDayNewListLogo" accept="image/*" />
+                  <small class="rate-day-help">Si no subes logo, se usará el nombre de empresa o la marca por defecto.</small>
+                </div>
+              </div>
+
+              <div class="rate-day-modal-actions">
+                <button class="btn ghost" id="rateDayNewListCancelBtn" type="button">Cancelar</button>
+                <button class="btn primary" id="rateDayNewListCreateBtn" type="button">Crear lista</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="view" id="view-rate-list-editor">
+        <div class="section-card">
+          <div class="section-header" style="align-items:flex-start;">
+            <div>
+              <button class="btn small ghost" id="rateListEditorBackBtn" type="button" style="margin-bottom:8px;">← Volver</button>
+              <h2 class="section-title" id="rateListEditorTitle">Editar lista</h2>
+              <p class="section-text">Configura tu lista, agrega pares y elige el % de ganancia.</p>
+            </div>
+            <div class="rate-day-editor-actions">
+              <button class="rate-day-details-btn" id="rateListEditorDetailsBtn" type="button">⚙️ Detalles</button>
+              <button class="btn ghost" id="rateListEditorSaveBtn" type="button">Guardar cambios</button>
+              <button class="btn primary" id="rateListEditorImageBtn" type="button" style="display:none;">Generar imagen</button>
+            </div>
+          </div>
+
+          <div class="rate-day-details-card" id="rateListDetailsCard">
+            <div class="rate-day-details-head">
+              <div>
+                <div class="rate-day-list-kicker">Información de la lista</div>
+              </div>
+            </div>
+
+            <div class="rate-day-details-grid">
+              <div class="form-row">
+                <label for="rateListEditorName">Nombre de la lista</label>
+                <input type="text" id="rateListEditorName" placeholder="Ej: Tasas Chile" />
+              </div>
+
+              <div class="form-row">
+                <label for="rateListEditorCompanyName">Nombre empresa / marca</label>
+                <input type="text" id="rateListEditorCompanyName" placeholder="Ej: ONZE, AKI Transfer, Mi Empresa" />
+              </div>
+            </div>
+
+            <div class="rate-day-advanced-details" id="rateListAdvancedDetails">
+              <div class="rate-day-advanced-title">Configuración avanzada</div>
+
+              <div class="rate-day-profit-mode-editor">
+                <label class="rate-day-modal-label">Tipo de ganancia</label>
+                <div class="rate-day-choice-grid">
+                  <label class="rate-day-choice-card">
+                    <input type="radio" name="rateListEditorProfitMode" value="fixed" />
+                    <span>
+                      <strong>Ganancia fija global</strong>
+                      <small>Todos los pares usan el mismo porcentaje.</small>
+                    </span>
+                  </label>
+                  <label class="rate-day-choice-card">
+                    <input type="radio" name="rateListEditorProfitMode" value="custom" />
+                    <span>
+                      <strong>Ganancia variable por par</strong>
+                      <small>Cada par puede tener su propio porcentaje.</small>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="rate-day-details-grid">
+                <div class="form-row">
+                  <label for="rateListEditorProfit">% Ganancia global</label>
+                  <input type="number" id="rateListEditorProfit" step="0.01" min="0" placeholder="4" />
+                  <small class="rate-day-help">Si la lista es variable, este campo queda bloqueado y el % se edita por par.</small>
+                </div>
+
+                <div class="form-row">
+                  <label for="rateListEditorLogo">Cambiar logo</label>
+                  <input type="file" id="rateListEditorLogo" accept="image/*" />
+                  <small class="rate-day-help">Si no subes uno nuevo, se mantiene el logo actual.</small>
+                </div>
+              </div>
+
+              <div class="rate-day-logo-row">
+                <div class="rate-day-brand-current" id="rateListEditorLogoStatus">Logo actual: sin logo cargado.</div>
+                <label class="rate-day-remove-logo">
+                  <input type="checkbox" id="rateListEditorRemoveLogo" />
+                  Quitar logo actual
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <hr style="border:none;border-top:1px solid var(--sidebar-line);margin:20px 0;" />
+
+          <div class="rate-list-editor-add rate-day-add-card">
+            <div style="margin-bottom:14px;">
+              <h3 class="section-subtitle" style="margin:0;">Agregar pares</h3>
+              <p class="section-text" style="margin:4px 0 0;">Elige origen y destino. ONZE calculará la tasa final según el % aplicado.</p>
+            </div>
+            <div class="rate-day-add-grid">
+              <div class="form-row">
+                <label for="rateListEditorOrigin">País origen</label>
+                <select id="rateListEditorOrigin"><option value="">Selecciona origen...</option></select>
+              </div>
+              <div class="form-row">
+                <label for="rateListEditorDestination">País destino</label>
+                <select id="rateListEditorDestination"><option value="">Selecciona destino...</option></select>
+              </div>
+              <div class="rate-day-add-action">
+                <button class="btn primary" id="rateListEditorAddPairBtn" type="button">+ Agregar par</button>
+              </div>
+            </div>
+          </div>
+
+          <hr style="border:none;border-top:1px solid var(--sidebar-line);margin:20px 0;" />
+
+          <div class="rate-list-editor-pairs">
+            <div class="rate-day-pairs-heading">
+              <h3 class="section-subtitle">Pares de esta lista (<span id="rateListEditorPairCount">0</span>)</h3>
+              <button class="rate-day-generate-image-btn" id="rateListEditorImageBtnMini" type="button">Generar imagen</button>
+            </div>
+            <div class="empty-state" id="rateListEditorPairsEmpty" style="display:block;">
+              Esta lista aún no tiene pares. Agrega algunos arriba para empezar.
+            </div>
+            <div class="rate-list-pairs-grid" id="rateListEditorPairsGrid" style="display:none;"></div>
+          </div>
+
+          <hr style="border:none;border-top:1px solid var(--sidebar-line);margin:24px 0;" />
+
+          <div id="rateListImagePreviewWrap" style="display:none;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+              <div>
+                <h3 class="section-subtitle" style="margin:0;">Vista previa de imagen</h3>
+                <p class="section-text" style="margin:4px 0 0;">Así se verá la imagen de tasas del día antes de descargarla.</p>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn small ghost" id="rateListImageRefreshBtn" type="button" onclick="window.refreshRateDayRates()">Actualizar vista</button>
+                <button class="btn small primary" id="rateListImageDownloadBtn" type="button" onclick="window.downloadRateImagePNG()">Descargar PNG</button>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:center;overflow:auto;padding:12px;background:#f3f4f6;border-radius:18px;">
+              <div id="rateListImagePreview"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
 
       <section class="view" id="view-dashboard">
         <section class="section-card">
@@ -13776,6 +14012,2483 @@ if(addProviderBtn){
 })();
 </script>
 
+</script>
+
+
+<style>
+  .rate-day-modal-backdrop{
+    position:fixed;
+    inset:0;
+    z-index:9999;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:22px;
+    background:rgba(2,6,23,.72);
+    backdrop-filter:blur(10px);
+  }
+
+  .rate-day-modal{
+    width:min(760px,100%);
+    max-height:92vh;
+    overflow:auto;
+    border:1px solid rgba(96,165,250,.28);
+    border-radius:28px;
+    padding:22px;
+    background:radial-gradient(circle at 12% 0%,rgba(34,139,34,.18),transparent 30%),linear-gradient(180deg,#071426,#06101f);
+    box-shadow:0 34px 90px rgba(0,0,0,.45);
+  }
+
+  .rate-day-modal-header{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:16px;
+    margin-bottom:20px;
+  }
+
+  .rate-day-modal-header h3{
+    margin:6px 0 4px;
+    color:#f8fafc;
+    font-size:30px;
+    line-height:1.05;
+    font-weight:950;
+    letter-spacing:-.03em;
+  }
+
+  .rate-day-modal-header p{
+    margin:0;
+    color:#94a3b8;
+    font-size:15px;
+    line-height:1.4;
+  }
+
+  .rate-day-modal-close{
+    width:40px;
+    height:40px;
+    border:1px solid rgba(148,163,184,.28);
+    border-radius:999px;
+    background:rgba(15,23,42,.55);
+    color:#e2e8f0;
+    font-size:24px;
+    font-weight:900;
+    cursor:pointer;
+  }
+
+  .rate-day-modal-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+  }
+
+  .rate-day-modal-full{
+    grid-column:1 / -1;
+  }
+
+  .rate-day-modal-label{
+    display:block;
+    color:#dbeafe;
+    font-size:14px;
+    font-weight:900;
+    margin-bottom:9px;
+  }
+
+  .rate-day-choice-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+  }
+
+  .rate-day-choice-card{
+    display:flex;
+    gap:12px;
+    align-items:flex-start;
+    border:1px solid rgba(96,165,250,.24);
+    border-radius:18px;
+    padding:14px;
+    background:rgba(15,42,71,.48);
+    cursor:pointer;
+  }
+
+  .rate-day-choice-card input{
+    margin-top:4px;
+    transform:scale(1.15);
+  }
+
+  .rate-day-choice-card strong{
+    display:block;
+    color:#f8fafc;
+    font-size:15px;
+    font-weight:950;
+    margin-bottom:4px;
+  }
+
+  .rate-day-choice-card small{
+    display:block;
+    color:#94a3b8;
+    font-size:13px;
+    line-height:1.35;
+  }
+
+  .rate-day-help{
+    display:block;
+    color:#94a3b8;
+    margin-top:7px;
+    font-size:12px;
+  }
+
+  .rate-day-modal input:disabled,
+  #rateListEditorProfit:disabled{
+    opacity:.7;
+    cursor:not-allowed;
+    background:rgba(15,23,42,.45);
+    color:#94a3b8;
+  }
+
+  .rate-day-official-hidden{
+    display:none !important;
+  }
+
+  .rate-day-modal-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap:10px;
+    margin-top:20px;
+    padding-top:16px;
+    border-top:1px solid rgba(148,163,184,.16);
+  }
+
+  @media (max-width: 720px){
+    .rate-day-modal-grid,
+    .rate-day-choice-grid{
+      grid-template-columns:1fr;
+    }
+  }
+
+  .rate-day-mode-switch-card{
+    margin-top:18px;
+    border:1px solid rgba(96,165,250,.24);
+    border-radius:24px;
+    padding:16px;
+    background:radial-gradient(circle at 12% 0%,rgba(34,139,34,.12),transparent 34%),linear-gradient(180deg,rgba(15,42,71,.54),rgba(7,20,38,.40));
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+    flex-wrap:wrap;
+  }
+
+  .rate-day-mode-switch-card p{
+    margin:4px 0 0;
+    color:#94a3b8;
+    font-size:14px;
+  }
+
+  .rate-day-mode-switch{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    padding:5px;
+    border:1px solid rgba(148,163,184,.18);
+    background:rgba(15,23,42,.34);
+    border-radius:18px;
+  }
+
+  .rate-day-mode-btn{
+    min-height:42px;
+    border:1px solid transparent;
+    border-radius:14px;
+    padding:0 16px;
+    background:transparent;
+    color:#cbd5e1;
+    font-size:14px;
+    font-weight:900;
+    cursor:pointer;
+  }
+
+  .rate-day-mode-btn:hover{
+    color:#ffffff;
+    background:rgba(96,165,250,.12);
+  }
+
+  .rate-day-mode-btn.is-active{
+    color:#ffffff;
+    background:linear-gradient(180deg,rgba(34,139,34,.95),rgba(25,110,25,.92));
+    border-color:rgba(187,247,208,.28);
+    box-shadow:0 12px 30px rgba(34,139,34,.22);
+  }
+
+  .rate-lists-container{
+    margin-top:34px;
+  }
+
+  .rate-lists-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+    gap:16px;
+  }
+
+  .rate-day-list-card{
+    border:1px solid rgba(96,165,250,.24);
+    border-radius:24px;
+    padding:18px;
+    background:radial-gradient(circle at 12% 0%,rgba(34,139,34,.16),transparent 30%),linear-gradient(180deg,rgba(15,42,71,.70),rgba(7,20,38,.58));
+    box-shadow:0 18px 48px rgba(0,0,0,.16);
+  }
+
+  .rate-day-list-top{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:18px;
+  }
+
+  .rate-day-list-kicker{
+    color:#93c5fd;
+    font-size:12px;
+    font-weight:900;
+    letter-spacing:.10em;
+    text-transform:uppercase;
+    margin-bottom:7px;
+  }
+
+  .rate-day-list-title{
+    margin:0;
+    color:#f8fafc;
+    font-size:26px;
+    line-height:1.08;
+    font-weight:950;
+    letter-spacing:-.02em;
+  }
+
+  .rate-day-list-trash{
+    width:40px;
+    height:40px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border:1px solid rgba(248,113,113,.35);
+    background:rgba(127,29,29,.22);
+    color:#fecaca;
+    border-radius:999px;
+    font-size:17px;
+    line-height:1;
+    cursor:pointer;
+  }
+
+  .rate-day-list-trash:hover{
+    background:rgba(220,38,38,.28);
+    border-color:rgba(248,113,113,.55);
+  }
+
+  .rate-day-list-stats{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-bottom:18px;
+  }
+
+  .rate-day-list-stats span{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    border:1px solid rgba(96,165,250,.24);
+    background:rgba(59,130,246,.12);
+    color:#cbd5e1;
+    border-radius:999px;
+    padding:8px 12px;
+    font-size:14px;
+    font-weight:800;
+  }
+
+  .rate-day-list-stats strong{
+    color:#ffffff;
+    font-weight:950;
+  }
+
+  .rate-day-list-open{
+    width:100%;
+    justify-content:center;
+    min-height:44px;
+    border-radius:16px;
+    font-weight:900;
+  }
+
+  .rate-day-add-card{
+    border:1px solid rgba(96,165,250,.22);
+    border-radius:22px;
+    padding:18px;
+    background:linear-gradient(180deg,rgba(15,42,71,.55),rgba(7,20,38,.35));
+    box-shadow:0 18px 50px rgba(0,0,0,.12);
+  }
+
+  .rate-day-add-grid{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;
+    gap:14px;
+    align-items:end;
+  }
+
+  .rate-day-add-action{
+    display:flex;
+    align-items:end;
+    padding-bottom:1px;
+  }
+
+  .rate-day-add-action .btn{
+    min-height:46px;
+    white-space:nowrap;
+  }
+
+  .rate-list-pairs-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+    gap:14px;
+  }
+
+  .rate-day-editor-actions{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+  }
+
+  .rate-day-details-btn{
+    min-height:44px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border:1px solid rgba(96,165,250,.34);
+    border-radius:14px;
+    padding:0 16px;
+    background:rgba(15,42,71,.42);
+    color:#dbeafe;
+    font-size:15px;
+    font-weight:900;
+    cursor:pointer;
+  }
+
+  .rate-day-details-btn:hover{
+    background:rgba(37,99,235,.16);
+    border-color:rgba(96,165,250,.58);
+    color:#ffffff;
+  }
+
+  .rate-day-details-card{
+    margin-top:18px;
+    border:1px solid rgba(96,165,250,.24);
+    border-radius:24px;
+    padding:18px;
+    background:radial-gradient(circle at 12% 0%,rgba(34,139,34,.13),transparent 34%),linear-gradient(180deg,rgba(15,42,71,.56),rgba(7,20,38,.40));
+  }
+
+  .rate-day-details-head{
+    margin-bottom:16px;
+  }
+
+  .rate-day-details-head h3{
+    margin:4px 0 4px;
+    color:#f8fafc;
+    font-size:24px;
+    font-weight:950;
+    letter-spacing:-.02em;
+  }
+
+  .rate-day-details-head p{
+    margin:0;
+    color:#94a3b8;
+    font-size:14px;
+  }
+
+  .rate-day-details-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+  }
+
+  .rate-day-advanced-details{
+    display:none;
+    margin-top:18px;
+    padding-top:18px;
+    border-top:1px solid rgba(148,163,184,.16);
+  }
+
+  .rate-day-details-card.is-open .rate-day-advanced-details{
+    display:block;
+  }
+
+  .rate-day-profit-mode-editor{
+    margin-bottom:16px;
+  }
+
+  .rate-day-advanced-title{
+    color:#93c5fd;
+    font-size:13px;
+    font-weight:950;
+    letter-spacing:.10em;
+    text-transform:uppercase;
+    margin-bottom:14px;
+  }
+
+  .rate-day-logo-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+    margin-top:12px;
+  }
+
+  .rate-day-brand-current{
+    flex:1;
+    min-width:240px;
+    padding:10px 12px;
+    border:1px solid rgba(148,163,184,.18);
+    border-radius:14px;
+    background:rgba(15,23,42,.35);
+    color:#cbd5e1;
+    font-size:13px;
+    font-weight:800;
+  }
+
+  .rate-day-remove-logo{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    color:#fecaca;
+    font-size:13px;
+    font-weight:850;
+    cursor:pointer;
+  }
+
+  @media (max-width: 720px){
+    .rate-day-details-grid{
+      grid-template-columns:1fr;
+    }
+    .rate-day-editor-actions{
+      justify-content:flex-start;
+    }
+  }
+
+  .rate-day-pairs-heading{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:14px;
+  }
+
+  .rate-day-pairs-heading .section-subtitle{
+    margin:0;
+  }
+
+  .rate-day-generate-image-btn{
+    min-height:42px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border:1px solid rgba(96,165,250,.34);
+    border-radius:14px;
+    padding:0 18px;
+    background:rgba(15,42,71,.42);
+    color:#dbeafe;
+    font-size:15px;
+    font-weight:900;
+    cursor:pointer;
+    box-shadow:none;
+    transition:background .16s ease, border-color .16s ease, color .16s ease;
+  }
+
+  .rate-day-generate-image-btn:hover{
+    background:rgba(37,99,235,.16);
+    border-color:rgba(96,165,250,.58);
+    color:#ffffff;
+  }
+
+  .rate-day-pair-card{
+    border:1px solid rgba(96,165,250,.24);
+    border-radius:22px;
+    padding:16px;
+    background:radial-gradient(circle at 12% 0%,rgba(34,139,34,.18),transparent 28%),linear-gradient(180deg,rgba(15,42,71,.72),rgba(7,20,38,.58));
+    box-shadow:0 18px 48px rgba(0,0,0,.16);
+  }
+
+  .rate-day-pair-top{
+    display:flex;
+    align-items:flex-start;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:14px;
+  }
+
+  .rate-day-pair-kicker{
+    color:#93c5fd;
+    font-size:12px;
+    font-weight:900;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    margin-bottom:5px;
+  }
+
+  .rate-day-pair-route{
+    display:block;
+    color:#f8fafc;
+    font-size:19px;
+    line-height:1.15;
+    letter-spacing:.01em;
+  }
+
+  .rate-day-trash-btn{
+    width:40px;
+    height:40px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border:1px solid rgba(248,113,113,.35);
+    background:rgba(127,29,29,.22);
+    color:#fecaca;
+    border-radius:999px;
+    font-size:17px;
+    line-height:1;
+    cursor:pointer;
+    transition:transform .15s ease, background .15s ease, border-color .15s ease;
+  }
+
+  .rate-day-trash-btn:hover{
+    transform:translateY(-1px);
+    background:rgba(220,38,38,.28);
+    border-color:rgba(248,113,113,.55);
+  }
+
+  .rate-day-pair-metrics{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-bottom:14px;
+  }
+
+  .rate-day-metric{
+    border:1px solid rgba(148,163,184,.20);
+    border-radius:16px;
+    padding:12px;
+    background:rgba(15,23,42,.38);
+  }
+
+  .rate-day-metric span{
+    display:block;
+    color:#94a3b8;
+    font-size:12px;
+    font-weight:800;
+    margin-bottom:6px;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+  }
+
+  .rate-day-metric strong{
+    display:block;
+    color:#e2e8f0;
+    font-size:22px;
+    line-height:1;
+    font-weight:950;
+  }
+
+  .rate-day-metric-final{
+    border-color:rgba(34,197,94,.34);
+    background:rgba(22,101,52,.18);
+  }
+
+  .rate-day-metric-final strong{
+    color:#bbf7d0;
+  }
+
+  .rate-day-pair-bottom{
+    display:flex;
+    align-items:end;
+    justify-content:space-between;
+    gap:12px;
+  }
+
+  .rate-day-pct-label{
+    flex:1;
+    display:block;
+    color:#cbd5e1;
+    font-size:13px;
+    font-weight:900;
+  }
+
+  .rate-day-pct-label > span{
+    display:block;
+    margin-bottom:7px;
+  }
+
+  .rate-day-pct-control{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+
+  .rate-day-pct-control input{
+    width:100%;
+    min-height:42px;
+    border-radius:14px;
+  }
+
+  .rate-day-pct-control b{
+    color:#e2e8f0;
+  }
+
+  .rate-day-fixed-profit-note{
+    flex:1;
+    min-height:42px;
+    display:flex;
+    align-items:center;
+    border:1px solid rgba(34,197,94,.24);
+    background:rgba(22,101,52,.13);
+    color:#cbd5e1;
+    border-radius:14px;
+    padding:10px 12px;
+    font-size:13px;
+    font-weight:850;
+  }
+
+  .rate-day-fixed-profit-note strong{
+    color:#bbf7d0;
+    margin-left:5px;
+    font-weight:950;
+  }
+
+  .rate-day-mode-pill{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-height:34px;
+    padding:7px 11px;
+    border-radius:999px;
+    background:rgba(59,130,246,.16);
+    border:1px solid rgba(96,165,250,.28);
+    color:#bfdbfe;
+    font-size:12px;
+    font-weight:900;
+    white-space:nowrap;
+  }
+
+  @media (max-width: 820px){
+    .rate-day-add-grid{
+      grid-template-columns:1fr;
+    }
+    .rate-day-add-action .btn{
+      width:100%;
+    }
+    .rate-day-pair-metrics{
+      grid-template-columns:1fr;
+    }
+  }
+</style>
+
+<!-- ============================================================ -->
+<!-- CONSTRUCTOR DE TASA DEL DÍA - Script principal                -->
+<!-- ============================================================ -->
+<script>
+(function(){
+  "use strict";
+
+  // Estado en memoria
+  let rateLists = [];
+
+  const ONZE_DEFAULT_RATE_PAIRS = [
+    ["CHILE", "VENEZUELA"],
+    ["USA", "VENEZUELA"],
+    ["USA", "CHILE"],
+    ["CHILE", "USA"],
+    ["CHILE", "COLOMBIA"],
+    ["COLOMBIA", "CHILE"],
+    ["PERÚ", "VENEZUELA"],
+    ["CHILE", "PERÚ"],
+    ["ARGENTINA", "VENEZUELA"],
+    ["CHILE", "ARGENTINA"],
+    ["MÉXICO", "VENEZUELA"],
+    ["CHILE", "MÉXICO"],
+    ["ESPAÑA", "VENEZUELA"],
+    ["ESPAÑA", "CHILE"],
+    ["COLOMBIA", "VENEZUELA"],
+    ["CHILE", "ECUADOR"],
+    ["PERÚ", "CHILE"],
+    ["ARGENTINA", "CHILE"],
+    ["CHILE", "ESPAÑA"],
+    ["CHILE", "BRASIL"],
+  ];
+
+  // Referencias a elementos del DOM
+  function getEl(id) {
+    return document.getElementById(id);
+  }
+
+  function normalizeRateListText(s) {
+    return String(s || "")
+      .normalize("NFD")
+      .replace(/[\\u0300-\\u036f]/g, "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function getRateListSettings(list) {
+    try {
+      return list && list.notes ? JSON.parse(list.notes) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function getRateListProfitLabel(list) {
+    const settings = getRateListSettings(list);
+    const mode = settings.profitMode || "custom";
+    if (mode === "fixed") {
+      return "<strong>" + (list.defaultProfitPct || "0") + "%</strong> ganancia";
+    }
+    return "<strong>Ganancia</strong> variable";
+  }
+
+  // ============================================================
+  // API: Traer todas las listas del usuario actual
+  // ============================================================
+  async function loadRateLists() {
+    try {
+      const res = await fetch("/api/rate-lists", { cache: "no-store" });
+      if (!res.ok) {
+        console.error("Error al cargar listas:", res.status);
+        return;
+      }
+      const data = await res.json();
+      rateLists = data.rateLists || [];
+      renderRateLists();
+    } catch (err) {
+      console.error("Error en loadRateLists:", err);
+    }
+  }
+
+  // ============================================================
+  // API: Crear nueva lista
+  // ============================================================
+  async function createRateList(name, defaultProfitPct, notes) {
+    try {
+      const res = await fetch("/api/rate-lists", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, defaultProfitPct, notes })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert("Error al crear lista: " + (err.error || res.status));
+        return null;
+      }
+      const data = await res.json();
+      return data.rateList;
+    } catch (err) {
+      console.error("Error en createRateList:", err);
+      alert("Error de conexión al crear la lista.");
+      return null;
+    }
+  }
+
+  // ============================================================
+  // API: Crear lista ONZE default con los 20 pares oficiales
+  // ============================================================
+  async function createOnzeDefaultRateList() {
+    const profitStr = prompt("% de ganancia global para la lista ONZE default:", "4");
+    if (profitStr === null) return;
+
+    const profit = Number(profitStr);
+    if (!Number.isFinite(profit) || profit < 0) {
+      alert("Porcentaje inválido.");
+      return;
+    }
+
+    try {
+      const countriesRes = await fetch("/api/countries", { cache: "no-store" });
+      if (!countriesRes.ok) {
+        alert("No pude cargar los países desde la base de datos.");
+        return;
+      }
+
+      const countriesData = await countriesRes.json();
+      const countries = countriesData.countries || countriesData || [];
+      const countriesIndex = {};
+
+      countries.forEach(function(c) {
+        if (!c) return;
+        if (c.name) countriesIndex[normalizeRateListText(c.name)] = c;
+        if (c.code) countriesIndex[normalizeRateListText(c.code)] = c;
+      });
+
+      const pairs = ONZE_DEFAULT_RATE_PAIRS.map(function(pair, idx) {
+        const origin = countriesIndex[normalizeRateListText(pair[0])];
+        const dest = countriesIndex[normalizeRateListText(pair[1])];
+
+        if (!origin || !dest) {
+          return {
+            missing: true,
+            originName: pair[0],
+            destName: pair[1],
+          };
+        }
+
+        return {
+          originCountryId: origin.id,
+          destinationCountryId: dest.id,
+          customProfitPct: null,
+          sortOrder: idx,
+        };
+      });
+
+      const missing = pairs.filter(function(p) { return p.missing; });
+      if (missing.length) {
+        alert("Faltan países en la base de datos para crear la lista:\n\n" + missing.map(function(p) {
+          return p.originName + " - " + p.destName;
+        }).join("\n"));
+        return;
+      }
+
+      const created = await createRateList("ONZE (default)", profit);
+      if (!created || !created.id) return;
+
+      const updateRes = await fetch("/api/rate-lists/" + created.id, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "ONZE (default)",
+          defaultProfitPct: profit,
+          pairs: pairs,
+        }),
+      });
+
+      if (!updateRes.ok) {
+        const err = await updateRes.json().catch(function(){ return {}; });
+        alert("Se creó la lista, pero no pude agregar los pares: " + (err.error || updateRes.status));
+        return;
+      }
+
+      await loadRateLists();
+      alert("Lista ONZE default creada ✓");
+    } catch (err) {
+      console.error("Error createOnzeDefaultRateList:", err);
+      alert("Error al crear la lista ONZE default.");
+    }
+  }
+
+  // ============================================================
+  // API: Eliminar lista
+  // ============================================================
+  async function deleteRateList(id) {
+    if (!confirm("¿Eliminar esta lista? Esta acción no se puede deshacer desde la interfaz.")) {
+      return;
+    }
+    try {
+      const res = await fetch("/api/rate-lists/" + id, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert("Error al eliminar: " + (err.error || res.status));
+        return;
+      }
+      await loadRateLists();
+    } catch (err) {
+      console.error("Error en deleteRateList:", err);
+    }
+  }
+
+  // ============================================================
+  // RENDER: Pintar las listas en pantalla
+  // ============================================================
+  function renderRateLists() {
+    const emptyEl = getEl("rateListsEmpty");
+    const gridEl = getEl("rateListsGrid");
+    if (!emptyEl || !gridEl) return;
+
+    if (!rateLists || rateLists.length === 0) {
+      emptyEl.style.display = "block";
+      gridEl.style.display = "none";
+      gridEl.innerHTML = "";
+      return;
+    }
+
+    emptyEl.style.display = "none";
+    gridEl.style.display = "grid";
+
+    gridEl.innerHTML = rateLists.map(function(list) {
+      const pairCount = (list.pairs || []).length;
+      const safeName = String(list.name || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const profitLabel = getRateListProfitLabel(list);
+      return `
+        <article class="rate-day-list-card" data-id="${list.id}">
+          <div class="rate-day-list-top">
+            <div>
+              <div class="rate-day-list-kicker">Lista de tasas</div>
+              <h3 class="rate-day-list-title">${safeName}</h3>
+            </div>
+            <button class="rate-list-card-delete rate-day-list-trash" data-action="delete" data-id="${list.id}" type="button" title="Eliminar lista" aria-label="Eliminar lista">🗑️</button>
+          </div>
+
+          <div class="rate-day-list-stats">
+            <span>${profitLabel}</span>
+            <span><strong>${pairCount}</strong> ${pairCount === 1 ? "par" : "pares"}</span>
+          </div>
+
+          <button class="btn small ghost rate-list-card-open rate-day-list-open" data-action="open" data-id="${list.id}" type="button">Abrir lista</button>
+        </article>
+      `;
+    }).join("");
+  }
+
+  // ============================================================
+  // EVENT: Click en "+ Nueva lista"
+  // ============================================================
+  function getNewRateListCreatorMode() {
+    return localStorage.getItem("onzeRateDayCreatorMode") || "official_onze";
+  }
+
+  function applyNewRateListModalMode() {
+    const mode = getNewRateListCreatorMode();
+    const isOperatorPercent = mode === "operator_percent";
+
+    const profitRow = getEl("rateDayNewListProfit")?.closest(".form-row");
+    const choiceWrap = document.querySelector('input[name="rateDayProfitMode"]')?.closest(".rate-day-modal-full");
+    const profitInput = getEl("rateDayNewListProfit");
+    const modalText = document.querySelector("#rateDayNewListModal .rate-day-modal-header p");
+
+    if (profitRow) profitRow.classList.toggle("rate-day-official-hidden", !isOperatorPercent);
+    if (choiceWrap) choiceWrap.classList.toggle("rate-day-official-hidden", !isOperatorPercent);
+
+    if (modalText) {
+      modalText.textContent = isOperatorPercent
+        ? "Configura la lista, el tipo de ganancia y la identidad que aparecerá en la imagen."
+        : "Configura los detalles básicos de tu imagen oficial ONZE.";
+    }
+
+    if (!isOperatorPercent && profitInput) {
+      profitInput.value = "";
+      profitInput.disabled = true;
+      profitInput.placeholder = "No aplica en imagen ONZE";
+    }
+
+    if (isOperatorPercent && typeof updateNewListProfitModeUI === "function") {
+      updateNewListProfitModeUI();
+    }
+  }
+
+  function openNewRateListModal() {
+    const modal = getEl("rateDayNewListModal");
+    if (!modal) return;
+    getEl("rateDayNewListName").value = "";
+    getEl("rateDayNewListProfit").value = "4";
+    getEl("rateDayNewListCompany").value = "";
+    const fixed = document.querySelector('input[name="rateDayProfitMode"][value="fixed"]');
+    if (fixed) fixed.checked = true;
+    updateNewListProfitModeUI();
+    const logo = getEl("rateDayNewListLogo");
+    if (logo) logo.value = "";
+    applyNewRateListModalMode();
+
+    modal.style.display = "flex";
+    setTimeout(function(){ getEl("rateDayNewListName")?.focus(); }, 50);
+  }
+
+  function closeNewRateListModal() {
+    const modal = getEl("rateDayNewListModal");
+    if (modal) modal.style.display = "none";
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise(function(resolve, reject) {
+      if (!file) return resolve(null);
+      const reader = new FileReader();
+      reader.onload = function() { resolve(reader.result); };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function updateNewListProfitModeUI() {
+    const modeEl = document.querySelector('input[name="rateDayProfitMode"]:checked');
+    const profitInput = getEl("rateDayNewListProfit");
+    const mode = modeEl ? modeEl.value : "fixed";
+    if (!profitInput) return;
+
+    if (mode === "custom") {
+      profitInput.value = "";
+      profitInput.disabled = true;
+      profitInput.placeholder = "Se define por cada par";
+    } else {
+      profitInput.disabled = false;
+      profitInput.placeholder = "4";
+      if (!profitInput.value) profitInput.value = "4";
+    }
+  }
+
+  async function handleCreateNewListFromModal() {
+    const name = getEl("rateDayNewListName")?.value?.trim() || "";
+    const profit = Number(getEl("rateDayNewListProfit")?.value);
+    const companyName = getEl("rateDayNewListCompany")?.value?.trim() || "";
+    const modeEl = document.querySelector('input[name="rateDayProfitMode"]:checked');
+    const profitMode = modeEl ? modeEl.value : "fixed";
+    const logoInput = getEl("rateDayNewListLogo");
+
+    if (!name) {
+      alert("Coloca el nombre de la lista.");
+      return;
+    }
+
+    const creatorModeForValidation = getNewRateListCreatorMode();
+    if (creatorModeForValidation === "operator_percent" && profitMode === "fixed" && (!Number.isFinite(profit) || profit < 0)) {
+      alert("El % de ganancia es inválido.");
+      return;
+    }
+
+    let logoDataUrl = null;
+    try {
+      logoDataUrl = await readFileAsDataUrl(logoInput && logoInput.files ? logoInput.files[0] : null);
+    } catch (err) {
+      console.error("Error leyendo logo:", err);
+      alert("No pude leer el logo. Intenta con otra imagen.");
+      return;
+    }
+
+    const creatorMode = getNewRateListCreatorMode();
+    const isOperatorPercent = creatorMode === "operator_percent";
+
+    const settings = {
+      version: 1,
+      creatorMode: creatorMode,
+      imageRateMode: isOperatorPercent ? "operator_percent" : "official_onze",
+      profitMode: isOperatorPercent ? profitMode : "official_onze",
+      companyName: companyName,
+      logoDataUrl: logoDataUrl,
+      templateMode: "previous"
+    };
+
+    const created = await createRateList(
+      name,
+      isOperatorPercent && profitMode === "fixed" ? profit : 0,
+      JSON.stringify(settings)
+    );
+    if (created) {
+      closeNewRateListModal();
+      await loadRateLists();
+    }
+  }
+
+  function handleNewListClick() {
+    openNewRateListModal();
+  }
+
+  // ============================================================
+  // EVENT: Delegación de clicks en las cards
+  // ============================================================
+  function handleGridClick(e) {
+    const btn = e.target.closest("[data-action]");
+    if (!btn) return;
+    const id = Number(btn.getAttribute("data-id"));
+    const action = btn.getAttribute("data-action");
+
+    if (action === "delete") {
+      deleteRateList(id);
+    } else if (action === "open") {
+      // TODO: abrir el editor de la lista (próximo paso)
+      if(typeof window.__openRateListEditor==="function"){window.__openRateListEditor(id);}
+    }
+  }
+
+  // ============================================================
+  // INIT: Configurar listeners cuando el DOM está listo
+  // ============================================================
+  function init() {
+    const newBtn = getEl("newRateListBtn");
+    const defaultBtn = getEl("createOnzeDefaultRateListBtn");
+    const gridEl = getEl("rateListsGrid");
+
+    if (newBtn) {
+      newBtn.addEventListener("click", handleNewListClick);
+    }
+
+    const modalCloseBtn = getEl("rateDayNewListCloseBtn");
+    const modalCancelBtn = getEl("rateDayNewListCancelBtn");
+    const modalCreateBtn = getEl("rateDayNewListCreateBtn");
+    const modal = getEl("rateDayNewListModal");
+
+    if (modalCloseBtn) modalCloseBtn.addEventListener("click", closeNewRateListModal);
+    if (modalCancelBtn) modalCancelBtn.addEventListener("click", closeNewRateListModal);
+    if (modalCreateBtn) modalCreateBtn.addEventListener("click", handleCreateNewListFromModal);
+    document.querySelectorAll('input[name="rateDayProfitMode"]').forEach(function(radio) {
+      radio.addEventListener("change", updateNewListProfitModeUI);
+    });
+    if (modal) {
+      modal.addEventListener("click", function(e) {
+        if (e.target === modal) closeNewRateListModal();
+      });
+    }
+
+    if (defaultBtn) {
+      defaultBtn.addEventListener("click", createOnzeDefaultRateList);
+    }
+    if (gridEl) {
+      gridEl.addEventListener("click", handleGridClick);
+    }
+
+    // Cargar las listas si el usuario abre el tab
+    const tabBtn = document.querySelector('.nav-btn[data-view-target="tasa-del-dia"]');
+    if (tabBtn) {
+      tabBtn.addEventListener("click", function() {
+        loadRateLists();
+      });
+    }
+
+    // Cargar también al inicio si la vista ya está activa
+    const view = getEl("view-tasa-del-dia");
+    if (view && view.classList.contains("active")) {
+      loadRateLists();
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>
+
+
+<!-- ============================================================ -->
+<!-- EDITOR DE LISTA DE TASAS                                     -->
+<!-- ============================================================ -->
+<script>
+(function(){
+  "use strict";
+
+  // Estado del editor
+  let currentList = null;       // La lista que se está editando
+  let currentPairs = [];        // Pares en memoria { originId, destId, originName, destName, customProfitPct }
+  let csvData = null;           // Snapshot del CSV para Crea tu tasa del día
+  let countriesCache = [];      // Lista de países desde la BD
+
+  const RATE_LIST_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT9Teo-_5ka3LKx7FXL3x3yV3uf4KhoI61ewnVJyJ90XRnksoObf4CDn-lJvrFKiQ/pub?gid=119557813&single=true&output=csv";
+
+  // ============================================================
+  // HELPERS
+  // ============================================================
+  function getEl(id) { return document.getElementById(id); }
+
+  function getCurrentListSettings() {
+    try {
+      return currentList && currentList.notes ? JSON.parse(currentList.notes) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  function getCurrentProfitMode() {
+    const settings = getCurrentListSettings();
+    return settings.profitMode || "custom";
+  }
+
+  function readEditorLogoFileAsDataUrl(file) {
+    return new Promise(function(resolve, reject) {
+      if (!file) return resolve(null);
+      const reader = new FileReader();
+      reader.onload = function() { resolve(reader.result); };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function updateEditorBrandFields() {
+    const settings = getCurrentListSettings();
+    const companyInput = getEl("rateListEditorCompanyName");
+    const logoInput = getEl("rateListEditorLogo");
+    const removeLogo = getEl("rateListEditorRemoveLogo");
+    const status = getEl("rateListEditorLogoStatus");
+
+    if (companyInput) companyInput.value = settings.companyName || "";
+    if (logoInput) logoInput.value = "";
+    if (removeLogo) removeLogo.checked = false;
+
+    if (status) {
+      status.textContent = settings.logoDataUrl
+        ? "Logo actual: logo cargado correctamente."
+        : "Logo actual: sin logo cargado.";
+    }
+  }
+
+  function getEditorSelectedProfitMode() {
+    const checked = document.querySelector('input[name="rateListEditorProfitMode"]:checked');
+    return checked ? checked.value : getCurrentProfitMode();
+  }
+
+  function updateEditorProfitModeFields() {
+    const settings = getCurrentListSettings();
+    const mode = settings.profitMode || "custom";
+    const fixedRadio = document.querySelector('input[name="rateListEditorProfitMode"][value="fixed"]');
+    const customRadio = document.querySelector('input[name="rateListEditorProfitMode"][value="custom"]');
+    const profitInput = getEl("rateListEditorProfit");
+
+    if (fixedRadio) fixedRadio.checked = mode === "fixed";
+    if (customRadio) customRadio.checked = mode !== "fixed";
+
+    if (profitInput) {
+      if (mode === "fixed") {
+        profitInput.disabled = false;
+        profitInput.placeholder = "4";
+        if (!profitInput.value) profitInput.value = currentList?.defaultProfitPct || "0";
+      } else {
+        profitInput.disabled = true;
+        profitInput.value = "";
+        profitInput.placeholder = "Ganancia variable por par";
+      }
+    }
+  }
+
+  function handleEditorProfitModeChange() {
+    const settings = getCurrentListSettings();
+    const selectedMode = getEditorSelectedProfitMode();
+
+    if (currentList) {
+      currentList.notes = JSON.stringify({
+        ...settings,
+        profitMode: selectedMode
+      });
+    }
+
+    updateEditorProfitModeFields();
+    renderPairs();
+    resetRateImagePreview();
+  }
+
+  function toggleRateListDetails() {
+    const card = getEl("rateListDetailsCard");
+    const btn = getEl("rateListEditorDetailsBtn");
+    if (!card) return;
+
+    const isOpen = card.classList.toggle("is-open");
+    if (btn) btn.textContent = isOpen ? "Ocultar detalles" : "⚙️ Detalles";
+
+    card.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function normalizeText(s) {
+    return String(s || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function escapeHtml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function parseRateListCSV(text) {
+    const rows = [];
+    let row = [];
+    let cell = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      const next = text[i + 1];
+
+      if (ch === '"' && inQuotes && next === '"') {
+        cell += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = !inQuotes;
+      } else if (ch === "," && !inQuotes) {
+        row.push(cell);
+        cell = "";
+      } else if ((ch === "\n" || ch === "\r") && !inQuotes) {
+        if (ch === "\r" && next === "\n") i++;
+        row.push(cell);
+        if (row.some(function(v){ return String(v).trim() !== ""; })) rows.push(row);
+        row = [];
+        cell = "";
+      } else {
+        cell += ch;
+      }
+    }
+
+    row.push(cell);
+    if (row.some(function(v){ return String(v).trim() !== ""; })) rows.push(row);
+    return rows;
+  }
+
+  function normalizeHeaderKey(s) {
+    return normalizeText(s).replace(/[^a-z0-9]/g, "");
+  }
+
+  function findHeaderIndex(headers, candidates) {
+    const normalizedHeaders = headers.map(normalizeHeaderKey);
+    for (const candidate of candidates) {
+      const key = normalizeHeaderKey(candidate);
+      const idx = normalizedHeaders.indexOf(key);
+      if (idx >= 0) return idx;
+    }
+    return -1;
+  }
+
+  function parseNumberLoose(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw) return null;
+
+    let s = raw.replace(/\s/g, "").replace(/[^0-9,.-]/g, "");
+
+    if (s.includes(",") && s.includes(".")) {
+      const lastComma = s.lastIndexOf(",");
+      const lastDot = s.lastIndexOf(".");
+      if (lastComma > lastDot) {
+        s = s.replace(/\./g, "").replace(",", ".");
+      } else {
+        s = s.replace(/,/g, "");
+      }
+    } else if (s.includes(",")) {
+      s = s.replace(",", ".");
+    }
+
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function buildRateListSnapshotFromCSV(rows) {
+    if (!rows || rows.length < 2) return {};
+
+    const headers = rows[0].map(function(h){ return String(h || "").trim(); });
+
+    const originIdx = findHeaderIndex(headers, [
+      "pais origen", "país origen", "origen", "desde", "country origin", "origin"
+    ]);
+    const destIdx = findHeaderIndex(headers, [
+      "pais destino", "país destino", "destino", "hacia", "country destination", "destination", "dest"
+    ]);
+
+    const rateIdx = findHeaderIndex(headers, [
+      "tasa", "tasa cliente", "cliente", "rate", "precio", "valor", "tasa web"
+    ]);
+    const detailIdx = findHeaderIndex(headers, [
+      "tasa detal", "detal", "tasa detalle", "tasa final detal", "tasa oficial", "oficial"
+    ]);
+    const providerIdx = findHeaderIndex(headers, [
+      "tasa proveedor", "proveedor", "tasa costo", "costo", "costrate", "cost", "provider"
+    ]);
+    const decimalsIdx = findHeaderIndex(headers, [
+      "decimales", "decimals", "decimal"
+    ]);
+
+    if (originIdx < 0 || destIdx < 0) {
+      console.warn("No pude detectar columnas origen/destino en CSV:", headers);
+      return {};
+    }
+
+    const snapshot = {};
+
+    rows.slice(1).forEach(function(r) {
+      const origin = String(r[originIdx] || "").trim();
+      const dest = String(r[destIdx] || "").trim();
+      if (!origin || !dest) return;
+
+      const rateRaw = rateIdx >= 0 ? r[rateIdx] : "";
+      const detailRaw = detailIdx >= 0 ? r[detailIdx] : "";
+      const providerRaw = providerIdx >= 0 ? r[providerIdx] : "";
+      const decimalsRaw = decimalsIdx >= 0 ? r[decimalsIdx] : "";
+
+      const rate = parseNumberLoose(rateRaw);
+      const detailRate = parseNumberLoose(detailRaw);
+      const providerRate = parseNumberLoose(providerRaw);
+      const decimals = Number.isFinite(Number(decimalsRaw)) ? Number(decimalsRaw) : null;
+
+      if (!snapshot[origin]) snapshot[origin] = [];
+      snapshot[origin].push({
+        dest: dest,
+        rate: rate,
+        detailRate: detailRate,
+        detalRate: detailRate,
+        officialRate: detailRate,
+        providerRate: providerRate,
+        costRate: providerRate,
+        displayRate: rate,
+        rawRate: rateRaw,
+        rawDetailRate: detailRaw,
+        rawDetalRate: detailRaw,
+        rawProviderRate: providerRaw,
+        decimals: decimals
+      });
+    });
+
+    return snapshot;
+  }
+
+  async function loadRateListCSVSnapshot() {
+    const url = RATE_LIST_CSV_URL + (RATE_LIST_CSV_URL.includes("?") ? "&" : "?") + "cacheBust=" + Date.now();
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error("No se pudo leer CSV tasas del día: HTTP " + res.status);
+    const txt = await res.text();
+    const rows = parseRateListCSV(txt);
+    const snapshot = buildRateListSnapshotFromCSV(rows);
+    csvData = snapshot;
+    window.rateListDaySnapshot = snapshot;
+    return snapshot;
+  }
+
+  // Pares donde se SUMA el margen (lógica idéntica a ONZE EXCEPTIONS_UP)
+  const EXCEPTIONS_UP_KEYS = new Set([
+    "argentina|usa",
+    "chile|ecuador",
+    "chile|espana",
+    "chile|usa",
+    "colombia|usa",
+    "colombia|venezuela",
+    "peru|ecuador"
+  ]);
+
+  function pairKey(originName, destName) {
+    return normalizeText(originName) + "|" + normalizeText(destName);
+  }
+
+  function shouldAddMargin(originName, destName) {
+    return EXCEPTIONS_UP_KEYS.has(pairKey(originName, destName));
+  }
+
+  // Cálculo de tasa cliente según lógica ONZE
+  function calculateClientRate(providerRate, profitPct, originName, destName) {
+    const p = Number(providerRate);
+    const pct = Number(profitPct) / 100;
+    if (!Number.isFinite(p) || !Number.isFinite(pct)) return null;
+    if (shouldAddMargin(originName, destName)) {
+      return p * (1 + pct);
+    }
+    return p * (1 - pct);
+  }
+
+  // Detecta decimales del valor (CLP/COP suelen no tener decimales)
+  function detectDecimals(value, currencyCode) {
+    const code = String(currencyCode || "").toUpperCase();
+    if (code === "CLP" || code === "COP") return 0;
+    const str = String(value);
+    if (str.includes(".")) {
+      const decPart = str.split(".")[1] || "";
+      return Math.min(decPart.length, 6);
+    }
+    if (str.includes(",")) {
+      const decPart = str.split(",")[1] || "";
+      return Math.min(decPart.length, 6);
+    }
+    return 2;
+  }
+
+  function detectDecimalsFromRawRate(rawValue) {
+    const str = String(rawValue ?? "").trim();
+    if (!str) return 2;
+
+    if (str.includes(",")) {
+      const decPart = str.split(",").pop() || "";
+      return Math.min(decPart.replace(/[^0-9]/g, "").length, 6);
+    }
+
+    if (str.includes(".")) {
+      const decPart = str.split(".").pop() || "";
+      return Math.min(decPart.replace(/[^0-9]/g, "").length, 6);
+    }
+
+    return 0;
+  }
+
+  function formatRate(value, decimals) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "—";
+    return n.toLocaleString("es-CL", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    });
+  }
+
+  // ============================================================
+  // CARGA DE DATOS
+  // ============================================================
+  function loadHtml2CanvasOnce() {
+    return new Promise(function(resolve, reject) {
+      if (window.html2canvas) {
+        resolve(window.html2canvas);
+        return;
+      }
+
+      const existing = document.getElementById("html2canvasScript");
+      if (existing) {
+        existing.addEventListener("load", function() { resolve(window.html2canvas); });
+        existing.addEventListener("error", reject);
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.id = "html2canvasScript";
+      script.src = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+      script.onload = function() {
+        if (window.html2canvas) resolve(window.html2canvas);
+        else reject(new Error("html2canvas no quedó disponible"));
+      };
+      script.onerror = function() {
+        reject(new Error("No pude cargar html2canvas"));
+      };
+      document.head.appendChild(script);
+    });
+  }
+
+  async function downloadRateImagePNG() {
+    const node = document.getElementById("rateListImageCanvas");
+
+    if (!node) {
+      alert("Primero debes generar la imagen.");
+      return;
+    }
+
+    const btn = document.getElementById("rateListImageDownloadBtn");
+    const oldText = btn ? btn.textContent : "";
+
+    try {
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Preparando...";
+      }
+
+      const html2canvas = await loadHtml2CanvasOnce();
+
+      const canvas = await html2canvas(node, {
+        backgroundColor: null,
+        scale: 3,
+        useCORS: true,
+        allowTaint: true,
+        logging: false
+      });
+
+      const safeName = (currentList?.name || "tasa-del-dia")
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9áéíóúñü]+/gi, "-")
+        .replace(/^-+|-+$/g, "") || "tasa-del-dia";
+
+      const link = document.createElement("a");
+      link.download = safeName + ".png";
+      link.href = canvas.toDataURL("image/png", 1);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error("Error descargando PNG:", err);
+      alert("No pude descargar la imagen. Revisa la consola y me mandas el error si vuelve a pasar.");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = oldText || "Descargar PNG";
+      }
+    }
+  }
+
+  async function refreshRateDayRates() {
+    const btn = document.getElementById("rateListImageRefreshBtn");
+    const oldText = btn ? btn.textContent : "";
+
+    try {
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Actualizando...";
+      }
+
+      await loadRateListCSVSnapshot();
+
+      if (typeof renderPairs === "function") {
+        renderPairs();
+      }
+
+      if (typeof renderRateImagePreview === "function") {
+        renderRateImagePreview();
+      }
+
+      if (typeof showToast === "function") {
+        showToast("Vista actualizada con tasas nuevas del Sheet");
+      }
+    } catch (err) {
+      console.error("Error actualizando vista tasas del día:", err);
+      alert("No pude actualizar la vista con el Sheet. Revisa consola y me mandas el error.");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = oldText || "Actualizar vista";
+      }
+    }
+  }
+
+  window.refreshRateDayRates = refreshRateDayRates;
+
+  window.downloadRateImagePNG = downloadRateImagePNG;
+
+  async function loadCountriesFromDB() {
+    try {
+      // Crea tu tasa del día debe leer siempre el CSV directo,
+      // porque ahí existe la columna "tasa detal".
+      await loadRateListCSVSnapshot();
+    } catch (err) {
+      console.error("Error loadCountriesFromDB:", err);
+      alert("No pude cargar las tasas del Sheet para Crea tu tasa del día.");
+    }
+  }
+
+  function buildCountriesList() {
+    // Construye lista única de países origen + destino desde el snapshot real de ONZE.
+    // En ONZE lastDataSnapshot tiene forma: { ORIGEN: [ { dest, ...tasas } ] }
+    if (!csvData) return [];
+    const set = new Map();
+
+    Object.keys(csvData).forEach(function(origin) {
+      const originClean = String(origin).trim();
+      if (originClean && !set.has(normalizeText(originClean))) {
+        set.set(normalizeText(originClean), originClean);
+      }
+
+      const destinations = csvData[origin] || [];
+
+      if (Array.isArray(destinations)) {
+        destinations.forEach(function(item) {
+          const destClean = String(item && (item.dest || item.destination || item.destName || "")).trim();
+          if (destClean && !set.has(normalizeText(destClean))) {
+            set.set(normalizeText(destClean), destClean);
+          }
+        });
+      } else {
+        Object.keys(destinations).forEach(function(dest) {
+          const destClean = String(dest).trim();
+          if (destClean && !set.has(normalizeText(destClean))) {
+            set.set(normalizeText(destClean), destClean);
+          }
+        });
+      }
+    });
+
+    return Array.from(set.values()).sort(function(a,b){
+      return String(a).localeCompare(String(b), "es", { sensitivity: "base" });
+    });
+  }
+
+  function populateCountrySelects() {
+    const originSel = getEl("rateListEditorOrigin");
+    const destSel = getEl("rateListEditorDestination");
+    if (!originSel || !destSel) return;
+
+    const countries = buildCountriesList();
+    const optionsHtml = '<option value="">Selecciona...</option>' +
+      countries.map(function(c) {
+        return '<option value="' + c + '">' + c + '</option>';
+      }).join("");
+    originSel.innerHTML = optionsHtml;
+    destSel.innerHTML = optionsHtml;
+  }
+
+  // ============================================================
+  // GET TASA PROVEEDOR del CSV para un par
+  // ============================================================
+  function getRateRowFromCSV(originName, destName) {
+    if (!csvData && window.rateListDaySnapshot) {
+      csvData = window.rateListDaySnapshot;
+    }
+    if (!csvData && window.lastDataSnapshot) {
+      csvData = window.lastDataSnapshot;
+    }
+    if (!csvData) return null;
+
+    const origins = Object.keys(csvData);
+    const matchOrigin = origins.find(function(o) {
+      return normalizeText(o) === normalizeText(originName);
+    });
+    if (!matchOrigin) return null;
+
+    const dests = csvData[matchOrigin] || [];
+
+    if (Array.isArray(dests)) {
+      return dests.find(function(item) {
+        const destValue = item && (item.dest || item.destination || item.destName || item.to || "");
+        return normalizeText(destValue) === normalizeText(destName);
+      }) || null;
+    }
+
+    const matchDest = Object.keys(dests).find(function(d) {
+      return normalizeText(d) === normalizeText(destName);
+    });
+
+    return matchDest ? dests[matchDest] : null;
+  }
+
+  function getRateDecimalsFromCSV(originName, destName) {
+    const row = getRateRowFromCSV(originName, destName);
+    if (!row) return 2;
+
+    // En Mi imagen ONZE, la tasa oficial sale de "tasa detal",
+    // así que los decimales también deben salir de esa misma columna.
+    if (!isOperatorPercentImageMode()) {
+      return detectDecimalsFromRawRate(
+        row.rawDetailRate
+        ?? row.rawDetalRate
+        ?? row.detailRate
+        ?? row.detalRate
+        ?? row.officialRate
+        ?? row.rawRate
+        ?? row.displayRate
+        ?? row.rate
+      );
+    }
+
+    // En operador con % propio, mantenemos la lógica anterior.
+    if (row.decimals != null && row.decimals !== "" && Number.isFinite(Number(row.decimals))) {
+      return Number(row.decimals);
+    }
+
+    return detectDecimalsFromRawRate(
+      row.rawRate
+      ?? row.displayRate
+      ?? row.rate
+      ?? row.clientRate
+      ?? row.providerRate
+      ?? row.costRate
+    );
+  }
+
+  function getProviderRateFromCSV(originName, destName) {
+    const row = getRateRowFromCSV(originName, destName);
+    if (!row) return null;
+
+    // Para la imagen del día usamos la tasa visible del Sheet.
+    return row.displayRate ?? row.rate ?? row.clientRate ?? row.tasa ?? row.valor ?? row.providerRate ?? row.costRate ?? row.cost ?? null;
+  }
+
+  function getRateDayCreatorMode() {
+    return localStorage.getItem("onzeRateDayCreatorMode") || "official_onze";
+  }
+
+  function isOperatorPercentImageMode() {
+    return getRateDayCreatorMode() === "operator_percent";
+  }
+
+  function updateRateDayCreatorModeUI() {
+    const mode = getRateDayCreatorMode();
+    const onzeBtn = getEl("rateDayModeOnzeBtn");
+    const operatorBtn = getEl("rateDayModeOperatorBtn");
+    const desc = getEl("rateDayModeDescription");
+
+    if (onzeBtn) onzeBtn.classList.toggle("is-active", mode === "official_onze");
+    if (operatorBtn) operatorBtn.classList.toggle("is-active", mode === "operator_percent");
+
+    if (desc) {
+      desc.textContent = mode === "operator_percent"
+        ? "Prueba la visual de un operador que crea imágenes con su propio porcentaje."
+        : "Crea tu imagen oficial ONZE con las tasas del día listas para compartir.";
+    }
+  }
+
+  function setRateDayCreatorMode(mode) {
+    localStorage.setItem("onzeRateDayCreatorMode", mode === "operator_percent" ? "operator_percent" : "official_onze");
+    updateRateDayCreatorModeUI();
+
+    if (typeof renderPairs === "function") renderPairs();
+    if (typeof resetRateImagePreview === "function") resetRateImagePreview();
+  }
+
+  window.setRateDayCreatorMode = setRateDayCreatorMode;
+
+  function truncateDecimals(value, decimals) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    const factor = Math.pow(10, decimals);
+    return Math.trunc(n * factor) / factor;
+  }
+
+  function formatMovedThreeDigitsRate(value) {
+    if (value == null || value === "") return "—";
+
+    const rawText = String(value).trim();
+
+    let digits = rawText.replace(/[^0-9]/g, "").replace(/^0+/, "");
+
+    if (!digits) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return "—";
+      digits = Math.abs(n).toFixed(18).replace(/[^0-9]/g, "").replace(/^0+/, "");
+    }
+
+    if (!digits) return "0,00";
+
+    digits = digits.slice(0, 3);
+
+    while (digits.length < 3) {
+      digits += "0";
+    }
+
+    return digits[0] + "," + digits.slice(1, 3);
+  }
+
+  function formatOfficialDailyRate(originName, destName, value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "—";
+
+    const key = pairKey(originName, destName);
+
+    // Reglas especiales solo para Crea tu tasa del día / Mi imagen ONZE
+    if (
+      key === "usa|venezuela" ||
+      key === "usa|chile" ||
+      key === "espana|venezuela" ||
+      key === "espana|chile" ||
+      key === "peru|chile"
+    ) {
+      return n.toLocaleString("es-CL", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+      });
+    }
+
+    // Colombia → Chile: truncar a 3 decimales, sin redondear
+    if (key === "colombia|chile") {
+      const truncated = truncateDecimals(n, 3);
+      return truncated.toLocaleString("es-CL", {
+        minimumFractionDigits: 3,
+        maximumFractionDigits: 3
+      });
+    }
+
+    // Chile → Perú: usar los primeros 3 números útiles de la tasa real, sin redondear.
+    // Ejemplo: 0,000359 -> 3,59
+    if (key === "chile|peru") {
+      const row = getRateRowFromCSV(originName, destName);
+      const raw = row?.rawDetailRate
+        ?? row?.rawDetalRate
+        ?? row?.detailRate
+        ?? row?.detalRate
+        ?? row?.officialRate
+        ?? value;
+
+      return formatMovedThreeDigitsRate(raw);
+    }
+
+    // México → Venezuela: 3 decimales
+    if (key === "mexico|venezuela") {
+      return n.toLocaleString("es-CL", {
+        minimumFractionDigits: 3,
+        maximumFractionDigits: 3
+      });
+    }
+
+    // Colombia → Venezuela: 2 decimales, redondeado
+    if (key === "colombia|venezuela") {
+      return n.toLocaleString("es-CL", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+
+    // Argentina → Chile: 3 decimales
+    if (key === "argentina|chile") {
+      return n.toLocaleString("es-CL", {
+        minimumFractionDigits: 3,
+        maximumFractionDigits: 3
+      });
+    }
+
+    // Regla normal: respetar decimales de la tasa detal del Sheet
+    const decimals = getRateDecimalsFromCSV(originName, destName);
+    return formatRate(n, decimals);
+  }
+
+  function getOfficialRateFromCSV(originName, destName) {
+    // Para "Mi imagen ONZE" mostramos la tasa detal/oficial del Sheet.
+    // Columna esperada: "tasa detal".
+    const row = getRateRowFromCSV(originName, destName);
+    if (!row) return null;
+
+    return row.detailRate
+      ?? row.detalRate
+      ?? row.officialRate
+      ?? row.tasaDetal
+      ?? row["tasa detal"]
+      ?? row.displayRate
+      ?? row.rate
+      ?? row.clientRate
+      ?? row.tasa
+      ?? row.valor
+      ?? null;
+  }
+
+  // ============================================================
+  // RENDER de pares
+  // ============================================================
+  function renderPairs() {
+    const grid = getEl("rateListEditorPairsGrid");
+    const empty = getEl("rateListEditorPairsEmpty");
+    const count = getEl("rateListEditorPairCount");
+    if (!grid || !empty || !count) return;
+
+    count.textContent = currentPairs.length;
+
+    if (currentPairs.length === 0) {
+      grid.style.display = "none";
+      empty.style.display = "block";
+      grid.innerHTML = "";
+      return;
+    }
+
+    empty.style.display = "none";
+    grid.style.display = "grid";
+
+    const operatorMode = isOperatorPercentImageMode();
+    const profitMode = getCurrentProfitMode();
+    const isFixedProfit = profitMode === "fixed";
+    const globalProfit = isFixedProfit ? (Number(getEl("rateListEditorProfit").value) || 0) : 0;
+
+    grid.innerHTML = currentPairs.map(function(p, idx) {
+      const decimals = getRateDecimalsFromCSV(p.originName, p.destName);
+
+      if (!operatorMode) {
+        const officialRate = getOfficialRateFromCSV(p.originName, p.destName);
+        const formattedOfficial = officialRate != null ? formatOfficialDailyRate(p.originName, p.destName, officialRate) : "—";
+
+        return `
+          <article class="rate-day-pair-card rate-pair-row" data-idx="${idx}">
+            <div class="rate-day-pair-top">
+              <div>
+                <div class="rate-day-pair-kicker">Par #${idx + 1}</div>
+                <strong class="rate-day-pair-route">${escapeHtml(p.originName)} → ${escapeHtml(p.destName)}</strong>
+              </div>
+              <button class="rate-pair-delete rate-day-trash-btn" data-idx="${idx}" type="button" title="Eliminar par" aria-label="Eliminar par">🗑️</button>
+            </div>
+
+            <div class="rate-day-pair-metrics">
+              <div class="rate-day-metric rate-day-metric-final">
+                <span>Tasa oficial ONZE</span>
+                <strong class="rate-pair-final">${escapeHtml(formattedOfficial)}</strong>
+              </div>
+            </div>
+
+            <div class="rate-day-pair-bottom">
+              <div class="rate-day-fixed-profit-note">Imagen oficial con <strong>tasa ONZE</strong></div>
+              <span class="rate-pair-custom-mark rate-day-mode-pill" title="Tipo de tasa">Oficial</span>
+            </div>
+          </article>
+        `;
+      }
+
+      const provider = getProviderRateFromCSV(p.originName, p.destName);
+      const effectivePct = p.customProfitPct != null && p.customProfitPct !== "" ? Number(p.customProfitPct) : globalProfit;
+      const clientRate = provider != null ? calculateClientRate(provider, effectivePct, p.originName, p.destName) : null;
+      const formatted = clientRate != null ? formatRate(clientRate, decimals) : "—";
+      const formattedProvider = provider != null ? formatRate(provider, decimals) : "—";
+      const modeLabel = p.customProfitPct != null && p.customProfitPct !== "" ? "Personalizado" : "Global";
+
+      return `
+        <article class="rate-day-pair-card rate-pair-row" data-idx="${idx}">
+          <div class="rate-day-pair-top">
+            <div>
+              <div class="rate-day-pair-kicker">Par #${idx + 1}</div>
+              <strong class="rate-day-pair-route">${escapeHtml(p.originName)} → ${escapeHtml(p.destName)}</strong>
+            </div>
+            <button class="rate-pair-delete rate-day-trash-btn" data-idx="${idx}" type="button" title="Eliminar par" aria-label="Eliminar par">🗑️</button>
+          </div>
+
+          <div class="rate-day-pair-metrics">
+            <div class="rate-day-metric">
+              <span>Tasa proveedor</span>
+              <strong>${escapeHtml(formattedProvider)}</strong>
+            </div>
+            <div class="rate-day-metric rate-day-metric-final">
+              <span>Tasa final imagen</span>
+              <strong class="rate-pair-final">${escapeHtml(formatted)}</strong>
+            </div>
+          </div>
+
+          <div class="rate-day-pair-bottom">
+            ${
+              isFixedProfit
+                ? `<div class="rate-day-fixed-profit-note">Usa ganancia fija global: <strong>${globalProfit}%</strong></div>`
+                : `<label class="rate-day-pct-label">
+                    <span>% aplicado</span>
+                    <div class="rate-day-pct-control">
+                      <input type="number" step="0.01" min="0" placeholder="${globalProfit}" value="${p.customProfitPct != null ? p.customProfitPct : ""}" data-idx="${idx}" class="rate-pair-pct-input" />
+                      <b>%</b>
+                    </div>
+                  </label>`
+            }
+            <span class="rate-pair-custom-mark rate-day-mode-pill" title="Tipo de porcentaje">${isFixedProfit ? "Fijo" : modeLabel}</span>
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  // ============================================================
+  // ACCIONES
+  // ============================================================
+  function handleAddPair() {
+    const originSel = getEl("rateListEditorOrigin");
+    const destSel = getEl("rateListEditorDestination");
+    const origin = originSel.value.trim();
+    const dest = destSel.value.trim();
+
+    if (!origin || !dest) {
+      alert("Selecciona país origen y destino.");
+      return;
+    }
+    if (normalizeText(origin) === normalizeText(dest)) {
+      alert("Origen y destino no pueden ser iguales.");
+      return;
+    }
+
+    // Verificar duplicados
+    const exists = currentPairs.some(function(p) {
+      return normalizeText(p.originName) === normalizeText(origin) &&
+             normalizeText(p.destName) === normalizeText(dest);
+    });
+    if (exists) {
+      alert("Este par ya está en la lista.");
+      return;
+    }
+
+    // Verificar que el par exista en el CSV
+    const providerRate = getProviderRateFromCSV(origin, dest);
+    if (providerRate == null) {
+      alert("Este par no existe en el Sheet de tasas (no hay tasa proveedor).");
+      return;
+    }
+
+    currentPairs.push({
+      originName: origin,
+      destName: dest,
+      customProfitPct: null
+    });
+
+    originSel.value = "";
+    destSel.value = "";
+    renderPairs();
+  }
+
+  function handlePairsGridClick(e) {
+    const delBtn = e.target.closest(".rate-pair-delete");
+    if (delBtn) {
+      const idx = Number(delBtn.getAttribute("data-idx"));
+      if (Number.isFinite(idx) && currentPairs[idx]) {
+        currentPairs.splice(idx, 1);
+        renderPairs();
+      }
+    }
+  }
+
+  function handlePairsGridInput(e) {
+    const inp = e.target.closest(".rate-pair-pct-input");
+    if (inp) {
+      const idx = Number(inp.getAttribute("data-idx"));
+      if (Number.isFinite(idx) && currentPairs[idx]) {
+        const v = inp.value.trim();
+        currentPairs[idx].customProfitPct = v === "" ? null : Number(v);
+        // Solo re-render la tasa final, no todo (evita perder el foco)
+        const row = inp.closest(".rate-pair-row");
+        if (row) {
+          const globalProfit = Number(getEl("rateListEditorProfit").value) || 0;
+          const p = currentPairs[idx];
+          const provider = getProviderRateFromCSV(p.originName, p.destName);
+          const effectivePct = p.customProfitPct != null ? Number(p.customProfitPct) : globalProfit;
+          const clientRate = provider != null ? calculateClientRate(provider, effectivePct, p.originName, p.destName) : null;
+          const decimals = getRateDecimalsFromCSV(p.originName, p.destName);
+          const finalEl = row.querySelector(".rate-pair-final");
+          if (finalEl) finalEl.textContent = clientRate != null ? formatRate(clientRate, decimals) : "—";
+          const markEl = row.querySelector(".rate-pair-custom-mark");
+          if (markEl) markEl.textContent = p.customProfitPct != null ? "Personalizado" : "Global";
+        }
+      }
+    }
+  }
+
+  function handleProfitGlobalChange() {
+    renderPairs();
+  }
+
+  // ============================================================
+  // GUARDAR
+  // ============================================================
+  async function handleSave() {
+    if (!currentList) return;
+    const name = getEl("rateListEditorName").value.trim();
+    const profitMode = getEditorSelectedProfitMode();
+    const profit = Number(getEl("rateListEditorProfit").value);
+
+    if (!name) {
+      alert("El nombre es obligatorio.");
+      return;
+    }
+    if (profitMode === "fixed" && (!Number.isFinite(profit) || profit < 0)) {
+      alert("El % de ganancia es inválido.");
+      return;
+    }
+
+    // Resolver countryIds desde el nombre del país
+    const countriesIndex = await ensureCountryIndex();
+    const settings = getCurrentListSettings();
+    const companyName = getEl("rateListEditorCompanyName")?.value?.trim() || "";
+    const logoInput = getEl("rateListEditorLogo");
+    const removeLogo = !!getEl("rateListEditorRemoveLogo")?.checked;
+
+    let logoDataUrl = settings.logoDataUrl || null;
+
+    if (removeLogo) {
+      logoDataUrl = null;
+    } else if (logoInput && logoInput.files && logoInput.files[0]) {
+      try {
+        logoDataUrl = await readEditorLogoFileAsDataUrl(logoInput.files[0]);
+      } catch (err) {
+        console.error("Error leyendo logo:", err);
+        alert("No pude leer el logo. Intenta con otra imagen.");
+        return;
+      }
+    }
+
+    const updatedSettings = {
+      ...settings,
+      profitMode: profitMode,
+      companyName: companyName,
+      logoDataUrl: logoDataUrl
+    };
+
+    const pairsForApi = currentPairs.map(function(p, idx) {
+      const originCountry = countriesIndex[normalizeText(p.originName)];
+      const destCountry = countriesIndex[normalizeText(p.destName)];
+      if (!originCountry || !destCountry) return null;
+      return {
+        originCountryId: originCountry.id,
+        destinationCountryId: destCountry.id,
+        customProfitPct: p.customProfitPct,
+        sortOrder: idx
+      };
+    }).filter(function(x) { return x != null; });
+
+    try {
+      const res = await fetch("/api/rate-lists/" + currentList.id, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name,
+          defaultProfitPct: profitMode === "fixed" ? profit : 0,
+          notes: JSON.stringify(updatedSettings),
+          pairs: pairsForApi
+        })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert("Error al guardar: " + (err.error || res.status));
+        return;
+      }
+      const data = await res.json();
+      currentList = data.rateList;
+      alert("Cambios guardados ✓");
+    } catch (err) {
+      console.error("Error save:", err);
+      alert("Error de conexión al guardar.");
+    }
+  }
+
+  // Cache de países (id por nombre normalizado)
+  let countryIndexPromise = null;
+  function ensureCountryIndex() {
+    if (countryIndexPromise) return countryIndexPromise;
+    countryIndexPromise = (async function() {
+      try {
+        const res = await fetch("/api/countries", { cache: "no-store" });
+        if (!res.ok) {
+          // Fallback: si no existe el endpoint, devolvemos vacío
+          return {};
+        }
+        const data = await res.json();
+        const list = data.countries || data || [];
+        const idx = {};
+        list.forEach(function(c) {
+          if (c && c.name) idx[normalizeText(c.name)] = c;
+          if (c && c.code) idx[normalizeText(c.code)] = c;
+        });
+        return idx;
+      } catch {
+        return {};
+      }
+    })();
+    return countryIndexPromise;
+  }
+
+  // ============================================================
+  // ABRIR / CERRAR EDITOR
+  // ============================================================
+  async function openEditor(listId) {
+    resetRateImagePreview();
+    try {
+      const res = await fetch("/api/rate-lists/" + listId, { cache: "no-store" });
+      if (!res.ok) {
+        alert("No se pudo abrir la lista.");
+        return;
+      }
+      const data = await res.json();
+      currentList = data.rateList;
+
+      // Cargar datos al editor
+      getEl("rateListEditorTitle").textContent = "Editar lista: " + currentList.name;
+      getEl("rateListEditorName").value = currentList.name || "";
+      getEl("rateListEditorProfit").value = currentList.defaultProfitPct || "0";
+      const editorProfitInput = getEl("rateListEditorProfit");
+      const profitMode = getCurrentProfitMode();
+      if (editorProfitInput) {
+        if (profitMode === "custom") {
+          editorProfitInput.disabled = true;
+          editorProfitInput.value = "";
+          editorProfitInput.placeholder = "Ganancia variable por par";
+        } else {
+          editorProfitInput.disabled = false;
+          editorProfitInput.placeholder = "4";
+        }
+      }
+
+      const detailsCard = getEl("rateListDetailsCard");
+      const detailsBtn = getEl("rateListEditorDetailsBtn");
+      if (detailsCard) detailsCard.classList.remove("is-open");
+      if (detailsBtn) detailsBtn.textContent = "⚙️ Detalles";
+
+      updateEditorBrandFields();
+      updateEditorProfitModeFields();
+
+      currentPairs = (currentList.pairs || []).map(function(p) {
+        return {
+          originName: p.originCountry?.name || "",
+          destName: p.destinationCountry?.name || "",
+          customProfitPct: p.customProfitPct != null ? Number(p.customProfitPct) : null
+        };
+      });
+
+      await loadCountriesFromDB();
+      populateCountrySelects();
+      renderPairs();
+
+      // Cambiar a la vista del editor
+      document.querySelectorAll(".view").forEach(function(v) { v.classList.remove("active"); });
+      getEl("view-rate-list-editor").classList.add("active");
+    } catch (err) {
+      console.error("Error openEditor:", err);
+      alert("Error al abrir el editor.");
+    }
+  }
+
+  function closeEditor() {
+    resetRateImagePreview();
+    currentList = null;
+    currentPairs = [];
+    document.querySelectorAll(".view").forEach(function(v) { v.classList.remove("active"); });
+    getEl("view-tasa-del-dia").classList.add("active");
+    // Refrescar las listas
+    if (typeof window.__reloadRateLists === "function") {
+      window.__reloadRateLists();
+    }
+  }
+
+  // Exponer openEditor globalmente para que el script anterior pueda usarlo
+  window.__openRateListEditor = openEditor;
+
+  // ============================================================
+  // GENERAR VISTA PREVIA DE IMAGEN
+  // ============================================================
+  function buildImageRows() {
+    const operatorMode = isOperatorPercentImageMode();
+    const globalProfit = Number(getEl("rateListEditorProfit")?.value) || 0;
+
+    return currentPairs.map(function(p) {
+      const decimals = getRateDecimalsFromCSV(p.originName, p.destName);
+
+      let rateValue = null;
+
+      if (operatorMode) {
+        const provider = getProviderRateFromCSV(p.originName, p.destName);
+        const effectivePct = p.customProfitPct != null && p.customProfitPct !== "" ? Number(p.customProfitPct) : globalProfit;
+        rateValue = provider != null ? calculateClientRate(provider, effectivePct, p.originName, p.destName) : null;
+      } else {
+        rateValue = getOfficialRateFromCSV(p.originName, p.destName);
+      }
+
+      return {
+        label: `${p.originName} - ${p.destName}`.toUpperCase(),
+        rateText: rateValue == null
+          ? "—"
+          : (operatorMode ? formatRate(rateValue, decimals) : formatOfficialDailyRate(p.originName, p.destName, rateValue))
+      };
+    });
+  }
+
+  async function renderFreshRateImagePreview() {
+    try {
+      await loadRateListCSVSnapshot();
+
+      if (typeof renderPairs === "function") {
+        renderPairs();
+      }
+
+      if (typeof renderRateImagePreview === "function") {
+        renderRateImagePreview();
+      }
+    } catch (err) {
+      console.warn("No pude refrescar CSV antes de generar imagen:", err);
+      if (typeof renderRateImagePreview === "function") {
+        renderRateImagePreview();
+      }
+    }
+  }
+
+  window.renderFreshRateImagePreview = renderFreshRateImagePreview;
+
+  function resetRateImagePreview() {
+    const wrap = getEl("rateListImagePreviewWrap");
+    const preview = getEl("rateListImagePreview");
+    if (preview) preview.innerHTML = "";
+    if (wrap) wrap.style.display = "none";
+  }
+
+  function renderRateImagePreview() {
+    if (!currentList) return;
+
+    if (!currentPairs.length) {
+      alert("Agrega al menos un par antes de generar la imagen.");
+      return;
+    }
+
+    const wrap = getEl("rateListImagePreviewWrap");
+    const preview = getEl("rateListImagePreview");
+    if (!wrap || !preview) return;
+
+    const listName = getEl("rateListEditorName").value.trim() || currentList.name || "Tasas del día";
+    const settings = getCurrentListSettings();
+    const brandName = String(settings.companyName || "").trim() || "ONZE";
+    const logoDataUrl = String(settings.logoDataUrl || "").trim();
+    const rows = buildImageRows();
+    const left = rows.filter(function(_, idx) { return idx % 2 === 0; });
+    const right = rows.filter(function(_, idx) { return idx % 2 !== 0; });
+
+    const brandTopHtml = logoDataUrl
+      ? `<img src="${escapeHtml(logoDataUrl)}" alt="${escapeHtml(brandName)}" style="max-width:122px;max-height:48px;object-fit:contain;display:block;margin:0 auto;" />`
+      : `<div style="display:inline-flex;align-items:center;justify-content:center;padding:8px 16px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);color:#dfffe8;font-size:13px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;">${escapeHtml(brandName)}</div>`;
+
+    const brandBottomHtml = logoDataUrl
+      ? `<img src="${escapeHtml(logoDataUrl)}" alt="${escapeHtml(brandName)}" style="max-width:170px;max-height:82px;object-fit:contain;display:block;" />`
+      : `<div style="padding:12px 22px;border-radius:18px;background:rgba(255,255,255,.94);color:#228B22;font-weight:950;font-size:27px;letter-spacing:-.8px;">${escapeHtml(brandName)}</div>`;
+
+    function renderColumn(items) {
+      return items.map(function(item) {
+        return `
+          <div style="margin-bottom:12px;text-align:center;">
+            <div style="color:#ffffff;font-weight:950;font-size:21px;line-height:1.05;letter-spacing:.8px;text-transform:uppercase;text-shadow:0 2px 4px rgba(0,0,0,.22);margin-bottom:6px;white-space:nowrap;">
+              ${escapeHtml(item.label)}
+            </div>
+            <div style="height:42px;display:flex;align-items:center;justify-content:center;border:3px solid rgba(245,181,0,.92);border-radius:999px;background:rgba(2,82,55,.18);color:#ffffff;font-weight:900;font-size:32px;line-height:1;letter-spacing:1px;text-shadow:0 2px 4px rgba(0,0,0,.28);">
+              ${escapeHtml(item.rateText)}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    const today = new Date();
+    const dateText = today.toLocaleDateString("es-CL", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
+    });
+
+    preview.innerHTML = `
+      <div id="rateListImageCanvas" style="width:720px;min-height:900px;box-sizing:border-box;padding:34px 34px 28px;border-radius:28px;position:relative;overflow:hidden;background:radial-gradient(circle at 18% 12%, rgba(34,139,34,.95), transparent 32%),radial-gradient(circle at 90% 8%, rgba(255,255,255,.20), transparent 28%),linear-gradient(135deg,#07140d 0%,#0f2a19 42%,#228B22 100%);box-shadow:0 24px 70px rgba(0,0,0,.35);font-family:Arial, Helvetica, sans-serif;">
+        <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px),linear-gradient(90deg,rgba(255,255,255,.045) 1px, transparent 1px);background-size:26px 26px;opacity:.55;"></div>
+        <div style="position:relative;z-index:1;">
+          <div style="text-align:center;margin-bottom:24px;">
+            ${brandTopHtml}
+            <h1 style="margin:14px 0 4px;color:#ffffff;font-size:44px;line-height:1;font-weight:950;letter-spacing:-1.4px;text-transform:uppercase;">Tasas del día</h1>
+            <div style="color:rgba(255,255,255,.82);font-size:15px;font-weight:700;">${escapeHtml(listName)} · ${escapeHtml(dateText)}</div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;">
+            <div>${renderColumn(left)}</div>
+            <div>${renderColumn(right)}</div>
+          </div>
+
+          <div style="margin-top:24px;text-align:center;color:rgba(255,255,255,.86);font-size:13px;font-weight:700;">
+            Tasas referenciales sujetas a disponibilidad y confirmación al momento de operar.
+          </div>
+
+          <div style="margin-top:18px;display:flex;justify-content:center;">
+            ${brandBottomHtml}
+          </div>
+        </div>
+      </div>
+    `;
+
+    wrap.style.display = "block";
+    wrap.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // ============================================================
+  // INIT
+  // ============================================================
+  function init() {
+    const modeOnzeBtn = getEl("rateDayModeOnzeBtn");
+    const modeOperatorBtn = getEl("rateDayModeOperatorBtn");
+
+    if (modeOnzeBtn) modeOnzeBtn.addEventListener("click", function() { setRateDayCreatorMode("official_onze"); });
+    if (modeOperatorBtn) modeOperatorBtn.addEventListener("click", function() { setRateDayCreatorMode("operator_percent"); });
+    updateRateDayCreatorModeUI();
+
+    const backBtn = getEl("rateListEditorBackBtn");
+    const addBtn = getEl("rateListEditorAddPairBtn");
+    const saveBtn = getEl("rateListEditorSaveBtn");
+    const detailsBtn = getEl("rateListEditorDetailsBtn");
+    const profitInput = getEl("rateListEditorProfit");
+    const pairsGrid = getEl("rateListEditorPairsGrid");
+
+    if (backBtn) backBtn.addEventListener("click", closeEditor);
+    if (addBtn) addBtn.addEventListener("click", handleAddPair);
+    if (saveBtn) saveBtn.addEventListener("click", handleSave);
+    if (detailsBtn) detailsBtn.addEventListener("click", toggleRateListDetails);
+    document.querySelectorAll('input[name="rateListEditorProfitMode"]').forEach(function(radio) {
+      radio.addEventListener("change", handleEditorProfitModeChange);
+    });
+    if (profitInput) profitInput.addEventListener("input", handleProfitGlobalChange);
+    if (pairsGrid) {
+      pairsGrid.addEventListener("click", handlePairsGridClick);
+      pairsGrid.addEventListener("input", handlePairsGridInput);
+    }
+
+    const imgBtn = getEl("rateListEditorImageBtn");
+    const imgBtnMini = getEl("rateListEditorImageBtnMini");
+    const refreshImgBtn = getEl("rateListImageRefreshBtn");
+
+    if (imgBtn) {
+      imgBtn.addEventListener("click", renderFreshRateImagePreview);
+    }
+    if (imgBtnMini) {
+      imgBtnMini.addEventListener("click", renderFreshRateImagePreview);
+    }
+    if (refreshImgBtn) {
+      refreshImgBtn.addEventListener("click", refreshRateDayRates);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
 </script>
 
 </body>
