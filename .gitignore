@@ -64,3 +64,4 @@ scripts/*.ts
 exports/
 .env.production.local
 prisma/schema.prisma.backup
+prisma/schema.prisma.backup
