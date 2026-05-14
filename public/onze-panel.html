@@ -15795,7 +15795,81 @@ if(addProviderBtn){
     return row.displayRate ?? row.rate ?? row.clientRate ?? row.tasa ?? row.valor ?? row.providerRate ?? row.costRate ?? row.cost ?? null;
   }
 
-  function getRateDayCreatorMode() {
+  
+  function getRateDayUrlParams() {
+    return new URLSearchParams(window.location.search || "");
+  }
+
+  function getRateDayRoleFromUrl() {
+    return String(getRateDayUrlParams().get("role") || "").toLowerCase();
+  }
+
+  function getRateDayOperatorModeFromUrl() {
+    return String(getRateDayUrlParams().get("operatorMode") || "").toLowerCase();
+  }
+
+  function isRateDayAdminCreator() {
+    const role = getRateDayRoleFromUrl();
+
+    if (role === "super_admin_global" || role === "super_admin_cliente") {
+      return true;
+    }
+
+    const candidates = [
+      window.currentUser,
+      window.authUser,
+      window.ONZE_USER,
+      window.sessionUser
+    ].filter(Boolean);
+
+    return candidates.some(function(user) {
+      const r = String(user.role || "").toLowerCase();
+      const email = String(user.email || "").toLowerCase();
+      return r === "super_admin_global"
+        || r === "super_admin_cliente"
+        || email === "onze.cl21@gmail.com";
+    });
+  }
+
+  function isRateDayFixedPercentOrPartnerOperator() {
+    const mode = getRateDayOperatorModeFromUrl();
+
+    return mode.includes("porcentaje")
+      || mode.includes("percent")
+      || mode.includes("percentage")
+      || mode.includes("socio")
+      || mode.includes("partner")
+      || mode.includes("50");
+  }
+
+  function isRateDayLibreOperator() {
+    const mode = getRateDayOperatorModeFromUrl();
+    return mode.includes("libre") || mode.includes("free");
+  }
+
+  function getForcedRateDayCreatorModeByRole() {
+    if (isRateDayAdminCreator()) return null;
+
+    // Operador por % fijo y socio siempre publican con tasa oficial/detal ONZE.
+    if (isRateDayFixedPercentOrPartnerOperator()) {
+      return "official_onze";
+    }
+
+    // Operador libre tiene estructura propia; no necesita ver selector.
+    // Usamos el modo de operador para mantener su lógica separada.
+    if (isRateDayLibreOperator()) {
+      return "operator_percent";
+    }
+
+    // Por seguridad, cualquier usuario no admin queda con tasa oficial ONZE.
+    return "official_onze";
+  }
+
+
+function getRateDayCreatorMode() {
+    const forcedMode = getForcedRateDayCreatorModeByRole();
+    if (forcedMode) return forcedMode;
+
     return localStorage.getItem("onzeRateDayCreatorMode") || "official_onze";
   }
 
@@ -15804,25 +15878,34 @@ if(addProviderBtn){
   }
 
   function updateRateDayCreatorModeUI() {
-    const mode = getRateDayCreatorMode();
-    const onzeBtn = getEl("rateDayModeOnzeBtn");
-    const operatorBtn = getEl("rateDayModeOperatorBtn");
-    const desc = getEl("rateDayModeDescription");
+    const card = document.getElementById("rateDayModeCard");
+    const modeOnzeBtn = document.getElementById("rateDayModeOnzeBtn");
+    const modeOperatorBtn = document.getElementById("rateDayModeOperatorBtn");
 
-    if (onzeBtn) onzeBtn.classList.toggle("is-active", mode === "official_onze");
-    if (operatorBtn) operatorBtn.classList.toggle("is-active", mode === "operator_percent");
-
-    if (desc) {
-      desc.textContent = mode === "operator_percent"
-        ? "Prueba la visual de un operador que crea imágenes con su propio porcentaje."
-        : "Crea tu imagen oficial ONZE con las tasas del día listas para compartir.";
+    if (card) {
+      card.style.display = isRateDayAdminCreator() ? "" : "none";
     }
+
+    const mode = getRateDayCreatorMode();
+
+    if (modeOnzeBtn) {
+      modeOnzeBtn.classList.toggle("active", mode === "official_onze");
+    }
+
+    if (modeOperatorBtn) {
+      modeOperatorBtn.classList.toggle("active", mode === "operator_percent");
+    }
+  }
   }
 
   function setRateDayCreatorMode(mode) {
+    if (!isRateDayAdminCreator()) {
+      updateRateDayCreatorModeUI();
+      return;
+    }
+
     localStorage.setItem("onzeRateDayCreatorMode", mode === "operator_percent" ? "operator_percent" : "official_onze");
     updateRateDayCreatorModeUI();
-
     if (typeof renderPairs === "function") renderPairs();
     if (typeof resetRateImagePreview === "function") resetRateImagePreview();
   }
