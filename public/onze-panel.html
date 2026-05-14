@@ -2279,7 +2279,8 @@
             <div class="form-row" style="margin-top:12px;max-width:420px;">
               <label for="rateDayTemplateSelect">Plantilla</label>
               <select id="rateDayTemplateSelect" onchange="window.setRateDayTemplateId && window.setRateDayTemplateId(this.value)">
-                <option value="aki_original">AKI Transfer Original</option>
+                <option value="aki_exact">AKI Transfer Original Exacta</option>
+                <option value="aki_original">AKI Transfer Original Dinámica</option>
                 <option value="aki_modern">AKI Transfer Moderna</option>
                 <option value="aki_premium">AKI Transfer Premium</option>
                 <option value="onze_classic">ONZE Verde Clásica</option>
@@ -16385,11 +16386,18 @@ if(addProviderBtn){
 
   const RATE_DAY_TEMPLATES = [
     {
-      id: "aki_original",
-      name: "AKI Transfer Original",
+      id: "aki_exact",
+      name: "AKI Transfer Original Exacta",
       scope: "super_admin",
       brand: "AKI",
-      description: "Diseño base oficial de AKI Transfer."
+      description: "Usa la imagen real de AKI Transfer como fondo y solo escribe las tasas encima."
+    },
+    {
+      id: "aki_original",
+      name: "AKI Transfer Original Dinámica",
+      scope: "super_admin",
+      brand: "AKI",
+      description: "Diseño base editable de AKI Transfer."
     },
     {
       id: "aki_modern",
@@ -16453,7 +16461,7 @@ if(addProviderBtn){
   }
 
   function getRateDayDefaultTemplateId() {
-    return isRateDaySuperAdmin() ? "aki_original" : "onze_classic";
+    return isRateDaySuperAdmin() ? "aki_exact" : "onze_classic";
   }
 
   function getRateDayTemplateId() {
@@ -16462,8 +16470,8 @@ if(addProviderBtn){
     // Para el super admin, la base principal siempre debe ser AKI Original.
     // Si antes quedó guardado ONZE clásica por haber cargado antes de detectar usuario,
     // lo corregimos automáticamente.
-    if (isRateDaySuperAdmin() && (!stored || stored === "onze_classic")) {
-      return "aki_original";
+    if (isRateDaySuperAdmin() && (!stored || stored === "onze_classic" || stored === "aki_original")) {
+      return "aki_exact";
     }
 
     const exists = RATE_DAY_TEMPLATES.some(function(t) { return t.id === stored; });
@@ -16545,8 +16553,8 @@ if(addProviderBtn){
 
         if (isRateDaySuperAdmin()) {
           const stored = localStorage.getItem("onzeRateDayTemplateId");
-          if (!stored || stored === "onze_classic") {
-            localStorage.setItem("onzeRateDayTemplateId", "aki_original");
+          if (!stored || stored === "onze_classic" || stored === "aki_original") {
+            localStorage.setItem("onzeRateDayTemplateId", "aki_exact");
           }
         }
       }
@@ -16610,6 +16618,49 @@ if(addProviderBtn){
     }
 
     return `<div style="padding:13px 24px;border-radius:20px;background:rgba(255,255,255,.95);color:#228B22;font-weight:950;font-size:34px;letter-spacing:-1px;">${escapeHtml(brandName || "ONZE")}</div>`;
+  }
+
+  function renderAkiExactTemplate(rows) {
+    const positions = [
+      { left: 120, top: 305, width: 306, height: 60 },
+      { left: 483, top: 305, width: 306, height: 60 },
+      { left: 120, top: 416, width: 306, height: 60 },
+      { left: 483, top: 416, width: 306, height: 60 },
+      { left: 120, top: 529, width: 306, height: 60 },
+      { left: 483, top: 529, width: 306, height: 60 },
+      { left: 120, top: 642, width: 306, height: 60 },
+      { left: 483, top: 642, width: 306, height: 60 },
+      { left: 120, top: 755, width: 306, height: 60 },
+      { left: 483, top: 755, width: 306, height: 60 },
+      { left: 120, top: 868, width: 306, height: 60 },
+      { left: 483, top: 868, width: 306, height: 60 },
+      { left: 120, top: 982, width: 306, height: 60 },
+      { left: 483, top: 982, width: 306, height: 60 },
+      { left: 120, top: 1095, width: 306, height: 60 },
+      { left: 483, top: 1095, width: 306, height: 60 },
+      { left: 120, top: 1208, width: 306, height: 60 },
+      { left: 483, top: 1208, width: 306, height: 60 },
+      { left: 120, top: 1321, width: 306, height: 60 },
+      { left: 483, top: 1321, width: 306, height: 60 }
+    ];
+
+    const rateHtml = rows.slice(0, 20).map(function(item, idx) {
+      const pos = positions[idx];
+      if (!pos) return "";
+
+      return `
+        <div style="position:absolute;left:${pos.left}px;top:${pos.top}px;width:${pos.width}px;height:${pos.height}px;display:flex;align-items:center;justify-content:center;color:#ffffff;font-family:Arial, Helvetica, sans-serif;font-size:40px;font-weight:950;letter-spacing:.8px;text-shadow:0 3px 5px rgba(0,0,0,.28);line-height:1;">
+          ${escapeHtml(item.rateText)}
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div id="rateListImageCanvas" style="width:900px;height:1600px;position:relative;overflow:hidden;background:#085b40;font-family:Arial, Helvetica, sans-serif;">
+        <img src="/templates/aki-transfer-original.jpg" alt="AKI Transfer Original" style="position:absolute;inset:0;width:900px;height:1600px;object-fit:cover;display:block;" />
+        ${rateHtml}
+      </div>
+    `;
   }
 
   function renderAkiOriginalTemplate(rows, listName, brandName, logoDataUrl, dateText) {
@@ -16799,7 +16850,9 @@ if(addProviderBtn){
 
     let html = "";
 
-    if (template.id === "aki_original") {
+    if (template.id === "aki_exact") {
+      html = renderAkiExactTemplate(rows);
+    } else if (template.id === "aki_original") {
       html = renderAkiOriginalTemplate(rows, listName, brandName, logoDataUrl, dateText);
     } else if (template.id === "aki_modern") {
       html = renderAkiModernTemplate(rows, listName, brandName, logoDataUrl, dateText);
