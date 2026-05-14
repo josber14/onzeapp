@@ -16644,6 +16644,10 @@ if(addProviderBtn){
     const rateBg = options.rateBg || "rgba(0,80,55,.28)";
     const pairColor = options.pairColor || "#ffffff";
     const rateColor = options.rateColor || "#ffffff";
+    const rateWeight = options.rateWeight || 950;
+    const rateLetterSpacing = options.rateLetterSpacing || "1px";
+    const rateLineHeight = options.rateLineHeight || "1";
+    const rateTranslateY = options.rateTranslateY || "0px";
 
     return items.map(function(item) {
       return `
@@ -16651,8 +16655,8 @@ if(addProviderBtn){
           <div style="color:${pairColor};font-weight:950;font-size:${pairFont}px;line-height:1.02;letter-spacing:.8px;text-transform:uppercase;text-shadow:0 3px 5px rgba(0,0,0,.26);margin-bottom:8px;white-space:nowrap;">
             ${escapeHtml(item.label)}
           </div>
-          <div style="height:${rateHeight}px;display:flex;align-items:center;justify-content:center;border:4px solid ${borderColor};border-radius:999px;background:${rateBg};color:${rateColor};font-weight:950;font-size:${rateFont}px;line-height:1;letter-spacing:1px;text-shadow:0 3px 5px rgba(0,0,0,.30);box-shadow:0 10px 22px rgba(0,0,0,.14);">
-            ${escapeHtml(item.rateText)}
+          <div style="height:${rateHeight}px;display:flex;align-items:center;justify-content:center;border:4px solid ${borderColor};border-radius:999px;background:${rateBg};color:${rateColor};font-weight:${rateWeight};font-size:${rateFont}px;line-height:${rateLineHeight};letter-spacing:${rateLetterSpacing};text-shadow:0 2px 4px rgba(0,0,0,.24);box-shadow:0 10px 22px rgba(0,0,0,.14);">
+            <span style="display:block;transform:translateY(${rateTranslateY});">${escapeHtml(item.rateText)}</span>
           </div>
         </div>
       `;
@@ -16726,9 +16730,9 @@ if(addProviderBtn){
     const total = rows.length;
 
     const pairFont = total <= 10 ? 32 : total > 20 ? 22 : 28;
-    const rateFont = total <= 10 ? 48 : total > 20 ? 30 : 40;
+    const rateFont = total <= 10 ? 46 : total > 20 ? 28 : 38;
     const itemMargin = total <= 10 ? 30 : total > 20 ? 11 : 17;
-    const rateHeight = total <= 10 ? 68 : total > 20 ? 46 : 55;
+    const rateHeight = total <= 10 ? 68 : total > 20 ? 50 : 58;
 
     const cleanBrand = String(brandName || "").trim();
 
@@ -16763,7 +16767,11 @@ if(addProviderBtn){
               borderColor:"#e3aa08",
               rateBg:"transparent",
               pairColor:"#ffffff",
-              rateColor:"#ffffff"
+              rateColor:"#ffffff",
+              rateWeight:500,
+              rateLetterSpacing:"5px",
+              rateLineHeight:"1.08",
+              rateTranslateY:"-1px"
             })}</div>
             <div>${renderRateColumn(split.right, {
               pairFont,
@@ -16773,7 +16781,11 @@ if(addProviderBtn){
               borderColor:"#e3aa08",
               rateBg:"transparent",
               pairColor:"#ffffff",
-              rateColor:"#ffffff"
+              rateColor:"#ffffff",
+              rateWeight:500,
+              rateLetterSpacing:"5px",
+              rateLineHeight:"1.08",
+              rateTranslateY:"-1px"
             })}</div>
           </div>
 
