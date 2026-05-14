@@ -2075,7 +2075,7 @@
             <button class="btn primary" id="newRateListBtn" type="button">+ Nueva lista</button>
           </div>
 
-                    <div class="rate-day-mode-switch-card">
+                    <div class="rate-day-mode-switch-card" id="rateDayModeCard">
             <div>
               <div class="rate-day-list-kicker">Vista de creador</div>
               <p id="rateDayModeDescription">Crea tu imagen oficial ONZE con las tasas del día listas para compartir.</p>
@@ -15284,6 +15284,7 @@ if(addProviderBtn){
     }
 
     updateEditorProfitModeFields();
+    updateRateDayProfitConfigVisibility();
     renderPairs();
     resetRateImagePreview();
   }
@@ -15791,8 +15792,23 @@ if(addProviderBtn){
     const row = getRateRowFromCSV(originName, destName);
     if (!row) return null;
 
-    // Para la imagen del día usamos la tasa visible del Sheet.
-    return row.displayRate ?? row.rate ?? row.clientRate ?? row.tasa ?? row.valor ?? row.providerRate ?? row.costRate ?? row.cost ?? null;
+    // En "Operador con % propio" la base debe ser tasa proveedor/costo.
+    // Si no existe una columna proveedor/costo, recién ahí usamos la tasa visible como respaldo.
+    return row.providerRate
+      ?? row.costRate
+      ?? row.cost
+      ?? row.rawProviderRate
+      ?? row.rawCostRate
+      ?? row["tasa proveedor"]
+      ?? row["proveedor"]
+      ?? row["tasa costo"]
+      ?? row["costo"]
+      ?? row.displayRate
+      ?? row.rate
+      ?? row.clientRate
+      ?? row.tasa
+      ?? row.valor
+      ?? null;
   }
 
   function getRateDayCreatorMode() {
@@ -16289,6 +16305,7 @@ if(addProviderBtn){
 
       updateEditorBrandFields();
       updateEditorProfitModeFields();
+      updateRateDayProfitConfigVisibility();
 
       currentPairs = (currentList.pairs || []).map(function(p) {
         return {
@@ -17173,8 +17190,42 @@ if(addProviderBtn){
     }
   }
 
+  function updateRateDayProfitConfigVisibility() {
+    const showProfitConfig = getRateDayCreatorMode() === "operator_percent";
+
+    // Modal Nueva lista
+    const newProfitInput = document.getElementById("rateDayNewListProfit");
+    const newProfitRow = newProfitInput ? newProfitInput.closest(".form-row") : null;
+    if (newProfitRow) newProfitRow.style.display = showProfitConfig ? "" : "none";
+
+    const newProfitModeBlock = document.querySelector('input[name="rateDayProfitMode"]')?.closest(".rate-day-modal-full");
+    if (newProfitModeBlock) newProfitModeBlock.style.display = showProfitConfig ? "" : "none";
+
+    // Editor / Detalles de lista existente
+    const advancedDetails = document.getElementById("rateListAdvancedDetails");
+    if (advancedDetails) advancedDetails.style.display = showProfitConfig ? "" : "none";
+
+    const editorProfitModeBlock = document.querySelector('input[name="rateListEditorProfitMode"]')?.closest(".rate-day-profit-mode-editor");
+    if (editorProfitModeBlock) editorProfitModeBlock.style.display = showProfitConfig ? "" : "none";
+
+    const editorProfitInput = document.getElementById("rateListEditorProfit");
+    const editorProfitRow = editorProfitInput ? editorProfitInput.closest(".form-row") : null;
+    if (editorProfitRow) editorProfitRow.style.display = showProfitConfig ? "" : "none";
+
+    if (!showProfitConfig) {
+      const fixedNewRadio = document.querySelector('input[name="rateDayProfitMode"][value="fixed"]');
+      if (fixedNewRadio) fixedNewRadio.checked = true;
+
+      const fixedEditorRadio = document.querySelector('input[name="rateListEditorProfitMode"][value="fixed"]');
+      if (fixedEditorRadio) fixedEditorRadio.checked = true;
+
+      if (newProfitInput) newProfitInput.value = newProfitInput.value || "0";
+      if (editorProfitInput) editorProfitInput.value = editorProfitInput.value || "0";
+    }
+  }
+
   function updateRateDayCreatorModeUI() {
-    const card = document.getElementById("rateDayModeCard");
+    const card = document.getElementById("rateDayModeCard") || document.querySelector(".rate-day-mode-switch-card");
     const modeOnzeBtn = document.getElementById("rateDayModeOnzeBtn");
     const modeOperatorBtn = document.getElementById("rateDayModeOperatorBtn");
 
@@ -17183,16 +17234,20 @@ if(addProviderBtn){
     }
 
     const mode = getRateDayCreatorMode();
+    updateRateDayProfitConfigVisibility();
 
     if (modeOnzeBtn) {
       modeOnzeBtn.classList.toggle("active", mode === "official_onze");
+      modeOnzeBtn.classList.toggle("is-active", mode === "official_onze");
       modeOnzeBtn.setAttribute("aria-pressed", mode === "official_onze" ? "true" : "false");
     }
 
     if (modeOperatorBtn) {
       modeOperatorBtn.classList.toggle("active", mode === "operator_percent");
+      modeOperatorBtn.classList.toggle("is-active", mode === "operator_percent");
       modeOperatorBtn.setAttribute("aria-pressed", mode === "operator_percent" ? "true" : "false");
     }
+
   }
 
   window.getRateDayCreatorMode = getRateDayCreatorMode;
