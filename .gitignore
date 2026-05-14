@@ -58,3 +58,8 @@ next-env.d.ts
 # Backups locales del panel
 public/*.bak*
 public/*backup*
+
+# Local admin scripts / exports
+scripts/*.ts
+exports/
+.env.production.local
