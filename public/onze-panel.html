@@ -16748,25 +16748,71 @@ if(addProviderBtn){
 
   function renderAkiModernTemplate(rows, listName, brandName, logoDataUrl, dateText) {
     const split = splitRateRows(rows);
+    const total = rows.length;
+
+    const pairFont = total > 20 ? 20 : total <= 10 ? 30 : 24;
+    const rateFont = total > 20 ? 29 : total <= 10 ? 45 : 35;
+    const itemMargin = total > 20 ? 9 : total <= 10 ? 24 : 13;
+    const rateHeight = total > 20 ? 43 : total <= 10 ? 62 : 48;
+
+    const logoHtml = logoDataUrl
+      ? `<img src="${escapeHtml(logoDataUrl)}" alt="${escapeHtml(brandName || "AKI TRANSFER")}" style="max-width:210px;max-height:82px;object-fit:contain;display:block;margin:0 auto;" />`
+      : `
+        <div style="display:inline-flex;align-items:center;gap:14px;">
+          <div style="width:58px;height:58px;border-radius:999px;background:#ffffff;color:#08743d;display:flex;align-items:center;justify-content:center;font-weight:950;font-size:32px;">A</div>
+          <div>
+            <div style="color:#ffffff;font-size:44px;font-weight:950;letter-spacing:-1.5px;line-height:.85;">AKI</div>
+            <div style="color:#f5b500;font-size:17px;font-weight:950;letter-spacing:.38em;margin-top:8px;">TRANSFER</div>
+          </div>
+        </div>
+      `;
+
     return `
-      <div id="rateListImageCanvas" style="width:900px;height:1600px;box-sizing:border-box;padding:70px 64px 54px;position:relative;overflow:hidden;background:linear-gradient(145deg,#042b1b 0%,#0a8f48 56%,#18b862 100%);font-family:Arial, Helvetica, sans-serif;">
-        <div style="position:absolute;top:0;right:0;width:420px;height:420px;background:rgba(245,181,0,.20);filter:blur(8px);border-bottom-left-radius:999px;"></div>
-        <div style="position:relative;z-index:1;">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:20px;">
+      <div id="rateListImageCanvas" style="width:900px;height:1600px;box-sizing:border-box;padding:58px 58px 44px;position:relative;overflow:hidden;background:linear-gradient(160deg,#041f16 0%,#075b39 42%,#11a755 100%);font-family:Arial, Helvetica, sans-serif;">
+        <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px, transparent 1px);background-size:38px 38px;opacity:.55;"></div>
+        <div style="position:absolute;right:-160px;top:-120px;width:520px;height:520px;border-radius:999px;background:rgba(245,181,0,.20);filter:blur(2px);"></div>
+        <div style="position:absolute;left:-180px;bottom:120px;width:520px;height:520px;border-radius:999px;background:rgba(255,255,255,.08);"></div>
+
+        <div style="position:relative;z-index:1;height:100%;display:flex;flex-direction:column;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:22px;">
             <div>
-              <div style="display:inline-block;padding:9px 16px;border-radius:999px;background:#f5b500;color:#063b24;font-weight:950;font-size:18px;">${escapeHtml(dateText)}</div>
-              <h1 style="margin:22px 0 0;color:#ffffff;font-size:74px;line-height:.88;font-weight:950;letter-spacing:-3px;text-transform:uppercase;">Tasa<br/>del día</h1>
+              <div style="display:inline-flex;align-items:center;padding:10px 18px;border-radius:999px;background:#f5b500;color:#063b24;font-size:18px;font-weight:950;letter-spacing:.08em;text-transform:uppercase;">
+                ${escapeHtml(dateText)}
+              </div>
+              <h1 style="margin:24px 0 0;color:#ffffff;font-size:78px;line-height:.86;font-weight:950;letter-spacing:-4px;text-transform:uppercase;text-shadow:0 8px 18px rgba(0,0,0,.26);">
+                Tasas<br/>del día
+              </h1>
             </div>
-            <div style="font-size:22px;font-weight:900;color:rgba(255,255,255,.88);text-align:right;">${escapeHtml(listName)}</div>
+            <div style="max-width:270px;text-align:right;color:rgba(255,255,255,.86);font-size:20px;font-weight:900;line-height:1.2;">
+              ${escapeHtml(listName)}
+            </div>
           </div>
 
-          <div style="margin-top:70px;display:grid;grid-template-columns:1fr 1fr;gap:30px;">
-            <div>${renderRateColumn(split.left, { pairFont:23, rateFont:36, itemMargin:15, rateHeight:50, borderColor:"#ffffff", rateBg:"rgba(245,181,0,.18)" })}</div>
-            <div>${renderRateColumn(split.right, { pairFont:23, rateFont:36, itemMargin:15, rateHeight:50, borderColor:"#ffffff", rateBg:"rgba(245,181,0,.18)" })}</div>
+          <div style="margin-top:54px;display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start;">
+            <div>${renderRateColumn(split.left, {
+              pairFont,
+              rateFont,
+              itemMargin,
+              rateHeight,
+              borderColor:"#f5b500",
+              rateBg:"rgba(255,255,255,.10)",
+              pairColor:"#ffffff",
+              rateColor:"#ffffff"
+            })}</div>
+            <div>${renderRateColumn(split.right, {
+              pairFont,
+              rateFont,
+              itemMargin,
+              rateHeight,
+              borderColor:"#f5b500",
+              rateBg:"rgba(255,255,255,.10)",
+              pairColor:"#ffffff",
+              rateColor:"#ffffff"
+            })}</div>
           </div>
 
-          <div style="position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;">
-            ${getRateImageBrandHtml(brandName || "AKI TRANSFER", logoDataUrl, "aki_modern")}
+          <div style="margin-top:auto;padding-top:18px;display:flex;justify-content:center;align-items:center;">
+            ${logoHtml}
           </div>
         </div>
       </div>
@@ -16775,21 +16821,67 @@ if(addProviderBtn){
 
   function renderAkiPremiumTemplate(rows, listName, brandName, logoDataUrl, dateText) {
     const split = splitRateRows(rows);
-    return `
-      <div id="rateListImageCanvas" style="width:900px;height:1600px;box-sizing:border-box;padding:76px 62px 54px;position:relative;overflow:hidden;background:radial-gradient(circle at 50% 0%,#1ed46f 0%,#087c3d 36%,#03140e 100%);font-family:Arial, Helvetica, sans-serif;">
-        <div style="position:absolute;inset:32px;border:2px solid rgba(245,181,0,.45);border-radius:42px;"></div>
-        <div style="position:relative;z-index:1;text-align:center;">
-          <div style="font-size:24px;color:#f5b500;font-weight:950;letter-spacing:.22em;text-transform:uppercase;">${escapeHtml(brandName || "AKI TRANSFER")}</div>
-          <h1 style="margin:20px 0 8px;color:#ffffff;font-size:82px;line-height:.88;font-weight:950;letter-spacing:-4px;text-transform:uppercase;">Tasa<br/>del día</h1>
-          <div style="color:rgba(255,255,255,.78);font-size:20px;font-weight:800;">${escapeHtml(listName)} · ${escapeHtml(dateText)}</div>
+    const total = rows.length;
 
-          <div style="margin-top:58px;display:grid;grid-template-columns:1fr 1fr;gap:28px;">
-            <div>${renderRateColumn(split.left, { pairFont:22, rateFont:35, itemMargin:14, rateHeight:49, borderColor:"#f5b500", rateBg:"rgba(255,255,255,.10)" })}</div>
-            <div>${renderRateColumn(split.right, { pairFont:22, rateFont:35, itemMargin:14, rateHeight:49, borderColor:"#f5b500", rateBg:"rgba(255,255,255,.10)" })}</div>
+    const pairFont = total > 20 ? 20 : total <= 10 ? 30 : 24;
+    const rateFont = total > 20 ? 29 : total <= 10 ? 45 : 35;
+    const itemMargin = total > 20 ? 9 : total <= 10 ? 24 : 13;
+    const rateHeight = total > 20 ? 43 : total <= 10 ? 62 : 48;
+
+    const logoHtml = logoDataUrl
+      ? `<img src="${escapeHtml(logoDataUrl)}" alt="${escapeHtml(brandName || "AKI TRANSFER")}" style="max-width:215px;max-height:86px;object-fit:contain;display:block;margin:0 auto;" />`
+      : `
+        <div style="text-align:center;">
+          <div style="color:#ffffff;font-size:62px;line-height:.78;font-weight:950;letter-spacing:-4px;">AKI</div>
+          <div style="margin-top:9px;color:#f5b500;font-size:18px;font-weight:950;letter-spacing:.44em;">TRANSFER</div>
+        </div>
+      `;
+
+    return `
+      <div id="rateListImageCanvas" style="width:900px;height:1600px;box-sizing:border-box;padding:56px 56px 44px;position:relative;overflow:hidden;background:radial-gradient(circle at 50% -6%,#25d976 0%,#078046 34%,#02150f 100%);font-family:Arial, Helvetica, sans-serif;">
+        <div style="position:absolute;inset:28px;border:2px solid rgba(245,181,0,.45);border-radius:44px;"></div>
+        <div style="position:absolute;inset:40px;border:1px solid rgba(255,255,255,.10);border-radius:34px;"></div>
+        <div style="position:absolute;left:-120px;top:230px;width:330px;height:330px;border-radius:999px;background:rgba(245,181,0,.11);filter:blur(1px);"></div>
+        <div style="position:absolute;right:-130px;bottom:190px;width:360px;height:360px;border-radius:999px;background:rgba(255,255,255,.08);"></div>
+
+        <div style="position:relative;z-index:1;height:100%;display:flex;flex-direction:column;text-align:center;">
+          <div>
+            <div style="display:inline-flex;align-items:center;justify-content:center;padding:9px 22px;border-radius:999px;border:1px solid rgba(245,181,0,.55);background:rgba(245,181,0,.12);color:#f5b500;font-size:20px;font-weight:950;letter-spacing:.22em;text-transform:uppercase;">
+              ${escapeHtml(brandName || "AKI TRANSFER")}
+            </div>
+            <h1 style="margin:22px 0 6px;color:#ffffff;font-size:82px;line-height:.88;font-weight:950;letter-spacing:-4px;text-transform:uppercase;text-shadow:0 9px 22px rgba(0,0,0,.34);">
+              Tasas<br/>del día
+            </h1>
+            <div style="color:rgba(255,255,255,.82);font-size:20px;font-weight:850;">
+              ${escapeHtml(listName)} · ${escapeHtml(dateText)}
+            </div>
           </div>
 
-          <div style="position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;">
-            ${getRateImageBrandHtml(brandName || "AKI TRANSFER", logoDataUrl, "aki_premium")}
+          <div style="margin-top:48px;display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start;">
+            <div>${renderRateColumn(split.left, {
+              pairFont,
+              rateFont,
+              itemMargin,
+              rateHeight,
+              borderColor:"#f5b500",
+              rateBg:"rgba(255,255,255,.095)",
+              pairColor:"#ffffff",
+              rateColor:"#ffffff"
+            })}</div>
+            <div>${renderRateColumn(split.right, {
+              pairFont,
+              rateFont,
+              itemMargin,
+              rateHeight,
+              borderColor:"#f5b500",
+              rateBg:"rgba(255,255,255,.095)",
+              pairColor:"#ffffff",
+              rateColor:"#ffffff"
+            })}</div>
+          </div>
+
+          <div style="margin-top:auto;padding-top:16px;display:flex;justify-content:center;align-items:center;">
+            ${logoHtml}
           </div>
         </div>
       </div>
