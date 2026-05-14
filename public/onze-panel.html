@@ -2082,10 +2082,10 @@
             </div>
 
             <div class="rate-day-mode-switch">
-              <button class="rate-day-mode-btn is-active" id="rateDayModeOnzeBtn" type="button" data-mode="official_onze">
+              <button class="rate-day-mode-btn is-active" id="rateDayModeOnzeBtn" type="button" data-mode="official_onze" onclick="window.setRateDayCreatorMode && window.setRateDayCreatorMode(\'official_onze\')">
                 Mi imagen ONZE
               </button>
-              <button class="rate-day-mode-btn" id="rateDayModeOperatorBtn" type="button" data-mode="operator_percent">
+              <button class="rate-day-mode-btn" id="rateDayModeOperatorBtn" type="button" data-mode="operator_percent" onclick="window.setRateDayCreatorMode && window.setRateDayCreatorMode(\'operator_percent\')">
                 Operador con % propio
               </button>
             </div>
@@ -17079,6 +17079,123 @@ if(addProviderBtn){
     }
   }
 
+  window.setRateDayCreatorMode = setRateDayCreatorMode;
+  window.updateRateDayCreatorModeUI = updateRateDayCreatorModeUI;
+
+
+
+  // ============================================================
+  // ADMIN CREATOR TOGGLE FIX
+  // Super admin puede alternar:
+  // - official_onze: tasa detal
+  // - operator_percent: tasa proveedor / % propio
+  // No-admin no ve ni cambia este selector.
+  // ============================================================
+  function getRateDayFinalParams() {
+    return new URLSearchParams(window.location.search || "");
+  }
+
+  function getRateDayFinalRole() {
+    return String(getRateDayFinalParams().get("role") || "").toLowerCase();
+  }
+
+  function getRateDayFinalOperatorMode() {
+    return String(getRateDayFinalParams().get("operatorMode") || "").toLowerCase();
+  }
+
+  function isRateDayFinalAdmin() {
+    const role = getRateDayFinalRole();
+
+    if (role === "super_admin_global" || role === "super_admin_cliente") {
+      return true;
+    }
+
+    const candidates = [
+      rateDayAuthUser,
+      window.currentUser,
+      window.authUser,
+      window.ONZE_USER,
+      window.sessionUser
+    ].filter(Boolean);
+
+    return candidates.some(function(user) {
+      const r = String(user.role || "").toLowerCase();
+      const email = String(user.email || "").toLowerCase();
+
+      return r === "super_admin_global"
+        || r === "super_admin_cliente"
+        || email === "onze.cl21@gmail.com";
+    });
+  }
+
+  function getForcedRateDayFinalMode() {
+    if (isRateDayFinalAdmin()) return null;
+
+    const mode = getRateDayFinalOperatorMode();
+
+    if (mode.includes("libre") || mode.includes("free")) {
+      return "operator_percent";
+    }
+
+    return "official_onze";
+  }
+
+  function getRateDayCreatorMode() {
+    const forced = getForcedRateDayFinalMode();
+    if (forced) return forced;
+
+    return localStorage.getItem("onzeRateDayCreatorMode") || "official_onze";
+  }
+
+  function setRateDayCreatorMode(mode) {
+    if (!isRateDayFinalAdmin()) {
+      updateRateDayCreatorModeUI();
+      return;
+    }
+
+    const nextMode = mode === "operator_percent" ? "operator_percent" : "official_onze";
+    localStorage.setItem("onzeRateDayCreatorMode", nextMode);
+
+    updateRateDayCreatorModeUI();
+
+    if (typeof renderPairs === "function") {
+      renderPairs();
+    }
+
+    if (typeof resetRateImagePreview === "function") {
+      resetRateImagePreview();
+    }
+
+    if (typeof showToast === "function") {
+      showToast(nextMode === "operator_percent"
+        ? "Modo operador con % propio activado"
+        : "Modo Mi imagen ONZE activado");
+    }
+  }
+
+  function updateRateDayCreatorModeUI() {
+    const card = document.getElementById("rateDayModeCard");
+    const modeOnzeBtn = document.getElementById("rateDayModeOnzeBtn");
+    const modeOperatorBtn = document.getElementById("rateDayModeOperatorBtn");
+
+    if (card) {
+      card.style.display = isRateDayFinalAdmin() ? "" : "none";
+    }
+
+    const mode = getRateDayCreatorMode();
+
+    if (modeOnzeBtn) {
+      modeOnzeBtn.classList.toggle("active", mode === "official_onze");
+      modeOnzeBtn.setAttribute("aria-pressed", mode === "official_onze" ? "true" : "false");
+    }
+
+    if (modeOperatorBtn) {
+      modeOperatorBtn.classList.toggle("active", mode === "operator_percent");
+      modeOperatorBtn.setAttribute("aria-pressed", mode === "operator_percent" ? "true" : "false");
+    }
+  }
+
+  window.getRateDayCreatorMode = getRateDayCreatorMode;
   window.setRateDayCreatorMode = setRateDayCreatorMode;
   window.updateRateDayCreatorModeUI = updateRateDayCreatorModeUI;
 
