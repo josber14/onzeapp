@@ -16446,6 +16446,18 @@ if(addProviderBtn){
   let rateDayAuthUser = null;
 
   function isRateDaySuperAdmin() {
+    const params = new URLSearchParams(window.location.search || "");
+    const roleFromUrl = String(params.get("role") || "").toLowerCase();
+    const emailFromUrl = String(params.get("email") || "").toLowerCase();
+
+    if (roleFromUrl === "super_admin_global" || roleFromUrl === "super_admin_cliente") {
+      return true;
+    }
+
+    if (emailFromUrl === "onze.cl21@gmail.com") {
+      return true;
+    }
+
     const candidates = [
       rateDayAuthUser,
       window.currentUser,
@@ -16456,6 +16468,7 @@ if(addProviderBtn){
 
     return candidates.some(function(user) {
       return String(user.role || "").toLowerCase() === "super_admin_global"
+        || String(user.role || "").toLowerCase() === "super_admin_cliente"
         || String(user.email || "").toLowerCase() === "onze.cl21@gmail.com";
     });
   }
@@ -16548,6 +16561,7 @@ if(addProviderBtn){
     try {
       const res = await fetch("/api/auth/me", { credentials: "include" });
       const data = await res.json();
+
       if (data && data.ok && data.user) {
         rateDayAuthUser = data.user;
 
@@ -16562,6 +16576,11 @@ if(addProviderBtn){
       console.warn("No pude cargar usuario para plantillas:", err);
     } finally {
       updateRateDayTemplateUI();
+
+      const select = getEl("rateDayTemplateSelect");
+      if (select && isRateDaySuperAdmin()) {
+        select.value = getRateDayTemplateId();
+      }
     }
   }
 
