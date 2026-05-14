@@ -137,6 +137,7 @@ model Tenant {
   binanceCredentials BinanceCredentials?
   binanceOrders BinanceOrder[]
   p2pCapacities P2PCapacity[]
+  rateLists     RateList[]
 }
 
 model Subscription {
@@ -191,7 +192,7 @@ model User {
   expenses             Expense[]
   auditLogs            AuditLog[]
   kyc                  UserKyc?
-
+  rateLists            RateList[]
   @@index([tenantId])
   @@index([status])
 }
@@ -261,6 +262,8 @@ model Country {
   liquidityAlerts     LiquidityAlert[]
   fundingSourceLinks  InternalFunding[]   @relation("FundingSourceCountry")
   fundingTargetLinks  InternalFunding[]   @relation("FundingTargetCountry")
+  rateListPairsOrigin       RateListPair[]      @relation("RateListPairOrigin")
+  rateListPairsDestination  RateListPair[]      @relation("RateListPairDestination")
 }
 
 model TenantPair {
@@ -687,4 +690,47 @@ model P2PCapacity {
   tenant                Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   @@index([tenantId])
   @@index([status])
+}
+// ============================================================
+// CONSTRUCTOR DE TASA DEL DÍA
+// Permite a cada operador crear listas de pares con su % ganancia
+// y generar imágenes descargables para publicar
+// ============================================================
+
+model RateList {
+  id                Int      @id @default(autoincrement())
+  tenantId          Int
+  ownerUserId       Int
+  name              String
+  defaultProfitPct  Decimal  @default(0) @db.Decimal(8, 4)
+  active            Boolean  @default(true)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ownerUser User            @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  pairs     RateListPair[]
+
+  @@index([tenantId])
+  @@index([ownerUserId])
+  @@index([active])
+}
+
+model RateListPair {
+  id                  Int      @id @default(autoincrement())
+  rateListId          Int
+  originCountryId     Int
+  destinationCountryId Int
+  customProfitPct     Decimal? @db.Decimal(8, 4)
+  sortOrder           Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  rateList           RateList @relation(fields: [rateListId], references: [id], onDelete: Cascade)
+  originCountry      Country  @relation("RateListPairOrigin", fields: [originCountryId], references: [id])
+  destinationCountry Country  @relation("RateListPairDestination", fields: [destinationCountryId], references: [id])
+
+  @@unique([rateListId, originCountryId, destinationCountryId])
+  @@index([rateListId])
 }
