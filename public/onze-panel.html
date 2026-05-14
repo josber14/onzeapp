@@ -2274,11 +2274,11 @@
                 <h3 class="section-subtitle" style="margin:0;">Diseño de imagen</h3>
                 <p class="section-text" style="margin:4px 0 0;">Elige una plantilla dinámica para generar tu tasa del día.</p>
               </div>
-              <button class="btn small ghost" id="rateDayTemplateResetBtn" type="button">Volver al original</button>
+              <button class="btn small ghost" id="rateDayTemplateResetBtn" type="button" onclick="window.resetRateDayTemplateToOriginal && window.resetRateDayTemplateToOriginal()">Volver al original</button>
             </div>
             <div class="form-row" style="margin-top:12px;max-width:420px;">
               <label for="rateDayTemplateSelect">Plantilla</label>
-              <select id="rateDayTemplateSelect">
+              <select id="rateDayTemplateSelect" onchange="window.setRateDayTemplateId && window.setRateDayTemplateId(this.value)">
                 <option value="aki_original">AKI Transfer Original</option>
                 <option value="aki_modern">AKI Transfer Moderna</option>
                 <option value="aki_premium">AKI Transfer Premium</option>
@@ -16458,6 +16458,14 @@ if(addProviderBtn){
 
   function getRateDayTemplateId() {
     const stored = localStorage.getItem("onzeRateDayTemplateId");
+
+    // Para el super admin, la base principal siempre debe ser AKI Original.
+    // Si antes quedó guardado ONZE clásica por haber cargado antes de detectar usuario,
+    // lo corregimos automáticamente.
+    if (isRateDaySuperAdmin() && (!stored || stored === "onze_classic")) {
+      return "aki_original";
+    }
+
     const exists = RATE_DAY_TEMPLATES.some(function(t) { return t.id === stored; });
     if (!exists) return getRateDayDefaultTemplateId();
 
@@ -16485,7 +16493,13 @@ if(addProviderBtn){
     }
 
     updateRateDayTemplateUI();
-    resetRateImagePreview();
+
+    const wrap = getEl("rateListImagePreviewWrap");
+    if (wrap && wrap.style.display !== "none" && typeof renderRateImagePreview === "function") {
+      renderRateImagePreview();
+    } else {
+      resetRateImagePreview();
+    }
   }
 
   function resetRateDayTemplateToOriginal() {
@@ -16528,6 +16542,13 @@ if(addProviderBtn){
       const data = await res.json();
       if (data && data.ok && data.user) {
         rateDayAuthUser = data.user;
+
+        if (isRateDaySuperAdmin()) {
+          const stored = localStorage.getItem("onzeRateDayTemplateId");
+          if (!stored || stored === "onze_classic") {
+            localStorage.setItem("onzeRateDayTemplateId", "aki_original");
+          }
+        }
       }
     } catch (err) {
       console.warn("No pude cargar usuario para plantillas:", err);
@@ -16535,6 +16556,11 @@ if(addProviderBtn){
       updateRateDayTemplateUI();
     }
   }
+
+  window.setRateDayTemplateId = setRateDayTemplateId;
+  window.resetRateDayTemplateToOriginal = resetRateDayTemplateToOriginal;
+  window.updateRateDayTemplateUI = updateRateDayTemplateUI;
+  window.loadRateDayAuthUser = loadRateDayAuthUser;
 
   function splitRateRows(rows) {
     return {
@@ -16589,31 +16615,61 @@ if(addProviderBtn){
   function renderAkiOriginalTemplate(rows, listName, brandName, logoDataUrl, dateText) {
     const split = splitRateRows(rows);
     const total = rows.length;
-    const compact = total > 20;
-    const pairFont = compact ? 21 : total <= 10 ? 31 : 24;
-    const rateFont = compact ? 30 : total <= 10 ? 46 : 37;
-    const itemMargin = compact ? 10 : total <= 10 ? 24 : 15;
-    const rateHeight = compact ? 43 : total <= 10 ? 62 : 51;
+
+    const pairFont = total <= 10 ? 32 : total > 20 ? 22 : 28;
+    const rateFont = total <= 10 ? 48 : total > 20 ? 30 : 40;
+    const itemMargin = total <= 10 ? 30 : total > 20 ? 11 : 17;
+    const rateHeight = total <= 10 ? 68 : total > 20 ? 46 : 55;
+
+    const logoHtml = logoDataUrl
+      ? `<img src="${escapeHtml(logoDataUrl)}" alt="${escapeHtml(brandName || "AKI TRANSFER")}" style="max-width:230px;max-height:100px;object-fit:contain;display:block;margin:0 auto;" />`
+      : `
+        <div style="text-align:center;color:#ffffff;">
+          <div style="font-size:72px;line-height:.78;font-weight:950;letter-spacing:-5px;">AKI</div>
+          <div style="margin-top:8px;font-size:18px;font-weight:950;letter-spacing:.42em;">TRANSFER</div>
+          <div style="margin-top:5px;font-size:13px;font-weight:700;font-style:italic;letter-spacing:.14em;">¡Aquí y Ahora!</div>
+        </div>
+      `;
 
     return `
-      <div id="rateListImageCanvas" style="width:900px;height:1600px;box-sizing:border-box;padding:82px 70px 52px;position:relative;overflow:hidden;background:radial-gradient(circle at 50% 18%, rgba(17,181,91,.95), transparent 30%),linear-gradient(180deg,#089344 0%,#087f3d 42%,#076d35 100%);font-family:Arial, Helvetica, sans-serif;">
-        <div style="position:absolute;left:-170px;top:120px;width:500px;height:500px;border-radius:999px;border:70px solid rgba(255,255,255,.05);"></div>
-        <div style="position:absolute;right:-180px;bottom:180px;width:540px;height:540px;border-radius:999px;border:80px solid rgba(255,255,255,.045);"></div>
-        <div style="position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.08),transparent 38%,rgba(0,0,0,.10));"></div>
+      <div id="rateListImageCanvas" style="width:900px;height:1600px;box-sizing:border-box;padding:82px 72px 54px;position:relative;overflow:hidden;background:#085b40;font-family:Arial, Helvetica, sans-serif;">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,#0a6044 0%,#07583d 52%,#064f38 100%);"></div>
 
-        <div style="position:relative;z-index:1;text-align:center;">
-          <div style="font-size:78px;line-height:.88;font-weight:950;text-transform:uppercase;color:#f5b500;letter-spacing:-3px;text-shadow:0 7px 0 rgba(0,0,0,.16);">
-            Tasa<br/>del día
-          </div>
-          <div style="margin-top:14px;color:rgba(255,255,255,.88);font-size:20px;font-weight:800;">${escapeHtml(listName)} · ${escapeHtml(dateText)}</div>
-
-          <div style="margin-top:62px;display:grid;grid-template-columns:1fr 1fr;gap:34px;align-items:start;">
-            <div>${renderRateColumn(split.left, { pairFont, rateFont, itemMargin, rateHeight, borderColor:"#f5b500", rateBg:"rgba(1,96,56,.20)" })}</div>
-            <div>${renderRateColumn(split.right, { pairFont, rateFont, itemMargin, rateHeight, borderColor:"#f5b500", rateBg:"rgba(1,96,56,.20)" })}</div>
+        <div style="position:relative;z-index:1;text-align:center;height:100%;">
+          <div style="height:155px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;">
+            <div style="color:#ffffff;font-size:55px;line-height:1;font-weight:950;letter-spacing:.28em;text-transform:uppercase;margin-left:18px;">
+              TASA
+            </div>
+            <div style="margin-top:8px;background:#f4b700;color:#07583d;border-radius:999px;padding:9px 42px 12px;min-width:360px;box-sizing:border-box;font-size:56px;line-height:1;font-weight:950;letter-spacing:.02em;text-transform:uppercase;">
+              DEL DÍA
+            </div>
           </div>
 
-          <div style="position:absolute;left:0;right:0;bottom:-18px;display:flex;justify-content:center;">
-            ${getRateImageBrandHtml(brandName || "AKI TRANSFER", logoDataUrl, "aki_original")}
+          <div style="margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:34px;align-items:start;">
+            <div>${renderRateColumn(split.left, {
+              pairFont,
+              rateFont,
+              itemMargin,
+              rateHeight,
+              borderColor:"#e3aa08",
+              rateBg:"transparent",
+              pairColor:"#ffffff",
+              rateColor:"#ffffff"
+            })}</div>
+            <div>${renderRateColumn(split.right, {
+              pairFont,
+              rateFont,
+              itemMargin,
+              rateHeight,
+              borderColor:"#e3aa08",
+              rateBg:"transparent",
+              pairColor:"#ffffff",
+              rateColor:"#ffffff"
+            })}</div>
+          </div>
+
+          <div style="position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:center;">
+            ${logoHtml}
           </div>
         </div>
       </div>
