@@ -2329,8 +2329,8 @@
                 <button class="btn small primary" id="rateListImageDownloadBtn" type="button" onclick="window.downloadRateImagePNG()">Descargar PNG</button>
               </div>
             </div>
-            <div style="display:flex;justify-content:center;overflow:auto;padding:12px;background:#f3f4f6;border-radius:18px;">
-              <div id="rateListImagePreview"></div>
+            <div id="rateListImagePreviewViewport" style="display:flex;justify-content:center;overflow:hidden;padding:12px;background:#f3f4f6;border-radius:18px;">
+              <div id="rateListImagePreview" style="display:flex;justify-content:center;width:100%;"></div>
             </div>
           </div>
         </div>
@@ -15615,12 +15615,38 @@ if(addProviderBtn){
         .replace(/[^a-z0-9áéíóúñü]+/gi, "-")
         .replace(/^-+|-+$/g, "") || "tasa-del-dia";
 
+      const fileName = safeName + ".png";
+      const blob = await new Promise(function(resolve) {
+        canvas.toBlob(resolve, "image/png", 1);
+      });
+
+      if (!blob) {
+        throw new Error("No se pudo generar el PNG.");
+      }
+
+      const file = new File([blob], fileName, { type: "image/png" });
+
+      // En iPhone/Safari es más confiable abrir Compartir para guardar la imagen.
+      if (navigator.canShare && navigator.canShare({ files: [file] }) && navigator.share) {
+        await navigator.share({
+          files: [file],
+          title: fileName,
+          text: "Imagen de tasas del día"
+        });
+        return;
+      }
+
+      const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.download = safeName + ".png";
-      link.href = canvas.toDataURL("image/png", 1);
+      link.download = fileName;
+      link.href = blobUrl;
       document.body.appendChild(link);
       link.click();
       link.remove();
+
+      setTimeout(function() {
+        URL.revokeObjectURL(blobUrl);
+      }, 3000);
     } catch (err) {
       console.error("Error descargando PNG:", err);
       alert("No pude descargar la imagen. Revisa la consola y me mandas el error si vuelve a pasar.");
@@ -15667,6 +15693,12 @@ if(addProviderBtn){
   }
 
   window.refreshRateDayRates = refreshRateDayRates;
+
+  window.addEventListener("resize", function() {
+    if (document.getElementById("rateListImageCanvas")) {
+      fitRateImagePreviewToScreen();
+    }
+  });
 
   window.downloadRateImagePNG = downloadRateImagePNG;
 
@@ -16377,6 +16409,29 @@ if(addProviderBtn){
           : (operatorMode ? formatRate(rateValue, decimals) : formatOfficialDailyRate(p.originName, p.destName, rateValue))
       };
     });
+  }
+
+  function fitRateImagePreviewToScreen() {
+    const viewport = document.getElementById("rateListImagePreviewViewport");
+    const canvas = document.getElementById("rateListImageCanvas");
+    if (!viewport || !canvas) return;
+
+    const available = Math.max(260, viewport.clientWidth - 24);
+    const originalWidth = 900;
+    const originalHeight = 1600;
+    const scale = Math.min(1, available / originalWidth);
+
+    canvas.style.transformOrigin = "top center";
+    canvas.style.transform = `scale(${scale})`;
+    canvas.style.margin = "0 auto";
+    canvas.style.flex = "0 0 auto";
+
+    const preview = document.getElementById("rateListImagePreview");
+    if (preview) {
+      preview.style.height = Math.ceil(originalHeight * scale) + "px";
+      preview.style.overflow = "hidden";
+      preview.style.alignItems = "flex-start";
+    }
   }
 
   async function renderFreshRateImagePreview() {
@@ -17093,6 +17148,7 @@ if(addProviderBtn){
     preview.innerHTML = html;
 
     wrap.style.display = "block";
+    fitRateImagePreviewToScreen();
     wrap.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
