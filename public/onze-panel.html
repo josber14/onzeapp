@@ -2268,6 +2268,31 @@
 
           <hr style="border:none;border-top:1px solid var(--sidebar-line);margin:20px 0;" />
 
+          <div class="rate-day-template-card" style="border:1px solid var(--sidebar-line);border-radius:18px;padding:16px;background:rgba(255,255,255,.72);margin-bottom:18px;">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+              <div>
+                <h3 class="section-subtitle" style="margin:0;">Diseño de imagen</h3>
+                <p class="section-text" style="margin:4px 0 0;">Elige una plantilla dinámica para generar tu tasa del día.</p>
+              </div>
+              <button class="btn small ghost" id="rateDayTemplateResetBtn" type="button">Volver al original</button>
+            </div>
+            <div class="form-row" style="margin-top:12px;max-width:420px;">
+              <label for="rateDayTemplateSelect">Plantilla</label>
+              <select id="rateDayTemplateSelect">
+                <option value="aki_original">AKI Transfer Original</option>
+                <option value="aki_modern">AKI Transfer Moderna</option>
+                <option value="aki_premium">AKI Transfer Premium</option>
+                <option value="onze_classic">ONZE Verde Clásica</option>
+                <option value="onze_dark">ONZE Oscura</option>
+                <option value="onze_halloween">ONZE Halloween</option>
+                <option value="onze_navidad">ONZE Navidad</option>
+              </select>
+            </div>
+            <p class="section-text" id="rateDayTemplateHint" style="margin:8px 0 0;font-size:12px;">
+              Tu plantilla original queda como base principal. Las demás son variaciones dinámicas.
+            </p>
+          </div>
+
           <div class="rate-list-editor-pairs">
             <div class="rate-day-pairs-heading">
               <h3 class="section-subtitle">Pares de esta lista (<span id="rateListEditorPairCount">0</span>)</h3>
@@ -16357,6 +16382,337 @@ if(addProviderBtn){
     if (wrap) wrap.style.display = "none";
   }
 
+
+  const RATE_DAY_TEMPLATES = [
+    {
+      id: "aki_original",
+      name: "AKI Transfer Original",
+      scope: "super_admin",
+      brand: "AKI",
+      description: "Diseño base oficial de AKI Transfer."
+    },
+    {
+      id: "aki_modern",
+      name: "AKI Transfer Moderna",
+      scope: "super_admin",
+      brand: "AKI",
+      description: "Misma marca, estilo más limpio y moderno."
+    },
+    {
+      id: "aki_premium",
+      name: "AKI Transfer Premium",
+      scope: "super_admin",
+      brand: "AKI",
+      description: "Versión más elegante para publicaciones especiales."
+    },
+    {
+      id: "onze_classic",
+      name: "ONZE Verde Clásica",
+      scope: "public",
+      brand: "ONZE",
+      description: "Plantilla pública verde para operadores y clientes."
+    },
+    {
+      id: "onze_dark",
+      name: "ONZE Oscura",
+      scope: "public",
+      brand: "ONZE",
+      description: "Plantilla pública oscura."
+    },
+    {
+      id: "onze_halloween",
+      name: "ONZE Halloween",
+      scope: "public",
+      brand: "ONZE",
+      description: "Plantilla pública especial de Halloween."
+    },
+    {
+      id: "onze_navidad",
+      name: "ONZE Navidad",
+      scope: "public",
+      brand: "ONZE",
+      description: "Plantilla pública especial de Navidad."
+    }
+  ];
+
+  let rateDayAuthUser = null;
+
+  function isRateDaySuperAdmin() {
+    const candidates = [
+      rateDayAuthUser,
+      window.currentUser,
+      window.authUser,
+      window.ONZE_USER,
+      window.sessionUser
+    ].filter(Boolean);
+
+    return candidates.some(function(user) {
+      return String(user.role || "").toLowerCase() === "super_admin_global"
+        || String(user.email || "").toLowerCase() === "onze.cl21@gmail.com";
+    });
+  }
+
+  function getRateDayDefaultTemplateId() {
+    return isRateDaySuperAdmin() ? "aki_original" : "onze_classic";
+  }
+
+  function getRateDayTemplateId() {
+    const stored = localStorage.getItem("onzeRateDayTemplateId");
+    const exists = RATE_DAY_TEMPLATES.some(function(t) { return t.id === stored; });
+    if (!exists) return getRateDayDefaultTemplateId();
+
+    const template = RATE_DAY_TEMPLATES.find(function(t) { return t.id === stored; });
+    if (template && template.scope === "super_admin" && !isRateDaySuperAdmin()) {
+      return "onze_classic";
+    }
+
+    return stored;
+  }
+
+  function getRateDayTemplate() {
+    const id = getRateDayTemplateId();
+    return RATE_DAY_TEMPLATES.find(function(t) { return t.id === id; }) || RATE_DAY_TEMPLATES[0];
+  }
+
+  function setRateDayTemplateId(id) {
+    const template = RATE_DAY_TEMPLATES.find(function(t) { return t.id === id; });
+    if (!template) return;
+
+    if (template.scope === "super_admin" && !isRateDaySuperAdmin()) {
+      localStorage.setItem("onzeRateDayTemplateId", "onze_classic");
+    } else {
+      localStorage.setItem("onzeRateDayTemplateId", template.id);
+    }
+
+    updateRateDayTemplateUI();
+    resetRateImagePreview();
+  }
+
+  function resetRateDayTemplateToOriginal() {
+    setRateDayTemplateId(getRateDayDefaultTemplateId());
+  }
+
+  function updateRateDayTemplateUI() {
+    const select = getEl("rateDayTemplateSelect");
+    const resetBtn = getEl("rateDayTemplateResetBtn");
+    const hint = getEl("rateDayTemplateHint");
+    if (!select) return;
+
+    const currentId = getRateDayTemplateId();
+    const allowed = RATE_DAY_TEMPLATES.filter(function(template) {
+      return template.scope !== "super_admin" || isRateDaySuperAdmin();
+    });
+
+    select.innerHTML = allowed.map(function(template) {
+      return `<option value="${escapeHtml(template.id)}">${escapeHtml(template.name)}</option>`;
+    }).join("");
+
+    select.value = allowed.some(function(t) { return t.id === currentId; })
+      ? currentId
+      : getRateDayDefaultTemplateId();
+
+    const current = RATE_DAY_TEMPLATES.find(function(t) { return t.id === select.value; });
+    if (hint && current) {
+      hint.textContent = current.description || "Plantilla dinámica para tasa del día.";
+    }
+
+    if (resetBtn) {
+      resetBtn.style.display = "inline-flex";
+      resetBtn.textContent = isRateDaySuperAdmin() ? "Volver al original" : "Volver a ONZE clásica";
+    }
+  }
+
+  async function loadRateDayAuthUser() {
+    try {
+      const res = await fetch("/api/auth/me", { credentials: "include" });
+      const data = await res.json();
+      if (data && data.ok && data.user) {
+        rateDayAuthUser = data.user;
+      }
+    } catch (err) {
+      console.warn("No pude cargar usuario para plantillas:", err);
+    } finally {
+      updateRateDayTemplateUI();
+    }
+  }
+
+  function splitRateRows(rows) {
+    return {
+      left: rows.filter(function(_, idx) { return idx % 2 === 0; }),
+      right: rows.filter(function(_, idx) { return idx % 2 !== 0; })
+    };
+  }
+
+  function renderRateColumn(items, options) {
+    const pairFont = options.pairFont || 25;
+    const rateFont = options.rateFont || 38;
+    const itemMargin = options.itemMargin || 16;
+    const rateHeight = options.rateHeight || 52;
+    const borderColor = options.borderColor || "#f5b500";
+    const rateBg = options.rateBg || "rgba(0,80,55,.28)";
+    const pairColor = options.pairColor || "#ffffff";
+    const rateColor = options.rateColor || "#ffffff";
+
+    return items.map(function(item) {
+      return `
+        <div style="margin-bottom:${itemMargin}px;text-align:center;">
+          <div style="color:${pairColor};font-weight:950;font-size:${pairFont}px;line-height:1.02;letter-spacing:.8px;text-transform:uppercase;text-shadow:0 3px 5px rgba(0,0,0,.26);margin-bottom:8px;white-space:nowrap;">
+            ${escapeHtml(item.label)}
+          </div>
+          <div style="height:${rateHeight}px;display:flex;align-items:center;justify-content:center;border:4px solid ${borderColor};border-radius:999px;background:${rateBg};color:${rateColor};font-weight:950;font-size:${rateFont}px;line-height:1;letter-spacing:1px;text-shadow:0 3px 5px rgba(0,0,0,.30);box-shadow:0 10px 22px rgba(0,0,0,.14);">
+            ${escapeHtml(item.rateText)}
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function getRateImageBrandHtml(brandName, logoDataUrl, templateId) {
+    if (logoDataUrl) {
+      return `<img src="${escapeHtml(logoDataUrl)}" alt="${escapeHtml(brandName)}" style="max-width:230px;max-height:105px;object-fit:contain;display:block;" />`;
+    }
+
+    if (templateId.indexOf("aki_") === 0) {
+      return `
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:62px;height:62px;border-radius:999px;background:#ffffff;display:flex;align-items:center;justify-content:center;color:#0b8f45;font-weight:950;font-size:30px;">A</div>
+          <div style="font-size:48px;line-height:.9;font-weight:950;letter-spacing:-2px;color:#ffffff;text-shadow:0 4px 10px rgba(0,0,0,.28);">
+            AKI <span style="color:#f5b500;">TRANSFER</span>
+          </div>
+        </div>
+      `;
+    }
+
+    return `<div style="padding:13px 24px;border-radius:20px;background:rgba(255,255,255,.95);color:#228B22;font-weight:950;font-size:34px;letter-spacing:-1px;">${escapeHtml(brandName || "ONZE")}</div>`;
+  }
+
+  function renderAkiOriginalTemplate(rows, listName, brandName, logoDataUrl, dateText) {
+    const split = splitRateRows(rows);
+    const total = rows.length;
+    const compact = total > 20;
+    const pairFont = compact ? 21 : total <= 10 ? 31 : 24;
+    const rateFont = compact ? 30 : total <= 10 ? 46 : 37;
+    const itemMargin = compact ? 10 : total <= 10 ? 24 : 15;
+    const rateHeight = compact ? 43 : total <= 10 ? 62 : 51;
+
+    return `
+      <div id="rateListImageCanvas" style="width:900px;height:1600px;box-sizing:border-box;padding:82px 70px 52px;position:relative;overflow:hidden;background:radial-gradient(circle at 50% 18%, rgba(17,181,91,.95), transparent 30%),linear-gradient(180deg,#089344 0%,#087f3d 42%,#076d35 100%);font-family:Arial, Helvetica, sans-serif;">
+        <div style="position:absolute;left:-170px;top:120px;width:500px;height:500px;border-radius:999px;border:70px solid rgba(255,255,255,.05);"></div>
+        <div style="position:absolute;right:-180px;bottom:180px;width:540px;height:540px;border-radius:999px;border:80px solid rgba(255,255,255,.045);"></div>
+        <div style="position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.08),transparent 38%,rgba(0,0,0,.10));"></div>
+
+        <div style="position:relative;z-index:1;text-align:center;">
+          <div style="font-size:78px;line-height:.88;font-weight:950;text-transform:uppercase;color:#f5b500;letter-spacing:-3px;text-shadow:0 7px 0 rgba(0,0,0,.16);">
+            Tasa<br/>del día
+          </div>
+          <div style="margin-top:14px;color:rgba(255,255,255,.88);font-size:20px;font-weight:800;">${escapeHtml(listName)} · ${escapeHtml(dateText)}</div>
+
+          <div style="margin-top:62px;display:grid;grid-template-columns:1fr 1fr;gap:34px;align-items:start;">
+            <div>${renderRateColumn(split.left, { pairFont, rateFont, itemMargin, rateHeight, borderColor:"#f5b500", rateBg:"rgba(1,96,56,.20)" })}</div>
+            <div>${renderRateColumn(split.right, { pairFont, rateFont, itemMargin, rateHeight, borderColor:"#f5b500", rateBg:"rgba(1,96,56,.20)" })}</div>
+          </div>
+
+          <div style="position:absolute;left:0;right:0;bottom:-18px;display:flex;justify-content:center;">
+            ${getRateImageBrandHtml(brandName || "AKI TRANSFER", logoDataUrl, "aki_original")}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderAkiModernTemplate(rows, listName, brandName, logoDataUrl, dateText) {
+    const split = splitRateRows(rows);
+    return `
+      <div id="rateListImageCanvas" style="width:900px;height:1600px;box-sizing:border-box;padding:70px 64px 54px;position:relative;overflow:hidden;background:linear-gradient(145deg,#042b1b 0%,#0a8f48 56%,#18b862 100%);font-family:Arial, Helvetica, sans-serif;">
+        <div style="position:absolute;top:0;right:0;width:420px;height:420px;background:rgba(245,181,0,.20);filter:blur(8px);border-bottom-left-radius:999px;"></div>
+        <div style="position:relative;z-index:1;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:20px;">
+            <div>
+              <div style="display:inline-block;padding:9px 16px;border-radius:999px;background:#f5b500;color:#063b24;font-weight:950;font-size:18px;">${escapeHtml(dateText)}</div>
+              <h1 style="margin:22px 0 0;color:#ffffff;font-size:74px;line-height:.88;font-weight:950;letter-spacing:-3px;text-transform:uppercase;">Tasa<br/>del día</h1>
+            </div>
+            <div style="font-size:22px;font-weight:900;color:rgba(255,255,255,.88);text-align:right;">${escapeHtml(listName)}</div>
+          </div>
+
+          <div style="margin-top:70px;display:grid;grid-template-columns:1fr 1fr;gap:30px;">
+            <div>${renderRateColumn(split.left, { pairFont:23, rateFont:36, itemMargin:15, rateHeight:50, borderColor:"#ffffff", rateBg:"rgba(245,181,0,.18)" })}</div>
+            <div>${renderRateColumn(split.right, { pairFont:23, rateFont:36, itemMargin:15, rateHeight:50, borderColor:"#ffffff", rateBg:"rgba(245,181,0,.18)" })}</div>
+          </div>
+
+          <div style="position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;">
+            ${getRateImageBrandHtml(brandName || "AKI TRANSFER", logoDataUrl, "aki_modern")}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderAkiPremiumTemplate(rows, listName, brandName, logoDataUrl, dateText) {
+    const split = splitRateRows(rows);
+    return `
+      <div id="rateListImageCanvas" style="width:900px;height:1600px;box-sizing:border-box;padding:76px 62px 54px;position:relative;overflow:hidden;background:radial-gradient(circle at 50% 0%,#1ed46f 0%,#087c3d 36%,#03140e 100%);font-family:Arial, Helvetica, sans-serif;">
+        <div style="position:absolute;inset:32px;border:2px solid rgba(245,181,0,.45);border-radius:42px;"></div>
+        <div style="position:relative;z-index:1;text-align:center;">
+          <div style="font-size:24px;color:#f5b500;font-weight:950;letter-spacing:.22em;text-transform:uppercase;">${escapeHtml(brandName || "AKI TRANSFER")}</div>
+          <h1 style="margin:20px 0 8px;color:#ffffff;font-size:82px;line-height:.88;font-weight:950;letter-spacing:-4px;text-transform:uppercase;">Tasa<br/>del día</h1>
+          <div style="color:rgba(255,255,255,.78);font-size:20px;font-weight:800;">${escapeHtml(listName)} · ${escapeHtml(dateText)}</div>
+
+          <div style="margin-top:58px;display:grid;grid-template-columns:1fr 1fr;gap:28px;">
+            <div>${renderRateColumn(split.left, { pairFont:22, rateFont:35, itemMargin:14, rateHeight:49, borderColor:"#f5b500", rateBg:"rgba(255,255,255,.10)" })}</div>
+            <div>${renderRateColumn(split.right, { pairFont:22, rateFont:35, itemMargin:14, rateHeight:49, borderColor:"#f5b500", rateBg:"rgba(255,255,255,.10)" })}</div>
+          </div>
+
+          <div style="position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;">
+            ${getRateImageBrandHtml(brandName || "AKI TRANSFER", logoDataUrl, "aki_premium")}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderOnzeTemplate(rows, listName, brandName, logoDataUrl, dateText, variant) {
+    const split = splitRateRows(rows);
+    const halloween = variant === "onze_halloween";
+    const navidad = variant === "onze_navidad";
+    const dark = variant === "onze_dark";
+
+    const bg = halloween
+      ? "linear-gradient(160deg,#1a0d25 0%,#3b135c 46%,#f97316 100%)"
+      : navidad
+        ? "linear-gradient(160deg,#064e3b 0%,#0f8a45 50%,#b91c1c 100%)"
+        : dark
+          ? "linear-gradient(160deg,#020617 0%,#0f172a 52%,#14532d 100%)"
+          : "linear-gradient(160deg,#052e1c 0%,#166534 48%,#22c55e 100%)";
+
+    const accent = halloween ? "#fb923c" : navidad ? "#facc15" : "#f5b500";
+    const emoji = halloween ? "🎃" : navidad ? "🎄" : "";
+
+    return `
+      <div id="rateListImageCanvas" style="width:900px;height:1600px;box-sizing:border-box;padding:72px 60px 54px;position:relative;overflow:hidden;background:${bg};font-family:Arial, Helvetica, sans-serif;">
+        <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.055) 1px, transparent 1px),linear-gradient(90deg,rgba(255,255,255,.055) 1px, transparent 1px);background-size:34px 34px;opacity:.55;"></div>
+        <div style="position:relative;z-index:1;text-align:center;">
+          <div style="font-size:30px;font-weight:950;color:${accent};letter-spacing:.18em;text-transform:uppercase;">${emoji} ${escapeHtml(brandName || "ONZE")} ${emoji}</div>
+          <h1 style="margin:22px 0 8px;color:#ffffff;font-size:76px;line-height:.9;font-weight:950;letter-spacing:-3px;text-transform:uppercase;">Tasas del día</h1>
+          <div style="color:rgba(255,255,255,.78);font-size:20px;font-weight:800;">${escapeHtml(listName)} · ${escapeHtml(dateText)}</div>
+
+          <div style="margin-top:62px;display:grid;grid-template-columns:1fr 1fr;gap:30px;">
+            <div>${renderRateColumn(split.left, { pairFont:22, rateFont:35, itemMargin:14, rateHeight:49, borderColor:accent, rateBg:"rgba(255,255,255,.10)" })}</div>
+            <div>${renderRateColumn(split.right, { pairFont:22, rateFont:35, itemMargin:14, rateHeight:49, borderColor:accent, rateBg:"rgba(255,255,255,.10)" })}</div>
+          </div>
+
+          <div style="margin-top:38px;color:rgba(255,255,255,.78);font-size:16px;font-weight:700;">
+            Tasas referenciales sujetas a disponibilidad y confirmación.
+          </div>
+
+          <div style="margin-top:28px;display:flex;justify-content:center;">
+            ${getRateImageBrandHtml(brandName || "ONZE", logoDataUrl, variant)}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+
   function renderRateImagePreview() {
     if (!currentList) return;
 
@@ -16369,36 +16725,14 @@ if(addProviderBtn){
     const preview = getEl("rateListImagePreview");
     if (!wrap || !preview) return;
 
+    updateRateDayTemplateUI();
+
     const listName = getEl("rateListEditorName").value.trim() || currentList.name || "Tasas del día";
     const settings = getCurrentListSettings();
-    const brandName = String(settings.companyName || "").trim() || "ONZE";
+    const template = getRateDayTemplate();
+    const brandName = String(settings.companyName || "").trim() || (template.id.indexOf("aki_") === 0 ? "AKI TRANSFER" : "ONZE");
     const logoDataUrl = String(settings.logoDataUrl || "").trim();
     const rows = buildImageRows();
-    const left = rows.filter(function(_, idx) { return idx % 2 === 0; });
-    const right = rows.filter(function(_, idx) { return idx % 2 !== 0; });
-
-    const brandTopHtml = logoDataUrl
-      ? `<img src="${escapeHtml(logoDataUrl)}" alt="${escapeHtml(brandName)}" style="max-width:122px;max-height:48px;object-fit:contain;display:block;margin:0 auto;" />`
-      : `<div style="display:inline-flex;align-items:center;justify-content:center;padding:8px 16px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);color:#dfffe8;font-size:13px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;">${escapeHtml(brandName)}</div>`;
-
-    const brandBottomHtml = logoDataUrl
-      ? `<img src="${escapeHtml(logoDataUrl)}" alt="${escapeHtml(brandName)}" style="max-width:170px;max-height:82px;object-fit:contain;display:block;" />`
-      : `<div style="padding:12px 22px;border-radius:18px;background:rgba(255,255,255,.94);color:#228B22;font-weight:950;font-size:27px;letter-spacing:-.8px;">${escapeHtml(brandName)}</div>`;
-
-    function renderColumn(items) {
-      return items.map(function(item) {
-        return `
-          <div style="margin-bottom:12px;text-align:center;">
-            <div style="color:#ffffff;font-weight:950;font-size:21px;line-height:1.05;letter-spacing:.8px;text-transform:uppercase;text-shadow:0 2px 4px rgba(0,0,0,.22);margin-bottom:6px;white-space:nowrap;">
-              ${escapeHtml(item.label)}
-            </div>
-            <div style="height:42px;display:flex;align-items:center;justify-content:center;border:3px solid rgba(245,181,0,.92);border-radius:999px;background:rgba(2,82,55,.18);color:#ffffff;font-weight:900;font-size:32px;line-height:1;letter-spacing:1px;text-shadow:0 2px 4px rgba(0,0,0,.28);">
-              ${escapeHtml(item.rateText)}
-            </div>
-          </div>
-        `;
-      }).join("");
-    }
 
     const today = new Date();
     const dateText = today.toLocaleDateString("es-CL", {
@@ -16407,31 +16741,19 @@ if(addProviderBtn){
       year: "numeric"
     });
 
-    preview.innerHTML = `
-      <div id="rateListImageCanvas" style="width:720px;min-height:900px;box-sizing:border-box;padding:34px 34px 28px;border-radius:28px;position:relative;overflow:hidden;background:radial-gradient(circle at 18% 12%, rgba(34,139,34,.95), transparent 32%),radial-gradient(circle at 90% 8%, rgba(255,255,255,.20), transparent 28%),linear-gradient(135deg,#07140d 0%,#0f2a19 42%,#228B22 100%);box-shadow:0 24px 70px rgba(0,0,0,.35);font-family:Arial, Helvetica, sans-serif;">
-        <div style="position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px),linear-gradient(90deg,rgba(255,255,255,.045) 1px, transparent 1px);background-size:26px 26px;opacity:.55;"></div>
-        <div style="position:relative;z-index:1;">
-          <div style="text-align:center;margin-bottom:24px;">
-            ${brandTopHtml}
-            <h1 style="margin:14px 0 4px;color:#ffffff;font-size:44px;line-height:1;font-weight:950;letter-spacing:-1.4px;text-transform:uppercase;">Tasas del día</h1>
-            <div style="color:rgba(255,255,255,.82);font-size:15px;font-weight:700;">${escapeHtml(listName)} · ${escapeHtml(dateText)}</div>
-          </div>
+    let html = "";
 
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;">
-            <div>${renderColumn(left)}</div>
-            <div>${renderColumn(right)}</div>
-          </div>
+    if (template.id === "aki_original") {
+      html = renderAkiOriginalTemplate(rows, listName, brandName, logoDataUrl, dateText);
+    } else if (template.id === "aki_modern") {
+      html = renderAkiModernTemplate(rows, listName, brandName, logoDataUrl, dateText);
+    } else if (template.id === "aki_premium") {
+      html = renderAkiPremiumTemplate(rows, listName, brandName, logoDataUrl, dateText);
+    } else {
+      html = renderOnzeTemplate(rows, listName, brandName, logoDataUrl, dateText, template.id);
+    }
 
-          <div style="margin-top:24px;text-align:center;color:rgba(255,255,255,.86);font-size:13px;font-weight:700;">
-            Tasas referenciales sujetas a disponibilidad y confirmación al momento de operar.
-          </div>
-
-          <div style="margin-top:18px;display:flex;justify-content:center;">
-            ${brandBottomHtml}
-          </div>
-        </div>
-      </div>
-    `;
+    preview.innerHTML = html;
 
     wrap.style.display = "block";
     wrap.scrollIntoView({ behavior: "smooth", block: "start" });
