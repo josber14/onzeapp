@@ -2268,7 +2268,7 @@
 
           <hr style="border:none;border-top:1px solid var(--sidebar-line);margin:20px 0;" />
 
-          <div class="rate-day-template-card" style="border:1px solid var(--sidebar-line);border-radius:18px;padding:16px;background:rgba(255,255,255,.72);margin-bottom:18px;">
+          <div class="rate-day-template-card" style="border:1px solid rgba(96,165,250,.24);border-radius:24px;padding:18px;background:radial-gradient(circle at 12% 0%,rgba(34,139,34,.12),transparent 34%),linear-gradient(180deg,rgba(15,42,71,.54),rgba(7,20,38,.40));margin-bottom:18px;box-shadow:0 18px 36px rgba(0,0,0,.18);">
             <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
               <div>
                 <h3 class="section-subtitle" style="margin:0;">Diseño de imagen</h3>
@@ -2279,14 +2279,14 @@
             <div class="form-row" style="margin-top:12px;max-width:420px;">
               <label for="rateDayTemplateSelect">Plantilla</label>
               <select id="rateDayTemplateSelect" onchange="window.setRateDayTemplateId && window.setRateDayTemplateId(this.value)">
-                <option value="aki_exact">AKI Transfer Original Exacta</option>
-                <option value="aki_original">AKI Transfer Original Dinámica</option>
-                <option value="aki_modern">AKI Transfer Moderna</option>
-                <option value="aki_premium">AKI Transfer Premium</option>
-                <option value="onze_classic">ONZE Verde Clásica</option>
-                <option value="onze_dark">ONZE Oscura</option>
-                <option value="onze_halloween">ONZE Halloween</option>
-                <option value="onze_navidad">ONZE Navidad</option>
+                <option value="aki_exact">Original</option>
+                <option value="aki_original">Dinámica</option>
+                <option value="aki_modern">Moderna</option>
+                <option value="aki_premium">Premium</option>
+                <option value="onze_classic">Clásica</option>
+                <option value="onze_dark">Oscura</option>
+                <option value="onze_halloween">Halloween</option>
+                <option value="onze_navidad">Navidad</option>
               </select>
             </div>
             <p class="section-text" id="rateDayTemplateHint" style="margin:8px 0 0;font-size:12px;">
@@ -16017,10 +16017,6 @@ if(addProviderBtn){
               </div>
             </div>
 
-            <div class="rate-day-pair-bottom">
-              <div class="rate-day-fixed-profit-note">Imagen oficial con <strong>tasa ONZE</strong></div>
-              <span class="rate-pair-custom-mark rate-day-mode-pill" title="Tipo de tasa">Oficial</span>
-            </div>
           </article>
         `;
       }
@@ -16404,56 +16400,56 @@ if(addProviderBtn){
   const RATE_DAY_TEMPLATES = [
     {
       id: "aki_exact",
-      name: "AKI Transfer Original Exacta",
+      name: "Original",
       scope: "super_admin",
       brand: "AKI",
       description: "Usa la imagen real de AKI Transfer como fondo y solo escribe las tasas encima."
     },
     {
       id: "aki_original",
-      name: "AKI Transfer Original Dinámica",
+      name: "Dinámica",
       scope: "super_admin",
       brand: "AKI",
       description: "Diseño base editable de AKI Transfer."
     },
     {
       id: "aki_modern",
-      name: "AKI Transfer Moderna",
+      name: "Moderna",
       scope: "super_admin",
       brand: "AKI",
       description: "Misma marca, estilo más limpio y moderno."
     },
     {
       id: "aki_premium",
-      name: "AKI Transfer Premium",
+      name: "Premium",
       scope: "super_admin",
       brand: "AKI",
       description: "Versión más elegante para publicaciones especiales."
     },
     {
       id: "onze_classic",
-      name: "ONZE Verde Clásica",
+      name: "Clásica",
       scope: "public",
       brand: "ONZE",
       description: "Plantilla pública verde para operadores y clientes."
     },
     {
       id: "onze_dark",
-      name: "ONZE Oscura",
+      name: "Oscura",
       scope: "public",
       brand: "ONZE",
       description: "Plantilla pública oscura."
     },
     {
       id: "onze_halloween",
-      name: "ONZE Halloween",
+      name: "Halloween",
       scope: "public",
       brand: "ONZE",
       description: "Plantilla pública especial de Halloween."
     },
     {
       id: "onze_navidad",
-      name: "ONZE Navidad",
+      name: "Navidad",
       scope: "public",
       brand: "ONZE",
       description: "Plantilla pública especial de Navidad."
@@ -17202,8 +17198,10 @@ if(addProviderBtn){
     if (newProfitModeBlock) newProfitModeBlock.style.display = showProfitConfig ? "" : "none";
 
     // Editor / Detalles de lista existente
+    // No ocultamos todo rateListAdvancedDetails porque ahí también está el logo.
+    // Solo ocultamos la configuración de porcentaje.
     const advancedDetails = document.getElementById("rateListAdvancedDetails");
-    if (advancedDetails) advancedDetails.style.display = showProfitConfig ? "" : "none";
+    if (advancedDetails) advancedDetails.style.display = "";
 
     const editorProfitModeBlock = document.querySelector('input[name="rateListEditorProfitMode"]')?.closest(".rate-day-profit-mode-editor");
     if (editorProfitModeBlock) editorProfitModeBlock.style.display = showProfitConfig ? "" : "none";
