@@ -12477,7 +12477,7 @@ if(addProviderBtn){
         return;
       }
 
-      const items = loadP2PCapacity();
+      const items = loadP2PCapacity().slice();
 
       const newCapacity = {
         id: `cap_${Date.now()}`,
