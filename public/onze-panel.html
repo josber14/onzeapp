@@ -12478,7 +12478,8 @@ if(addProviderBtn){
       }
 
       const items = loadP2PCapacity();
-      items.push({
+
+      const newCapacity = {
         id: `cap_${Date.now()}`,
         provider: provider.trim(),
         date,
@@ -12498,9 +12499,33 @@ if(addProviderBtn){
         reference: reference.trim(),
         note: note.trim(),
         createdAt: new Date().toISOString()
-      });
+      };
+
+      items.push(newCapacity);
 
       saveP2PCapacity(items);
+
+      fetch('/api/p2p/capacity', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: newCapacity })
+      })
+      .then(async res => {
+        const data = await res.json().catch(()=>null);
+
+        if(!res.ok || !data?.ok){
+          console.warn("No se pudo guardar capacity en servidor:", res.status, data);
+          alert("El capacity se creó en pantalla, pero no se pudo guardar en servidor. Revisa consola.");
+          return;
+        }
+
+        console.log("✅ Capacity guardado en servidor:", newCapacity.id);
+      })
+      .catch(err => {
+        console.warn("Error guardando capacity directo:", err);
+        alert("Error guardando capacity en servidor. Revisa consola.");
+      });
       closeP2PCapacityModal();
       renderP2PCapacityPanel();
       updateP2PDashboardWithCapacity();
