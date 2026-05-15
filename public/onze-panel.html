@@ -11742,6 +11742,9 @@ if(addProviderBtn){
     try { return JSON.parse(localStorage.getItem(CAPACITY_KEY) || "[]"); } catch(e) { return []; }
   })();
 
+  // Items guardados localmente que todavía pueden no haber llegado al servidor.
+  window.__p2pCapacityPendingSync = window.__p2pCapacityPendingSync || {};
+
   window.loadP2PCapacity = function loadP2PCapacity(){
     return Array.isArray(window.__p2pCapacityCache) ? window.__p2pCapacityCache : [];
   };
@@ -11750,36 +11753,108 @@ if(addProviderBtn){
     const arr = Array.isArray(items) ? items : [];
     const previous = window.__p2pCapacityCache || [];
     const newIds = new Set(arr.map(p => p.id));
+
     window.__p2pCapacityCache = arr;
+    window.__p2pCapacityLastSave = Date.now();
     localStorage.setItem(CAPACITY_KEY, JSON.stringify(arr));
+
     for (const item of arr) {
       const prev = previous.find(p => p.id === item.id);
       if (!prev || JSON.stringify(prev) !== JSON.stringify(item)) {
+        window.__p2pCapacityPendingSync[item.id] = {
+          item: { ...item },
+          savedAt: Date.now()
+        };
+
         fetch('/api/p2p/capacity', {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ item })
-        }).catch(e => console.warn('Error sync capacity:', e));
+        })
+        .then(res => {
+          if(!res.ok) throw new Error("No se pudo guardar capacity en servidor");
+
+          // No borramos el pendiente aquí.
+          // Solo se confirma cuando el GET del servidor devuelva este id.
+          if(window.__p2pCapacityPendingSync[item.id]){
+            window.__p2pCapacityPendingSync[item.id].postedOkAt = Date.now();
+          }
+        })
+        .catch(e => console.warn('Error sync capacity:', e));
       }
     }
-    for (const oldItem of previous) {
-      if (!newIds.has(oldItem.id)) {
-        fetch('/api/p2p/capacity?id=' + encodeURIComponent(oldItem.id), { method: 'DELETE' })
-          .catch(e => console.warn('Error delete capacity:', e));
-      }
-    }
+
+    // Importante:
+    // No borramos automáticamente en servidor los items que falten en la lista local.
+    // Un auto-refresh puede dejar la cache local vacía por segundos y eso no debe eliminar capacities reales.
+    // El DELETE al servidor queda reservado solo para deleteP2PCapacity(), cuando el usuario lo pide.
   }
 
   window.syncP2PCapacityFromServer = async function syncP2PCapacityFromServer(){
     try {
-      const res = await fetch('/api/p2p/capacity');
+      // Bloqueo defensivo: no sincronizar si hubo un guardado local reciente.
+      // Evita que el server devuelva una lista vieja y desaparezca un capacity recién creado.
+      const lastSave = Number(window.__p2pCapacityLastSave || 0);
+      if (lastSave && (Date.now() - lastSave) < 12000) {
+        console.log("⏸️ Sync pospuesto: guardado local reciente");
+        return false;
+      }
+
+      const res = await fetch('/api/p2p/capacity', { credentials: 'include' });
       if (!res.ok) return false;
       const data = await res.json();
       if (data?.ok && Array.isArray(data.items)) {
         const previous = window.__p2pCapacityCache || [];
-        const changed = JSON.stringify(previous) !== JSON.stringify(data.items);
-        window.__p2pCapacityCache = data.items;
-        localStorage.setItem(CAPACITY_KEY, JSON.stringify(data.items));
+        const serverItems = data.items;
+        const previousLocalItems = Array.isArray(window.__p2pCapacityCache) ? window.__p2pCapacityCache : [];
+
+        // Defensa fuerte: si el servidor devuelve vacío pero localmente hay capacities,
+        // no borramos la pantalla automáticamente. Esto evita el bug donde el auto-refresh
+        // deja el dashboard P2P sin capacities activos.
+        if(serverItems.length === 0 && previousLocalItems.length > 0){
+          console.warn("⚠️ Sync capacity devolvió vacío; mantengo cache local y reintento subir.");
+
+          previousLocalItems.forEach(item => {
+            if(!item?.id) return;
+
+            window.__p2pCapacityPendingSync[item.id] = {
+              item: { ...item },
+              savedAt: Date.now()
+            };
+
+            fetch('/api/p2p/capacity', {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ item })
+            }).catch(e => console.warn('Error re-sync capacity local:', e));
+          });
+
+          return false;
+        }
+
+        const serverIds = new Set(serverItems.map(item => item.id));
+        const now = Date.now();
+
+        // Confirmar pendientes solo cuando el servidor los devuelve en GET.
+        Object.keys(window.__p2pCapacityPendingSync || {}).forEach(id => {
+          if(serverIds.has(id)){
+            delete window.__p2pCapacityPendingSync[id];
+          }
+        });
+
+        // Si hay items pendientes de guardar que todavía no aparecen en servidor,
+        // mantenerlos en pantalla para que no desaparezcan por un sync viejo.
+        const protectedLocalItems = Object.values(window.__p2pCapacityPendingSync || {})
+          .filter(entry => entry?.item?.id && !serverIds.has(entry.item.id) && (now - Number(entry.savedAt || 0)) < 10 * 60 * 1000)
+          .map(entry => entry.item);
+
+        const mergedItems = [...serverItems, ...protectedLocalItems];
+
+        const changed = JSON.stringify(previous) !== JSON.stringify(mergedItems);
+        window.__p2pCapacityCache = mergedItems;
+        localStorage.setItem(CAPACITY_KEY, JSON.stringify(mergedItems));
         if (changed) {
           if (typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
           if (typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
@@ -11921,10 +11996,12 @@ if(addProviderBtn){
       const usdt = capacityClp > 0 && price > 0 ? capacityClp / price : legacyUsdt;
       const totalCost = capacityClp > 0 ? capacityClp : usdt * price;
 
-      const isFinished = item.status === "finished";
+      const normalizedStatus = String(item.status || "active").trim().toLowerCase();
+      const isFinished = normalizedStatus === "finished";
 
       return {
         ...item,
+        status: normalizedStatus || "active",
         usdtAmount: usdt,
         totalCost,
         usedUsdt: isFinished ? Number(item.finalSoldUsdt || 0) : 0,
@@ -11968,6 +12045,18 @@ if(addProviderBtn){
 
         // Capacity finalizado queda congelado. Las nuevas ventas saltan al siguiente activo.
         if(cap.status === "finished") continue;
+
+        // Un capacity activo solo debe consumir ventas posteriores a su creación.
+        // Esto evita que un capacity nuevo tome ventas viejas de Binance y se complete solo.
+        const capStartTs = cap.createdAt
+          ? new Date(cap.createdAt).getTime()
+          : (cap.date ? new Date(String(cap.date) + "T00:00:00").getTime() : 0);
+
+        const saleTs = Number(getOrderTs(sale) || 0);
+
+        if(capStartTs && saleTs && saleTs < capStartTs){
+          continue;
+        }
 
         const capTotalUsdt = Number(cap.usdtAmount || 0);
         const capUsedUsdt = Number(cap.usedUsdt || 0);
@@ -12018,7 +12107,12 @@ if(addProviderBtn){
 
     const enriched = capacities.map(item => {
       const price = Number(item.buyPrice || 0);
-      const paid = Number(item.paidClp || 0);
+      const paid = Number(
+        item.manualPaymentsClp ??
+        item.manualPaymentClp ??
+        item.paidClp ??
+        0
+      );
 
       const usedCost = Number(item.usedUsdt || 0) * price;
       const remainingUsdt = Math.max(Number(item.usdtAmount || 0) - Number(item.usedUsdt || 0), 0);
@@ -12392,6 +12486,15 @@ if(addProviderBtn){
         usdtAmount,
         buyPrice,
         paidClp,
+        status: "active",
+        finishedAt: null,
+        finalSoldUsdt: null,
+        finalClpReceived: null,
+        finalCommissionUsdt: null,
+        finalCommissionClp: null,
+        finalSaleParts: [],
+        manualPaymentClp: null,
+        manualPaymentsClp: null,
         reference: reference.trim(),
         note: note.trim(),
         createdAt: new Date().toISOString()
@@ -12688,7 +12791,7 @@ if(addProviderBtn){
     const remainingClp = Math.max(capacityClpTotal - clpReceived, 0);
     const payment = Math.min(manualClpPayment, remainingClp);
 
-    if(payment >= remainingClp - 1){
+    if(payment >= remainingClp * 0.99){
       // Pago completo: cerrar capacity
       capacities[idx] = {
         ...cap,
@@ -12699,7 +12802,8 @@ if(addProviderBtn){
         finalCommissionUsdt: Number(capStats.commissionUsdt || 0),
         finalCommissionClp: Number(capStats.commissionClp || 0),
         finalSaleParts: capStats.saleParts || [],
-        manualPaymentClp: payment
+        manualPaymentClp: Number(cap.manualPaymentClp || 0) + payment,
+        manualPaymentsClp: Number(cap.manualPaymentsClp || 0) + payment
       };
     } else {
       // Pago parcial: bajar capacity total
@@ -12789,8 +12893,18 @@ if(addProviderBtn){
 
   window.deleteP2PCapacity = function(id){
     if(!confirm("¿Seguro que deseas eliminar este capacity P2P?")) return;
+
+    delete window.__p2pCapacityPendingSync[id];
+
     const items = loadP2PCapacity().filter(item => item.id !== id);
-    saveP2PCapacity(items);
+    window.__p2pCapacityCache = items;
+    localStorage.setItem(CAPACITY_KEY, JSON.stringify(items));
+
+    fetch('/api/p2p/capacity?id=' + encodeURIComponent(id) + '&confirm=manual', {
+      method: 'DELETE',
+      credentials: 'include'
+    }).catch(e => console.warn('Error delete capacity:', e));
+
     renderP2PCapacityPanel();
     updateP2PDashboardWithCapacity();
   };
@@ -14049,7 +14163,6 @@ if(addProviderBtn){
 })();
 </script>
 
-</script>
 
 
 <style>

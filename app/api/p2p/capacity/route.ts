@@ -83,11 +83,24 @@ export async function DELETE(req: NextRequest) {
   }
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
+  const confirmDelete = searchParams.get("confirm");
+
   if (!id) {
     return NextResponse.json({ ok: false, error: "Falta id" }, { status: 400 });
   }
+
+  // Protección anti-borrado automático:
+  // Solo permitimos borrar si viene desde el botón manual del panel.
+  if (confirmDelete !== "manual") {
+    return NextResponse.json(
+      { ok: false, error: "DELETE bloqueado: falta confirmación manual" },
+      { status: 409 }
+    );
+  }
+
   await prisma.p2PCapacity.deleteMany({
     where: { id, tenantId: session.tenantId },
   });
+
   return NextResponse.json({ ok: true });
 }
