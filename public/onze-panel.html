@@ -1833,6 +1833,297 @@
     }
 
 </style>
+
+  <style id="onze-global-button-polish">
+    :root{
+      --onze-btn-blue-a: rgba(37,99,235,.94);
+      --onze-btn-blue-b: rgba(30,64,175,.88);
+      --onze-btn-border: rgba(96,165,250,.28);
+      --onze-btn-border-hover: rgba(147,197,253,.46);
+      --onze-btn-text: #f8fafc;
+      --onze-btn-muted-bg-a: rgba(30,64,175,.30);
+      --onze-btn-muted-bg-b: rgba(15,23,42,.28);
+      --onze-btn-danger-a: rgba(127,29,29,.34);
+      --onze-btn-danger-b: rgba(69,10,10,.24);
+    }
+
+    .btn,
+    button.btn,
+    a.btn{
+      min-height:44px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:9px;
+      padding:0 20px;
+      border-radius:14px;
+      border:1px solid var(--onze-btn-border);
+      background:linear-gradient(180deg, var(--onze-btn-blue-a), var(--onze-btn-blue-b));
+      color:var(--onze-btn-text);
+      font-weight:950;
+      letter-spacing:.01em;
+      text-decoration:none;
+      cursor:pointer;
+      box-shadow:0 12px 28px rgba(37,99,235,.18);
+      transition:transform .16s ease, border-color .16s ease, filter .16s ease, background .16s ease, color .16s ease;
+      -webkit-tap-highlight-color:transparent;
+    }
+
+    .btn:hover,
+    button.btn:hover,
+    a.btn:hover{
+      transform:translateY(-1px);
+      border-color:var(--onze-btn-border-hover);
+      filter:brightness(1.06);
+    }
+
+    .btn:active,
+    button.btn:active,
+    a.btn:active{
+      transform:translateY(0);
+      filter:brightness(.98);
+    }
+
+    .btn.secondary,
+    button.btn.secondary,
+    a.btn.secondary{
+      border-color:rgba(96,165,250,.20);
+      background:linear-gradient(180deg, var(--onze-btn-muted-bg-a), var(--onze-btn-muted-bg-b));
+      color:#dbeafe;
+      box-shadow:0 10px 24px rgba(15,23,42,.16);
+    }
+
+    .btn.secondary:hover,
+    button.btn.secondary:hover,
+    a.btn.secondary:hover{
+      border-color:rgba(147,197,253,.40);
+      color:#eff6ff;
+      background:linear-gradient(180deg, rgba(37,99,235,.34), rgba(30,64,175,.24));
+    }
+
+    .btn.danger,
+    button.btn.danger,
+    a.btn.danger{
+      border-color:rgba(248,113,113,.24);
+      background:linear-gradient(180deg, var(--onze-btn-danger-a), var(--onze-btn-danger-b));
+      color:#fecaca;
+      box-shadow:0 10px 24px rgba(127,29,29,.15);
+    }
+
+    .btn.danger:hover,
+    button.btn.danger:hover,
+    a.btn.danger:hover{
+      border-color:rgba(248,113,113,.45);
+      color:#fff1f2;
+      background:linear-gradient(180deg, rgba(153,27,27,.40), rgba(127,29,29,.28));
+    }
+
+    .btn:disabled,
+    button.btn:disabled,
+    .btn.disabled{
+      opacity:.55;
+      cursor:not-allowed;
+      transform:none;
+      filter:none;
+    }
+
+    .btn svg,
+    button.btn svg,
+    a.btn svg{
+      width:18px;
+      height:18px;
+      stroke:currentColor;
+      fill:none;
+      stroke-width:2.3;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+      flex:0 0 auto;
+    }
+
+    .onze-icon-only-btn{
+      width:54px;
+      height:54px;
+      min-width:54px;
+      padding:0;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:16px;
+      border:1px solid rgba(96,165,250,.22);
+      background:linear-gradient(180deg, rgba(30,64,175,.30), rgba(15,23,42,.28));
+      color:#60a5fa;
+      box-shadow:0 10px 24px rgba(15,23,42,.16);
+      cursor:pointer;
+      transition:transform .16s ease, border-color .16s ease, background .16s ease, color .16s ease;
+    }
+
+    .onze-icon-only-btn:hover{
+      transform:translateY(-1px);
+      border-color:rgba(147,197,253,.42);
+      color:#93c5fd;
+      background:linear-gradient(180deg, rgba(37,99,235,.34), rgba(30,64,175,.24));
+    }
+
+    .onze-icon-only-btn svg{
+      width:22px;
+      height:22px;
+      stroke:currentColor;
+      fill:none;
+      stroke-width:2.2;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+    }
+
+    .onze-icon-only-btn.danger{
+      border-color:rgba(248,113,113,.22);
+      background:linear-gradient(180deg, rgba(127,29,29,.32), rgba(69,10,10,.22));
+      color:#f87171;
+    }
+
+    .onze-icon-only-btn.danger:hover{
+      border-color:rgba(248,113,113,.44);
+      color:#fca5a5;
+    }
+
+
+    .topbar .btn,
+    .panel-header .btn,
+    .admin-actions .btn{
+      min-height:40px;
+      border-radius:13px;
+      padding:0 16px;
+      font-size:14px;
+    }
+
+    @media (max-width: 640px){
+      .btn,
+      button.btn,
+      a.btn{
+        min-height:42px;
+        border-radius:13px;
+        padding:0 16px;
+        font-size:14px;
+      }
+    }
+  
+
+    .rate-day-mode-btn.active,
+    .rate-mode-btn.active,
+    #rateDayModeCard .active{
+      border-color:rgba(147,197,253,.44) !important;
+      background:linear-gradient(180deg, rgba(37,99,235,.92), rgba(30,64,175,.86)) !important;
+      color:#f8fafc !important;
+      box-shadow:0 12px 28px rgba(37,99,235,.18) !important;
+    }
+
+
+    .settings-section,
+    .settings-panel,
+    #settingsSection,
+    #p2pSettingsSection,
+    .news-section,
+    #newsSection{
+      margin-top:24px !important;
+      padding-top:24px !important;
+    }
+
+    .settings-section .section-title,
+    .settings-panel .section-title,
+    #settingsSection .section-title,
+    #p2pSettingsSection .section-title{
+      margin-top:0 !important;
+    }
+
+    .app-main:has(#p2pSettingsSection),
+    .app-main:has(#settingsSection),
+    .app-main:has(#newsSection){
+      align-items:flex-start !important;
+      padding-top:24px !important;
+    }
+</style>
+
+
+  <style id="onze-layout-visual-fixes">
+    .onze-rate-tools-card{
+      display:flex;
+      flex-direction:column;
+      align-items:stretch;
+      gap:12px;
+      min-width:260px;
+      padding:16px;
+      border-radius:22px;
+      border:1px solid rgba(96,165,250,.20);
+      background:linear-gradient(180deg, rgba(15,23,42,.48), rgba(2,6,23,.28));
+      box-shadow:0 18px 42px rgba(2,6,23,.22);
+    }
+
+    .onze-rate-improve-wrap{
+      flex-direction:column;
+      align-items:stretch;
+      gap:8px;
+      min-width:220px;
+    }
+
+    .onze-rate-tools-card #onzeImproveRatePct{
+      width:100% !important;
+      min-height:44px;
+      border-radius:14px !important;
+      padding:8px 14px !important;
+      background:rgba(15,43,78,.78) !important;
+      border:1px solid rgba(96,165,250,.30) !important;
+      font-size:20px;
+    }
+
+    .onze-rate-tools-card #applyOnzeImproveRateBtn{
+      flex:1;
+      min-height:44px;
+    }
+
+    .onze-rate-tools-card #resetOnzeImproveRateBtn{
+      min-width:48px !important;
+      height:44px;
+      border-radius:14px !important;
+    }
+
+    .onze-rate-tools-card #toggleCalc{
+      width:100%;
+      justify-content:center;
+      border-radius:18px;
+    }
+
+    #view-ajustes.active,
+    #view-noticias.active{
+      display:block !important;
+      width:100% !important;
+      align-self:flex-start !important;
+      margin-top:0 !important;
+      padding-top:24px !important;
+    }
+
+    #view-ajustes > div{
+      margin:0 auto !important;
+      padding-top:0 !important;
+    }
+
+    #view-noticias .section-card,
+    #view-ajustes .section-card{
+      margin-top:0 !important;
+    }
+
+    main.content{
+      align-items:flex-start !important;
+      justify-content:flex-start !important;
+    }
+
+    .onze-icon-only-btn,
+    .p2p-action-main-btn:has(svg):not(:has(span)){
+      width:54px !important;
+      min-width:54px !important;
+      height:54px !important;
+      padding:0 !important;
+      border-radius:16px !important;
+    }
+  </style>
 </head>
 <body>
   <div class="mobile-topbar">
@@ -1857,7 +2148,7 @@
         <button class="nav-btn" data-view-target="dashboard">Dashboard</button>
         <button class="nav-btn" data-view-target="historial">Historial</button>
         <button class="nav-btn" data-view-target="noticias">Noticias</button>
-        <button class="nav-btn" data-view-target="ajustes" onclick="(window.switchView||function(v){document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));var el=document.getElementById('view-'+v);if(el)el.classList.add('active');})( 'ajustes')">Ajustes</button>
+        <button class="nav-btn admin-only-control" data-view-target="ajustes" onclick="(window.switchView||function(v){document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));var el=document.getElementById('view-'+v);if(el)el.classList.add('active');})( 'ajustes')">Ajustes</button>
       </nav>
     </aside>
 
@@ -1934,8 +2225,7 @@
 
           <div class="hero-actions">
             <button class="btn" id="saveProfileBtn" type="button">Guardar perfil</button>
-            <button class="btn ghost" id="backupBtn" type="button">Respaldar datos en la nube</button>
-            <button class="btn ghost" id="restoreBtn" type="button">Restaurar desde la nube</button>
+
           </div>
         </section>
       </section>
@@ -2020,8 +2310,8 @@
           <div class="h2-row">
             <h2 id="title">Centro de operaciones</h2>
 
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px;padding-right:34px;">
-              <div id="onzeImproveRateWrap" style="display:none;flex-direction:column;align-items:flex-end;gap:6px;min-width:190px;">
+            <div class="onze-rate-tools-card">
+              <div id="onzeImproveRateWrap" class="onze-rate-improve-wrap" style="display:none;">
                 <span style="font-size:12px;color:#ffffff;font-weight:700;text-align:center;width:100%;display:block;margin:0 auto;padding-left:28px;">Mejorar tasa</span>
                 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;width:100%;">
                   <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;width:100%;">
@@ -2346,7 +2636,7 @@
             </div>
             <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
               <button class="btn small secondary" type="button" id="openOperatorProfitBtn">Ganancia operadores</button>
-              <button class="btn small secondary" type="button" id="openProviderControlBtn">Control proveedores</button>
+              <button class="btn small secondary admin-only-control" type="button" id="openProviderControlBtn">Control proveedores</button>
               <button class="btn small" type="button" id="openCapitalSetupBtn">Capital inicial</button>
             </div>
           </div>
@@ -2646,7 +2936,7 @@
         </section>
       </section>
 
-      <section class="view" id="view-provider-control">
+      <section class="view admin-only-view" id="view-provider-control">
         <section class="section-card">
           <div class="section-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;">
             <div>
@@ -2863,7 +3153,7 @@
           </div>
         </section>
       </section>
-      <section class="view" id="view-ajustes" style="padding-top:0; margin-top:0;">
+      <section class="view admin-only-view" id="view-ajustes" style="padding-top:0; margin-top:0;">
         <div style="max-width:600px; margin:0 auto; padding:24px 24px 24px 24px; padding-top:0;">
           <h2 style="color:#00d4ff; margin-bottom:8px;">Ajustes</h2>
           <p style="color:#aaa; margin-bottom:24px;">Configuración de integraciones y credenciales.</p>
@@ -4841,7 +5131,7 @@
             </div>
           </div>
           <div class="capital-card-actions">
-            <button class="btn small ghost" type="button" onclick="openCountryDetail('${item.country || ""}')" title="Ver detalle" aria-label="Ver detalle">Detalle</button>
+            <button class="p2p-action-main-btn" type="button" onclick="openCountryDetail('${item.country || ""}')" title="Ver detalle" aria-label="Ver detalle" style="min-height:38px;padding:0 14px;font-size:13px;"><svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.7"/></svg></button>
             ${deleteId ? `<button class="btn small danger" type="button" onclick="deleteInitialCapital('${deleteId}')" title="Eliminar capital" aria-label="Eliminar capital">🗑️</button>` : ""}
           </div>
         `;
@@ -11178,8 +11468,7 @@ if(addProviderBtn){
               <h3 class="section-title" style="margin-bottom:8px;">Resumen P2P</h3>
               <p class="section-text">Ventas reales de hoy en CLP después de la última orden VES de hoy.</p>
             </div>
-            <button class="btn secondary" type="button" id="syncBinanceP2PBtn">Sincronizar Binance P2P</button>
-              <button class="btn secondary" type="button" id="btn-p2p-detail-main" onclick="openP2PRangeDetailModal('today')" title="Ver detalle de tarjetas P2P" aria-label="Ver detalle de tarjetas P2P" style="margin-left:10px;min-width:52px;padding-left:16px;padding-right:16px;">📊</button>
+            <button class="onze-metric-icon-btn" type="button" id="btn-p2p-detail-main" onclick="openP2PRangeDetailModal('today')" title="Ver métricas P2P" aria-label="Ver métricas P2P"><svg viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16V11"/><path d="M12 16V8"/><path d="M16 16V6"/><path d="M20 16V13"/></svg></button>
           </div>
 
           <div class="p2p-dashboard-grid">
@@ -11227,8 +11516,8 @@ if(addProviderBtn){
           <div class="p2p-dashboard-panel">
             <h3 class="section-title" style="margin-bottom:8px;">Ventas Binance</h3>
             <p class="section-text" style="margin-bottom:14px;">Ventas P2P de hoy en CLP.</p>
-            <div style="margin-bottom:12px;">
-              <button id="btn-sync-binance-sales" style="padding:8px 16px; background:#007bff; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold;">Sincronizar Binance</button>
+            <div style="margin-bottom:16px;display:flex;justify-content:flex-start;">
+              <button id="btn-sync-binance-sales" class="btn secondary" type="button">Sincronizar Binance P2P</button>
             </div>
             <div id="binance-sales-container" class="p2p-dashboard-empty">Sin ventas Binance sincronizadas.</div>
             <table id="binance-sales-table" style="width:100%; margin-top:12px; display:none; border-collapse:collapse;">
@@ -12046,11 +12335,12 @@ if(addProviderBtn){
         // Capacity finalizado queda congelado. Las nuevas ventas saltan al siguiente activo.
         if(cap.status === "finished") continue;
 
-        // Un capacity activo solo debe consumir ventas posteriores a su creación.
-        // Esto evita que un capacity nuevo tome ventas viejas de Binance y se complete solo.
-        const capStartTs = cap.createdAt
-          ? new Date(cap.createdAt).getTime()
-          : (cap.date ? new Date(String(cap.date) + "T00:00:00").getTime() : 0);
+        // Un capacity activo consume ventas desde su fecha operativa.
+        // No usamos createdAt porque el usuario puede registrar el capacity después
+        // de que ya existan ventas Binance del mismo día/ciclo.
+        const capStartTs = cap.date
+          ? new Date(String(cap.date) + "T00:00:00").getTime()
+          : (cap.createdAt ? new Date(cap.createdAt).getTime() : 0);
 
         const saleTs = Number(getOrderTs(sale) || 0);
 
@@ -12213,6 +12503,127 @@ if(addProviderBtn){
         align-items:flex-start;
         flex-wrap:wrap;
       }
+
+      .p2p-capacity-actions-row{
+        display:flex;
+        justify-content:flex-end;
+        align-items:center;
+        gap:10px;
+        flex-wrap:wrap;
+        margin-top:16px;
+      }
+
+      .p2p-action-icon-btn{
+        width:44px;
+        height:44px;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        border-radius:14px;
+        border:1px solid rgba(96,165,250,.22);
+        background:linear-gradient(180deg, rgba(30,64,175,.36), rgba(30,58,138,.24));
+        color:#60a5fa;
+        box-shadow:0 10px 24px rgba(15,23,42,.18);
+        cursor:pointer;
+        transition:transform .16s ease, border-color .16s ease, background .16s ease, color .16s ease;
+      }
+
+      .p2p-action-icon-btn:hover{
+        transform:translateY(-1px);
+        border-color:rgba(96,165,250,.45);
+        background:linear-gradient(180deg, rgba(37,99,235,.42), rgba(30,64,175,.28));
+        color:#93c5fd;
+      }
+
+      .p2p-action-icon-btn svg{
+        width:20px;
+        height:20px;
+        stroke:currentColor;
+        fill:none;
+        stroke-width:2;
+        stroke-linecap:round;
+        stroke-linejoin:round;
+      }
+
+      .onze-metric-icon-btn{
+        width:54px;
+        height:54px;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        border-radius:16px;
+        border:1px solid rgba(96,165,250,.22);
+        background:linear-gradient(180deg, rgba(30,64,175,.30), rgba(15,23,42,.28));
+        color:#60a5fa;
+        box-shadow:0 10px 24px rgba(15,23,42,.16);
+        cursor:pointer;
+        transition:transform .16s ease, border-color .16s ease, background .16s ease, color .16s ease;
+      }
+
+      .onze-metric-icon-btn:hover{
+        transform:translateY(-1px);
+        border-color:rgba(147,197,253,.42);
+        color:#93c5fd;
+        background:linear-gradient(180deg, rgba(37,99,235,.34), rgba(30,64,175,.24));
+      }
+
+      .onze-metric-icon-btn svg{
+        width:24px;
+        height:24px;
+        stroke:currentColor;
+        fill:none;
+        stroke-width:2.2;
+        stroke-linecap:round;
+        stroke-linejoin:round;
+      }
+
+
+      .p2p-action-icon-btn.danger{
+        border-color:rgba(248,113,113,.20);
+        background:linear-gradient(180deg, rgba(127,29,29,.32), rgba(69,10,10,.22));
+        color:#f87171;
+      }
+
+      .p2p-action-icon-btn.danger:hover{
+        border-color:rgba(248,113,113,.42);
+        color:#fca5a5;
+        background:linear-gradient(180deg, rgba(153,27,27,.38), rgba(127,29,29,.24));
+      }
+
+      .p2p-action-main-btn{
+        min-height:44px;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        gap:9px;
+        padding:0 20px;
+        border-radius:14px;
+        border:1px solid rgba(96,165,250,.26);
+        background:linear-gradient(180deg, rgba(37,99,235,.92), rgba(30,64,175,.86));
+        color:#f8fafc;
+        font-weight:950;
+        letter-spacing:.01em;
+        cursor:pointer;
+        box-shadow:0 12px 28px rgba(37,99,235,.18);
+        transition:transform .16s ease, border-color .16s ease, filter .16s ease;
+      }
+
+      .p2p-action-main-btn:hover{
+        transform:translateY(-1px);
+        border-color:rgba(147,197,253,.45);
+        filter:brightness(1.06);
+      }
+
+      .p2p-action-main-btn svg{
+        width:18px;
+        height:18px;
+        stroke:currentColor;
+        fill:none;
+        stroke-width:2.4;
+        stroke-linecap:round;
+        stroke-linejoin:round;
+      }
+
 
       .p2p-capacity-title{
         color:#f8fafc;
@@ -12801,7 +13212,7 @@ if(addProviderBtn){
   };
 
   window.finishCapacityManually = function(id, manualClpPayment){
-    const capacities = loadP2PCapacity();
+    const capacities = loadP2PCapacity().slice();
     const idx = capacities.findIndex(c => c.id === id);
     if(idx < 0) return;
 
@@ -12843,6 +13254,28 @@ if(addProviderBtn){
     }
 
     saveP2PCapacity(capacities);
+
+    const updatedCapacity = capacities[idx];
+    fetch('/api/p2p/capacity', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item: updatedCapacity })
+    })
+    .then(async res => {
+      const data = await res.json().catch(()=>null);
+      if(!res.ok || !data?.ok){
+        console.warn("No se pudo guardar capacity completado en servidor:", res.status, data);
+        alert("El capacity se completó en pantalla, pero no se pudo guardar en servidor. Revisa consola.");
+      }else{
+        console.log("✅ Capacity completado guardado en servidor:", updatedCapacity.id);
+      }
+    })
+    .catch(err => {
+      console.warn("Error guardando capacity completado:", err);
+      alert("Error guardando capacity completado en servidor. Revisa consola.");
+    });
+
     renderP2PCapacityPanel();
     updateP2PDashboardWithCapacity();
 
@@ -12893,10 +13326,11 @@ if(addProviderBtn){
                 <div><span style="color:#8aa0ba;">Ganancia:</span><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};">${profitClp >= 0 ? '+' : ''}${Math.round(profitClp).toLocaleString("es-CL")} CLP</strong><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};font-size:12px;">${profitClp >= 0 ? '+' : ''}${(buyPrice > 0 ? profitClp / buyPrice : 0).toFixed(2)} USDT</strong></div>
               </div>
               <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
-                <button onclick="openP2PCapacityDetail('${cap.id}'); document.getElementById('completedCapacitiesModal').remove();"
-                  style="padding:6px 12px;background:#1a3a5a;color:#00d4ff;border:none;border-radius:6px;cursor:pointer;font-size:12px;">👁️ Ver detalle</button>
-                <button onclick="if(confirm('¿Eliminar este capacity completado?')) { deleteP2PCapacity('${cap.id}'); openCompletedCapacitiesModal(); }"
-                  style="padding:6px 10px;background:#3a1a1a;color:#fb7185;border:none;border-radius:6px;cursor:pointer;font-size:12px;">🗑️</button>
+                <button class="p2p-action-main-btn" onclick="openP2PCapacityDetail('${cap.id}'); document.getElementById('completedCapacitiesModal').remove();" style="min-height:38px;padding:0 14px;font-size:13px;">
+                  <svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.7"/></svg></button>
+                <button class="p2p-action-icon-btn danger" onclick="if(confirm('¿Eliminar este capacity completado?')) { deleteP2PCapacity('${cap.id}'); openCompletedCapacitiesModal(); }" style="width:38px;height:38px;border-radius:12px;">
+                  <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                </button>
               </div>
             </div>
           `;
@@ -12935,7 +13369,7 @@ if(addProviderBtn){
   };
 
   window.finishP2PCapacity = function(id){
-    const items = loadP2PCapacity();
+    const items = loadP2PCapacity().slice();
     const item = items.find(cap => cap.id === id);
 
     if(!item){
@@ -12974,6 +13408,27 @@ if(addProviderBtn){
     item.finalSaleParts = Array.isArray(current?.saleParts) ? current.saleParts : [];
 
     saveP2PCapacity(items);
+
+    fetch('/api/p2p/capacity', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item })
+    })
+    .then(async res => {
+      const data = await res.json().catch(()=>null);
+      if(!res.ok || !data?.ok){
+        console.warn("No se pudo guardar capacity finalizado en servidor:", res.status, data);
+        alert("El capacity se finalizó en pantalla, pero no se pudo guardar en servidor. Revisa consola.");
+      }else{
+        console.log("✅ Capacity finalizado guardado en servidor:", item.id);
+      }
+    })
+    .catch(err => {
+      console.warn("Error guardando capacity finalizado:", err);
+      alert("Error guardando capacity finalizado en servidor. Revisa consola.");
+    });
+
     renderP2PCapacityPanel();
     updateP2PDashboardWithCapacity();
 
@@ -13211,14 +13666,21 @@ if(addProviderBtn){
 
               ${item.finishedAt ? `<div class="p2p-capacity-meta" style="margin-top:10px;">Finalizado: ${new Date(item.finishedAt).toLocaleString("es-CL", { timeZone:"America/Santiago", day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" })}</div>` : ""}
 
-              <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:10px;">
-                <button class="btn secondary" type="button" title="Ver detalle" aria-label="Ver detalle" onclick="openP2PCapacityDetail('${item.id}')">👁️</button>
+              <div class="p2p-capacity-actions-row">
+                <button class="p2p-action-icon-btn" type="button" title="Ver detalle" aria-label="Ver detalle" onclick="openP2PCapacityDetail('${item.id}')">
+                  <svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.7"/></svg>
+                </button>
                 ${
                   item.status === "finished"
                     ? `<button class="btn secondary" type="button" disabled>Completado</button>`
-                    : `<button class="btn" type="button" onclick="openCompleteCapacityModal('${item.id}')" title="Completar capacity">✅ Completar</button>`
+                    : `<button class="p2p-action-main-btn" type="button" onclick="openCompleteCapacityModal('${item.id}')" title="Completar saldo pendiente del capacity">
+                         <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+                         <span>Completar saldo</span>
+                       </button>`
                 }
-                <button class="btn secondary" type="button" onclick="deleteP2PCapacity('${item.id}')" title="Eliminar" aria-label="Eliminar" style="padding:6px 10px;">🗑️</button>
+                <button class="p2p-action-icon-btn danger" type="button" onclick="deleteP2PCapacity('${item.id}')" title="Eliminar" aria-label="Eliminar">
+                  <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                </button>
               </div>
             </div>
           `).join("")
@@ -17690,6 +18152,125 @@ if(addProviderBtn){
   } else {
     init();
   }
+})();
+</script>
+
+
+<style id="onze-admin-only-hard-hide">
+  .admin-only-control,
+  .admin-only-view{
+    display:none !important;
+  }
+
+  body.onze-admin-visible .admin-only-control{
+    display:inline-flex !important;
+  }
+
+  body.onze-admin-visible .admin-only-view.view.active{
+    display:block !important;
+  }
+</style>
+
+<script id="onze-admin-only-hard-guard">
+(function(){
+  function readRoleText(){
+    const q = new URLSearchParams(location.search);
+    const parts = [
+      q.get("role"),
+      q.get("userRole"),
+      q.get("mode"),
+      document.body?.dataset?.role
+    ];
+
+    const keys = [
+      "onzeUser",
+      "onze_user",
+      "currentUser",
+      "onze_current_user",
+      "onzeProfile",
+      "profile",
+      "user",
+      "sessionUser"
+    ];
+
+    for(const key of keys){
+      try{
+        const raw = localStorage.getItem(key);
+        if(!raw) continue;
+        const obj = JSON.parse(raw);
+        parts.push(
+          obj?.role,
+          obj?.type,
+          obj?.userRole,
+          obj?.mode,
+          obj?.profile?.role,
+          obj?.user?.role,
+          obj?.isAdmin ? "admin" : ""
+        );
+      }catch(e){}
+    }
+
+    try{
+      if(typeof IS_ADMIN_ROLE !== "undefined" && IS_ADMIN_ROLE) parts.push("admin");
+      if(typeof CURRENT_USER_ROLE !== "undefined") parts.push(CURRENT_USER_ROLE);
+    }catch(e){}
+
+    return parts.filter(Boolean).join(" ").toLowerCase();
+  }
+
+  function isAdminLike(){
+    const role = readRoleText();
+    return (
+      role.includes("super_admin") ||
+      role.includes("super admin") ||
+      role.includes("superadmin") ||
+      role.includes("admin_global") ||
+      role.includes("admin")
+    );
+  }
+
+  function forceAdminVisibility(){
+    const allowed = isAdminLike();
+    document.body.classList.toggle("onze-admin-visible", allowed);
+
+    document.querySelectorAll('[data-view-target="ajustes"], #openProviderControlBtn').forEach(el=>{
+      el.style.display = allowed ? "" : "none";
+      el.setAttribute("aria-hidden", allowed ? "false" : "true");
+    });
+
+    document.querySelectorAll("#view-ajustes, #view-provider-control").forEach(view=>{
+      if(!allowed){
+        view.classList.remove("active");
+        view.style.display = "none";
+      }else{
+        view.style.display = "";
+      }
+    });
+
+    if(!allowed){
+      const activeBlocked = document.querySelector("#view-ajustes.active, #view-provider-control.active");
+      if(activeBlocked){
+        activeBlocked.classList.remove("active");
+      }
+
+      const hasActive = document.querySelector(".view.active");
+      if(!hasActive){
+        const fallback = document.getElementById("view-inicio") || document.getElementById("view-dashboard");
+        fallback?.classList.add("active");
+      }
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", forceAdminVisibility);
+  setTimeout(forceAdminVisibility, 50);
+  setTimeout(forceAdminVisibility, 300);
+  setTimeout(forceAdminVisibility, 1000);
+
+  document.addEventListener("click", function(){
+    setTimeout(forceAdminVisibility, 50);
+  }, true);
+
+  window.forceAdminVisibility = forceAdminVisibility;
 })();
 </script>
 
