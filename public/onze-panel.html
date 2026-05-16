@@ -11471,7 +11471,7 @@ if(addProviderBtn){
             <button class="onze-metric-icon-btn" type="button" id="btn-p2p-detail-main" onclick="openP2PRangeDetailModal('today')" title="Ver métricas P2P" aria-label="Ver métricas P2P"><svg viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16V11"/><path d="M12 16V8"/><path d="M16 16V6"/><path d="M20 16V13"/></svg></button>
           </div>
 
-          <div class="p2p-dashboard-grid">
+          <div class="p2p-dashboard-grid p2p-dashboard-grid-centered">
             <div class="p2p-dashboard-card main">
               <div class="p2p-dashboard-label">USDT vendidos Binance</div>
               <div class="p2p-dashboard-value green" id="p2pDashCapital">0.00 USDT</div>
@@ -11502,6 +11502,7 @@ if(addProviderBtn){
             <div class="p2p-dashboard-card">
               <div class="p2p-dashboard-label">Precio venta promedio</div>
               <div class="p2p-dashboard-value green" id="p2pDashAvgProfit">0 CLP</div>
+              <div class="p2p-dashboard-small" id="p2pDashAvgProfitSub">Rentabilidad: 0,00%</div>
             </div>
           </div>
         </div>
@@ -12430,6 +12431,9 @@ if(addProviderBtn){
     let totalPaidClp = 0;
     let usedCostClp = 0;
     let allocatedClpReceived = 0;
+    let smartReceivedUsdt = 0;
+    let smartRemainingUsdt = 0;
+    let smartCoveredClp = 0;
     let allocatedCommissionUsdt = 0;
     let allocatedCommissionClp = 0;
 
@@ -12443,8 +12447,19 @@ if(addProviderBtn){
       );
 
       const usedCost = Number(item.usedUsdt || 0) * price;
-      const remainingUsdt = Math.max(Number(item.usdtAmount || 0) - Number(item.usedUsdt || 0), 0);
-      const pendingClp = Math.max(Number(item.totalCost || 0) - paid, 0);
+
+      // Totales inteligentes del capacity:
+      // CLP recibido por ventas + saldo completado manualmente = parte del capacity ya cubierta/liberada.
+      const capTotalClp = Number(item.totalCost || item.capacityClp || 0);
+      const capTotalUsdt = Number(item.usdtAmount || 0);
+      const clpReceivedForCap = Number(item.clpReceived || 0);
+      const coveredClp = Math.min(capTotalClp, Math.max(0, clpReceivedForCap + paid));
+      const receivedUsdt = price > 0
+        ? Math.min(capTotalUsdt, coveredClp / price)
+        : Math.min(capTotalUsdt, Number(item.usedUsdt || 0));
+
+      const remainingUsdt = Math.max(capTotalUsdt - receivedUsdt, 0);
+      const pendingClp = Math.max(capTotalClp - coveredClp, 0);
       const profitClp = Number(item.clpReceived || 0) - usedCost - Number(item.commissionClp || 0);
       const avgSellPriceCap = Number(item.usedUsdt || 0) > 0 ? Number(item.clpReceived || 0) / Number(item.usedUsdt || 0) : 0;
       const profitUsdt = avgSellPriceCap > 0 ? profitClp / avgSellPriceCap : 0;
@@ -12454,8 +12469,12 @@ if(addProviderBtn){
       // Solo sumar capacities activos (no completados) en los totales globales
       if(item.status !== "finished"){
         totalCapacityUsdt += Number(item.usdtAmount || 0);
-        totalCapacityCostClp += Number(item.totalCost || 0);
+        totalCapacityCostClp += Number(item.totalCost || item.capacityClp || 0);
         totalPaidClp += paid;
+
+        smartReceivedUsdt += receivedUsdt;
+        smartRemainingUsdt += remainingUsdt;
+        smartCoveredClp += coveredClp;
       }
       usedCostClp += usedCost;
       allocatedClpReceived += Number(item.clpReceived || 0);
@@ -12500,8 +12519,14 @@ if(addProviderBtn){
       realProfitClp,
       realProfitUsdt,
       profitPct,
-      pendingProviderClp: Math.max(totalCapacityCostClp - totalPaidClp, 0),
-      remainingCapacityUsdt: Math.max(totalCapacityUsdt - totalUsdtSold, 0),
+      // Métricas inteligentes del panel de capacity:
+      // USDT recibidos sube con ventas asignadas y saldos completados.
+      // Capacity restante baja con esa misma cobertura.
+      // Pendiente proveedor baja con CLP recibido + saldo manual.
+      pendingProviderClp: Math.max(totalCapacityCostClp - smartCoveredClp, 0),
+      remainingCapacityUsdt: smartRemainingUsdt,
+      smartReceivedUsdt,
+      smartCoveredClp,
       unassignedSaleUsdt: Math.max(unassignedSaleUsdt - getP2POwnCapitalTotalUsdt(), 0),
       unassignedSaleClp,
       unassignedCommissionUsdt
@@ -12514,6 +12539,38 @@ if(addProviderBtn){
     const style = document.createElement("style");
     style.id = "onzeP2PCapacityStyles";
     style.textContent = `
+      .p2p-dashboard-grid-centered .p2p-dashboard-card{
+        display:flex;
+        flex-direction:column;
+        justify-content:flex-start;
+        align-items:center;
+        text-align:center;
+        min-height:142px;
+        padding-top:26px;
+      }
+
+      .p2p-dashboard-grid-centered .p2p-dashboard-label{
+        width:100%;
+        min-height:28px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        text-align:center;
+      }
+
+      .p2p-dashboard-grid-centered .p2p-dashboard-value{
+        width:100%;
+        justify-content:center;
+        text-align:center;
+        margin-top:8px;
+      }
+
+      .p2p-dashboard-grid-centered .p2p-dashboard-small{
+        width:100%;
+        text-align:center;
+        margin-top:10px;
+        line-height:1.2;
+      }
       .p2p-capacity-actions{
         display:flex;
         gap:10px;
@@ -13135,7 +13192,7 @@ if(addProviderBtn){
           </div>
           <div class="p2p-capacity-mini">
             <span>Ganancia</span>
-            <strong style="color:${item.profitUsdt >= 0 ? "#34d399" : "#fb7185"};">${item.profitUsdt >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(item.profitUsdt), 4)} USDT</strong>
+            <strong style="color:${item.profitUsdt >= 0 ? "#34d399" : "#fb7185"};">${item.profitUsdt >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(item.profitUsdt), 2)} USDT</strong>
             <div class="p2p-capacity-meta" style="margin-top:5px;">${item.profitClp >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(item.profitClp), 0)} CLP</div>
           </div>
         </div>
@@ -13702,18 +13759,27 @@ if(addProviderBtn){
         </div>
       </div>
 
-      <div class="p2p-capacity-mini-grid">
+      <div class="p2p-capacity-mini-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));">
         <div class="p2p-capacity-mini">
-          <span>USDT recibidos</span>
-          <strong>${p2pCapMoney(stats.totalCapacityUsdt, 2)} USDT</strong>
+          <span>Total USDT a recibir</span>
+          <strong>${p2pCapMoney(stats.totalCapacityUsdt || 0, 2)} USDT</strong>
+          <div class="p2p-capacity-meta" style="margin-top:8px;">
+            Recibido: ${p2pCapMoney(stats.smartReceivedUsdt || 0, 2)} USDT
+          </div>
+          <div class="p2p-capacity-meta" style="margin-top:3px;">
+            Restante: ${p2pCapMoney(stats.remainingCapacityUsdt || 0, 2)} USDT
+          </div>
         </div>
+
         <div class="p2p-capacity-mini">
-          <span>Capacity restante</span>
-          <strong>${p2pCapMoney(stats.remainingCapacityUsdt, 2)} USDT</strong>
-        </div>
-        <div class="p2p-capacity-mini">
-          <span>Pendiente proveedor</span>
-          <strong>${p2pCapMoney(stats.pendingProviderClp, 0)} CLP</strong>
+          <span>Total proveedor</span>
+          <strong>${p2pCapMoney(stats.totalCapacityCostClp || 0, 0)} CLP</strong>
+          <div class="p2p-capacity-meta" style="margin-top:8px;">
+            Recibido: ${p2pCapMoney(stats.smartCoveredClp || 0, 0)} CLP
+          </div>
+          <div class="p2p-capacity-meta" style="margin-top:3px;">
+            Restante: ${p2pCapMoney(stats.pendingProviderClp || 0, 0)} CLP
+          </div>
         </div>
       </div>
 
@@ -13802,7 +13868,7 @@ if(addProviderBtn){
                 </div>
                 <div class="p2p-capacity-mini">
                   <span>Ganancia</span>
-                  <strong style="color:${item.profitUsdt >= 0 ? "#34d399" : "#fb7185"};">${item.profitUsdt >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(item.profitUsdt), 4)} USDT</strong>
+                  <strong style="color:${item.profitUsdt >= 0 ? "#34d399" : "#fb7185"};">${item.profitUsdt >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(item.profitUsdt), 2)} USDT</strong>
                   <div class="p2p-capacity-meta" style="margin-top:4px;">${item.profitClp >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(item.profitClp), 0)} CLP</div>
                 </div>
               </div>
@@ -14705,7 +14771,14 @@ if(addProviderBtn){
 
     if(capitalSubEl){
       const sign = profitUsdt >= 0 ? "+" : "-";
-      capitalSubEl.textContent = `Inicial: ${p2pCapMoney(getP2PInitialCapital(), 2)} USDT · Hoy: ${sign}${p2pCapMoney(Math.abs(profitUsdt), 2)} USDT`;
+      capitalSubEl.innerHTML = `
+        <div style="display:inline-grid;grid-template-columns:auto auto;column-gap:8px;row-gap:2px;align-items:center;justify-content:center;text-align:left;">
+          <span style="text-align:right;">Inicial:</span>
+          <strong style="text-align:left;color:#cbd5e1;">${p2pCapMoney(getP2PInitialCapital(), 2)} USDT</strong>
+          <span style="text-align:right;">Hoy:</span>
+          <strong style="text-align:left;color:#cbd5e1;">${sign}${p2pCapMoney(Math.abs(profitUsdt), 2)} USDT</strong>
+        </div>
+      `;
     }
 
     if(salesCountEl){
@@ -14717,7 +14790,7 @@ if(addProviderBtn){
     }
 
     if(avgSubEl){
-      avgSubEl.textContent = `Promedio de venta de hoy · Rentabilidad ${p2pCapMoney(profitPct, 2)}%`;
+      avgSubEl.textContent = `Rentabilidad: ${p2pCapMoney(profitPct, 2)}%`;
     }
 
     ensureP2PDetailButton();
