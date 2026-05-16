@@ -14370,8 +14370,12 @@ if(addProviderBtn){
       return isP2PInRange(capDate, range);
     });
 
-    const capacityBoughtClp = capacitiesInRange.reduce((sum, cap)=> sum + Number(cap.totalCost || cap.capacityClp || 0), 0);
-    const capacityBoughtUsdt = capacitiesInRange.reduce((sum, cap)=> sum + Number(cap.usdtAmount || 0), 0);
+    // En métricas, "Capacity comprado" debe representar el capacity activo actual,
+    // no ciclos finalizados/viejos que ya fueron cerrados.
+    const activeCapacitiesInRange = capacitiesInRange.filter(cap => cap.status !== "finished");
+
+    const capacityBoughtClp = activeCapacitiesInRange.reduce((sum, cap)=> sum + Number(cap.totalCost || cap.capacityClp || 0), 0);
+    const capacityBoughtUsdt = activeCapacitiesInRange.reduce((sum, cap)=> sum + Number(cap.usdtAmount || 0), 0);
     const avgBuyPriceRange = capacityBoughtUsdt > 0 ? capacityBoughtClp / capacityBoughtUsdt : 0;
 
     const activeRemainingUsdt = activeCapacities.reduce((sum, cap)=> sum + Number(cap.remainingUsdt || 0), 0);
