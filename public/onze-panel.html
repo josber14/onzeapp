@@ -11995,6 +11995,29 @@ if(addProviderBtn){
 
   const CAPACITY_KEY = "onze_p2p_capacity_items";
   const OWN_CAPITAL_KEY = "onze_p2p_own_capital_items";
+  const P2P_CAPACITY_BASELINE_KEY = "onze_p2p_capacity_baseline_at";
+
+  function getP2PCapacityBaselineTs(){
+    let value = localStorage.getItem(P2P_CAPACITY_BASELINE_KEY);
+
+    if(!value){
+      value = new Date().toISOString();
+      localStorage.setItem(P2P_CAPACITY_BASELINE_KEY, value);
+      console.log("✅ Inicio P2P/capacity fijado desde ahora:", value);
+    }
+
+    const ts = new Date(value).getTime();
+    return Number.isFinite(ts) ? ts : 0;
+  }
+
+  window.resetP2PCapacityBaselineNow = function(){
+    const value = new Date().toISOString();
+    localStorage.setItem(P2P_CAPACITY_BASELINE_KEY, value);
+    renderP2PCapacityPanel();
+    updateP2PDashboardWithCapacity();
+    if(typeof showToast === "function") showToast("Inicio P2P reiniciado desde ahora");
+    console.log("✅ Inicio P2P/capacity reiniciado:", value);
+  };
 
   function p2pCapMoney(n, decimals = 2){
     const value = Number(n || 0);
@@ -12275,7 +12298,19 @@ if(addProviderBtn){
     const capacitiesRaw = loadP2PCapacity()
       .sort((a,b)=> new Date(a.date || a.createdAt || 0) - new Date(b.date || b.createdAt || 0));
 
+    const p2pCapacityBaselineTs = getP2PCapacityBaselineTs();
+
     const sales = loadP2PBinanceSales()
+      .filter(o => {
+        const saleTs = Number(getOrderTs(o) || 0);
+
+        // Desde este punto ONZE empieza en 0 para el módulo capacity.
+        // No se toman ventas Binance anteriores al inicio/reinicio P2P.
+        if(!p2pCapacityBaselineTs) return true;
+        if(!saleTs) return false;
+
+        return saleTs >= p2pCapacityBaselineTs;
+      })
       .sort((a,b)=> Number(getOrderTs(a) || 0) - Number(getOrderTs(b) || 0));
 
     const capacities = capacitiesRaw.map(item => {
@@ -13328,7 +13363,7 @@ if(addProviderBtn){
               <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
                 <button class="p2p-action-main-btn" onclick="openP2PCapacityDetail('${cap.id}'); document.getElementById('completedCapacitiesModal').remove();" style="min-height:38px;padding:0 14px;font-size:13px;">
                   <svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.7"/></svg></button>
-                <button class="p2p-action-icon-btn danger" onclick="if(confirm('¿Eliminar este capacity completado?')) { deleteP2PCapacity('${cap.id}'); openCompletedCapacitiesModal(); }" style="width:38px;height:38px;border-radius:12px;">
+                <button class="p2p-action-icon-btn danger" onclick="deleteP2PCapacity('${cap.id}')" style="width:38px;height:38px;border-radius:12px;">
                   <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
                 </button>
               </div>
@@ -13350,8 +13385,102 @@ if(addProviderBtn){
     document.body.appendChild(modal);
   };
 
-  window.deleteP2PCapacity = function(id){
-    if(!confirm("¿Seguro que deseas eliminar este capacity P2P?")) return;
+  function ensureP2PCapacityDeleteModal(){
+    if(document.getElementById("p2pCapacityDeleteModalBackdrop")) return;
+
+    const modal = document.createElement("div");
+    modal.id = "p2pCapacityDeleteModalBackdrop";
+    modal.className = "p2p-capacity-modal-backdrop";
+    modal.innerHTML = `
+      <div class="p2p-capacity-modal" style="max-width:560px;border-color:rgba(248,113,113,.28);">
+        <div style="display:flex;gap:14px;align-items:flex-start;">
+          <div style="width:46px;height:46px;border-radius:16px;display:flex;align-items:center;justify-content:center;background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.25);color:#fb7185;flex:0 0 auto;">
+            <svg viewBox="0 0 24 24" style="width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round;">
+              <path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
+            </svg>
+          </div>
+
+          <div style="min-width:0;width:100%;">
+            <h3 class="section-title" style="margin:0 0 6px;color:#f8fafc;">Eliminar capacity P2P</h3>
+            <p class="section-text" id="p2pCapacityDeleteText" style="margin:0;">
+              Esta acción eliminará el capacity seleccionado.
+            </p>
+
+            <div style="margin-top:14px;border:1px solid rgba(148,163,184,.14);background:rgba(15,23,42,.50);border-radius:16px;padding:12px;">
+              <div style="color:#94a3b8;font-size:12px;font-weight:900;margin-bottom:4px;">Capacity seleccionado</div>
+              <div id="p2pCapacityDeleteName" style="color:#f8fafc;font-size:15px;font-weight:950;">-</div>
+              <div id="p2pCapacityDeleteMeta" style="color:#8aa0ba;font-size:12px;font-weight:800;margin-top:4px;">-</div>
+            </div>
+
+            <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:18px;">
+              <button class="btn secondary" type="button" id="cancelP2PCapacityDelete">Cancelar</button>
+              <button class="p2p-action-main-btn" type="button" id="confirmP2PCapacityDelete" style="border-color:rgba(248,113,113,.35);background:linear-gradient(180deg,rgba(220,38,38,.95),rgba(127,29,29,.90));box-shadow:0 12px 28px rgba(220,38,38,.16);">
+                Eliminar capacity
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.getElementById("cancelP2PCapacityDelete")?.addEventListener("click", closeP2PCapacityDeleteModal);
+    modal.addEventListener("click", function(e){
+      if(e.target === modal) closeP2PCapacityDeleteModal();
+    });
+  }
+
+  function closeP2PCapacityDeleteModal(){
+    const modal = document.getElementById("p2pCapacityDeleteModalBackdrop");
+    if(modal){
+      modal.classList.remove("open");
+      modal.dataset.capacityId = "";
+    }
+  }
+
+  function openP2PCapacityDeleteModal(id){
+    ensureP2PCapacityDeleteModal();
+
+    const modal = document.getElementById("p2pCapacityDeleteModalBackdrop");
+    const item = loadP2PCapacity().find(cap => cap.id === id);
+
+    if(!modal || !item){
+      if(typeof showToast === "function") showToast("No encontré este capacity");
+      return;
+    }
+
+    modal.dataset.capacityId = id;
+
+    const nameEl = document.getElementById("p2pCapacityDeleteName");
+    const metaEl = document.getElementById("p2pCapacityDeleteMeta");
+    const confirmBtn = document.getElementById("confirmP2PCapacityDelete");
+
+    if(nameEl) nameEl.textContent = item.provider || "Proveedor";
+    if(metaEl){
+      const clp = p2pCapMoney(Number(item.capacityClp || item.totalCost || 0), 0);
+      const price = p2pCapMoney(Number(item.buyPrice || 0), 2);
+      metaEl.textContent = `${item.date || "Sin fecha"} · ${clp} CLP · ${price} CLP/USDT`;
+    }
+
+    if(confirmBtn){
+      confirmBtn.onclick = function(){
+        window.deleteP2PCapacity(modal.dataset.capacityId, true);
+      };
+    }
+
+    modal.classList.add("open");
+  }
+
+  window.deleteP2PCapacity = function(id, confirmed){
+    if(!confirmed){
+      openP2PCapacityDeleteModal(id);
+      return;
+    }
+
+    closeP2PCapacityDeleteModal();
+
+    const completedModalWasOpen = !!document.getElementById("completedCapacitiesModal");
 
     delete window.__p2pCapacityPendingSync[id];
 
@@ -13366,6 +13495,15 @@ if(addProviderBtn){
 
     renderP2PCapacityPanel();
     updateP2PDashboardWithCapacity();
+
+    if(completedModalWasOpen && typeof openCompletedCapacitiesModal === "function"){
+      document.getElementById("completedCapacitiesModal")?.remove();
+      openCompletedCapacitiesModal();
+    }
+
+    if(typeof showToast === "function"){
+      showToast("Capacity P2P eliminado");
+    }
   };
 
   window.finishP2PCapacity = function(id){
@@ -13577,22 +13715,24 @@ if(addProviderBtn){
       </div>
 
       ${
-        Number(stats.unassignedSaleUsdt || 0) > 0
+        !displayItems.length && Number(stats.unassignedSaleUsdt || 0) > 0
           ? `<div class="p2p-capacity-card" style="margin-top:12px;border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.07);">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
                 <div>
-                  <div class="p2p-capacity-title" style="color:#fbbf24;">Ventas sin capacity detectadas</div>
+                  <div class="p2p-capacity-title" style="color:#fbbf24;">Ventas sin compra/capacity detectadas</div>
                   <div class="p2p-capacity-meta" style="margin-top:5px;">
-                    Hay ${p2pCapMoney(stats.unassignedSaleUsdt, 2)} USDT vendidos que no están cubiertos por ningún capacity.
+                    Hay ${p2pCapMoney(stats.unassignedSaleUsdt, 2)} USDT vendidos que todavía no tienen una compra/capacity asignada.
                   </div>
                   <div class="p2p-capacity-meta" style="margin-top:5px;">
                     CLP recibido aprox: ${p2pCapMoney(stats.unassignedSaleClp, 0)} CLP · Comisión: ${p2pCapMoney(stats.unassignedCommissionUsdt, 4)} USDT
                   </div>
+                  <div class="p2p-capacity-meta" style="margin-top:7px;color:#facc15;">
+                    Para cerrar el ciclo, registra una compra/capacity por el monto correspondiente.
+                  </div>
                 </div>
 
                 <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-                  <button class="btn" type="button" onclick="resolveP2PUnassignedAsNewCapacity()">Crear capacity</button>
-                  <button class="btn secondary" type="button" onclick="resolveP2PUnassignedAsOwnCapital()">Capital propio</button>
+                  <button class="btn" type="button" onclick="resolveP2PUnassignedAsNewCapacity()">Registrar compra</button>
                 </div>
               </div>
             </div>`
@@ -13765,7 +13905,7 @@ if(addProviderBtn){
     modal.style.cssText = `
       position:fixed;
       inset:0;
-      z-index:99999;
+      z-index:1000001;
       display:none;
       align-items:center;
       justify-content:center;
@@ -13786,8 +13926,8 @@ if(addProviderBtn){
       ">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px;">
           <div>
-            <div style="font-size:22px;font-weight:900;letter-spacing:.2px;">Capital inicial P2P</div>
-            <div style="font-size:13px;color:#94a3b8;margin-top:5px;">Define el capital base en USDT para medir ganancia o pérdida.</div>
+            <div style="font-size:22px;font-weight:900;letter-spacing:.2px;">Capital P2P</div>
+            <div style="font-size:13px;color:#94a3b8;margin-top:5px;">Registra, aumenta o retira capital base en USDT.</div>
           </div>
           <button type="button" onclick="closeP2PInitialCapitalModal()" style="
             width:34px;
@@ -13800,6 +13940,39 @@ if(addProviderBtn){
             font-size:18px;
           ">×</button>
         </div>
+
+        <div style="
+          border:1px solid rgba(96,165,250,.20);
+          background:rgba(15,23,42,.62);
+          border-radius:18px;
+          padding:14px 16px;
+          margin-bottom:14px;
+        ">
+          <div style="font-size:12px;color:#94a3b8;font-weight:900;text-transform:uppercase;letter-spacing:.08em;">Capital registrado actual</div>
+          <div id="p2pCurrentCapitalLabel" style="margin-top:6px;font-size:28px;font-weight:1000;color:#34d399;">0,00 USDT</div>
+        </div>
+
+        <label style="display:block;font-size:13px;font-weight:800;color:#cbd5e1;margin-bottom:8px;">
+          Acción
+        </label>
+
+        <select id="p2pInitialCapitalAction" style="
+          width:100%;
+          box-sizing:border-box;
+          border-radius:16px;
+          border:1px solid rgba(96,165,250,.30);
+          background:rgba(15,43,78,.78);
+          color:#f8fafc;
+          padding:14px 16px;
+          font-size:15px;
+          font-weight:900;
+          outline:none;
+          margin-bottom:14px;
+        ">
+          <option value="set">Modificar capital total</option>
+          <option value="add">Agregar capital</option>
+          <option value="remove">Retirar capital</option>
+        </select>
 
         <label style="display:block;font-size:13px;font-weight:800;color:#cbd5e1;margin-bottom:8px;">
           Monto en USDT
@@ -13819,9 +13992,17 @@ if(addProviderBtn){
           box-shadow:0 0 0 3px rgba(52,211,153,.08);
         ">
 
-        <div id="p2pInitialCapitalError" style="
+        <div id="p2pInitialCapitalPreview" style="
           min-height:18px;
           margin-top:8px;
+          font-size:12px;
+          color:#93c5fd;
+          font-weight:800;
+        "></div>
+
+        <div id="p2pInitialCapitalError" style="
+          min-height:18px;
+          margin-top:6px;
           font-size:12px;
           color:#fca5a5;
           font-weight:700;
@@ -13872,43 +14053,102 @@ if(addProviderBtn){
     if(modal) modal.style.display = "none";
   };
 
-  window.saveP2PInitialCapitalFromModal = function saveP2PInitialCapitalFromModal(){
+  function updateP2PInitialCapitalPreview(){
     const input = document.getElementById("p2pInitialCapitalInput");
-    const error = document.getElementById("p2pInitialCapitalError");
+    const action = document.getElementById("p2pInitialCapitalAction")?.value || "set";
+    const preview = document.getElementById("p2pInitialCapitalPreview");
+    const current = getP2PInitialCapital();
 
     const raw = String(input?.value || "").trim();
     const clean = raw.replace(/\./g, "").replace(",", ".");
     const amount = Number(clean);
 
-    if(!isFinite(amount) || amount < 0){
-      if(error) error.textContent = "Ingresa un capital válido en USDT.";
+    if(!preview) return;
+
+    if(!raw || !isFinite(amount)){
+      preview.textContent = "";
       return;
     }
 
-    saveP2PInitialCapital(amount);
+    let next = amount;
+    if(action === "add") next = current + amount;
+    if(action === "remove") next = current - amount;
+
+    preview.textContent = `Capital resultante: ${p2pCapMoney(Math.max(next, 0), 2)} USDT`;
+  }
+
+  window.saveP2PInitialCapitalFromModal = function saveP2PInitialCapitalFromModal(){
+    const input = document.getElementById("p2pInitialCapitalInput");
+    const action = document.getElementById("p2pInitialCapitalAction")?.value || "set";
+    const error = document.getElementById("p2pInitialCapitalError");
+
+    const raw = String(input?.value || "").trim();
+    const clean = raw.replace(/\./g, "").replace(",", ".");
+    const amount = Number(clean);
+    const current = getP2PInitialCapital();
+
+    if(error) error.textContent = "";
+
+    if(!isFinite(amount) || amount < 0){
+      if(error) error.textContent = "Ingresa un monto válido en USDT.";
+      return;
+    }
+
+    let next = amount;
+
+    if(action === "add"){
+      next = current + amount;
+    }
+
+    if(action === "remove"){
+      if(amount > current){
+        if(error) error.textContent = "No puedes retirar más capital del que tienes registrado.";
+        return;
+      }
+      next = current - amount;
+    }
+
+    saveP2PInitialCapital(next);
     updateP2PCapitalCard();
+    if(typeof updateP2PDashboardWithCapacity === "function") updateP2PDashboardWithCapacity();
     closeP2PInitialCapitalModal();
 
+    const label = action === "add" ? "agregado" : action === "remove" ? "retirado" : "actualizado";
+
     if(typeof showToast === "function"){
-      showToast("Capital inicial P2P actualizado");
+      showToast(`Capital P2P ${label}`);
     }
   };
 
   window.setP2PInitialCapital = function setP2PInitialCapital(){
     const modal = ensureP2PInitialCapitalModal();
     const input = modal.querySelector("#p2pInitialCapitalInput");
+    const action = modal.querySelector("#p2pInitialCapitalAction");
     const error = modal.querySelector("#p2pInitialCapitalError");
+    const preview = modal.querySelector("#p2pInitialCapitalPreview");
+    const label = modal.querySelector("#p2pCurrentCapitalLabel");
     const current = getP2PInitialCapital();
 
     if(error) error.textContent = "";
+    if(preview) preview.textContent = "";
+    if(label) label.textContent = `${p2pCapMoney(current, 2)} USDT`;
+
+    if(action){
+      action.value = "set";
+      action.onchange = updateP2PInitialCapitalPreview;
+    }
+
     if(input){
       input.value = current ? String(current) : "";
+      input.oninput = updateP2PInitialCapitalPreview;
       setTimeout(()=>{
         input.focus();
         input.select();
+        updateP2PInitialCapitalPreview();
       }, 50);
     }
 
+    modal.style.zIndex = "1000001";
     modal.style.display = "flex";
   };
 
@@ -13962,7 +14202,21 @@ if(addProviderBtn){
     return itemDate >= start && itemDate <= end;
   }
 
+  function isP2PAfterCapacityBaseline(raw){
+    const baselineTs = typeof getP2PCapacityBaselineTs === "function" ? getP2PCapacityBaselineTs() : 0;
+    if(!baselineTs) return true;
+
+    const ts = Number(getOrderTs(raw) || 0) || new Date(raw || 0).getTime();
+    if(!ts || !Number.isFinite(ts)) return false;
+
+    return ts >= baselineTs;
+  }
+
   function isP2PInRange(raw, range){
+    // Regla global: el módulo P2P empieza en 0 desde el último reinicio.
+    // Ningún rango debe tomar ventas/capacity anteriores a esa fecha/hora.
+    if(!isP2PAfterCapacityBaseline(raw)) return false;
+
     if(range === "total") return true;
     if(range === "today") return p2pChileDayKey(raw) === p2pChileDayKey(new Date());
     if(range === "week") return isP2PInCurrentWeek(raw);
@@ -14103,11 +14357,15 @@ if(addProviderBtn){
     const capitalByRange = initialCapital + Number(data.profitUsdt || 0);
 
     const capacitiesInRange = (stats.capacities || []).filter(cap => {
-      const capDate = cap.date || cap.createdAt || cap.finishedAt || "";
+      const capDate = cap.createdAt || cap.finishedAt || cap.date || "";
       return isP2PInRange(capDate, range);
     });
 
-    const activeCapacities = (stats.capacities || []).filter(cap => cap.status !== "finished");
+    const activeCapacities = (stats.capacities || []).filter(cap => {
+      if(cap.status === "finished") return false;
+      const capDate = cap.createdAt || cap.finishedAt || cap.date || "";
+      return isP2PInRange(capDate, range);
+    });
 
     const capacityBoughtClp = capacitiesInRange.reduce((sum, cap)=> sum + Number(cap.totalCost || cap.capacityClp || 0), 0);
     const capacityBoughtUsdt = capacitiesInRange.reduce((sum, cap)=> sum + Number(cap.usdtAmount || 0), 0);
@@ -14158,11 +14416,13 @@ if(addProviderBtn){
     }).join("");
 
     content.innerHTML = `
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
-        ${p2pDetailFilterButton("today", range)}
-        ${p2pDetailFilterButton("week", range)}
-        ${p2pDetailFilterButton("month", range)}
-        ${p2pDetailFilterButton("total", range)}
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${p2pDetailFilterButton("today", range)}
+          ${p2pDetailFilterButton("week", range)}
+          ${p2pDetailFilterButton("month", range)}
+          ${p2pDetailFilterButton("total", range)}
+        </div>
       </div>
 
       <h3 class="section-title" style="margin-bottom:8px;">Resumen principal</h3>
@@ -14392,28 +14652,65 @@ if(addProviderBtn){
     const stats = calculateP2PCapacityStats();
     const today = getP2PRangeStatsFromCapacity(stats, "today");
 
+    const soldEl = document.getElementById("p2pDashCapital");
+    const clpEl = document.getElementById("p2pDashProfitToday");
     const realProfitEl = document.getElementById("p2pDashProfitMonth");
     const realProfitSubEl = document.getElementById("p2pDashProfitMonthSub");
+    const capitalEl = document.getElementById("p2pDashVolume");
+    const capitalSubEl = document.getElementById("p2pDashVolumeSub");
+    const salesCountEl = document.getElementById("p2pDashCycles");
     const avgEl = document.getElementById("p2pDashAvgProfit");
     const avgSubEl = document.getElementById("p2pDashAvgProfitSub");
 
+    const soldUsdt = Number(today.soldUsdt || 0);
+    const clpReceived = Number(today.clpReceived || today.totalClp || 0);
+    const profitUsdt = Number(today.profitUsdt || 0);
+    const profitClp = Number(today.profitClp || 0);
+    const profitPct = Number(today.profitPct || 0);
+    const salesCount = Number(today.salesCount || today.ordersCount || today.count || 0);
+    const avgSellPrice = soldUsdt > 0 ? clpReceived / soldUsdt : 0;
+
+    if(soldEl){
+      soldEl.textContent = `${p2pCapMoney(soldUsdt, 2)} USDT`;
+    }
+
+    if(clpEl){
+      clpEl.textContent = `${p2pCapMoney(clpReceived, 0)} CLP`;
+    }
+
     if(realProfitEl){
-      const signUsdt = today.profitUsdt >= 0 ? "+" : "-";
-      realProfitEl.textContent = `${signUsdt}${p2pCapMoney(Math.abs(today.profitUsdt), 2)} USDT`;
+      const signUsdt = profitUsdt >= 0 ? "+" : "-";
+      realProfitEl.textContent = `${signUsdt}${p2pCapMoney(Math.abs(profitUsdt), 2)} USDT`;
     }
 
     if(realProfitSubEl){
-      realProfitSubEl.textContent = `Hoy · ${p2pCapMoney(today.soldUsdt, 2)} USDT vendidos`;
+      const signClp = profitClp >= 0 ? "+" : "-";
+      realProfitSubEl.textContent = `Hoy · ${signClp}${p2pCapMoney(Math.abs(profitClp), 0)} CLP`;
     }
 
-    updateP2PCapitalCard(stats);
+    // En la pantalla principal dejamos capital como capital actual,
+    // pero el resultado que muestra debajo corresponde al día.
+    if(capitalEl){
+      const initial = getP2PInitialCapital();
+      const total = initial + profitUsdt;
+      capitalEl.textContent = `${p2pCapMoney(total, 2)} USDT`;
+    }
+
+    if(capitalSubEl){
+      const sign = profitUsdt >= 0 ? "+" : "-";
+      capitalSubEl.textContent = `Inicial: ${p2pCapMoney(getP2PInitialCapital(), 2)} USDT · Hoy: ${sign}${p2pCapMoney(Math.abs(profitUsdt), 2)} USDT`;
+    }
+
+    if(salesCountEl){
+      salesCountEl.textContent = String(salesCount);
+    }
 
     if(avgEl){
-      avgEl.textContent = `${p2pCapMoney(today.profitPct, 2)}%`;
+      avgEl.textContent = avgSellPrice > 0 ? `${p2pCapMoney(avgSellPrice, 2)} CLP` : "0,00 CLP";
     }
 
     if(avgSubEl){
-      avgSubEl.textContent = `Rentabilidad de hoy sobre costo usado`;
+      avgSubEl.textContent = `Promedio de venta de hoy · Rentabilidad ${p2pCapMoney(profitPct, 2)}%`;
     }
 
     ensureP2PDetailButton();
