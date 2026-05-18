@@ -2221,6 +2221,18 @@
                 <option value="">Selecciona un país…</option>
               </select>
             </div>
+
+            <div class="field">
+              <label for="profileP2pLevel">Nivel comerciante Binance P2P</label>
+              <select id="profileP2pLevel">
+                <option value="sin_comision">Sin comisión (0%)</option>
+                <option value="no_verificado">No verificado (0.20%)</option>
+                <option value="bronce">Bronce (0.175%)</option>
+                <option value="plata">Plata (0.14%)</option>
+                <option value="oro">Oro (0.12%)</option>
+              </select>
+              <p style="font-size:12px;color:#6b7280;margin:4px 0 0;">Usado para calcular tasa mínima de venta en P2P Capacity y fees en la calculadora.</p>
+            </div>
           </div>
 
           <div class="hero-actions">
@@ -3555,6 +3567,23 @@
 
     window.currentUserContext = CURRENT_USER_CONTEXT;
 
+    async function verifyUserRole() {
+      try {
+        const _res = await fetch("/api/auth/me", { credentials: "include" });
+        const _data = await _res.json();
+        if (_data?.ok && _data?.user) {
+          const _role = String(_data.user.role || "").toLowerCase();
+          if (_role !== CURRENT_USER_CONTEXT.role) {
+            CURRENT_USER_CONTEXT.role = _role;
+            IS_ADMIN_ROLE = _role === "super_admin_global" || _role === "super_admin_cliente";
+            window.authenticatedUser = _data.user;
+          }
+        }
+      } catch(_e) {}
+    }
+
+    verifyUserRole();
+
     function isGlobalAdmin(){
       return CURRENT_USER_CONTEXT.role === "super_admin_global";
     }
@@ -3741,7 +3770,7 @@
     const WHATSAPP_NUMBER = "56951333777";
     const PANEL_QUERY = new URLSearchParams(window.location.search);
     const SESSION_ROLE = String(PANEL_QUERY.get("role") || "").trim();
-    const IS_ADMIN_ROLE =
+    let IS_ADMIN_ROLE =
       SESSION_ROLE === "super_admin_global" ||
       SESSION_ROLE === "super_admin_cliente";
 
@@ -5552,6 +5581,10 @@
         populateCountrySelect(profileResidenceCountry);
         profileResidenceCountry.value = profile.residenceCountry || "";
       }
+      const p2pLevelEl = document.getElementById("profileP2pLevel");
+      if(p2pLevelEl && profile.p2pLevel){
+        p2pLevelEl.value = profile.p2pLevel;
+      }
       updateProfileUI();
     }
 
@@ -5566,6 +5599,15 @@
         }
       }
     }
+
+    window.getMerchantFeePct = function(){
+      const FEE_MAP = { sin_comision: 0, no_verificado: 0.20, bronce: 0.175, plata: 0.14, oro: 0.12 };
+      const profile = loadProfile();
+      if(profile.p2pLevel && FEE_MAP[profile.p2pLevel] !== undefined) return FEE_MAP[profile.p2pLevel];
+      const calcLevel = document.getElementById("p2pLevel")?.value;
+      if(calcLevel && FEE_MAP[calcLevel] !== undefined) return FEE_MAP[calcLevel];
+      return 0.14;
+    };
 
     function requireProfileForAction(message){
       const ok = isProfileComplete();
@@ -8711,7 +8753,8 @@ function refreshHistoryUI(){
         const data = {
           fullName: profileFullName?.value?.trim() || "",
           phone: profilePhone?.value?.trim() || "",
-          residenceCountry: profileResidenceCountry?.value || ""
+          residenceCountry: profileResidenceCountry?.value || "",
+          p2pLevel: document.getElementById("profileP2pLevel")?.value || ""
         };
 
         if(!data.fullName || !data.phone || !data.residenceCountry){
@@ -11129,12 +11172,14 @@ if(addProviderBtn){
   }
 
   function currentBinanceFee(){
+    const profile = (typeof loadProfile === "function") ? loadProfile() : {};
+    if(profile.p2pLevel && profile.p2pLevel !== "personalizado"){
+      return getFeeFromLevel(profile.p2pLevel);
+    }
     const level = document.getElementById("p2pLevel")?.value || "oro";
-
     if(level === "personalizado"){
       return getNumber("p2pCustomFee");
     }
-
     return getFeeFromLevel(level);
   }
 
@@ -12023,6 +12068,37 @@ if(addProviderBtn){
     console.log("✅ Inicio P2P/capacity reiniciado:", value);
   };
 
+  window.setP2PCapacityBaseline = function(isoStringOrTimestamp){
+    try{
+      const ts = typeof isoStringOrTimestamp === "number"
+        ? new Date(isoStringOrTimestamp)
+        : new Date(isoStringOrTimestamp);
+      if(isNaN(ts.getTime())) throw new Error("Fecha inválida");
+      localStorage.setItem(P2P_CAPACITY_BASELINE_KEY, ts.toISOString());
+      renderP2PCapacityPanel();
+      updateP2PDashboardWithCapacity();
+      if(typeof showToast === "function") showToast("Baseline P2P actualizado");
+      console.log("✅ Baseline P2P actualizado a:", ts.toISOString());
+    }catch(e){
+      console.warn("setP2PCapacityBaseline error:", e);
+      if(typeof showToast === "function") showToast("Error: fecha inválida. Usa ISO string o timestamp.");
+    }
+  };
+
+  window.clearP2PFinishedLocks = function(){
+    const items = loadP2PCapacity().map(cap => {
+      if(cap.status === "finished" && Array.isArray(cap.finalSaleParts) && cap.finalSaleParts.length > 0){
+        delete cap.finalSaleParts;
+      }
+      return cap;
+    });
+    saveP2PCapacity(items);
+    renderP2PCapacityPanel();
+    updateP2PDashboardWithCapacity();
+    if(typeof showToast === "function") showToast("Locks de capacities finalizados liberados");
+    console.log("✅ Locks de capacities finalizados eliminados");
+  };
+
   function p2pCapMoney(n, decimals = 2){
     const value = Number(n || 0);
     return value.toLocaleString("es-CL", {
@@ -12035,6 +12111,12 @@ if(addProviderBtn){
     const raw = String(value || "0").trim().replace(/\./g, "").replace(",", ".");
     const n = Number(raw);
     return Number.isFinite(n) ? n : 0;
+  }
+
+  function p2pCapDisplayNumber(value){
+    const n = Number(value || 0);
+    if(!Number.isFinite(n)) return "0";
+    return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   }
 
   function loadP2POwnCapital(){
@@ -12105,6 +12187,35 @@ if(addProviderBtn){
     // No borramos automáticamente en servidor los items que falten en la lista local.
     // Un auto-refresh puede dejar la cache local vacía por segundos y eso no debe eliminar capacities reales.
     // El DELETE al servidor queda reservado solo para deleteP2PCapacity(), cuando el usuario lo pide.
+  }
+
+  function getP2PManualPaymentsArray(item){
+    if(Array.isArray(item?.manualPayments)){
+      return item.manualPayments
+        .map((pay, index) => ({
+          id: pay.id || `manual_${index + 1}`,
+          amountClp: Number(pay.amountClp || pay.clp || pay.amount || 0),
+          createdAt: pay.createdAt || item.updatedAt || item.finishedAt || item.createdAt || new Date().toISOString(),
+          note: pay.note || "Pago manual registrado"
+        }))
+        .filter(pay => Number(pay.amountClp || 0) > 0);
+    }
+
+    const legacy = Number(item?.manualPaymentsClp ?? item?.manualPaymentClp ?? item?.paidClp ?? 0);
+
+    return legacy > 0
+      ? [{
+          id: "manual_legacy",
+          amountClp: legacy,
+          createdAt: item?.finishedAt || item?.updatedAt || item?.createdAt || new Date().toISOString(),
+          note: "Pago manual registrado"
+        }]
+      : [];
+  }
+
+  function getP2PManualPaymentsTotal(item){
+    return getP2PManualPaymentsArray(item)
+      .reduce((sum, pay) => sum + Number(pay.amountClp || 0), 0);
   }
 
   window.syncP2PCapacityFromServer = async function syncP2PCapacityFromServer(){
@@ -12273,28 +12384,10 @@ if(addProviderBtn){
       orders = JSON.parse(localStorage.getItem("onze_p2p_binance_orders") || "[]");
     }catch(e){}
 
-    // Modo normal:
-    // Si existen ventas CLP de hoy, ONZE usa TODAS las ventas CLP de hoy.
-    // Esto deja listo el dashboard para empezar limpio mañana.
-    const todayClpSales = orders
-      .filter(o => isCompletedSellClp(o) && isTodayChileFromTs(getOrderTs(o)))
-      .sort((a,b)=> getOrderTs(a) - getOrderTs(b));
-
-    if(todayClpSales.length){
-      return todayClpSales;
-    }
-
-    // Modo ensayo:
-    // Si hoy todavía no hay ventas CLP, usamos ventas CLP posteriores a la última orden VES disponible.
-    // Esto permite probar con las operaciones de ayer/después de la última VES.
-    const lastVesOrder = orders
-      .filter(o => String(o.fiat || "").toUpperCase() === "VES")
-      .sort((a,b)=> getOrderTs(b) - getOrderTs(a))[0];
-
-    const lastVesTs = lastVesOrder ? getOrderTs(lastVesOrder) : 0;
-
+    // Retorna TODAS las ventas CLP completadas, ordenadas por timestamp.
+    // El filtro por fecha (baseline) se aplica en calculateP2PCapacityStats.
     return orders
-      .filter(o => isCompletedSellClp(o) && (!lastVesTs || getOrderTs(o) > lastVesTs))
+      .filter(o => isCompletedSellClp(o))
       .sort((a,b)=> getOrderTs(a) - getOrderTs(b));
   }
 
@@ -12374,19 +12467,11 @@ if(addProviderBtn){
         // Capacity finalizado queda congelado. Las nuevas ventas saltan al siguiente activo.
         if(cap.status === "finished") continue;
 
-        // Un capacity activo consume ventas desde su fecha operativa.
-        // No usamos createdAt porque el usuario puede registrar el capacity después
-        // de que ya existan ventas Binance del mismo día/ciclo.
-        const capStartTs = cap.date
-          ? new Date(String(cap.date) + "T00:00:00").getTime()
-          : (cap.createdAt ? new Date(cap.createdAt).getTime() : 0);
-
-        const saleTs = Number(getOrderTs(sale) || 0);
-
-        if(capStartTs && saleTs && saleTs < capStartTs){
-          continue;
-        }
-
+        // El filtro por fecha (baseline) ya se aplicó sobre todas las ventas arriba.
+        // Un capacity activo toma ventas sin importar su fecha de creación.
+        // Antes había un filtro por capStartTs que excluía ventas anteriores al capacity,
+        // pero eso impedía asignar ventas viejas a un capacity nuevo.
+        
         const capTotalUsdt = Number(cap.usdtAmount || 0);
         const capUsedUsdt = Number(cap.usedUsdt || 0);
         const capAvailableUsdt = Math.max(capTotalUsdt - capUsedUsdt, 0);
@@ -12439,12 +12524,7 @@ if(addProviderBtn){
 
     const enriched = capacities.map(item => {
       const price = Number(item.buyPrice || 0);
-      const paid = Number(
-        item.manualPaymentsClp ??
-        item.manualPaymentClp ??
-        item.paidClp ??
-        0
-      );
+      const paid = getP2PManualPaymentsTotal(item);
 
       const usedCost = Number(item.usedUsdt || 0) * price;
 
@@ -12465,6 +12545,10 @@ if(addProviderBtn){
       const profitUsdt = avgSellPriceCap > 0 ? profitClp / avgSellPriceCap : 0;
       const commissionPct = Number(item.usedUsdt || 0) > 0 ? (Number(item.commissionUsdt || 0) / Number(item.usedUsdt || 0)) * 100 : 0;
       const profitPct = usedCost > 0 ? (profitClp / usedCost) * 100 : 0;
+      const baseFeePct = commissionPct > 0 ? commissionPct : (window.getMerchantFeePct ? window.getMerchantFeePct() : 0.14);
+      const breakEvenPrice = price > 0
+        ? price / (1 - Math.min(baseFeePct / 100, 0.99))
+        : 0;
 
       // Solo sumar capacities activos (no completados) en los totales globales
       if(item.status !== "finished"){
@@ -12489,6 +12573,7 @@ if(addProviderBtn){
         profitClp,
         profitUsdt,
         avgSellPriceCap,
+        breakEvenPrice,
         commissionPct,
         profitPct
       };
@@ -12531,6 +12616,40 @@ if(addProviderBtn){
       unassignedSaleClp,
       unassignedCommissionUsdt
     };
+  }
+
+  window.autoFinishCompletedCapacities = function autoFinishCompletedCapacities(){
+    const stats = calculateP2PCapacityStats();
+    const toFinish = stats.capacities.filter(cap =>
+      cap.status === "active" && Number(cap.remainingUsdt || 0) <= 0.0001
+    );
+    if(toFinish.length === 0) return false;
+
+    const capacities = loadP2PCapacity().slice();
+    let changed = false;
+
+    for(const capStats of toFinish){
+      const raw = capacities.find(c => c.id === capStats.id);
+      if(!raw) continue;
+
+      raw.status = "finished";
+      raw.finishedAt = new Date().toISOString();
+      raw.finalSoldUsdt = Number(capStats.usedUsdt || 0);
+      raw.finalClpReceived = Number(capStats.clpReceived || 0);
+      raw.finalCommissionUsdt = Number(capStats.commissionUsdt || 0);
+      raw.finalCommissionClp = Number(capStats.commissionClp || 0);
+      raw.finalSaleParts = Array.isArray(capStats.saleParts) ? capStats.saleParts : [];
+      changed = true;
+    }
+
+    if(changed){
+      saveP2PCapacity(capacities);
+      if(typeof showToast === "function"){
+        showToast(`✅ ${toFinish.length} capacity(es) completado(s) automáticamente — ventas cubren el total`);
+      }
+    }
+
+    return changed;
   }
 
   function addP2PCapacityStyles(){
@@ -13140,7 +13259,7 @@ if(addProviderBtn){
                 ${item.status === "finished" ? "Finalizado" : "Activo"}
               </span>
             </div>
-            <div class="p2p-capacity-meta">${item.date || ""} · Capacity ${p2pCapMoney(item.totalCost, 0)} CLP · Compra ${p2pCapMoney(item.buyPrice, 2)} CLP/USDT</div>
+            <div class="p2p-capacity-meta">${item.date || ""} · Capacity ${p2pCapMoney(item.totalCost, 0)} CLP · Compra ${p2pCapMoney(item.buyPrice, 2)} CLP/USDT · Vender min ${p2pCapMoney(item.breakEvenPrice, 2)} CLP/USDT</div>
           </div>
 
           <div style="text-align:right;">
@@ -13188,7 +13307,7 @@ if(addProviderBtn){
           <div class="p2p-capacity-mini">
             <span>Restante</span>
             <strong>${p2pCapMoney(item.remainingUsdt, 2)} USDT</strong>
-            <div class="p2p-capacity-meta" style="margin-top:5px;">${p2pCapMoney(Math.max(Number(item.capacityClp || 0) - Number(item.clpReceived || 0), 0), 0)} CLP</div>
+            <div class="p2p-capacity-meta" style="margin-top:5px;">${p2pCapMoney(Math.max(Number(item.totalCost || item.capacityClp || 0) - Number(item.clpReceived || 0) - getP2PManualPaymentsTotal(item), 0), 0)} CLP</div>
           </div>
           <div class="p2p-capacity-mini">
             <span>Ganancia</span>
@@ -13197,6 +13316,26 @@ if(addProviderBtn){
           </div>
         </div>
       </div>
+
+      ${getP2PManualPaymentsTotal(item) > 0 ? `
+      <div style="margin-top:14px;">
+        <h3 class="section-title" style="margin-bottom:8px;">Pagos manuales registrados</h3>
+        <div class="p2p-capacity-card">
+          ${getP2PManualPaymentsArray(item).map((pay, index) => `
+            <div class="p2p-detail-row">
+              <div>
+                <strong style="color:#fbbf24;font-size:13px;">#${index + 1} · ${Math.round(pay.amountClp).toLocaleString("es-CL")} CLP</strong>
+                <div class="p2p-capacity-meta" style="margin-top:3px;">${new Date(pay.createdAt).toLocaleString("es-CL", { timeZone:"America/Santiago", day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" })}</div>
+                <div class="p2p-capacity-meta" style="margin-top:3px;">${pay.note || "Pago manual"}</div>
+              </div>
+              <div style="text-align:right;">
+                <strong style="color:#fbbf24;font-size:13px;">${p2pCapMoney(Number(item.buyPrice || 0) > 0 ? pay.amountClp / Number(item.buyPrice) : 0, 2)} USDT</strong>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+      ` : ''}
 
       <div style="margin-top:14px;">
         <h3 class="section-title" style="margin-bottom:8px;">Operaciones asignadas</h3>
@@ -13243,14 +13382,17 @@ if(addProviderBtn){
     const capStats = stats.capacities.find(c => c.id === id);
     if(!capStats) { alert("No se pudo calcular el restante"); return; }
 
-    const remainingUsdt = Number(capStats.remainingUsdt || 0);
     const buyPrice = Number(cap.buyPrice || 0);
     const capacityClpTotal = Number(cap.capacityClp || 0);
     const clpReceived = Number(capStats.clpReceived || 0);
-    // Restante = lo que falta por cubrir del capacity total
-    const remainingClp = Math.max(capacityClpTotal - clpReceived, 0);
+    const previousManualPayments = getP2PManualPaymentsArray(cap);
+    const previousManualTotal = previousManualPayments.reduce((sum, pay)=> sum + Number(pay.amountClp || 0), 0);
 
-    if(remainingClp <= 0){
+    // Restante real = total capacity - ventas Binance asignadas - pagos manuales previos
+    const realRemainingClp = Math.max(capacityClpTotal - clpReceived - previousManualTotal, 0);
+    const realRemainingUsdt = buyPrice > 0 ? realRemainingClp / buyPrice : Number(capStats.remainingUsdt || 0);
+
+    if(realRemainingClp <= 0){
       if(confirm("Este capacity ya está cubierto por completo. ¿Marcar como completado?")){
         finishCapacityManually(id, 0);
       }
@@ -13265,40 +13407,100 @@ if(addProviderBtn){
     modal.id = "completeCapacityModal";
     modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;";
     modal.innerHTML = `
-      <div style="background:#0d2137;border:1px solid #2a4a6a;border-radius:16px;padding:24px;max-width:420px;width:90%;">
-        <h3 style="color:#00d4ff;margin-bottom:8px;">✅ Completar capacity manualmente</h3>
-        <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
+      <div style="background:#0d2137;border:1px solid #2a4a6a;border-radius:18px;padding:24px;max-width:460px;width:92%;box-shadow:0 24px 80px rgba(0,0,0,.45);">
+        <h3 style="color:#00d4ff;margin:0 0 8px;font-size:18px;">Completar saldo del capacity</h3>
+
+        <p style="color:#a8b3c7;font-size:13px;line-height:1.55;margin:0 0 16px;">
           Proveedor: <strong style="color:#fff;">${cap.provider || ""}</strong><br>
-          Restante: <strong style="color:#00ff88;">${Math.round(remainingClp).toLocaleString("es-CL")} CLP</strong> (${remainingUsdt.toFixed(2)} USDT)
+          Saldo pendiente actual:
+          <strong style="color:#00ff88;">${Math.round(realRemainingClp).toLocaleString("es-CL")} CLP</strong>
+          <span style="color:#8aa0ba;">(${realRemainingUsdt.toFixed(2)} USDT)</span>
         </p>
-        <p style="color:#aaa;font-size:12px;margin-bottom:8px;">
-          Ingresa cuánto CLP pagas manualmente. Si pagas todo, el capacity se cierra.
-          Si pagas una parte, el capacity baja y sigue activo.
-        </p>
-        <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">Monto en CLP a completar</label>
-        <div style="display:flex;gap:8px;margin-bottom:16px;">
-          <input id="completeCapacityAmount" type="text" inputmode="decimal" placeholder="Ej: 1.500.000" oninput="this.value=this.value.replace(/[^0-9]/g,\'\').replace(/\\B(?=(\\d{3})+(?!\\d))/g,\'.\');"
-            style="flex:1;padding:10px;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#fff;">
-          <button onclick="document.getElementById('completeCapacityAmount').value = Math.round(${remainingClp}).toLocaleString('es-CL')"
-            style="padding:10px 16px;background:#1a3a5a;color:#00d4ff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">MAX</button>
+
+        ${previousManualPayments.length > 0 ? `
+        <div style="background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.18);border-radius:14px;padding:12px;margin-bottom:16px;">
+          <div style="color:#fbbf24;font-size:12px;font-weight:900;margin-bottom:8px;">Pagos manuales registrados anteriormente:</div>
+          ${previousManualPayments.map(pay => `
+            <div style="display:flex;justify-content:space-between;color:#cbd5e1;font-size:12px;padding:4px 0;border-bottom:1px solid rgba(251,191,36,.1);">
+              <span>${new Date(pay.createdAt).toLocaleString("es-CL", { timeZone:"America/Santiago", day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" })}</span>
+              <span style="color:#fbbf24;font-weight:900;">${Math.round(pay.amountClp).toLocaleString("es-CL")} CLP</span>
+            </div>
+          `).join("")}
+          <div style="display:flex;justify-content:space-between;color:#fbbf24;font-size:12px;font-weight:900;padding-top:6px;margin-top:4px;">
+            <span>Total pagado manualmente:</span>
+            <span>${Math.round(previousManualTotal).toLocaleString("es-CL")} CLP</span>
+          </div>
         </div>
-        <div style="display:flex;gap:10px;justify-content:flex-end;">
-          <button onclick="document.getElementById('completeCapacityModal').remove()"
-            style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
-          <button onclick="confirmCompleteCapacity('${id}')"
-            style="padding:10px 16px;background:#00ff88;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Confirmar</button>
+        ` : ''}
+
+        <div style="background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.18);border-radius:14px;padding:12px;margin-bottom:16px;color:#cbd5e1;font-size:12px;line-height:1.45;">
+          Puedes registrar un pago manual parcial o completar todo el saldo pendiente.
+          Cada pago quedará guardado en este capacity.
         </div>
+
+        <label style="display:block;color:#a8b3c7;font-size:12px;font-weight:800;margin-bottom:6px;">
+          Monto manual en CLP
+        </label>
+
+        <div style="display:flex;gap:8px;margin-bottom:18px;">
+          <input
+            id="completeCapacityAmount"
+            type="text"
+            inputmode="decimal"
+            data-max="${Math.round(realRemainingClp)}"
+            placeholder="Ej: 300.000"
+            oninput="this.value=this.value.replace(/[^0-9]/g,\'\').replace(/\\B(?=(\\d{3})+(?!\\d))/g,\'.\');"
+            style="flex:1;padding:12px;background:#071828;border:1px solid #1a3a5a;border-radius:10px;color:#fff;font-size:14px;outline:none;"
+          >
+
+          <button
+            type="button"
+            onclick="document.getElementById('completeCapacityAmount').value = Math.round(${realRemainingClp}).toLocaleString('es-CL')"
+            style="padding:0 14px;background:#132f4d;color:#00d4ff;border:1px solid rgba(0,212,255,.22);border-radius:10px;cursor:pointer;font-weight:950;">
+            MAX
+          </button>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <button
+            type="button"
+            onclick="confirmCompleteCapacity('${id}', 'partial')"
+            style="padding:12px 14px;background:#00ff88;color:#001b12;border:none;border-radius:12px;cursor:pointer;font-weight:950;">
+            Registrar pago parcial
+          </button>
+
+          <button
+            type="button"
+            onclick="confirmCompleteCapacity('${id}', 'total')"
+            style="padding:12px 14px;background:#00d4ff;color:#001725;border:none;border-radius:12px;cursor:pointer;font-weight:950;">
+            Completar saldo total
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onclick="document.getElementById('completeCapacityModal').remove()"
+          style="width:100%;padding:11px 14px;background:#203a55;color:#fff;border:none;border-radius:12px;cursor:pointer;font-weight:800;">
+          Cancelar
+        </button>
       </div>
     `;
     document.body.appendChild(modal);
   };
 
-  window.confirmCompleteCapacity = function(id){
+  window.confirmCompleteCapacity = function(id, mode){
     const input = document.getElementById("completeCapacityAmount");
-    const amountClp = Number((input?.value || "").replace(/[^0-9]/g, ""));
+    const maxClp = Number(input?.dataset?.max || 0);
+    const typedClp = Number((input?.value || "").replace(/[^0-9]/g, ""));
+    const amountClp = mode === "total" ? maxClp : typedClp;
 
     if(!amountClp || amountClp <= 0){
       alert("Ingresa un monto válido");
+      return;
+    }
+
+    if(maxClp > 0 && amountClp > maxClp){
+      alert(`El monto supera el saldo pendiente. Máximo permitido: ${Math.round(maxClp).toLocaleString("es-CL")} CLP`);
       return;
     }
 
@@ -13316,37 +13518,64 @@ if(addProviderBtn){
     const capStats = stats.capacities.find(c => c.id === id);
     if(!capStats) return;
 
-    const buyPrice = Number(cap.buyPrice || 0);
     const capacityClpTotal = Number(cap.capacityClp || 0);
     const clpReceived = Number(capStats.clpReceived || 0);
-    const remainingClp = Math.max(capacityClpTotal - clpReceived, 0);
-    const payment = Math.min(manualClpPayment, remainingClp);
 
-    if(payment >= remainingClp * 0.99){
-      // Pago completo: cerrar capacity
-      capacities[idx] = {
-        ...cap,
-        status: "finished",
-        finishedAt: new Date().toISOString(),
-        finalSoldUsdt: Number(capStats.usedUsdt || 0),
-        finalClpReceived: clpReceived,
-        finalCommissionUsdt: Number(capStats.commissionUsdt || 0),
-        finalCommissionClp: Number(capStats.commissionClp || 0),
-        finalSaleParts: capStats.saleParts || [],
-        manualPaymentClp: Number(cap.manualPaymentClp || 0) + payment,
-        manualPaymentsClp: Number(cap.manualPaymentsClp || 0) + payment
-      };
-    } else {
-      // Pago parcial: bajar capacity total
-      const newCapacityClp = capacityClpTotal - payment;
-      const newUsdt = buyPrice > 0 ? newCapacityClp / buyPrice : 0;
-      capacities[idx] = {
-        ...cap,
-        capacityClp: newCapacityClp,
-        usdtAmount: newUsdt,
-        manualPaymentsClp: (Number(cap.manualPaymentsClp || 0)) + payment
-      };
+    // Pagos manuales existentes
+    const previousManualPayments = getP2PManualPaymentsArray(cap);
+    const previousManualTotal = previousManualPayments.reduce((sum, pay)=> sum + Number(pay.amountClp || 0), 0);
+
+    // Saldo real pendiente: total del capacity - ventas Binance asignadas - pagos manuales previos
+    const realRemainingClp = Math.max(capacityClpTotal - clpReceived - previousManualTotal, 0);
+
+    if(realRemainingClp <= 0){
+      alert("Este capacity ya no tiene saldo pendiente para completar.");
+      return;
     }
+
+    if(!manualClpPayment || manualClpPayment <= 0){
+      alert("Ingresa un monto válido.");
+      return;
+    }
+
+    if(manualClpPayment > realRemainingClp){
+      alert(`El monto supera el saldo pendiente. Máximo permitido: ${Math.round(realRemainingClp).toLocaleString("es-CL")} CLP`);
+      return;
+    }
+
+    const payment = Number(manualClpPayment || 0);
+    const manualPaymentItem = {
+      id: `manual_${Date.now()}`,
+      amountClp: payment,
+      createdAt: new Date().toISOString(),
+      note: "Completar saldo"
+    };
+
+    const manualPayments = previousManualPayments.concat(manualPaymentItem);
+    const manualPaymentsTotal = manualPayments.reduce((sum, pay)=> sum + Number(pay.amountClp || 0), 0);
+
+    const remainingAfterPayment = Math.max(capacityClpTotal - clpReceived - manualPaymentsTotal, 0);
+    const shouldFinish = remainingAfterPayment <= 0;
+
+    capacities[idx] = {
+      ...cap,
+      // El capacity original NO se reduce. Se mantiene para auditoría y balance real.
+      capacityClp: capacityClpTotal,
+      usdtAmount: Number(cap.usdtAmount || capStats.usdtAmount || 0),
+
+      manualPayments,
+      manualPaymentClp: manualPaymentsTotal,
+      manualPaymentsClp: manualPaymentsTotal,
+
+      status: shouldFinish ? "finished" : "active",
+      finishedAt: shouldFinish ? new Date().toISOString() : (cap.finishedAt || null),
+
+      finalSoldUsdt: shouldFinish ? Number(capStats.usedUsdt || 0) : (cap.finalSoldUsdt || null),
+      finalClpReceived: shouldFinish ? clpReceived : (cap.finalClpReceived || null),
+      finalCommissionUsdt: shouldFinish ? Number(capStats.commissionUsdt || 0) : (cap.finalCommissionUsdt || null),
+      finalCommissionClp: shouldFinish ? Number(capStats.commissionClp || 0) : (cap.finalCommissionClp || null),
+      finalSaleParts: shouldFinish ? (capStats.saleParts || []) : (cap.finalSaleParts || [])
+    };
 
     saveP2PCapacity(capacities);
 
@@ -13360,22 +13589,22 @@ if(addProviderBtn){
     .then(async res => {
       const data = await res.json().catch(()=>null);
       if(!res.ok || !data?.ok){
-        console.warn("No se pudo guardar capacity completado en servidor:", res.status, data);
-        alert("El capacity se completó en pantalla, pero no se pudo guardar en servidor. Revisa consola.");
+        console.warn("No se pudo guardar pago manual en servidor:", res.status, data);
+        alert("El pago manual se registró en pantalla, pero no se pudo guardar en servidor. Revisa consola.");
       }else{
-        console.log("✅ Capacity completado guardado en servidor:", updatedCapacity.id);
+        console.log("✅ Pago manual guardado en servidor:", updatedCapacity.id);
       }
     })
     .catch(err => {
-      console.warn("Error guardando capacity completado:", err);
-      alert("Error guardando capacity completado en servidor. Revisa consola.");
+      console.warn("Error guardando pago manual:", err);
+      alert("Error guardando pago manual en servidor. Revisa consola.");
     });
 
     renderP2PCapacityPanel();
     updateP2PDashboardWithCapacity();
 
     if(typeof showToast === "function"){
-      showToast("✅ Capacity actualizado");
+      showToast(shouldFinish ? "✅ Capacity completado" : "✅ Pago manual registrado");
     }
   };
 
@@ -13401,7 +13630,7 @@ if(addProviderBtn){
           const buyPrice = Number(cap.buyPrice || 0);
           const costUsed = finalSoldUsdt * buyPrice;
           const profitClp = finalClpReceived - costUsed - (finalCommissionUsdt * buyPrice);
-          const manualPayment = Number(cap.manualPaymentClp || 0);
+          const manualPayment = getP2PManualPaymentsTotal(cap);
 
           return `
             <div style="background:#0d2137;border:1px solid #1a3a5a;border-radius:12px;padding:16px;margin-bottom:12px;">
@@ -13417,11 +13646,11 @@ if(addProviderBtn){
                 <div><span style="color:#8aa0ba;">Tasa:</span><br><strong style="color:#fff;">${buyPrice.toFixed(2)} CLP/USDT</strong></div>
                 <div><span style="color:#8aa0ba;">USDT vendido:</span><br><strong style="color:#fff;">${finalSoldUsdt.toFixed(2)} USDT</strong></div>
                 <div><span style="color:#8aa0ba;">CLP recibido:</span><br><strong style="color:#fff;">${Math.round(finalClpReceived).toLocaleString("es-CL")} CLP</strong></div>
-                ${manualPayment > 0 ? `<div><span style="color:#8aa0ba;">Pago manual:</span><br><strong style="color:#fbbf24;">${Math.round(manualPayment).toLocaleString("es-CL")} CLP</strong></div>` : ''}
+                ${manualPayment > 0 ? `<div><span style="color:#8aa0ba;">Pago manual:</span><br><strong style="color:#fbbf24;">${Math.round(manualPayment).toLocaleString("es-CL")} CLP</strong><br><strong style="color:#fbbf24;font-size:12px;">${p2pCapMoney(buyPrice > 0 ? manualPayment / buyPrice : 0, 2)} USDT</strong></div>` : ''}
                 <div><span style="color:#8aa0ba;">Ganancia:</span><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};">${profitClp >= 0 ? '+' : ''}${Math.round(profitClp).toLocaleString("es-CL")} CLP</strong><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};font-size:12px;">${profitClp >= 0 ? '+' : ''}${(buyPrice > 0 ? profitClp / buyPrice : 0).toFixed(2)} USDT</strong></div>
               </div>
               <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
-                <button class="p2p-action-main-btn" onclick="openP2PCapacityDetail('${cap.id}'); document.getElementById('completedCapacitiesModal').remove();" style="min-height:38px;padding:0 14px;font-size:13px;">
+                <button class="p2p-action-icon-btn" onclick="openP2PCapacityDetail('${cap.id}'); document.getElementById('completedCapacitiesModal').remove();" style="width:38px;height:38px;border-radius:12px;">
                   <svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.7"/></svg></button>
                 <button class="p2p-action-icon-btn danger" onclick="deleteP2PCapacity('${cap.id}')" style="width:38px;height:38px;border-radius:12px;">
                   <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
@@ -13499,6 +13728,176 @@ if(addProviderBtn){
     }
   }
 
+  function ensureP2PCapacityEditModal(){
+    if(document.getElementById("p2pCapacityEditModalBackdrop")) return;
+    const modal = document.createElement("div");
+    modal.id = "p2pCapacityEditModalBackdrop";
+    modal.className = "p2p-capacity-modal-backdrop";
+    modal.innerHTML = `
+      <div class="p2p-capacity-modal">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+          <div>
+            <h3 class="section-title" style="margin-bottom:6px;">Editar capacity</h3>
+            <p class="section-text">Modifica los datos del capacity. Las ventas ya asignadas se recalculan automáticamente.</p>
+          </div>
+          <button class="btn secondary" type="button" id="closeP2PCapacityEditModal">Cerrar</button>
+        </div>
+
+        <form id="p2pCapacityEditForm" class="p2p-capacity-form">
+          <label class="full">
+            Proveedor
+            <input id="editP2pProvider" placeholder="Ej: Pedro / proveedor USDT" required>
+          </label>
+          <label>
+            Fecha
+            <input id="editP2pDate" type="date" required>
+          </label>
+          <label>
+            Precio compra (CLP/USDT)
+            <input id="editP2pBuyPrice" inputmode="decimal" placeholder="Ej: 820" required>
+          </label>
+          <label>
+            Capacity en CLP
+            <input id="editP2pCapacityClp" inputmode="decimal" placeholder="Ej: 8.200.000" required oninput="this.value=this.value.replace(/[^0-9]/g,'').replace(/\\B(?=(\\d{3})+(?!\\d))/g,'.');">
+          </label>
+          <label>
+            USDT estimados
+            <input id="editP2pUsdt" inputmode="decimal" placeholder="Se calcula automático" readonly>
+          </label>
+          <label>
+            Pagado al proveedor (CLP)
+            <input id="editP2pPaid" inputmode="decimal" value="0">
+          </label>
+          <label>
+            Referencia / cuenta / banco
+            <input id="editP2pReference" placeholder="Opcional">
+          </label>
+          <label class="full">
+            Nota
+            <textarea id="editP2pNote" placeholder="Ej: cupo cerrado, se paga con ventas Binance"></textarea>
+          </label>
+
+          <div class="full" style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:4px;">
+            <button class="btn secondary" type="button" id="cancelP2PCapacityEdit">Cancelar</button>
+            <button class="btn" type="submit">Guardar cambios</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById("cancelP2PCapacityEdit")?.addEventListener("click", closeP2PCapacityEditModal);
+    modal.addEventListener("click", function(e){
+      if(e.target === modal) closeP2PCapacityEditModal();
+    });
+
+    document.getElementById("closeP2PCapacityEditModal")?.addEventListener("click", closeP2PCapacityEditModal);
+    document.getElementById("cancelP2PCapacityEdit")?.addEventListener("click", closeP2PCapacityEditModal);
+
+    ["editP2pCapacityClp", "editP2pBuyPrice"].forEach(id=>{
+      const el = document.getElementById(id);
+      if(el){
+        el.addEventListener("input", updateP2PCapacityEditUsdtPreview);
+        el.addEventListener("change", updateP2PCapacityEditUsdtPreview);
+      }
+    });
+
+    document.getElementById("p2pCapacityEditForm")?.addEventListener("submit", function(e){
+      e.preventDefault();
+      const id = modal.dataset.capacityId;
+      if(!id) return;
+      const provider = document.getElementById("editP2pProvider")?.value || "";
+      const date = document.getElementById("editP2pDate")?.value || "";
+      const capacityClp = p2pCapNumber(document.getElementById("editP2pCapacityClp")?.value);
+      const buyPrice = p2pCapNumber(document.getElementById("editP2pBuyPrice")?.value);
+      const usdtAmount = buyPrice > 0 ? capacityClp / buyPrice : 0;
+      const paidClp = p2pCapNumber(document.getElementById("editP2pPaid")?.value);
+      const reference = document.getElementById("editP2pReference")?.value || "";
+      const note = document.getElementById("editP2pNote")?.value || "";
+
+      if(!provider.trim()){
+        alert("Coloca el proveedor.");
+        return;
+      }
+      if(capacityClp <= 0 || buyPrice <= 0 || usdtAmount <= 0){
+        alert("Coloca un monto CLP de capacity y precio de compra válido.");
+        return;
+      }
+
+      const items = loadP2PCapacity().slice();
+      const idx = items.findIndex(cap => cap.id === id);
+      if(idx === -1){
+        alert("No encontré este capacity.");
+        return;
+      }
+
+      items[idx].provider = provider.trim();
+      items[idx].date = date;
+      items[idx].capacityClp = capacityClp;
+      items[idx].usdtAmount = usdtAmount;
+      items[idx].buyPrice = buyPrice;
+      items[idx].paidClp = paidClp;
+      items[idx].reference = reference.trim();
+      items[idx].note = note.trim();
+
+      saveP2PCapacity(items);
+
+      fetch('/api/p2p/capacity', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: items[idx] })
+      }).catch(e => console.warn('Error updating capacity on server:', e));
+
+      closeP2PCapacityEditModal();
+      renderP2PCapacityPanel();
+      updateP2PDashboardWithCapacity();
+      if(typeof showToast === "function") showToast("Capacity actualizado");
+    });
+  }
+
+  function updateP2PCapacityEditUsdtPreview(){
+    const clp = p2pCapNumber(document.getElementById("editP2pCapacityClp")?.value);
+    const price = p2pCapNumber(document.getElementById("editP2pBuyPrice")?.value);
+    const preview = document.getElementById("editP2pUsdt");
+    if(preview){
+      preview.value = price > 0 && clp > 0 ? (clp / price).toFixed(2) : "";
+    }
+  }
+
+  function closeP2PCapacityEditModal(){
+    const modal = document.getElementById("p2pCapacityEditModalBackdrop");
+    if(modal){
+      modal.classList.remove("open");
+      modal.dataset.capacityId = "";
+    }
+  }
+
+  window.openP2PCapacityEditModal = function openP2PCapacityEditModal(id){
+    ensureP2PCapacityEditModal();
+    const modal = document.getElementById("p2pCapacityEditModalBackdrop");
+    const item = loadP2PCapacity().find(cap => cap.id === id);
+    if(!modal || !item){
+      if(typeof showToast === "function") showToast("No encontré este capacity");
+      return;
+    }
+    modal.dataset.capacityId = id;
+    setFieldValue("editP2pProvider", item.provider || "");
+    setFieldValue("editP2pDate", item.date || "");
+    setFieldValue("editP2pCapacityClp", p2pCapDisplayNumber(item.capacityClp || 0));
+    setFieldValue("editP2pBuyPrice", String(item.buyPrice || ""));
+    setFieldValue("editP2pPaid", String(item.paidClp || 0));
+    setFieldValue("editP2pReference", item.reference || "");
+    setFieldValue("editP2pNote", item.note || "");
+    updateP2PCapacityEditUsdtPreview();
+    modal.classList.add("open");
+  };
+
+  function setFieldValue(id, val){
+    const el = document.getElementById(id);
+    if(el) el.value = val;
+  }
+
   function openP2PCapacityDeleteModal(id){
     ensureP2PCapacityDeleteModal();
 
@@ -13552,6 +13951,24 @@ if(addProviderBtn){
       method: 'DELETE',
       credentials: 'include'
     }).catch(e => console.warn('Error delete capacity:', e));
+
+    // Si no quedan capacities activos, liberamos los locks de finalizados
+    // para que el próximo capacity pueda tomar las ventas completas.
+    const hasActive = items.some(c => String(c.status || "active").trim().toLowerCase() !== "finished");
+    if(!hasActive){
+      const cleaned = items.map(cap => {
+        if(cap.status === "finished" && Array.isArray(cap.finalSaleParts) && cap.finalSaleParts.length > 0){
+          delete cap.finalSaleParts;
+        }
+        return cap;
+      });
+      localStorage.setItem(CAPACITY_KEY, JSON.stringify(cleaned));
+    }
+
+    // Si no quedan capacities en absoluto, reseteamos capital inicial
+    if(items.length === 0 && getP2PInitialCapital() !== 0){
+      saveP2PInitialCapital(0);
+    }
 
     renderP2PCapacityPanel();
     updateP2PDashboardWithCapacity();
@@ -13720,6 +14137,8 @@ if(addProviderBtn){
   }
 
   window.renderP2PCapacityPanel = function renderP2PCapacityPanel(){
+    autoFinishCompletedCapacities();
+
     const panel = findCapacityPanel();
     if(!panel) return;
 
@@ -13753,7 +14172,7 @@ if(addProviderBtn){
           <h3 class="section-title" style="margin-bottom:8px;">Capacity externo P2P</h3>
           <p class="section-text">Proveedor, cupo, precio de compra, pagos realizados y saldo pendiente.</p>
         </div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap;align-items:center;">
           <button class="btn" type="button" id="openP2PCapacityBtn">Registrar capacity</button>
           <button class="btn secondary" type="button" id="openCompletedCapacitiesBtn" onclick="openCompletedCapacitiesModal()">📋 Completados</button>
         </div>
@@ -13784,24 +14203,31 @@ if(addProviderBtn){
       </div>
 
       ${
-        !displayItems.length && Number(stats.unassignedSaleUsdt || 0) > 0
+        Number(stats.unassignedSaleUsdt || 0) > 0
           ? `<div class="p2p-capacity-card" style="margin-top:12px;border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.07);">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
                 <div>
-                  <div class="p2p-capacity-title" style="color:#fbbf24;">Ventas sin compra/capacity detectadas</div>
+                  <div class="p2p-capacity-title" style="color:#fbbf24;">${
+                    !displayItems.length
+                      ? "Ventas sin compra/capacity detectadas"
+                      : "Ventas sin asignar — el capacity está al límite"
+                  }</div>
                   <div class="p2p-capacity-meta" style="margin-top:5px;">
-                    Hay ${p2pCapMoney(stats.unassignedSaleUsdt, 2)} USDT vendidos que todavía no tienen una compra/capacity asignada.
+                    Hay ${p2pCapMoney(stats.unassignedSaleUsdt, 2)} USDT que sobrepasan el monto del capacity actual.
                   </div>
                   <div class="p2p-capacity-meta" style="margin-top:5px;">
                     CLP recibido aprox: ${p2pCapMoney(stats.unassignedSaleClp, 0)} CLP · Comisión: ${p2pCapMoney(stats.unassignedCommissionUsdt, 4)} USDT
                   </div>
                   <div class="p2p-capacity-meta" style="margin-top:7px;color:#facc15;">
-                    Para cerrar el ciclo, registra una compra/capacity por el monto correspondiente.
+                    ${!displayItems.length ? "Registra una compra/capacity por el monto correspondiente." : "Edita el capacity y aumenta el monto CLP para cubrir el total."}
                   </div>
                 </div>
 
                 <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-                  <button class="btn" type="button" onclick="resolveP2PUnassignedAsNewCapacity()">Registrar compra</button>
+                  ${!displayItems.length
+                    ? `<button class="btn" type="button" onclick="resolveP2PUnassignedAsNewCapacity()">Registrar compra</button>`
+                    : ""
+                  }
                 </div>
               </div>
             </div>`
@@ -13818,13 +14244,17 @@ if(addProviderBtn){
                 <div style="width:100%;">
                   <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:center;">
                     <div class="p2p-capacity-title" style="font-size:15px;line-height:1.2;">#${index + 1} · ${item.provider || "Proveedor"}</div>
-
                     <div class="p2p-capacity-meta" style="font-size:14px;text-align:center;font-weight:950;color:#a8b3c7;">
                       ${item.date || ""}
                     </div>
 
-                    <span style="display:inline-flex;justify-content:center;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:950;color:${item.status === "finished" ? "#94a3b8" : "#34d399"};background:${item.status === "finished" ? "rgba(148,163,184,.10)" : "rgba(52,211,153,.12)"};border:1px solid ${item.status === "finished" ? "rgba(148,163,184,.20)" : "rgba(52,211,153,.26)"};">
-                      ${item.status === "finished" ? "Finalizado" : "Activo"}
+                    <span style="display:inline-flex;align-items:center;gap:6px;">
+                      <span style="display:inline-flex;justify-content:center;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:950;color:${item.status === "finished" ? "#94a3b8" : "#34d399"};background:${item.status === "finished" ? "rgba(148,163,184,.10)" : "rgba(52,211,153,.12)"};border:1px solid ${item.status === "finished" ? "rgba(148,163,184,.20)" : "rgba(52,211,153,.26)"};">
+                        ${item.status === "finished" ? "Finalizado" : "Activo"}
+                      </span>
+                      <button class="p2p-action-icon-btn" type="button" title="Editar capacity" aria-label="Editar capacity" onclick="openP2PCapacityEditModal('${item.id}')" style="width:30px;height:30px;">
+                        <svg viewBox="0 0 24 24" style="width:14px;height:14px;"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                      </button>
                     </span>
                   </div>
 
@@ -13852,7 +14282,7 @@ if(addProviderBtn){
                 <div class="p2p-capacity-mini">
                   <span>Restante</span>
                   <strong>${p2pCapMoney(item.remainingUsdt, 2)} USDT</strong>
-                  <div class="p2p-capacity-meta" style="margin-top:4px;">${p2pCapMoney(Math.max(Number(item.capacityClp || 0) - Number(item.clpReceived || 0), 0), 0)} CLP</div>
+                  <div class="p2p-capacity-meta" style="margin-top:4px;">${p2pCapMoney(Math.max(Number(item.totalCost || item.capacityClp || 0) - Number(item.clpReceived || 0) - getP2PManualPaymentsTotal(item), 0), 0)} CLP</div>
                 </div>
                 <div class="p2p-capacity-mini">
                   <span>CLP recibido</span>
@@ -13862,15 +14292,26 @@ if(addProviderBtn){
                   <span>Costo usado</span>
                   <strong>${p2pCapMoney(item.usedCost, 0)} CLP</strong>
                 </div>
-                <div class="p2p-capacity-mini">
-                  <span>Comisión</span>
-                  <strong>${p2pCapMoney(item.commissionUsdt, 2)} USDT</strong>
-                </div>
-                <div class="p2p-capacity-mini">
+                  <div class="p2p-capacity-mini">
+                    <span>Comisión</span>
+                    <strong>${p2pCapMoney(item.commissionUsdt, 2)} USDT</strong>
+                  </div>
+                  <div class="p2p-capacity-mini" style="border-color:rgba(251,191,36,.18);">
+                    <span>Tasa mínima de venta</span>
+                    <strong style="color:#fbbf24;">${p2pCapMoney(item.breakEvenPrice, 2)} CLP/USDT</strong>
+                  </div>
+                  <div class="p2p-capacity-mini">
                   <span>Ganancia</span>
                   <strong style="color:${item.profitUsdt >= 0 ? "#34d399" : "#fb7185"};">${item.profitUsdt >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(item.profitUsdt), 2)} USDT</strong>
                   <div class="p2p-capacity-meta" style="margin-top:4px;">${item.profitClp >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(item.profitClp), 0)} CLP</div>
                 </div>
+                ${getP2PManualPaymentsTotal(item) > 0 ? `
+                <div class="p2p-capacity-mini">
+                  <span>Pago manual</span>
+                  <strong style="color:#fbbf24;">${p2pCapMoney(getP2PManualPaymentsTotal(item), 0)} CLP</strong>
+                  <div class="p2p-capacity-meta" style="margin-top:4px;">${p2pCapMoney(getP2PManualPaymentsTotal(item) > 0 && Number(item.buyPrice || 0) > 0 ? getP2PManualPaymentsTotal(item) / Number(item.buyPrice) : 0, 2)} USDT</div>
+                </div>
+                ` : ''}
               </div>
 
               ${item.finishedAt ? `<div class="p2p-capacity-meta" style="margin-top:10px;">Finalizado: ${new Date(item.finishedAt).toLocaleString("es-CL", { timeZone:"America/Santiago", day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" })}</div>` : ""}
@@ -13908,6 +14349,23 @@ if(addProviderBtn){
 
   function saveP2PInitialCapital(value){
     localStorage.setItem(P2P_INITIAL_CAPITAL_KEY, String(Number(value || 0)));
+  }
+
+  window.resetP2PInitialCapital = function(){
+    const current = getP2PInitialCapital();
+    const ok = confirm(
+      `¿Resetear capital P2P inicial?\n\n` +
+      `Valor actual: ${p2pCapMoney(current, 2)} USDT\n` +
+      `Se establecerá a 0 USDT.\n\n` +
+      `El total mostrado será solo la ganancia calculada desde el último baseline.`
+    );
+    if(!ok) return;
+    saveP2PInitialCapital(0);
+    if(typeof updateP2PDashboardWithCapacity === "function") updateP2PDashboardWithCapacity();
+    if(typeof renderP2PCapacityPanel === "function") renderP2PCapacityPanel();
+    if(typeof showToast === "function"){
+      showToast("Capital inicial reseteado a 0 USDT");
+    }
   }
 
   function getP2PCompletedClpSalesForCapital(){
@@ -14723,7 +15181,40 @@ if(addProviderBtn){
 
   window.updateP2PDashboardWithCapacity = function updateP2PDashboardWithCapacity(){
     const stats = calculateP2PCapacityStats();
-    const today = getP2PRangeStatsFromCapacity(stats, "today");
+
+    // Si hay capacities activos consumiendo ventas, mostramos el total acumulado
+    // (no solo las ventas de hoy). Así el dashboard refleja la ganancia real del ciclo.
+    const activeCaps = (stats.capacities || []).filter(
+      c => c.status !== "finished" && Number(c.usedUsdt || 0) > 0
+    );
+    const useCapacityTotal = activeCaps.length > 0;
+
+    let soldUsdt, clpReceived, profitUsdt, profitClp, profitPct, salesCount, avgSellPrice;
+
+    if(useCapacityTotal){
+      soldUsdt = activeCaps.reduce((s, c) => s + Number(c.usedUsdt || 0), 0);
+      clpReceived = activeCaps.reduce((s, c) => s + Number(c.clpReceived || 0), 0);
+      profitUsdt = activeCaps.reduce((s, c) => s + Number(c.profitUsdt || 0), 0);
+      profitClp = activeCaps.reduce((s, c) => s + Number(c.profitClp || 0), 0);
+      const totalUsedCost = activeCaps.reduce((s, c) => s + Number(c.usedCost || 0), 0);
+      profitPct = totalUsedCost > 0 ? (profitClp / totalUsedCost) * 100 : 0;
+      const seenOrders = new Set();
+      activeCaps.forEach(c => (c.saleParts || []).forEach(p => {
+        const on = String(p.orderNumber || "");
+        if(on) seenOrders.add(on);
+      }));
+      salesCount = seenOrders.size;
+      avgSellPrice = soldUsdt > 0 ? clpReceived / soldUsdt : 0;
+    } else {
+      const today = getP2PRangeStatsFromCapacity(stats, "today");
+      soldUsdt = Number(today.soldUsdt || 0);
+      clpReceived = Number(today.clpReceived || today.totalClp || 0);
+      profitUsdt = Number(today.profitUsdt || 0);
+      profitClp = Number(today.profitClp || 0);
+      profitPct = Number(today.profitPct || 0);
+      salesCount = Number(today.salesCount || today.ordersCount || today.count || 0);
+      avgSellPrice = soldUsdt > 0 ? clpReceived / soldUsdt : 0;
+    }
 
     const soldEl = document.getElementById("p2pDashCapital");
     const clpEl = document.getElementById("p2pDashProfitToday");
@@ -14734,14 +15225,6 @@ if(addProviderBtn){
     const salesCountEl = document.getElementById("p2pDashCycles");
     const avgEl = document.getElementById("p2pDashAvgProfit");
     const avgSubEl = document.getElementById("p2pDashAvgProfitSub");
-
-    const soldUsdt = Number(today.soldUsdt || 0);
-    const clpReceived = Number(today.clpReceived || today.totalClp || 0);
-    const profitUsdt = Number(today.profitUsdt || 0);
-    const profitClp = Number(today.profitClp || 0);
-    const profitPct = Number(today.profitPct || 0);
-    const salesCount = Number(today.salesCount || today.ordersCount || today.count || 0);
-    const avgSellPrice = soldUsdt > 0 ? clpReceived / soldUsdt : 0;
 
     if(soldEl){
       soldEl.textContent = `${p2pCapMoney(soldUsdt, 2)} USDT`;
@@ -14758,11 +15241,12 @@ if(addProviderBtn){
 
     if(realProfitSubEl){
       const signClp = profitClp >= 0 ? "+" : "-";
-      realProfitSubEl.textContent = `Hoy · ${signClp}${p2pCapMoney(Math.abs(profitClp), 0)} CLP`;
+      const label = useCapacityTotal ? "Capacity" : "Hoy";
+      realProfitSubEl.textContent = `${label} · ${signClp}${p2pCapMoney(Math.abs(profitClp), 0)} CLP`;
     }
 
     // En la pantalla principal dejamos capital como capital actual,
-    // pero el resultado que muestra debajo corresponde al día.
+    // pero el resultado que muestra debajo corresponde al día/capacity.
     if(capitalEl){
       const initial = getP2PInitialCapital();
       const total = initial + profitUsdt;
@@ -14771,11 +15255,14 @@ if(addProviderBtn){
 
     if(capitalSubEl){
       const sign = profitUsdt >= 0 ? "+" : "-";
+      const label = useCapacityTotal ? "Capacity" : "Hoy";
+      const initialVal = getP2PInitialCapital();
       capitalSubEl.innerHTML = `
-        <div style="display:inline-grid;grid-template-columns:auto auto;column-gap:8px;row-gap:2px;align-items:center;justify-content:center;text-align:left;">
+        <div style="display:inline-grid;grid-template-columns:auto auto auto;column-gap:6px;row-gap:2px;align-items:center;justify-content:center;text-align:left;">
           <span style="text-align:right;">Inicial:</span>
-          <strong style="text-align:left;color:#cbd5e1;">${p2pCapMoney(getP2PInitialCapital(), 2)} USDT</strong>
-          <span style="text-align:right;">Hoy:</span>
+          <strong style="text-align:left;color:#cbd5e1;cursor:pointer;" onclick="setP2PInitialCapital()" title="Haz clic para editar capital inicial">${p2pCapMoney(initialVal, 2)} USDT</strong>
+          ${initialVal > 0 ? `<button onclick="resetP2PInitialCapital()" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px;padding:2px 4px;" title="Resetear capital inicial a 0">↺</button>` : `<span style="width:24px;"></span>`}
+          <span style="text-align:right;">${label}:</span>
           <strong style="text-align:left;color:#cbd5e1;">${sign}${p2pCapMoney(Math.abs(profitUsdt), 2)} USDT</strong>
         </div>
       `;
@@ -14892,7 +15379,59 @@ if(addProviderBtn){
     setInterval(() => syncBinanceSales(true), 60000);
   }
 
+  // Rollover automático del capital al inicio de cada día
+  const P2P_CAPITAL_ROLLOVER_DATE_KEY = "onze_p2p_capital_rollover_date";
+
+  function getP2PRolloverDate(){
+    return localStorage.getItem(P2P_CAPITAL_ROLLOVER_DATE_KEY) || "";
+  }
+
+  function saveP2PRolloverDate(dateStr){
+    localStorage.setItem(P2P_CAPITAL_ROLLOVER_DATE_KEY, dateStr);
+  }
+
+  function getTodayChileDateStr(){
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Santiago",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).format(new Date());
+  }
+
+  function rolloverP2PCapitalIfNeeded(){
+    const today = getTodayChileDateStr();
+    const lastRollover = getP2PRolloverDate();
+
+    if(lastRollover === today) return;
+
+    // Es un nuevo día: calcular ganancia acumulada y sumarla al capital inicial.
+    try{
+      const currentCapital = getP2PInitialCapital();
+      const stats = typeof calculateP2PCapacityStats === "function" ? calculateP2PCapacityStats() : null;
+      const currentProfit = stats && typeof stats.realProfitUsdt === "number" ? stats.realProfitUsdt : 0;
+
+      if(currentProfit !== 0){
+        const newCapital = currentCapital + currentProfit;
+        saveP2PInitialCapital(newCapital);
+      }
+
+      // Resetear baseline para que el profit del nuevo día arranque desde 0
+      if(typeof window.resetP2PCapacityBaselineNow === "function"){
+        const value = new Date().toISOString();
+        localStorage.setItem(P2P_CAPACITY_BASELINE_KEY, value);
+      }
+
+      saveP2PRolloverDate(today);
+      console.log(`✅ Capital P2P actualizado para el día ${today}: ${currentCapital} → ${currentCapital + currentProfit} USDT (profit: ${currentProfit} USDT)`);
+    }catch(e){
+      console.warn("Error en rollover de capital P2P:", e);
+      saveP2PRolloverDate(today);
+    }
+  }
+
   function initP2PCapacity(){
+    rolloverP2PCapitalIfNeeded();
     addP2PCapacityStyles();
     ensureP2PCapacityModal();
     ensureP2PCapacityDetailModal();
@@ -17597,30 +18136,18 @@ if(addProviderBtn){
   let rateDayAuthUser = null;
 
   function isRateDaySuperAdmin() {
-    const params = new URLSearchParams(window.location.search || "");
-    const roleFromUrl = String(params.get("role") || "").toLowerCase();
-    const emailFromUrl = String(params.get("email") || "").toLowerCase();
-
-    if (roleFromUrl === "super_admin_global" || roleFromUrl === "super_admin_cliente") {
-      return true;
-    }
-
-    if (emailFromUrl === "onze.cl21@gmail.com") {
-      return true;
-    }
-
     const candidates = [
       rateDayAuthUser,
       window.currentUser,
       window.authUser,
       window.ONZE_USER,
-      window.sessionUser
+      window.sessionUser,
+      window.authenticatedUser
     ].filter(Boolean);
 
     return candidates.some(function(user) {
       return String(user.role || "").toLowerCase() === "super_admin_global"
-        || String(user.role || "").toLowerCase() === "super_admin_cliente"
-        || String(user.email || "").toLowerCase() === "onze.cl21@gmail.com";
+        || String(user.role || "").toLowerCase() === "super_admin_cliente";
     });
   }
 
@@ -18235,27 +18762,19 @@ if(addProviderBtn){
   }
 
   function isRateDaySafeAdmin() {
-    const role = getRateDaySafeRole();
-
-    if (role === "super_admin_global" || role === "super_admin_cliente") {
-      return true;
-    }
-
     const candidates = [
       rateDayAuthUser,
       window.currentUser,
       window.authUser,
       window.ONZE_USER,
-      window.sessionUser
+      window.sessionUser,
+      window.authenticatedUser
     ].filter(Boolean);
 
     return candidates.some(function(user) {
       const r = String(user.role || "").toLowerCase();
-      const email = String(user.email || "").toLowerCase();
-
       return r === "super_admin_global"
-        || r === "super_admin_cliente"
-        || email === "onze.cl21@gmail.com";
+        || r === "super_admin_cliente";
     });
   }
 
@@ -18342,27 +18861,19 @@ if(addProviderBtn){
   }
 
   function isRateDayFinalAdmin() {
-    const role = getRateDayFinalRole();
-
-    if (role === "super_admin_global" || role === "super_admin_cliente") {
-      return true;
-    }
-
     const candidates = [
       rateDayAuthUser,
       window.currentUser,
       window.authUser,
       window.ONZE_USER,
-      window.sessionUser
+      window.sessionUser,
+      window.authenticatedUser
     ].filter(Boolean);
 
     return candidates.some(function(user) {
       const r = String(user.role || "").toLowerCase();
-      const email = String(user.email || "").toLowerCase();
-
       return r === "super_admin_global"
-        || r === "super_admin_cliente"
-        || email === "onze.cl21@gmail.com";
+        || r === "super_admin_cliente";
     });
   }
 
@@ -18551,11 +19062,7 @@ if(addProviderBtn){
 <script id="onze-admin-only-hard-guard">
 (function(){
   function readRoleText(){
-    const q = new URLSearchParams(location.search);
     const parts = [
-      q.get("role"),
-      q.get("userRole"),
-      q.get("mode"),
       document.body?.dataset?.role
     ];
 

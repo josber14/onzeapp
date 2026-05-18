@@ -14,8 +14,7 @@ export type SessionPayload = {
   exp: number;
 };
 
-const SESSION_SECRET =
-  process.env.SESSION_SECRET || "onze-dev-secret-cambiar-en-produccion";
+const SESSION_SECRET: string = process.env.SESSION_SECRET ?? (() => { throw new Error("SESSION_SECRET no está definida"); })();
 
 function base64UrlEncode(value: string) {
   return Buffer.from(value, "utf8")
