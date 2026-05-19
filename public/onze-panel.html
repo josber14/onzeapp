@@ -14848,22 +14848,16 @@ if(addProviderBtn){
     table.style.display = 'table';
 
     orders.forEach(order => {
-      try {
-        const row = document.createElement('tr');
-        row.style.borderBottom = '1px solid #1a3a5a';
-        const orderNum = String(order.orderNumber || '').slice(-8);
-        const amt = Number(order.amount || 0);
-        const tp = Math.round(Number(order.totalPrice || 0));
-        const up = Number(order.unitPrice || 0);
-        row.innerHTML = `
-          <td style="padding:8px; color:#fff;">${orderNum}</td>
-          <td style="padding:8px; text-align:right; color:#00ff00;">${amt.toFixed(2)}</td>
-          <td style="padding:8px; text-align:right; color:#00ff00;">${tp.toLocaleString('es-CL')}</td>
-          <td style="padding:8px; text-align:right; color:#fff;">${up.toFixed(2)}</td>
-          <td style="padding:8px; text-align:center; color:#aaa; font-size:11px;">${String(order.orderStatus || '')}</td>
-        `;
-        tbody.appendChild(row);
-      } catch(_e) {}
+      const row = document.createElement('tr');
+      row.style.borderBottom = '1px solid #1a3a5a';
+      row.innerHTML = `
+        <td style="padding:8px; color:#fff;">${order.orderNumber.slice(-8)}</td>
+        <td style="padding:8px; text-align:right; color:#00ff00;">${order.amount.toFixed(2)}</td>
+        <td style="padding:8px; text-align:right; color:#00ff00;">${Math.round(order.totalPrice).toLocaleString('es-CL')}</td>
+        <td style="padding:8px; text-align:right; color:#fff;">${order.unitPrice.toFixed(2)}</td>
+        <td style="padding:8px; text-align:center; color:#aaa; font-size:11px;">${order.orderStatus}</td>
+      `;
+      tbody.appendChild(row);
     });
   }
   window.syncBinanceSales = function syncBinanceSales(silent = false){
