@@ -14810,7 +14810,7 @@ if(addProviderBtn){
   }
   function getBinanceSales(){
     try{
-      const data = localStorage.getItem('onze_p2p_binance_orders');
+      const data = localStorage.getItem('onze_binance_sales');
       return data ? JSON.parse(data) : [];
     }catch(e){
       return [];

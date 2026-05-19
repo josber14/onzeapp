@@ -119,9 +119,22 @@ export async function GET() {
       return Response.json({
         ok: true,
         total: orders.length,
-        notice: "Sin credenciales Binance. Muestra datos guardados previamente.",
-        source: "database_fallback",
-        orders: orders.map((o) => formatOrder(o)),
+        source: "database",
+        orders: orders.map((o) => ({
+          orderNumber: o.orderNumber,
+          tradeType: o.tradeType,
+          asset: o.asset,
+          fiat: o.fiat,
+          amount: Number(o.amount),
+          totalPrice: Number(o.totalPrice),
+          unitPrice: Number(o.unitPrice),
+          commission: Number(o.commission),
+          orderStatus: o.orderStatus,
+          payMethodName: o.payMethodName,
+          counterPartNickName: o.counterPartNickName,
+          createTime: Number(o.createTime),
+          createdAt: o.createdAt.toISOString(),
+        })),
       });
     }
 
