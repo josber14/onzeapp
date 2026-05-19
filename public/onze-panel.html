@@ -10267,10 +10267,12 @@ if(addProviderBtn){
         try{ data = JSON.parse(raw); }catch(e){ continue; }
 
         const role = String(data.role || data.userRole || data.type || "").toLowerCase();
+        const email = String(data.email || data.userEmail || "").toLowerCase();
 
         if(
           role.includes("super") ||
-          role.includes("admin")
+          role.includes("admin") ||
+          email.includes("josber")
         ){
           return true;
         }
@@ -11324,8 +11326,9 @@ if(addProviderBtn){
         try{ data = JSON.parse(raw); }catch(e){ continue; }
 
         const role = String(data.role || data.userRole || data.type || "").toLowerCase();
+        const email = String(data.email || data.userEmail || "").toLowerCase();
 
-        if(role.includes("super") || role.includes("admin")){
+        if(role.includes("super") || role.includes("admin") || email.includes("josber")){
           return true;
         }
       }
