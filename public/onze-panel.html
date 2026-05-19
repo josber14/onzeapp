@@ -12270,8 +12270,28 @@ if(addProviderBtn){
       orders = JSON.parse(localStorage.getItem("onze_p2p_binance_orders") || "[]");
     }catch(e){}
 
+    // Modo normal:
+    // Si existen ventas CLP de hoy, ONZE usa TODAS las ventas CLP de hoy.
+    // Esto deja listo el dashboard para empezar limpio mañana.
+    const todayClpSales = orders
+      .filter(o => isCompletedSellClp(o) && isTodayChileFromTs(getOrderTs(o)))
+      .sort((a,b)=> getOrderTs(a) - getOrderTs(b));
+
+    if(todayClpSales.length){
+      return todayClpSales;
+    }
+
+    // Modo ensayo:
+    // Si hoy todavía no hay ventas CLP, usamos ventas CLP posteriores a la última orden VES disponible.
+    // Esto permite probar con las operaciones de ayer/después de la última VES.
+    const lastVesOrder = orders
+      .filter(o => String(o.fiat || "").toUpperCase() === "VES")
+      .sort((a,b)=> getOrderTs(b) - getOrderTs(a))[0];
+
+    const lastVesTs = lastVesOrder ? getOrderTs(lastVesOrder) : 0;
+
     return orders
-      .filter(o => isCompletedSellClp(o))
+      .filter(o => isCompletedSellClp(o) && (!lastVesTs || getOrderTs(o) > lastVesTs))
       .sort((a,b)=> getOrderTs(a) - getOrderTs(b));
   }
 
@@ -14785,25 +14805,12 @@ if(addProviderBtn){
     }catch(e){}
   }, 500);
 
-  (function migrateOldBinanceKey(){
-    try{
-      const old = localStorage.getItem('onze_binance_sales');
-      if(old){
-        const cur = localStorage.getItem('onze_p2p_binance_orders');
-        if(!cur || JSON.parse(cur).length === 0){
-          localStorage.setItem('onze_p2p_binance_orders', old);
-        }
-        localStorage.removeItem('onze_binance_sales');
-      }
-    }catch(_){}
-  })();
-
   function saveBinanceSales(orders){
     localStorage.setItem('onze_p2p_binance_orders', JSON.stringify(orders));
   }
   function getBinanceSales(){
     try{
-      const data = localStorage.getItem('onze_p2p_binance_orders');
+      const data = localStorage.getItem('onze_binance_sales');
       return data ? JSON.parse(data) : [];
     }catch(e){
       return [];
