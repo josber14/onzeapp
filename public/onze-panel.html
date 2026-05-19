@@ -11326,8 +11326,6 @@ if(addProviderBtn){
   }
 
   function initP2PCalculator(){
-    if(!isOnzeSuperAdmin()) return;
-
     addP2PStyles();
     buildP2PSection();
     addP2PNavButton();
@@ -11630,8 +11628,6 @@ if(addProviderBtn){
   }
 
   function initP2PDashboard(){
-    if(!isOnzeSuperAdminForP2PDashboard()) return;
-
     addP2PDashboardStyles();
     buildP2PDashboardView();
     addP2PDashboardNavButton();
