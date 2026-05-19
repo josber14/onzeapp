@@ -14805,25 +14805,12 @@ if(addProviderBtn){
     }catch(e){}
   }, 500);
 
-  (function migrateOldBinanceKey(){
-    try{
-      const old = localStorage.getItem('onze_binance_sales');
-      if(old){
-        const cur = localStorage.getItem('onze_p2p_binance_orders');
-        if(!cur || JSON.parse(cur).length === 0){
-          localStorage.setItem('onze_p2p_binance_orders', old);
-        }
-        localStorage.removeItem('onze_binance_sales');
-      }
-    }catch(_){}
-  })();
-
   function saveBinanceSales(orders){
     localStorage.setItem('onze_p2p_binance_orders', JSON.stringify(orders));
   }
   function getBinanceSales(){
     try{
-      const data = localStorage.getItem('onze_p2p_binance_orders');
+      const data = localStorage.getItem('onze_binance_sales');
       return data ? JSON.parse(data) : [];
     }catch(e){
       return [];
