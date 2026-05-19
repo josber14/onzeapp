@@ -14137,6 +14137,8 @@ if(addProviderBtn){
   }
 
   window.renderP2PCapacityPanel = function renderP2PCapacityPanel(){
+    autoFinishCompletedCapacities();
+
     const panel = findCapacityPanel();
     if(!panel) return;
 
