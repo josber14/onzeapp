@@ -12002,9 +12002,23 @@ if(addProviderBtn){
     let value = localStorage.getItem(P2P_CAPACITY_BASELINE_KEY);
 
     if(!value){
-      value = new Date().toISOString();
+      // Usar la fecha del primer capacity como inicio de línea.
+      // Así las ventas anteriores al primer capacity se ignoran,
+      // pero las del mismo día del capacity se incluyen.
+      const caps = loadP2PCapacity();
+      if(caps.length > 0){
+        const dates = caps.map(c => c.date).filter(Boolean).sort();
+        if(dates.length > 0){
+          value = dates[0] + "T00:00:00.000Z";
+        }
+      }
+      if(!value){
+        // Si no hay capacities, devolver ahora sin guardar.
+        // El baseline real se fijará cuando carguen los capacities del servidor.
+        return new Date().getTime();
+      }
       localStorage.setItem(P2P_CAPACITY_BASELINE_KEY, value);
-      console.log("✅ Inicio P2P/capacity fijado desde ahora:", value);
+      console.log("✅ Inicio P2P/capacity fijado:", value);
     }
 
     const ts = new Date(value).getTime();
@@ -12270,28 +12284,8 @@ if(addProviderBtn){
       orders = JSON.parse(localStorage.getItem("onze_p2p_binance_orders") || "[]");
     }catch(e){}
 
-    // Modo normal:
-    // Si existen ventas CLP de hoy, ONZE usa TODAS las ventas CLP de hoy.
-    // Esto deja listo el dashboard para empezar limpio mañana.
-    const todayClpSales = orders
-      .filter(o => isCompletedSellClp(o) && isTodayChileFromTs(getOrderTs(o)))
-      .sort((a,b)=> getOrderTs(a) - getOrderTs(b));
-
-    if(todayClpSales.length){
-      return todayClpSales;
-    }
-
-    // Modo ensayo:
-    // Si hoy todavía no hay ventas CLP, usamos ventas CLP posteriores a la última orden VES disponible.
-    // Esto permite probar con las operaciones de ayer/después de la última VES.
-    const lastVesOrder = orders
-      .filter(o => String(o.fiat || "").toUpperCase() === "VES")
-      .sort((a,b)=> getOrderTs(b) - getOrderTs(a))[0];
-
-    const lastVesTs = lastVesOrder ? getOrderTs(lastVesOrder) : 0;
-
     return orders
-      .filter(o => isCompletedSellClp(o) && (!lastVesTs || getOrderTs(o) > lastVesTs))
+      .filter(o => isCompletedSellClp(o) && isTodayChileFromTs(getOrderTs(o)))
       .sort((a,b)=> getOrderTs(a) - getOrderTs(b));
   }
 
@@ -12436,12 +12430,10 @@ if(addProviderBtn){
 
     const enriched = capacities.map(item => {
       const price = Number(item.buyPrice || 0);
-      const paid = Number(
-        item.manualPaymentsClp ??
-        item.manualPaymentClp ??
-        item.paidClp ??
-        0
-      );
+      // paidClp se registró al crear el capacity (no reduce el capacity).
+      // manualPaymentsClp se registró al completar saldo parcial (reduce capacityClp).
+      // Por eso NO sumamos manualPaymentsClp aquí, porque el capacity ya se redujo.
+      const paid = Number(item.paidClp || 0);
 
       const usedCost = Number(item.usedUsdt || 0) * price;
 
@@ -13192,6 +13184,14 @@ if(addProviderBtn){
             <strong style="color:${item.profitUsdt >= 0 ? "#34d399" : "#fb7185"};">${item.profitUsdt >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(item.profitUsdt), 2)} USDT</strong>
             <div class="p2p-capacity-meta" style="margin-top:5px;">${item.profitClp >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(item.profitClp), 0)} CLP</div>
           </div>
+          ${
+            Number(item.manualPaymentClp || item.manualPaymentsClp || item.paidClp || 0) > 0
+            ? `<div class="p2p-capacity-mini">
+                <span>Pago manual</span>
+                <strong style="color:#fbbf24;">${p2pCapMoney(Number(item.manualPaymentClp || item.manualPaymentsClp || item.paidClp || 0), 0)} CLP</strong>
+              </div>`
+            : ""
+          }
         </div>
       </div>
 
@@ -13398,7 +13398,7 @@ if(addProviderBtn){
           const buyPrice = Number(cap.buyPrice || 0);
           const costUsed = finalSoldUsdt * buyPrice;
           const profitClp = finalClpReceived - costUsed - (finalCommissionUsdt * buyPrice);
-          const manualPayment = Number(cap.manualPaymentClp || 0);
+          const manualPayment = Number(cap.manualPaymentsClp || cap.manualPaymentClp || 0);
 
           return `
             <div style="background:#0d2137;border:1px solid #1a3a5a;border-radius:12px;padding:16px;margin-bottom:12px;">
@@ -13418,7 +13418,7 @@ if(addProviderBtn){
                 <div><span style="color:#8aa0ba;">Ganancia:</span><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};">${profitClp >= 0 ? '+' : ''}${Math.round(profitClp).toLocaleString("es-CL")} CLP</strong><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};font-size:12px;">${profitClp >= 0 ? '+' : ''}${(buyPrice > 0 ? profitClp / buyPrice : 0).toFixed(2)} USDT</strong></div>
               </div>
               <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
-                <button class="p2p-action-main-btn" onclick="openP2PCapacityDetail('${cap.id}'); document.getElementById('completedCapacitiesModal').remove();" style="min-height:38px;padding:0 14px;font-size:13px;">
+                <button class="p2p-action-icon-btn" onclick="openP2PCapacityDetail('${cap.id}'); document.getElementById('completedCapacitiesModal').remove();" style="width:38px;height:38px;border-radius:12px;">
                   <svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.7"/></svg></button>
                 <button class="p2p-action-icon-btn danger" onclick="deleteP2PCapacity('${cap.id}')" style="width:38px;height:38px;border-radius:12px;">
                   <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
@@ -13527,6 +13527,176 @@ if(addProviderBtn){
     }
 
     modal.classList.add("open");
+  }
+
+  function closeP2PCapacityEditModal(){
+    const modal = document.getElementById("p2pCapacityEditModalBackdrop");
+    if(modal){
+      modal.classList.remove("open");
+      modal.dataset.capacityId = "";
+    }
+  }
+
+  function ensureP2PCapacityEditModal(){
+    if(document.getElementById("p2pCapacityEditModalBackdrop")) return;
+    const modal = document.createElement("div");
+    modal.id = "p2pCapacityEditModalBackdrop";
+    modal.className = "p2p-capacity-modal-backdrop";
+    modal.innerHTML = `
+      <div class="p2p-capacity-modal">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+          <div>
+            <h3 class="section-title" style="margin-bottom:6px;">Editar capacity</h3>
+            <p class="section-text">Modifica los datos del capacity. Las ventas ya asignadas se recalculan automáticamente.</p>
+          </div>
+          <button class="btn secondary" type="button" id="closeP2PCapacityEditModal">Cerrar</button>
+        </div>
+
+        <form id="p2pCapacityEditForm" class="p2p-capacity-form">
+          <label class="full">
+            Proveedor
+            <input id="editP2pProvider" placeholder="Ej: Pedro / proveedor USDT" required>
+          </label>
+          <label>
+            Fecha
+            <input id="editP2pDate" type="date" required>
+          </label>
+          <label>
+            Precio compra (CLP/USDT)
+            <input id="editP2pBuyPrice" inputmode="decimal" placeholder="Ej: 820" required>
+          </label>
+          <label>
+            Capacity en CLP
+            <input id="editP2pCapacityClp" inputmode="decimal" placeholder="Ej: 8.200.000" required oninput="this.value=this.value.replace(/[^0-9]/g,'').replace(/\B(?=(\d{3})+(?!\d))/g,'.');">
+          </label>
+          <label>
+            USDT estimados
+            <input id="editP2pUsdt" inputmode="decimal" placeholder="Se calcula automático" readonly>
+          </label>
+          <label>
+            Pagado al proveedor (CLP)
+            <input id="editP2pPaid" inputmode="decimal" value="0">
+          </label>
+          <label>
+            Referencia / cuenta / banco
+            <input id="editP2pReference" placeholder="Opcional">
+          </label>
+          <label class="full">
+            Nota
+            <textarea id="editP2pNote" placeholder="Ej: cupo cerrado, se paga con ventas Binance"></textarea>
+          </label>
+
+          <div class="full" style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:4px;">
+            <button class="btn secondary" type="button" id="cancelP2PCapacityEdit">Cancelar</button>
+            <button class="btn" type="submit">Guardar cambios</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById("cancelP2PCapacityEdit")?.addEventListener("click", closeP2PCapacityEditModal);
+    modal.addEventListener("click", function(e){
+      if(e.target === modal) closeP2PCapacityEditModal();
+    });
+
+    document.getElementById("closeP2PCapacityEditModal")?.addEventListener("click", closeP2PCapacityEditModal);
+    document.getElementById("cancelP2PCapacityEdit")?.addEventListener("click", closeP2PCapacityEditModal);
+
+    ["editP2pCapacityClp", "editP2pBuyPrice"].forEach(id=>{
+      const el = document.getElementById(id);
+      if(el){
+        el.addEventListener("input", updateP2PCapacityEditUsdtPreview);
+        el.addEventListener("change", updateP2PCapacityEditUsdtPreview);
+      }
+    });
+
+    document.getElementById("p2pCapacityEditForm")?.addEventListener("submit", function(e){
+      e.preventDefault();
+      const id = modal.dataset.capacityId;
+      if(!id) return;
+      const provider = document.getElementById("editP2pProvider")?.value || "";
+      const date = document.getElementById("editP2pDate")?.value || "";
+      const capacityClp = p2pCapNumber(document.getElementById("editP2pCapacityClp")?.value);
+      const buyPrice = p2pCapNumber(document.getElementById("editP2pBuyPrice")?.value);
+      const usdtAmount = buyPrice > 0 ? capacityClp / buyPrice : 0;
+      const paidClp = p2pCapNumber(document.getElementById("editP2pPaid")?.value);
+      const reference = document.getElementById("editP2pReference")?.value || "";
+      const note = document.getElementById("editP2pNote")?.value || "";
+
+      if(!provider.trim()){
+        alert("Coloca el proveedor.");
+        return;
+      }
+      if(capacityClp <= 0 || buyPrice <= 0 || usdtAmount <= 0){
+        alert("Coloca un monto CLP de capacity y precio de compra válido.");
+        return;
+      }
+
+      const items = loadP2PCapacity().slice();
+      const idx = items.findIndex(cap => cap.id === id);
+      if(idx === -1){
+        alert("No encontré este capacity.");
+        return;
+      }
+
+      items[idx].provider = provider.trim();
+      items[idx].date = date;
+      items[idx].capacityClp = capacityClp;
+      items[idx].usdtAmount = usdtAmount;
+      items[idx].buyPrice = buyPrice;
+      items[idx].paidClp = paidClp;
+      items[idx].reference = reference.trim();
+      items[idx].note = note.trim();
+
+      saveP2PCapacity(items);
+
+      fetch('/api/p2p/capacity', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: items[idx] })
+      }).catch(e => console.warn('Error updating capacity on server:', e));
+
+      closeP2PCapacityEditModal();
+      renderP2PCapacityPanel();
+      updateP2PDashboardWithCapacity();
+      if(typeof showToast === "function") showToast("Capacity actualizado");
+    });
+  }
+
+  window.openP2PCapacityEditModal = function openP2PCapacityEditModal(id){
+    ensureP2PCapacityEditModal();
+    const modal = document.getElementById("p2pCapacityEditModalBackdrop");
+    if(!modal) return;
+    modal.dataset.capacityId = id;
+
+    const stats = calculateP2PCapacityStats();
+    const item = stats.capacities.find(cap => cap.id === id);
+    if(!item){
+      alert("No encontré este capacity.");
+      return;
+    }
+
+    document.getElementById("editP2pProvider").value = item.provider || "";
+    document.getElementById("editP2pDate").value = item.date || "";
+    document.getElementById("editP2pBuyPrice").value = String(Number(item.buyPrice || 0));
+    document.getElementById("editP2pCapacityClp").value = Math.round(Number(item.capacityClp || item.totalCost || 0)).toLocaleString("es-CL");
+    document.getElementById("editP2pUsdt").value = p2pCapMoney(item.usdtAmount, 2);
+    document.getElementById("editP2pPaid").value = String(Number(item.paidClp || item.manualPaymentClp || item.manualPaymentsClp || 0));
+    document.getElementById("editP2pReference").value = item.reference || "";
+    document.getElementById("editP2pNote").value = item.note || "";
+
+    modal.classList.add("open");
+  }
+
+  function updateP2PCapacityEditUsdtPreview(){
+    const clp = p2pCapNumber(document.getElementById("editP2pCapacityClp")?.value);
+    const price = p2pCapNumber(document.getElementById("editP2pBuyPrice")?.value);
+    const usdtEl = document.getElementById("editP2pUsdt");
+    if(usdtEl){
+      usdtEl.value = price > 0 ? p2pCapMoney(clp / price, 2) : "0.00";
+    }
   }
 
   window.deleteP2PCapacity = function(id, confirmed){
@@ -13723,6 +13893,14 @@ if(addProviderBtn){
     const stats = calculateP2PCapacityStats();
     const items = stats.capacities;
 
+    // Numeración global: el orden real de creación no cambia cuando uno se completa.
+    const globalOrder = {};
+    items.slice().sort((a,b) => {
+      const ad = new Date(a.date || a.createdAt || 0).getTime();
+      const bd = new Date(b.date || b.createdAt || 0).getTime();
+      return ad - bd;
+    }).forEach((c, i) => { globalOrder[c.id] = i + 1; });
+
     // Orden profesional P2P:
     // 1) Capacity activo/en proceso primero
     // 2) Siguientes capacity activos debajo, en orden de creación/fecha
@@ -13814,14 +13992,19 @@ if(addProviderBtn){
               <div class="p2p-capacity-top" style="align-items:flex-start;">
                 <div style="width:100%;">
                   <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:center;">
-                    <div class="p2p-capacity-title" style="font-size:15px;line-height:1.2;">#${index + 1} · ${item.provider || "Proveedor"}</div>
+                    <div class="p2p-capacity-title" style="font-size:15px;line-height:1.2;">#${globalOrder[item.id] || index + 1} · ${item.provider || "Proveedor"}</div>
 
                     <div class="p2p-capacity-meta" style="font-size:14px;text-align:center;font-weight:950;color:#a8b3c7;">
                       ${item.date || ""}
                     </div>
 
-                    <span style="display:inline-flex;justify-content:center;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:950;color:${item.status === "finished" ? "#94a3b8" : "#34d399"};background:${item.status === "finished" ? "rgba(148,163,184,.10)" : "rgba(52,211,153,.12)"};border:1px solid ${item.status === "finished" ? "rgba(148,163,184,.20)" : "rgba(52,211,153,.26)"};">
-                      ${item.status === "finished" ? "Finalizado" : "Activo"}
+                    <span style="display:inline-flex;align-items:center;gap:6px;">
+                      <span style="display:inline-flex;justify-content:center;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:950;color:${item.status === "finished" ? "#94a3b8" : "#34d399"};background:${item.status === "finished" ? "rgba(148,163,184,.10)" : "rgba(52,211,153,.12)"};border:1px solid ${item.status === "finished" ? "rgba(148,163,184,.20)" : "rgba(52,211,153,.26)"};">
+                        ${item.status === "finished" ? "Finalizado" : "Activo"}
+                      </span>
+                      <button class="p2p-action-icon-btn" type="button" title="Editar capacity" aria-label="Editar capacity" onclick="openP2PCapacityEditModal('${item.id}')" style="width:30px;height:30px;">
+                        <svg viewBox="0 0 24 24" style="width:14px;height:14px;"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                      </button>
                     </span>
                   </div>
 
@@ -13863,6 +14046,14 @@ if(addProviderBtn){
                   <span>Comisión</span>
                   <strong>${p2pCapMoney(item.commissionUsdt, 2)} USDT</strong>
                 </div>
+                ${
+                  Number(item.manualPaymentClp || item.manualPaymentsClp || item.paidClp || 0) > 0
+                  ? `<div class="p2p-capacity-mini">
+                      <span>Pago manual</span>
+                      <strong style="color:#fbbf24;">${p2pCapMoney(Number(item.manualPaymentClp || item.manualPaymentsClp || item.paidClp || 0), 0)} CLP</strong>
+                    </div>`
+                  : ""
+                }
                 <div class="p2p-capacity-mini">
                   <span>Ganancia</span>
                   <strong style="color:${item.profitUsdt >= 0 ? "#34d399" : "#fb7185"};">${item.profitUsdt >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(item.profitUsdt), 2)} USDT</strong>
@@ -14849,6 +15040,39 @@ if(addProviderBtn){
       tbody.appendChild(row);
     });
   }
+  function autoFinishP2PCapacities(){
+    const stats = calculateP2PCapacityStats();
+    const toFinish = stats.capacities.filter(c =>
+      c.status === "active" &&
+      Number(c.usdtAmount || 0) > 0 &&
+      Number(c.usedUsdt || 0) >= Number(c.usdtAmount || 0) * 0.99
+    );
+    if(!toFinish.length) return;
+
+    const caps = loadP2PCapacity();
+    for(const capStats of toFinish){
+      const idx = caps.findIndex(c => c.id === capStats.id);
+      if(idx < 0) continue;
+      caps[idx] = {
+        ...caps[idx],
+        status: "finished",
+        finishedAt: new Date().toISOString(),
+        finalSoldUsdt: capStats.usedUsdt,
+        finalClpReceived: capStats.clpReceived,
+        finalCommissionUsdt: capStats.commissionUsdt,
+        finalCommissionClp: capStats.commissionClp,
+        finalSaleParts: capStats.saleParts || [],
+      };
+      fetch('/api/p2p/capacity', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: caps[idx] })
+      }).catch(e => console.warn('Error auto-finish capacity:', e));
+    }
+    saveP2PCapacity(caps);
+  }
+
   window.syncBinanceSales = function syncBinanceSales(silent = false){
     const btn = document.getElementById('btn-sync-binance-sales');
     if(!btn) return;
@@ -14862,6 +15086,7 @@ if(addProviderBtn){
       .then(data => {
         if(data.ok && data.orders){
           saveBinanceSales(data.orders);
+          autoFinishP2PCapacities();
           renderBinanceSalesTable();
           if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
           if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
@@ -14886,7 +15111,7 @@ if(addProviderBtn){
     }
     renderBinanceSalesTable();
     // Auto-sync cada 60 segundos
-    setInterval(() => syncBinanceSales(true), 60000);
+    setInterval(() => syncBinanceSales(true), 15000);
   }
 
   function initP2PCapacity(){
@@ -14896,6 +15121,9 @@ if(addProviderBtn){
     // Cargar capacities desde la base de datos al iniciar
     if(typeof window.syncP2PCapacityFromServer === 'function'){
       window.syncP2PCapacityFromServer().then(()=>{
+        // Una vez cargados los capacities reales, recalcular baseline
+        // para que se base en las fechas de los capacities y no en la hora actual.
+        localStorage.removeItem(P2P_CAPACITY_BASELINE_KEY);
         renderP2PCapacityPanel();
         updateP2PDashboardWithCapacity();
       });
@@ -17594,6 +17822,13 @@ if(addProviderBtn){
   let rateDayAuthUser = null;
 
   function isRateDaySuperAdmin() {
+    const params = new URLSearchParams(window.location.search || "");
+    const roleFromUrl = String(params.get("role") || "").toLowerCase();
+
+    if (roleFromUrl === "super_admin_global" || roleFromUrl === "super_admin_cliente") {
+      return true;
+    }
+
     const candidates = [
       rateDayAuthUser,
       window.currentUser,

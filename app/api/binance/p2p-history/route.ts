@@ -39,16 +39,12 @@ function formatOrder(o: any) {
 async function fetchAllBinanceOrders(apiKey: string, secretKey: string) {
   const allOrders: any[] = [];
   let page = 1;
-  const startTime = new Date("2020-01-01").getTime();
-  const endTime = Date.now();
 
   while (page <= 50) {
     const params = new URLSearchParams();
     params.set("tradeType", "SELL");
     params.set("page", String(page));
     params.set("rows", "100");
-    params.set("startTimestamp", String(startTime));
-    params.set("endTimestamp", String(endTime));
     params.set("recvWindow", "5000");
     params.set("timestamp", String(Date.now()));
 
@@ -172,10 +168,12 @@ export async function GET() {
       orders: allOrders,
     });
   } catch (error: any) {
+    console.error("BINANCE_P2P_HISTORY_ERROR:", error?.stack || error?.message || error);
     return Response.json(
       {
         ok: false,
         error: error?.message || "Error desconocido consultando Binance",
+        detail: error?.stack?.split("\n").slice(0,3).join(" | "),
       },
       { status: 500 }
     );
