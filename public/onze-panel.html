@@ -12046,39 +12046,6 @@ if(addProviderBtn){
   const OWN_CAPITAL_KEY = "onze_p2p_own_capital_items";
   const P2P_CAPACITY_BASELINE_KEY = "onze_p2p_capacity_baseline_at";
 
-  // Recuperación: si capacities fueron auto-completados por error en versiones anteriores,
-  // los re-activamos. Se ejecuta UNA vez.
-  const RECOVERY_DONE_KEY = "onze_p2p_recovery_v1_done";
-  if(!localStorage.getItem(RECOVERY_DONE_KEY)){
-    try {
-      const _raw = localStorage.getItem(CAPACITY_KEY);
-      if(_raw){
-        const _caps = JSON.parse(_raw);
-        let _changed = false;
-        const _oneHourAgo = Date.now() - 3600000;
-        for(const _cap of _caps){
-          if(_cap.status === "finished" && _cap.finalSoldUsdt !== undefined && _cap.finishedAt){
-            const _ts = new Date(_cap.finishedAt).getTime();
-            if(_ts > _oneHourAgo){
-              _cap.status = "active";
-              delete _cap.finishedAt;
-              delete _cap.finalSoldUsdt;
-              delete _cap.finalClpReceived;
-              delete _cap.finalCommissionUsdt;
-              delete _cap.finalCommissionClp;
-              delete _cap.finalSaleParts;
-              _changed = true;
-            }
-          }
-        }
-        if(_changed){
-          localStorage.setItem(CAPACITY_KEY, JSON.stringify(_caps));
-        }
-      }
-    } catch(_e) {}
-    localStorage.setItem(RECOVERY_DONE_KEY, "1");
-  }
-
   function getP2PCapacityBaselineTs(){
     let value = localStorage.getItem(P2P_CAPACITY_BASELINE_KEY);
 
