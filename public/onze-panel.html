@@ -11281,8 +11281,6 @@ if(addProviderBtn){
   }
 
   function initP2PCalculator(){
-    if(!isOnzeSuperAdmin()) return;
-
     addP2PStyles();
     buildP2PSection();
     addP2PNavButton();
@@ -11308,6 +11306,7 @@ if(addProviderBtn){
   function isOnzeSuperAdminForP2PDashboard(){
     try{
       if(typeof IS_ADMIN_ROLE !== "undefined" && IS_ADMIN_ROLE) return true;
+      if(window.currentUserContext?.role === "super_admin_global" || window.currentUserContext?.role === "super_admin_cliente") return true;
 
       const possibleKeys = [
         "onzeUser",
@@ -11585,8 +11584,6 @@ if(addProviderBtn){
   }
 
   function initP2PDashboard(){
-    if(!isOnzeSuperAdminForP2PDashboard()) return;
-
     addP2PDashboardStyles();
     buildP2PDashboardView();
     addP2PDashboardNavButton();
