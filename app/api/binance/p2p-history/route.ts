@@ -18,13 +18,15 @@ function signQuery(query: string, secretKey: string) {
   return crypto.createHmac("sha256", secretKey).update(query).digest("hex");
 }
 
-async function fetchFromBinance(apiKey: string, secretKey: string, page: number) {
+async function fetchFromBinance(apiKey: string, secretKey: string, page: number, startTime?: number, endTime?: number) {
   const params = new URLSearchParams();
   params.set("tradeType", "SELL");
   params.set("page", String(page));
   params.set("rows", "100");
   params.set("recvWindow", "5000");
   params.set("timestamp", String(Date.now()));
+  if (startTime) params.set("startTimestamp", String(startTime));
+  if (endTime) params.set("endTimestamp", String(endTime));
 
   const query = params.toString();
   const signature = signQuery(query, secretKey);
@@ -55,15 +57,17 @@ export async function GET() {
       const allOrders: any[] = [];
       let page = 1;
       let fetched: any[];
+      const startOf2020 = new Date("2020-01-01").getTime();
+      const now = Date.now();
 
       do {
-        fetched = await fetchFromBinance(creds.apiKey, creds.secretKey, page);
+        fetched = await fetchFromBinance(creds.apiKey, creds.secretKey, page, startOf2020, now);
         const clpSells = fetched.filter(
           (o: any) => o.fiat === "CLP" && o.tradeType === "SELL" && o.orderStatus === "COMPLETED"
         );
         allOrders.push(...clpSells);
         page++;
-      } while (fetched.length === 100 && page <= 5);
+      } while (fetched.length === 100 && page <= 50);
 
       for (const o of allOrders) {
         try {
