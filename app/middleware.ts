@@ -14,7 +14,8 @@ type SessionPayload = {
   exp: number;
 };
 
-const SESSION_SECRET: string = process.env.SESSION_SECRET ?? (() => { throw new Error("SESSION_SECRET no está definida"); })();
+const SESSION_SECRET: string =
+  process.env.SESSION_SECRET ?? (() => { throw new Error("SESSION_SECRET no definido en .env.local"); })();
 
 function hexToUint8Array(hex: string) {
   const bytes = new Uint8Array(hex.length / 2);
