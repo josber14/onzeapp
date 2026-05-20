@@ -14076,6 +14076,8 @@ if(addProviderBtn){
   }
 
   const P2P_INITIAL_CAPITAL_KEY = "onze_p2p_initial_capital_usdt";
+  const P2P_PROFIT_DAY_KEY = "onze_p2p_profit_day";
+  const P2P_PROFIT_START_KEY = "onze_p2p_profit_start";
 
   function getP2PInitialCapital(){
     return Number(localStorage.getItem(P2P_INITIAL_CAPITAL_KEY) || 0);
@@ -14083,6 +14085,20 @@ if(addProviderBtn){
 
   window.saveP2PInitialCapital = function saveP2PInitialCapital(value){
     localStorage.setItem(P2P_INITIAL_CAPITAL_KEY, String(Number(value || 0)));
+  }
+
+  function getP2PTodayProfit(cumulativeProfit){
+    const today = new Date().toLocaleDateString("es-CL", { timeZone:"America/Santiago" });
+    const savedDay = localStorage.getItem(P2P_PROFIT_DAY_KEY) || "";
+
+    if(savedDay !== today){
+      localStorage.setItem(P2P_PROFIT_DAY_KEY, today);
+      localStorage.setItem(P2P_PROFIT_START_KEY, String(cumulativeProfit));
+      return 0;
+    }
+
+    const startProfit = Number(localStorage.getItem(P2P_PROFIT_START_KEY) || 0);
+    return cumulativeProfit - startProfit;
   }
 
   function getP2PCompletedClpSalesForCapital(){
@@ -14126,16 +14142,17 @@ if(addProviderBtn){
 
     const safeStats = stats || (typeof calculateP2PCapacityStats === "function" ? calculateP2PCapacityStats() : {});
     const initial = getP2PInitialCapital();
-    const profitUsdt = calculateP2PProfitUsdtFromStats(safeStats);
-    const total = initial + profitUsdt;
+    const cumulativeProfit = calculateP2PProfitUsdtFromStats(safeStats);
+    const total = initial + cumulativeProfit;
+    const todayProfit = typeof getP2PTodayProfit === "function" ? getP2PTodayProfit(cumulativeProfit) : cumulativeProfit;
 
     if(capitalEl){
       capitalEl.textContent = `${p2pCapMoney(total, 2)} USDT`;
     }
 
     if(subEl){
-      const sign = profitUsdt >= 0 ? "+" : "-";
-      subEl.textContent = `Inicial: ${p2pCapMoney(initial, 2)} USDT · Resultado: ${sign}${p2pCapMoney(Math.abs(profitUsdt), 2)} USDT`;
+      const sign = todayProfit >= 0 ? "+" : "-";
+      subEl.textContent = `Inicial: ${p2pCapMoney(initial, 2)} USDT · Resultado: ${sign}${p2pCapMoney(Math.abs(todayProfit), 2)} USDT`;
     }
   }
 
