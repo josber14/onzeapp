@@ -11490,7 +11490,7 @@ if(addProviderBtn){
             <div class="p2p-dashboard-card">
               <div class="p2p-dashboard-label">Capital P2P</div>
               <div class="p2p-dashboard-value green" id="p2pDashVolume">0.00 USDT</div>
-              <div class="p2p-dashboard-small" id="p2pDashVolumeSub">Inicial: 0.00 USDT · Resultado: +0.00 USDT</div>
+              <div class="p2p-dashboard-small" id="p2pDashVolumeSub" onclick="setP2PInitialCapital()" style="cursor:pointer;">Inicial: 0.00 USDT · Resultado: +0.00 USDT</div>
             </div>
 
             <div class="p2p-dashboard-card">
@@ -14079,7 +14079,7 @@ if(addProviderBtn){
     return Number(localStorage.getItem(P2P_INITIAL_CAPITAL_KEY) || 0);
   }
 
-  function saveP2PInitialCapital(value){
+  window.saveP2PInitialCapital = function saveP2PInitialCapital(value){
     localStorage.setItem(P2P_INITIAL_CAPITAL_KEY, String(Number(value || 0)));
   }
 
@@ -14118,7 +14118,7 @@ if(addProviderBtn){
     return 0;
   }
 
-  function updateP2PCapitalCard(stats){
+  window.updateP2PCapitalCard = function updateP2PCapitalCard(stats){
     const capitalEl = document.getElementById("p2pDashVolume");
     const subEl = document.getElementById("p2pDashVolumeSub");
 
@@ -14278,6 +14278,10 @@ if(addProviderBtn){
             cursor:pointer;
           ">Guardar</button>
         </div>
+
+        <button type="button" onclick="saveP2PInitialCapital(0);closeP2PInitialCapitalModal();updateP2PCapitalCard();" style="
+          width:100%;margin-top:12px;border:0;border-radius:16px;padding:13px 14px;background:#dc2626;color:#fff;font-size:15px;font-weight:1000;cursor:pointer;
+        ">Reiniciar</button>
       </div>
     `;
 
