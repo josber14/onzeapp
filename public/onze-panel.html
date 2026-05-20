@@ -14002,7 +14002,7 @@ if(addProviderBtn){
                     </div>
 
                     <div style="color:#a8b3c7;font-weight:900;font-size:15px;line-height:1.25;">
-                      USDT: <span style="color:#34d399;font-size:15px;font-weight:950;">${p2pCapMoney(item.usdtAmount, 2)}</span>
+                      USDT a recibir: <span style="color:#34d399;font-size:15px;font-weight:950;">${p2pCapMoney(Number(item.clpReceived || 0) / Number(item.buyPrice || 1), 2)}</span>
                     </div>
                   </div>
                 </div>
@@ -14029,10 +14029,6 @@ if(addProviderBtn){
                 <div class="p2p-capacity-mini">
                   <span>Comisión</span>
                   <strong>${p2pCapMoney(item.commissionUsdt, 2)} USDT</strong>
-                </div>
-                <div class="p2p-capacity-mini">
-                  <span>Total USDT a recibir</span>
-                  <strong style="color:#34d399;">${p2pCapMoney(Number(item.totalCost || 0) / Number(item.buyPrice || 1), 2)} USDT</strong>
                 </div>
                 ${
                   Number(item.manualPaymentClp || item.manualPaymentsClp || item.paidClp || 0) > 0
