@@ -14030,6 +14030,10 @@ if(addProviderBtn){
                   <span>Comisión</span>
                   <strong>${p2pCapMoney(item.commissionUsdt, 2)} USDT</strong>
                 </div>
+                <div class="p2p-capacity-mini">
+                  <span>Total USDT a recibir</span>
+                  <strong style="color:#34d399;">${p2pCapMoney(Number(item.totalCost || 0) / Number(item.buyPrice || 1), 2)} USDT</strong>
+                </div>
                 ${
                   Number(item.manualPaymentClp || item.manualPaymentsClp || item.paidClp || 0) > 0
                   ? `<div class="p2p-capacity-mini">
