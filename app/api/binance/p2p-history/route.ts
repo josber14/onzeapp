@@ -134,38 +134,69 @@ export async function GET() {
       });
     }
 
-    const allOrders = await fetchAllBinanceOrders(apiKey, secretKey);
+    try {
+      const allOrders = await fetchAllBinanceOrders(apiKey, secretKey);
 
-    for (const o of allOrders) {
-      try {
-        await prisma.binanceOrder.upsert({
-          where: { orderNumber: o.orderNumber },
-          update: { orderStatus: o.orderStatus, syncedAt: new Date() },
-          create: {
-            tenantId,
-            orderNumber: o.orderNumber,
-            tradeType: "SELL",
-            asset: o.asset,
-            fiat: "CLP",
-            amount: o.amount,
-            totalPrice: o.totalPrice,
-            unitPrice: o.unitPrice,
-            commission: o.commission,
-            orderStatus: o.orderStatus,
-            payMethodName: o.payMethodName,
-            counterPartNickName: o.counterPartNickName,
-            createTime: BigInt(o.createTime),
-            createdAt: new Date(o.createTime),
-          },
-        });
-      } catch (_) {}
+      for (const o of allOrders) {
+        try {
+          await prisma.binanceOrder.upsert({
+            where: { orderNumber: o.orderNumber },
+            update: { orderStatus: o.orderStatus, syncedAt: new Date() },
+            create: {
+              tenantId,
+              orderNumber: o.orderNumber,
+              tradeType: "SELL",
+              asset: o.asset,
+              fiat: "CLP",
+              amount: o.amount,
+              totalPrice: o.totalPrice,
+              unitPrice: o.unitPrice,
+              commission: o.commission,
+              orderStatus: o.orderStatus,
+              payMethodName: o.payMethodName,
+              counterPartNickName: o.counterPartNickName,
+              createTime: BigInt(o.createTime),
+              createdAt: new Date(o.createTime),
+            },
+          });
+        } catch (_) {}
+      }
+
+      return Response.json({
+        ok: true,
+        total: allOrders.length,
+        source: "binance",
+        orders: allOrders,
+      });
+    } catch (e) {
+      console.warn("Binance live fetch failed, falling back to DB:", e);
     }
+
+    const orders = await prisma.binanceOrder.findMany({
+      where: { tenantId, fiat: "CLP" },
+      orderBy: { createTime: "desc" },
+      take: 100,
+    });
 
     return Response.json({
       ok: true,
-      total: allOrders.length,
-      source: "binance",
-      orders: allOrders,
+      total: orders.length,
+      source: "database",
+      orders: orders.map((o) => ({
+        orderNumber: o.orderNumber,
+        tradeType: o.tradeType,
+        asset: o.asset,
+        fiat: o.fiat,
+        amount: Number(o.amount),
+        totalPrice: Number(o.totalPrice),
+        unitPrice: Number(o.unitPrice),
+        commission: Number(o.commission),
+        orderStatus: o.orderStatus,
+        payMethodName: o.payMethodName,
+        counterPartNickName: o.counterPartNickName,
+        createTime: Number(o.createTime),
+        createdAt: o.createdAt.toISOString(),
+      })),
     });
   } catch (error: any) {
     console.error("BINANCE_P2P_HISTORY_ERROR:", error?.stack || error?.message || error);

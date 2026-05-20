@@ -15106,6 +15106,7 @@ if(addProviderBtn){
         }
       })
       .catch(error => {
+        console.warn("syncBinanceSales error:", error.message);
         if(!silent) alert('❌ Error: ' + error.message);
       })
       .finally(() => {
@@ -15120,6 +15121,12 @@ if(addProviderBtn){
     }
     if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
     setInterval(() => syncBinanceSales(true), 15000);
+
+    document.addEventListener("visibilitychange", function(){
+      if(document.visibilityState === "visible"){
+        syncBinanceSales(true);
+      }
+    });
   }
 
   function initP2PCapacity(){
