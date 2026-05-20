@@ -13875,6 +13875,8 @@ if(addProviderBtn){
     const panel = findCapacityPanel();
     if(!panel) return;
 
+    if(typeof autoFinishP2PCapacities === "function") autoFinishP2PCapacities();
+
     const stats = calculateP2PCapacityStats();
     const items = stats.capacities;
 
