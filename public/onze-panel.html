@@ -13398,6 +13398,7 @@ if(addProviderBtn){
                 <div><span style="color:#8aa0ba;">Tasa:</span><br><strong style="color:#fff;">${buyPrice.toFixed(2)} CLP/USDT</strong></div>
                 <div><span style="color:#8aa0ba;">USDT vendido:</span><br><strong style="color:#fff;">${finalSoldUsdt.toFixed(2)} USDT</strong></div>
                 <div><span style="color:#8aa0ba;">CLP recibido:</span><br><strong style="color:#fff;">${Math.round(finalClpReceived).toLocaleString("es-CL")} CLP</strong></div>
+                <div><span style="color:#8aa0ba;">USDT recibidos:</span><br><strong style="color:#34d399;">${(buyPrice > 0 ? finalClpReceived / buyPrice : 0).toFixed(2)}</strong></div>
                 ${manualPayment > 0 ? `<div><span style="color:#8aa0ba;">Pago manual:</span><br><strong style="color:#fbbf24;">${Math.round(manualPayment).toLocaleString("es-CL")} CLP</strong></div>` : ''}
                 <div><span style="color:#8aa0ba;">Ganancia:</span><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};">${profitClp >= 0 ? '+' : ''}${Math.round(profitClp).toLocaleString("es-CL")} CLP</strong><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};font-size:12px;">${profitClp >= 0 ? '+' : ''}${(buyPrice > 0 ? profitClp / buyPrice : 0).toFixed(2)} USDT</strong></div>
               </div>
