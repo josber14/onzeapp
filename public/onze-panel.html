@@ -14076,34 +14076,9 @@ if(addProviderBtn){
   }
 
   const P2P_INITIAL_CAPITAL_KEY = "onze_p2p_initial_capital_usdt";
-  const P2P_PROFIT_LOCK_DATE_KEY = "onze_p2p_profit_lock_date";
-  const P2P_PROFIT_AT_LOCK_KEY = "onze_p2p_profit_at_lock";
 
   function getP2PInitialCapital(){
     return Number(localStorage.getItem(P2P_INITIAL_CAPITAL_KEY) || 0);
-  }
-
-  function getP2PProfitAtLock(){
-    return Number(localStorage.getItem(P2P_PROFIT_AT_LOCK_KEY) || 0);
-  }
-
-  function accumulateP2PProfitIntoCapital(){
-    const today = new Date().toLocaleDateString("es-CL", { timeZone:"America/Santiago" });
-    const lastLock = localStorage.getItem(P2P_PROFIT_LOCK_DATE_KEY) || "";
-    if(lastLock === today) return;
-
-    const stats = typeof calculateP2PCapacityStats === "function" ? calculateP2PCapacityStats() : { realProfitUsdt: 0 };
-    const currentProfit = calculateP2PProfitUsdtFromStats(stats);
-    const profitAtLock = getP2PProfitAtLock();
-    const profitToLock = currentProfit - profitAtLock;
-
-    if(profitToLock > 0.01){
-      const currentInitial = getP2PInitialCapital();
-      window.saveP2PInitialCapital(currentInitial + profitToLock);
-    }
-
-    localStorage.setItem(P2P_PROFIT_LOCK_DATE_KEY, today);
-    localStorage.setItem(P2P_PROFIT_AT_LOCK_KEY, String(currentProfit));
   }
 
   window.saveP2PInitialCapital = function saveP2PInitialCapital(value){
@@ -14146,25 +14121,21 @@ if(addProviderBtn){
   }
 
   window.updateP2PCapitalCard = function updateP2PCapitalCard(stats){
-    if(typeof accumulateP2PProfitIntoCapital === "function") accumulateP2PProfitIntoCapital();
-
     const capitalEl = document.getElementById("p2pDashVolume");
     const subEl = document.getElementById("p2pDashVolumeSub");
 
     const safeStats = stats || (typeof calculateP2PCapacityStats === "function" ? calculateP2PCapacityStats() : {});
     const initial = getP2PInitialCapital();
-    const cumulativeProfit = calculateP2PProfitUsdtFromStats(safeStats);
-    const profitAtLock = getP2PProfitAtLock();
-    const todayProfit = cumulativeProfit - profitAtLock;
-    const total = initial + todayProfit;
+    const profitUsdt = calculateP2PProfitUsdtFromStats(safeStats);
+    const total = initial + profitUsdt;
 
     if(capitalEl){
       capitalEl.textContent = `${p2pCapMoney(total, 2)} USDT`;
     }
 
     if(subEl){
-      const sign = todayProfit >= 0 ? "+" : "-";
-      subEl.textContent = `Inicial: ${p2pCapMoney(initial, 2)} USDT · Resultado: ${sign}${p2pCapMoney(Math.abs(todayProfit), 2)} USDT`;
+      const sign = profitUsdt >= 0 ? "+" : "-";
+      subEl.textContent = `Inicial: ${p2pCapMoney(initial, 2)} USDT · Resultado: ${sign}${p2pCapMoney(Math.abs(profitUsdt), 2)} USDT`;
     }
   }
 
