@@ -12004,6 +12004,13 @@ if(addProviderBtn){
     return Number.isFinite(ts) ? ts : 0;
   }
 
+  function getP2PCapacityChileMidnightTs(){
+    const now = new Date();
+    const chileDate = now.toLocaleDateString("en-CA", { timeZone: "America/Santiago" });
+    const [y, m, d] = chileDate.split("-").map(Number);
+    return Date.UTC(y, m - 1, d, 4, 0, 0);
+  }
+
   window.resetP2PCapacityBaselineNow = function(){
     const value = new Date().toISOString();
     localStorage.setItem(P2P_CAPACITY_BASELINE_KEY, value);
@@ -12303,11 +12310,11 @@ if(addProviderBtn){
         status: normalizedStatus || "active",
         usdtAmount: usdt,
         totalCost,
-        usedUsdt: isFinished ? Number(item.finalSoldUsdt || 0) : 0,
-        clpReceived: isFinished ? Number(item.finalClpReceived || 0) : 0,
-        commissionUsdt: isFinished ? Number(item.finalCommissionUsdt || 0) : 0,
-        commissionClp: isFinished ? Number(item.finalCommissionClp || 0) : 0,
-        saleParts: isFinished && Array.isArray(item.finalSaleParts) ? item.finalSaleParts : []
+        usedUsdt: isFinished ? Number(item.finalSoldUsdt || 0) : Number(item.usedUsdt || 0),
+        clpReceived: isFinished ? Number(item.finalClpReceived || 0) : Number(item.clpReceived || 0),
+        commissionUsdt: isFinished ? Number(item.finalCommissionUsdt || 0) : Number(item.commissionUsdt || 0),
+        commissionClp: isFinished ? Number(item.finalCommissionClp || 0) : Number(item.commissionClp || 0),
+        saleParts: isFinished && Array.isArray(item.finalSaleParts) ? item.finalSaleParts : (Array.isArray(item.saleParts) ? item.saleParts : [])
       };
     });
 
@@ -12356,6 +12363,15 @@ if(addProviderBtn){
 
         if(capStartTs && saleTs && saleTs < capStartTs){
           continue;
+        }
+
+        // Activos solo consumen ventas de hoy (Chile). Ventas de días anteriores
+        // solo cuentan si el capacity ya las traía pre-cargadas (usedUsdt/clpReceived).
+        if(cap.status === "active"){
+          const chileMidnight = getP2PCapacityChileMidnightTs();
+          if(chileMidnight && saleTs && saleTs < chileMidnight){
+            continue;
+          }
         }
 
         const capTotalUsdt = Number(cap.usdtAmount || 0);
@@ -15164,7 +15180,50 @@ if(addProviderBtn){
     });
   }
 
+  window.repairP2PCapacity = function(capacityId, carryoverUsdt, carryoverClp, carryoverCommissionUsdt){
+    const caps = loadP2PCapacity();
+    const idx = caps.findIndex(c => c.id === capacityId);
+    if(idx < 0) return false;
+
+    const cap = caps[idx];
+    cap.status = "active";
+    delete cap.finishedAt;
+    delete cap.finalSoldUsdt;
+    delete cap.finalClpReceived;
+    delete cap.finalCommissionUsdt;
+    delete cap.finalCommissionClp;
+    delete cap.finalSaleParts;
+    cap.usedUsdt = carryoverUsdt || 0;
+    cap.clpReceived = carryoverClp || 0;
+    cap.commissionUsdt = carryoverCommissionUsdt || 0;
+    cap.saleParts = [];
+
+    caps[idx] = cap;
+    saveP2PCapacity(caps);
+    return true;
+  };
+
   function initP2PCapacity(){
+    // Reparación única: reactivar capacity #1 si fue auto-finalizado por error
+    if(!localStorage.getItem("p2p_capacity_repaired_v1")){
+      try{
+        const caps = loadP2PCapacity();
+        const sorted = caps.slice().sort((a,b)=> (a.createdAt || 0) - (b.createdAt || 0));
+        const first = sorted[0];
+        if(first && first.status === "finished"){
+          const clp = Number(first.capacityClp || 0);
+          if(clp >= 3000000 && clp <= 5000000){
+            const buyPrice = Number(first.buyPrice || 903.45);
+            const carriedClp = 407000;
+            const carriedUsdt = buyPrice > 0 ? carriedClp / buyPrice : 0;
+            const carriedCommission = carriedUsdt * 0.0014;
+            window.repairP2PCapacity(first.id, carriedUsdt, carriedClp, carriedCommission);
+            localStorage.setItem("p2p_capacity_repaired_v1", "1");
+          }
+        }
+      }catch(e){ console.warn("auto-repair capacity:", e); }
+    }
+
     addP2PCapacityStyles();
     ensureP2PCapacityModal();
     ensureP2PCapacityDetailModal();
