@@ -12274,7 +12274,8 @@ if(addProviderBtn){
 
     const p2pCapacityBaselineTs = getP2PCapacityBaselineTs();
 
-    const sales = loadP2PBinanceSales()
+    const sales = loadP2PBinanceOrders()
+      .filter(o => isCompletedSellClp(o))
       .filter(o => {
         const saleTs = Number(getOrderTs(o) || 0);
 
