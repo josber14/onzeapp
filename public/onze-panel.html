@@ -2097,7 +2097,7 @@
       width:100% !important;
       align-self:flex-start !important;
       margin-top:0 !important;
-      padding-top:24px !important;
+      padding-top:0 !important;
     }
 
     #view-ajustes > div{
@@ -2153,6 +2153,75 @@
     </aside>
 
     <main class="content">
+      <section class="view admin-only-view" id="view-ajustes" style="padding-top:0; margin-top:0;">
+        <div style="max-width:600px; margin:0 auto; padding:24px 24px 24px 24px; padding-top:0;">
+          <h2 style="color:#00d4ff; margin-bottom:8px;">Ajustes</h2>
+          <p style="color:#aaa; margin-bottom:24px;">Configuración de integraciones y credenciales.</p>
+          <div style="background:#0d2137; border:1px solid #1a3a5a; border-radius:12px; padding:24px; margin-bottom:24px;">
+            <h3 style="color:#fff; margin-bottom:4px;">🔑 Credenciales Binance P2P</h3>
+            <p style="color:#aaa; font-size:13px; margin-bottom:16px;">Ingresa tu API Key y Secret Key de Binance para conectar tus operaciones P2P.</p>
+            <div id="binance-creds-status" style="margin-bottom:16px; padding:10px; border-radius:8px; background:#1a3a5a; font-size:13px; color:#aaa;">Verificando estado...</div>
+            <div style="margin-bottom:12px;">
+              <label style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">API Key</label>
+              <input id="input-binance-api-key" type="password" placeholder="Ingresa tu Binance API Key" style="width:100%; padding:10px; background:#071828; border:1px solid #1a3a5a; border-radius:6px; color:#fff; font-size:13px; box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:16px;">
+              <label style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">Secret Key</label>
+              <input id="input-binance-secret-key" type="password" placeholder="Ingresa tu Binance Secret Key" style="width:100%; padding:10px; background:#071828; border:1px solid #1a3a5a; border-radius:6px; color:#fff; font-size:13px; box-sizing:border-box;">
+            </div>
+            <button id="btn-save-binance-creds" style="padding:10px 20px; background:#007bff; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:14px;">Guardar credenciales</button>
+          </div>
+        </div>
+      </section>
+      <section class="view" id="view-noticias">
+        <section class="section-card">
+          <div class="section-top">
+            <div>
+              <h2 class="section-title">Noticias</h2>
+              <p class="section-text">Sección preparada para integrar noticias del sector</p>
+            </div>
+          </div>
+
+          <div class="news-grid">
+            <div class="news-card">
+              <h3>Mercado cambiario</h3>
+              <p>Monitorea las variaciones del tipo de cambio entre tus pares de países más usados.</p>
+              <div id="newsRateSummary" class="news-rate-summary"></div>
+            </div>
+
+            <div class="news-card">
+              <h3>Consejos del día</h3>
+              <div id="newsTips" class="news-tips"></div>
+            </div>
+
+            <div class="news-card">
+              <h3>Resumen rápido</h3>
+              <div id="newsQuickStats" class="news-quick-stats"></div>
+            </div>
+          </div>
+
+          <div class="news-grid" style="margin-top:12px;">
+            <div class="news-card">
+              <h3>Monedas que manejas</h3>
+              <p>Basado en tu historial de operaciones.</p>
+              <div id="newsCurrencySummary" class="news-currency-summary"></div>
+            </div>
+
+            <div class="news-card">
+              <h3>Horarios recomendados</h3>
+              <p>Los horarios donde registras más operaciones.</p>
+              <div id="newsActivityHours" class="news-activity-hours"></div>
+            </div>
+
+            <div class="news-card">
+              <h3>Notas del operador</h3>
+              <p>Espacio para tus notas personales y recordatorios.</p>
+              <textarea id="operatorNotes" class="operator-notes" placeholder="Escribe tus notas aquí..."></textarea>
+              <button class="btn small" id="saveOperatorNotesBtn" type="button" style="margin-top:8px;">Guardar notas</button>
+            </div>
+          </div>
+        </section>
+      </section>
       <section class="view active" id="view-inicio">
         <div class="hero">
           <h1>Bienvenido a ONZE</h1>
@@ -3103,90 +3172,6 @@
       </section>
       </section>
       </div>
-
-      <section class="view" id="view-noticias">
-        <section class="section-card">
-          <div class="section-top">
-            <div>
-              <h2 class="section-title">Noticias</h2>
-              <p class="section-text">Sección preparada para integrar noticias del sector</p>
-            </div>
-          </div>
-
-          <div class="news-grid">
-            <div class="news-card">
-              <h3>Mercado cambiario</h3>
-              <p>Monitorea las variaciones del tipo de cambio entre tus pares de países más usados.</p>
-              <div id="newsRateSummary" class="news-rate-summary"></div>
-            </div>
-
-            <div class="news-card">
-              <h3>Consejos del día</h3>
-              <div id="newsTips" class="news-tips"></div>
-            </div>
-
-            <div class="news-card">
-              <h3>Resumen rápido</h3>
-              <div id="newsQuickStats" class="news-quick-stats"></div>
-            </div>
-          </div>
-
-          <div class="news-grid" style="margin-top:12px;">
-            <div class="news-card">
-              <h3>Monedas que manejas</h3>
-              <p>Basado en tu historial de operaciones.</p>
-              <div id="newsCurrencySummary" class="news-currency-summary"></div>
-            </div>
-
-            <div class="news-card">
-              <h3>Horarios recomendados</h3>
-              <p>Los horarios donde registras más operaciones.</p>
-              <div id="newsActivityHours" class="news-activity-hours"></div>
-            </div>
-
-            <div class="news-card">
-              <h3>Notas del operador</h3>
-              <p>Espacio para tus notas personales y recordatorios.</p>
-              <textarea id="operatorNotes" class="operator-notes" placeholder="Escribe tus notas aquí..."></textarea>
-              <button class="btn small" id="saveOperatorNotesBtn" type="button" style="margin-top:8px;">Guardar notas</button>
-            </div>
-          </div>
-        </section>
-      </section>
-      <section class="view admin-only-view" id="view-ajustes" style="padding-top:0; margin-top:0;">
-        <div style="max-width:600px; margin:0 auto; padding:24px 24px 24px 24px; padding-top:0;">
-          <h2 style="color:#00d4ff; margin-bottom:8px;">Ajustes</h2>
-          <p style="color:#aaa; margin-bottom:24px;">Configuración de integraciones y credenciales.</p>
-
-          <!-- Binance Credentials -->
-          <div style="background:#0d2137; border:1px solid #1a3a5a; border-radius:12px; padding:24px; margin-bottom:24px;">
-            <h3 style="color:#fff; margin-bottom:4px;">🔑 Credenciales Binance P2P</h3>
-            <p style="color:#aaa; font-size:13px; margin-bottom:16px;">Ingresa tu API Key y Secret Key de Binance para conectar tus operaciones P2P.</p>
-
-            <div id="binance-creds-status" style="margin-bottom:16px; padding:10px; border-radius:8px; background:#1a3a5a; font-size:13px; color:#aaa;">
-              Verificando estado...
-            </div>
-
-            <div style="margin-bottom:12px;">
-              <label style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">API Key</label>
-              <input id="input-binance-api-key" type="password" placeholder="Ingresa tu Binance API Key"
-                style="width:100%; padding:10px; background:#071828; border:1px solid #1a3a5a; border-radius:6px; color:#fff; font-size:13px; box-sizing:border-box;">
-            </div>
-
-            <div style="margin-bottom:16px;">
-              <label style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">Secret Key</label>
-              <input id="input-binance-secret-key" type="password" placeholder="Ingresa tu Binance Secret Key"
-                style="width:100%; padding:10px; background:#071828; border:1px solid #1a3a5a; border-radius:6px; color:#fff; font-size:13px; box-sizing:border-box;">
-            </div>
-
-            <button id="btn-save-binance-creds"
-              style="padding:10px 20px; background:#007bff; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:14px;">
-              Guardar credenciales
-            </button>
-          </div>
-        </div>
-      </section>
-      </section>
     </main>
   </div>
 
@@ -9659,8 +9644,16 @@ if(addProviderBtn){
   const origSwitchView = window.switchView;
   window.switchView = function(viewName){
     if(typeof origSwitchView === 'function') origSwitchView(viewName);
+    if(viewName === 'ajustes'){
+      window.scrollTo({top:0,behavior:'instant'});
+      document.getElementById('view-ajustes')?.scrollIntoView({block:'start',behavior:'instant'});
+    }
     if(viewName === 'dashboard'){ renderWeeklyChart(); renderTopClients(); renderTopRoutes(); }
-    if(viewName === 'noticias') renderNewsSections();
+    if(viewName === 'noticias'){
+      document.getElementById('view-noticias')?.scrollIntoView({block:'start',behavior:'instant'});
+      window.scrollTo({top:0,behavior:'instant'});
+      renderNewsSections();
+    }
   };
 
   /* --- Bind events --- */
@@ -11867,6 +11860,8 @@ if(addProviderBtn){
 
     const historyEmpty = Array.from(document.querySelectorAll(".p2p-dashboard-empty"))
       .find(el => el.textContent.includes("Sin operaciones P2P") || el.textContent.includes("sincronizadas") || el.closest(".p2p-dashboard-panel")?.innerText.includes("Ventas Binance"));
+
+    if(typeof loadP2PInitialCapitalFromServer === 'function') loadP2PInitialCapitalFromServer();
 
     if(historyEmpty){
       if(!completedSales.length){
@@ -14089,6 +14084,36 @@ if(addProviderBtn){
     localStorage.setItem(P2P_INITIAL_CAPITAL_KEY, String(Number(value || 0)));
   }
 
+  async function syncP2PInitialCapitalToServer(value){
+    try{
+      const res = await fetch("/api/p2p/initial-capital", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({value}),
+      });
+      const data = await res.json();
+      if(!data.ok) console.warn("Error sync capital al servidor:", data.error);
+    }catch(e){
+      console.warn("Error sync capital al servidor:", e);
+    }
+  }
+
+  window.loadP2PInitialCapitalFromServer = async function loadP2PInitialCapitalFromServer(){
+    try{
+      const res = await fetch("/api/p2p/initial-capital");
+      const data = await res.json();
+      if(data.ok && typeof data.value === "number" && data.value > 0){
+        const local = getP2PInitialCapital();
+        if(Math.abs(data.value - local) > 0.01){
+          localStorage.setItem(P2P_INITIAL_CAPITAL_KEY, String(data.value));
+          updateP2PCapitalCard();
+        }
+      }
+    }catch(e){
+      // silent — server may not have it yet
+    }
+  }
+
   function getP2PTodayProfit(cumulativeProfit){
     const today = new Date().toLocaleDateString("es-CL", { timeZone:"America/Santiago" });
     const savedDay = localStorage.getItem(P2P_PROFIT_DAY_KEY) || "";
@@ -14376,6 +14401,7 @@ if(addProviderBtn){
     }
 
     saveP2PInitialCapital(next);
+    syncP2PInitialCapitalToServer(next);
     updateP2PCapitalCard();
     if(typeof updateP2PDashboardWithCapacity === "function") updateP2PDashboardWithCapacity();
     closeP2PInitialCapitalModal();
@@ -15054,8 +15080,8 @@ if(addProviderBtn){
     const stats = calculateP2PCapacityStats();
     const toFinish = stats.capacities.filter(c =>
       c.status === "active" &&
-      Number(c.usdtAmount || 0) > 0 &&
-      Number(c.usedUsdt || 0) >= Number(c.usdtAmount || 0) * 0.99
+      Number(c.capacityClp || c.totalCost || 0) > 0 &&
+      Number(c.clpReceived || 0) >= Number(c.capacityClp || c.totalCost || 0)
     );
     if(!toFinish.length) return;
 
