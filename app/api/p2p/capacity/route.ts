@@ -46,6 +46,17 @@ export async function POST(req: NextRequest) {
   }
   const body = await req.json();
   const item = body?.item;
+  const { searchParams } = new URL(req.url);
+  const confirmPost = searchParams.get("confirm");
+  console.log("[P2P POST] from", session.email || session.tenantId, "id:", item?.id, "provider:", item?.provider, "confirm:", confirmPost, "referer:", req.headers.get("referer") || "none");
+
+  if (confirmPost !== "manual") {
+    return NextResponse.json(
+      { ok: false, error: "POST bloqueado: falta confirmación manual" },
+      { status: 409 }
+    );
+  }
+
   if (!item?.id) {
     return NextResponse.json({ ok: false, error: "Falta id" }, { status: 400 });
   }
