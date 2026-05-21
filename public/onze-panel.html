@@ -14031,6 +14031,14 @@ if(addProviderBtn){
                   <span>Comisión</span>
                   <strong>${p2pCapMoney(item.commissionUsdt, 2)} USDT</strong>
                 </div>
+                <div class="p2p-capacity-mini">
+                  <span>Mín. venta</span>
+                  <strong style="color:#facc15;">${(()=>{
+                    const bp = Number(item.buyPrice || 0);
+                    const pct = 0.0014;
+                    return p2pCapMoney(1 - pct > 0 ? bp / (1 - pct) : bp, 2);
+                  })()} CLP</strong>
+                </div>
                 ${
                   Number(item.manualPaymentClp || item.manualPaymentsClp || item.paidClp || 0) > 0
                   ? `<div class="p2p-capacity-mini">
