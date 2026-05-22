@@ -12402,22 +12402,8 @@ if(addProviderBtn){
         // Capacity finalizado queda congelado. Las nuevas ventas saltan al siguiente activo.
         if(cap.status === "finished") continue;
 
-        // Un capacity activo consume ventas desde su fecha operativa.
-        // No usamos createdAt porque el usuario puede registrar el capacity después
-        // de que ya existan ventas Binance del mismo día/ciclo.
-        const capStartTs = cap.date
-          ? new Date(String(cap.date) + "T00:00:00").getTime()
-          : (cap.createdAt ? new Date(cap.createdAt).getTime() : 0);
-
-        const saleTs = Number(getOrderTs(sale) || 0);
-
-        if(capStartTs && saleTs && saleTs < capStartTs){
-          continue;
-        }
-
-        // Activos toman ventas desde su fecha operativa (capStartTs).
-        // Ya no filtramos por "solo hoy" para que ventas de días anteriores
-        // no asignadas a capacities finalizados se consuman en el siguiente activo.
+        // Activos toman ventas desde el baseline. Las ventas ya consumidas
+        // por capacities finalizados están en lockedByOrder y se descuentan.
 
         const capTotalUsdt = Number(cap.usdtAmount || 0);
         const capUsedUsdt = Number(cap.usedUsdt || 0);
