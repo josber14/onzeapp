@@ -12415,14 +12415,9 @@ if(addProviderBtn){
           continue;
         }
 
-        // Activos solo consumen ventas de hoy (Chile). Ventas de días anteriores
-        // solo cuentan si el capacity ya las traía pre-cargadas (usedUsdt/clpReceived).
-        if(cap.status === "active"){
-          const chileMidnight = getP2PCapacityChileMidnightTs();
-          if(chileMidnight && saleTs && saleTs < chileMidnight){
-            continue;
-          }
-        }
+        // Activos toman ventas desde su fecha operativa (capStartTs).
+        // Ya no filtramos por "solo hoy" para que ventas de días anteriores
+        // no asignadas a capacities finalizados se consuman en el siguiente activo.
 
         const capTotalUsdt = Number(cap.usdtAmount || 0);
         const capUsedUsdt = Number(cap.usedUsdt || 0);
