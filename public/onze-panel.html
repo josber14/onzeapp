@@ -11561,6 +11561,7 @@ if(addProviderBtn){
   }
 
   function initP2PDashboard(){
+    if(!isOnzeSuperAdminForP2PDashboard()) return;
     addP2PDashboardStyles();
     buildP2PDashboardView();
     addP2PDashboardNavButton();
@@ -12360,22 +12361,27 @@ if(addProviderBtn){
         status: normalizedStatus || "active",
         usdtAmount: usdt,
         totalCost,
-        usedUsdt: isFinished ? Number(item.finalSoldUsdt || 0) : Number(item.usedUsdt || 0),
-        clpReceived: isFinished ? Number(item.finalClpReceived || 0) : Number(item.clpReceived || 0),
-        commissionUsdt: isFinished ? Number(item.finalCommissionUsdt || 0) : Number(item.commissionUsdt || 0),
-        commissionClp: isFinished ? Number(item.finalCommissionClp || 0) : Number(item.commissionClp || 0),
-        saleParts: isFinished && Array.isArray(item.finalSaleParts) ? [...item.finalSaleParts] : (Array.isArray(item.saleParts) ? [...item.saleParts] : [])
+        usedUsdt: isFinished ? Number(item.finalSoldUsdt || 0) : 0,
+        clpReceived: isFinished ? Number(item.finalClpReceived || 0) : 0,
+        commissionUsdt: isFinished ? Number(item.finalCommissionUsdt || 0) : 0,
+        commissionClp: isFinished ? Number(item.finalCommissionClp || 0) : 0,
+        saleParts: isFinished && Array.isArray(item.finalSaleParts) ? [...item.finalSaleParts] : []
       };
     });
 
     // Lo que ya quedó cerrado en capacities finalizados no se vuelve a asignar.
+    // Cada capacidad finalizada cuenta cada orden solo una vez (dedup de acumulaciones).
     const lockedByOrder = {};
+    const lockedCapsSeen = new Set();
     capacities
       .filter(cap => cap.status === "finished")
       .forEach(cap => {
         (cap.saleParts || []).forEach(part => {
           const key = String(part.orderNumber || "");
           if(!key) return;
+          const capKey = cap.id + '::' + key;
+          if(lockedCapsSeen.has(capKey)) return;
+          lockedCapsSeen.add(capKey);
           lockedByOrder[key] = (lockedByOrder[key] || 0) + Number(part.assignedUsdt || 0);
         });
       });
