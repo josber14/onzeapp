@@ -11561,10 +11561,11 @@ if(addProviderBtn){
   }
 
   function initP2PDashboard(){
-    if(!isOnzeSuperAdminForP2PDashboard()) return;
-    addP2PDashboardStyles();
-    buildP2PDashboardView();
-    addP2PDashboardNavButton();
+    if(isOnzeSuperAdminForP2PDashboard()){
+      addP2PDashboardStyles();
+      buildP2PDashboardView();
+      addP2PDashboardNavButton();
+    }
     setTimeout(initBinanceSalesSync, 500);
   }
 
@@ -11826,6 +11827,9 @@ if(addProviderBtn){
     localStorage.setItem("onze_p2p_binance_orders", JSON.stringify(Array.isArray(orders) ? orders : []));
   }
 
+  window.__p2pBinancePage = 1;
+  const __p2pBinancePageSize = 10;
+
   window.renderP2PDashboardFromBinance = function renderP2PDashboardFromBinance(){
     const orders = loadP2PBinanceOrders();
 
@@ -11868,7 +11872,12 @@ if(addProviderBtn){
       if(!completedSales.length){
         historyEmpty.textContent = "Sin ventas Binance sincronizadas todavía.";
       }else{
-        historyEmpty.innerHTML = completedSales.slice(0, 10).map(o => {
+        const totalPages = Math.ceil(completedSales.length / __p2pBinancePageSize) || 1;
+        if(window.__p2pBinancePage > totalPages) window.__p2pBinancePage = totalPages;
+        const startIdx = (window.__p2pBinancePage - 1) * __p2pBinancePageSize;
+        const pageSales = completedSales.slice(startIdx, startIdx + __p2pBinancePageSize);
+
+        historyEmpty.innerHTML = pageSales.map(o => {
           const date = o.createdAt ? new Date(o.createdAt).toLocaleString("es-CL", {
             timeZone:"America/Santiago",
             day:"2-digit",
@@ -11893,7 +11902,13 @@ if(addProviderBtn){
               </div>
             </div>
           `;
-        }).join("");
+        }).join("") + `
+          <div style="display:flex;justify-content:center;gap:12px;padding-top:14px;align-items:center;">
+            <button class="btn secondary" style="padding:6px 12px;font-size:16px;line-height:1;" onclick="window.__p2pBinancePage = Math.max(1, window.__p2pBinancePage - 1); renderP2PDashboardFromBinance();" ${window.__p2pBinancePage <= 1 ? 'disabled' : ''}>&larr;</button>
+            <span style="color:#8aa0ba;font-size:13px;">${window.__p2pBinancePage} / ${totalPages}</span>
+            <button class="btn secondary" style="padding:6px 12px;font-size:16px;line-height:1;" onclick="window.__p2pBinancePage = Math.min(${totalPages}, window.__p2pBinancePage + 1); renderP2PDashboardFromBinance();" ${window.__p2pBinancePage >= totalPages ? 'disabled' : ''}>&rarr;</button>
+          </div>
+        `;
       }
     }
 
@@ -12361,27 +12376,22 @@ if(addProviderBtn){
         status: normalizedStatus || "active",
         usdtAmount: usdt,
         totalCost,
-        usedUsdt: isFinished ? Number(item.finalSoldUsdt || 0) : 0,
-        clpReceived: isFinished ? Number(item.finalClpReceived || 0) : 0,
-        commissionUsdt: isFinished ? Number(item.finalCommissionUsdt || 0) : 0,
-        commissionClp: isFinished ? Number(item.finalCommissionClp || 0) : 0,
-        saleParts: isFinished && Array.isArray(item.finalSaleParts) ? [...item.finalSaleParts] : []
+        usedUsdt: isFinished ? Number(item.finalSoldUsdt || 0) : Number(item.usedUsdt || 0),
+        clpReceived: isFinished ? Number(item.finalClpReceived || 0) : Number(item.clpReceived || 0),
+        commissionUsdt: isFinished ? Number(item.finalCommissionUsdt || 0) : Number(item.commissionUsdt || 0),
+        commissionClp: isFinished ? Number(item.finalCommissionClp || 0) : Number(item.commissionClp || 0),
+        saleParts: isFinished && Array.isArray(item.finalSaleParts) ? [...item.finalSaleParts] : (Array.isArray(item.saleParts) ? [...item.saleParts] : [])
       };
     });
 
     // Lo que ya quedó cerrado en capacities finalizados no se vuelve a asignar.
-    // Cada capacidad finalizada cuenta cada orden solo una vez (dedup de acumulaciones).
     const lockedByOrder = {};
-    const lockedCapsSeen = new Set();
     capacities
       .filter(cap => cap.status === "finished")
       .forEach(cap => {
         (cap.saleParts || []).forEach(part => {
           const key = String(part.orderNumber || "");
           if(!key) return;
-          const capKey = cap.id + '::' + key;
-          if(lockedCapsSeen.has(capKey)) return;
-          lockedCapsSeen.add(capKey);
           lockedByOrder[key] = (lockedByOrder[key] || 0) + Number(part.assignedUsdt || 0);
         });
       });
@@ -12408,8 +12418,27 @@ if(addProviderBtn){
         // Capacity finalizado queda congelado. Las nuevas ventas saltan al siguiente activo.
         if(cap.status === "finished") continue;
 
-        // Activos toman ventas desde el baseline. Las ventas ya consumidas
-        // por capacities finalizados están en lockedByOrder y se descuentan.
+        // Un capacity activo consume ventas desde su fecha operativa.
+        // No usamos createdAt porque el usuario puede registrar el capacity después
+        // de que ya existan ventas Binance del mismo día/ciclo.
+        const capStartTs = cap.date
+          ? new Date(String(cap.date) + "T00:00:00").getTime()
+          : (cap.createdAt ? new Date(cap.createdAt).getTime() : 0);
+
+        const saleTs = Number(getOrderTs(sale) || 0);
+
+        if(capStartTs && saleTs && saleTs < capStartTs){
+          continue;
+        }
+
+        // Activos solo consumen ventas de hoy (Chile). Ventas de días anteriores
+        // solo cuentan si el capacity ya las traía pre-cargadas (usedUsdt/clpReceived).
+        if(cap.status === "active"){
+          const chileMidnight = getP2PCapacityChileMidnightTs();
+          if(chileMidnight && saleTs && saleTs < chileMidnight){
+            continue;
+          }
+        }
 
         const capTotalUsdt = Number(cap.usdtAmount || 0);
         const capUsedUsdt = Number(cap.usedUsdt || 0);
@@ -15189,6 +15218,7 @@ if(addProviderBtn){
       .then(data => {
         if(data.ok && data.orders){
           saveBinanceSales(data.orders);
+          window.__p2pBinancePage = 1;
           autoFinishP2PCapacities();
           if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
           if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
