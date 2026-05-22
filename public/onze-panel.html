@@ -12213,6 +12213,17 @@ if(addProviderBtn){
         if(Array.isArray(localCache)){
           localCache.forEach(l => { if(l?.id) localById[l.id] = l; });
         }
+
+        // También preservar items del cache local que no están en el servidor
+        // (ej: importados manualmente en localStorage).
+        if(Array.isArray(localCache)){
+          localCache.forEach(localItem => {
+            if(localItem?.id && !serverIds.has(localItem.id) && !protectedLocalItems.find(p => p.id === localItem.id)){
+              protectedLocalItems.push(localItem);
+            }
+          });
+        }
+
         const mergedServerItems = serverItems.map(srv => {
           const local = localById[srv.id];
           if(!local) return srv;
@@ -15279,6 +15290,13 @@ if(addProviderBtn){
     addP2PCapacityStyles();
     ensureP2PCapacityModal();
     ensureP2PCapacityDetailModal();
+    // Inicializar cache local desde localStorage antes del sync para preservar runtime fields
+    if(!window.__p2pCapacityCache || !window.__p2pCapacityCache.length){
+      try{
+        const local = JSON.parse(localStorage.getItem(CAPACITY_KEY) || '[]');
+        window.__p2pCapacityCache = local;
+      }catch(e){}
+    }
     // Cargar capacities desde la base de datos al iniciar
     if(typeof window.syncP2PCapacityFromServer === 'function'){
       window.syncP2PCapacityFromServer().then(()=>{
