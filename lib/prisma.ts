@@ -1,8 +1,9 @@
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const connectionString =
-  process.env.DIRECT_URL || process.env.DATABASE_URL;
+let rawUrl = process.env.DIRECT_URL || process.env.DATABASE_URL || "";
+// Neon: si la URL contiene "-pooler", conectamos directo al compute
+const connectionString = rawUrl.replace("-pooler", "");
 
 if (!connectionString) {
   throw new Error("No está definida DIRECT_URL ni DATABASE_URL.");
