@@ -11561,11 +11561,9 @@ if(addProviderBtn){
   }
 
   function initP2PDashboard(){
-    if(isOnzeSuperAdminForP2PDashboard()){
-      addP2PDashboardStyles();
-      buildP2PDashboardView();
-      addP2PDashboardNavButton();
-    }
+    addP2PDashboardStyles();
+    buildP2PDashboardView();
+    addP2PDashboardNavButton();
     setTimeout(initBinanceSalesSync, 500);
   }
 
