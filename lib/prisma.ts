@@ -1,9 +1,9 @@
 import { PrismaClient } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaNeon } from "@prisma/adapter-neon";
+import { neon } from "@neondatabase/serverless";
 
-let rawUrl = process.env.DIRECT_URL || process.env.DATABASE_URL || "";
-// Neon: si la URL contiene "-pooler", conectamos directo al compute
-const connectionString = rawUrl.replace("-pooler", "");
+const connectionString =
+  process.env.DIRECT_URL || process.env.DATABASE_URL;
 
 if (!connectionString) {
   throw new Error("No está definida DIRECT_URL ni DATABASE_URL.");
@@ -13,9 +13,8 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-const adapter = new PrismaPg({
-  connectionString,
-});
+const sql = neon(connectionString);
+const adapter = new PrismaNeon({ sql });
 
 export const prisma =
   globalForPrisma.prisma ??
