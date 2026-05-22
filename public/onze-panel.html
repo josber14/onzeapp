@@ -11561,10 +11561,11 @@ if(addProviderBtn){
   }
 
   function initP2PDashboard(){
-    if(!isOnzeSuperAdminForP2PDashboard()) return;
-    addP2PDashboardStyles();
-    buildP2PDashboardView();
-    addP2PDashboardNavButton();
+    if(isOnzeSuperAdminForP2PDashboard()){
+      addP2PDashboardStyles();
+      buildP2PDashboardView();
+      addP2PDashboardNavButton();
+    }
     setTimeout(initBinanceSalesSync, 500);
   }
 
