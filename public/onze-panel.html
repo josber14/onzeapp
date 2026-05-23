@@ -15098,22 +15098,24 @@ if(addProviderBtn){
       realProfitSubEl.textContent = `Hoy · ${signClp}${p2pCapMoney(Math.abs(profitClp), 0)} CLP`;
     }
 
-    // En la pantalla principal dejamos capital como capital actual,
-    // pero el resultado que muestra debajo corresponde al día.
+    // Capital = inicial + ganancia acumulada total (ayer + hoy)
     if(capitalEl){
+      const allTime = getP2PRangeStatsFromCapacity(stats, "total");
       const initial = getP2PInitialCapital();
-      const total = initial + profitUsdt;
-      capitalEl.textContent = `${p2pCapMoney(total, 2)} USDT`;
+      const totalCapital = initial + Number(allTime.profitUsdt || 0);
+      capitalEl.textContent = `${p2pCapMoney(totalCapital, 2)} USDT`;
     }
 
     if(capitalSubEl){
-      const sign = profitUsdt >= 0 ? "+" : "-";
+      const allTime = getP2PRangeStatsFromCapacity(stats, "total");
+      const totalProfitUsdt = Number(allTime.profitUsdt || 0);
+      const sign = totalProfitUsdt >= 0 ? "+" : "-";
       capitalSubEl.innerHTML = `
         <div style="display:inline-grid;grid-template-columns:auto auto;column-gap:8px;row-gap:2px;align-items:center;justify-content:center;text-align:left;">
           <span style="text-align:right;">Inicial:</span>
           <strong style="text-align:left;color:#cbd5e1;">${p2pCapMoney(getP2PInitialCapital(), 2)} USDT</strong>
-          <span style="text-align:right;">Hoy:</span>
-          <strong style="text-align:left;color:#cbd5e1;">${sign}${p2pCapMoney(Math.abs(profitUsdt), 2)} USDT</strong>
+          <span style="text-align:right;">Resultado:</span>
+          <strong style="text-align:left;color:#cbd5e1;">${sign}${p2pCapMoney(Math.abs(totalProfitUsdt), 2)} USDT</strong>
         </div>
       `;
     }
