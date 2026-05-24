@@ -12175,18 +12175,26 @@ if(addProviderBtn){
         const lastClear = Number(window.__p2pCapacityLastClear || localStorage.getItem('__p2pCapacityLastClear') || 0);
         const recentlyCleared = lastClear && (Date.now() - lastClear) < 60000;
 
+        const clearAge = lastClear ? Date.now() - lastClear : Infinity;
+
+        // Si el modo manual está activo pero ya pasaron 60s desde el último clear,
+        // ignorarlo (la bandera quedó colgada de un reset anterior).
+        if(p2pManualMode && !recentlyCleared && clearAge > 60000){
+          localStorage.removeItem('__p2pManualMode');
+          console.log("✅ Modo manual P2P desactivado — ya expiró");
+        }
+
         if(p2pManualMode || recentlyCleared){
-          if(data.items.length > 0){
+          if(data.items.length > 0 && recentlyCleared){
             for(const item of data.items){
               fetch('/api/p2p/capacity?id=' + encodeURIComponent(item.id) + '&confirm=manual', { method:'DELETE', credentials:'include' })
                 .catch(() => {});
             }
           }
-          if(p2pManualMode){
+          if(p2pManualMode && recentlyCleared){
             console.log("🧹 Modo manual P2P activo — limpiando registros del servidor cada sync");
           }
           // Si el servidor ya está vacío O pasaron 60s, desactivar modo manual
-          const clearAge = lastClear ? Date.now() - lastClear : Infinity;
           if(data.items.length === 0 || (clearAge > 60000)){
             localStorage.removeItem('__p2pManualMode');
             if(p2pManualMode) console.log("✅ Modo manual P2P desactivado — servidor limpio");
