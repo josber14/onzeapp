@@ -12128,11 +12128,17 @@ if(addProviderBtn){
             savedAt: Date.now()
           };
 
+          // Incluir saleParts como finalSaleParts para persistir asignaciones activas
+          const serverItem = {
+            ...item,
+            finalSaleParts: Array.isArray(item.saleParts) ? item.saleParts : (item.finalSaleParts || null)
+          };
+
           fetch('/api/p2p/capacity', {
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ item })
+            body: JSON.stringify({ item: serverItem })
           })
           .then(res => {
             if(!res.ok) throw new Error("No se pudo guardar capacity en servidor");
@@ -12178,6 +12184,12 @@ if(addProviderBtn){
           }
           if(p2pManualMode){
             console.log("🧹 Modo manual P2P activo — limpiando registros del servidor cada sync");
+          }
+          // Si el servidor ya está vacío O pasaron 60s, desactivar modo manual
+          const clearAge = lastClear ? Date.now() - lastClear : Infinity;
+          if(data.items.length === 0 || (clearAge > 60000)){
+            localStorage.removeItem('__p2pManualMode');
+            if(p2pManualMode) console.log("✅ Modo manual P2P desactivado — servidor limpio");
           }
           return false;
         }
@@ -12226,7 +12238,13 @@ if(addProviderBtn){
 
         const mergedServerItems = serverItems.map(srv => {
           const local = localById[srv.id];
-          if(!local) return srv;
+          if(!local){
+            // Sin datos locales: usar finalSaleParts del servidor como saleParts
+            return {
+              ...srv,
+              saleParts: Array.isArray(srv.finalSaleParts) ? srv.finalSaleParts : [],
+            };
+          }
           return {
             ...srv,
             usedUsdt: Number(local.usedUsdt || 0),
@@ -12239,7 +12257,10 @@ if(addProviderBtn){
           };
         });
 
-        const mergedItems = [...mergedServerItems, ...protectedLocalItems];
+        // Filtrar registros especiales de capital inicial que no deben mostrarse como capacities
+        const filteredServer = mergedServerItems.filter(c => c.status !== "_capital");
+        const filteredLocal = protectedLocalItems.filter(c => c.status !== "_capital");
+        const mergedItems = [...filteredServer, ...filteredLocal];
 
         const changed = JSON.stringify(previous) !== JSON.stringify(mergedItems);
         window.__p2pCapacityCache = mergedItems;
@@ -12254,58 +12275,7 @@ if(addProviderBtn){
     return false;
   };
 
-  window.isTodayChileFromTs = function isTodayChileFromTs(ts){
-    if(!ts) return false;
-
-    const todayCL = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Santiago",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit"
-    }).format(new Date());
-
-    const orderDayCL = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Santiago",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit"
-    }).format(new Date(Number(ts)));
-
-    return orderDayCL === todayCL;
-  }
-
-  window.getOrderTs = function getOrderTs(o){
-    if(o?.createTime) return Number(o.createTime);
-    if(o?.createdAt) return new Date(o.createdAt).getTime();
-    return 0;
-  }
-
-  window.isTodayChileFromTs = function isTodayChileFromTs(ts){
-    if(!ts) return false;
-
-    const todayCL = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Santiago",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit"
-    }).format(new Date());
-
-    const orderDayCL = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Santiago",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit"
-    }).format(new Date(Number(ts)));
-
-    return orderDayCL === todayCL;
-  }
-
-  window.getOrderTs = function getOrderTs(o){
-    if(o?.createTime) return Number(o.createTime);
-    if(o?.createdAt) return new Date(o.createdAt).getTime();
-    return 0;
-  }
-
+  // SINGLE definition (duplicates removed)
   window.isTodayChileFromTs = function isTodayChileFromTs(ts){
     if(!ts) return false;
 
@@ -12354,6 +12324,7 @@ if(addProviderBtn){
   window.calculateP2PCapacityStats = function calculateP2PCapacityStats(){
 
     const capacitiesRaw = loadP2PCapacity()
+      .filter(c => c.status !== "_capital")
       .sort((a,b)=> new Date(a.date || a.createdAt || 0) - new Date(b.date || b.createdAt || 0));
 
     const p2pCapacityBaselineTs = getP2PCapacityBaselineTs();
@@ -12395,17 +12366,16 @@ if(addProviderBtn){
       };
     });
 
-    // Lo que ya quedó cerrado en capacities finalizados no se vuelve a asignar.
+    // Bloquear ventas ya asignadas a CUALQUIER capacity (activo o finalizado)
+    // para evitar doble conteo entre días.
     const lockedByOrder = {};
-    capacities
-      .filter(cap => cap.status === "finished")
-      .forEach(cap => {
-        (cap.saleParts || []).forEach(part => {
-          const key = String(part.orderNumber || "");
-          if(!key) return;
-          lockedByOrder[key] = (lockedByOrder[key] || 0) + Number(part.assignedUsdt || 0);
-        });
+    capacities.forEach(cap => {
+      (cap.saleParts || []).forEach(part => {
+        const key = String(part.orderNumber || "");
+        if(!key) return;
+        lockedByOrder[key] = (lockedByOrder[key] || 0) + Number(part.assignedUsdt || 0);
       });
+    });
 
     let unassignedSaleUsdt = 0;
     let unassignedSaleClp = 0;
@@ -12442,14 +12412,9 @@ if(addProviderBtn){
           continue;
         }
 
-        // Activos solo consumen ventas de hoy (Chile). Ventas de días anteriores
-        // solo cuentan si el capacity ya las traía pre-cargadas (usedUsdt/clpReceived).
-        if(cap.status === "active"){
-          const chileMidnight = getP2PCapacityChileMidnightTs();
-          if(chileMidnight && saleTs && saleTs < chileMidnight){
-            continue;
-          }
-        }
+        // Ahora todos los capacities (activos y finalizados) pueden consumir ventas
+        // de cualquier día. Las ya asignadas están bloqueadas por lockedByOrder.
+        // Esto permite que un capacity continúe completándose día tras día.
 
         const capTotalUsdt = Number(cap.usdtAmount || 0);
         const capUsedUsdt = Number(cap.usedUsdt || 0);
@@ -12846,9 +12811,22 @@ if(addProviderBtn){
         background:rgba(2,6,23,.76);
         backdrop-filter:blur(8px);
         display:none;
-        align-items:center;
+        align-items:flex-start;
         justify-content:center;
         padding:20px;
+        overflow-y:auto;
+      }
+      .p2p-capacity-modal-backdrop.open{
+        display:flex;
+      }
+      .p2p-capacity-modal{
+        width:min(720px,100%);
+        margin:auto;
+        border:1px solid rgba(52,211,153,.28);
+        background:linear-gradient(135deg,rgba(2,6,23,.98),rgba(8,22,37,.98));
+        border-radius:24px;
+        padding:22px;
+        box-shadow:0 30px 80px rgba(0,0,0,.45);
       }
 
       .p2p-capacity-modal-backdrop.open{
@@ -12907,9 +12885,24 @@ if(addProviderBtn){
         background:rgba(2,6,23,.78);
         backdrop-filter:blur(8px);
         display:none;
-        align-items:center;
+        align-items:flex-start;
         justify-content:center;
         padding:20px;
+        overflow-y:auto;
+      }
+      .p2p-capacity-detail-modal-backdrop.open{
+        display:flex;
+      }
+      .p2p-capacity-detail-modal{
+        width:min(920px,100%);
+        margin:auto;
+        max-height:88vh;
+        overflow:auto;
+        border:1px solid rgba(52,211,153,.28);
+        background:linear-gradient(135deg,rgba(2,6,23,.98),rgba(8,22,37,.98));
+        border-radius:24px;
+        padding:22px;
+        box-shadow:0 30px 80px rgba(0,0,0,.45);
       }
 
       .p2p-capacity-detail-modal-backdrop.open{
@@ -13344,7 +13337,7 @@ if(addProviderBtn){
 
     modal = document.createElement("div");
     modal.id = "completeCapacityModal";
-    modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;";
+    modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;";
     modal.innerHTML = `
       <div style="background:#0d2137;border:1px solid #2a4a6a;border-radius:16px;padding:24px;max-width:420px;width:90%;">
         <h3 style="color:#00d4ff;margin-bottom:8px;">✅ Completar capacity manualmente</h3>
@@ -13462,7 +13455,7 @@ if(addProviderBtn){
 
 
   window.openCompletedCapacitiesModal = function(){
-    const capacities = loadP2PCapacity().filter(c => c.status === "finished")
+    const capacities = loadP2PCapacity().filter(c => c.status === "finished" && c.provider !== "_initial_capital")
       .sort((a,b)=> new Date(b.finishedAt || 0) - new Date(a.finishedAt || 0));
 
     let modal = document.getElementById("completedCapacitiesModal");
@@ -13990,11 +13983,8 @@ if(addProviderBtn){
       return ad - bd;
     }).forEach((c, i) => { globalOrder[c.id] = i + 1; });
 
-    // Orden profesional P2P:
-    // 1) Capacity activo/en proceso primero
-    // 2) Siguientes capacity activos debajo, en orden de creación/fecha
-    // 3) Capacity finalizados al final
-    const displayItems = items.filter(c => c.status !== "finished").slice().sort((a,b) => {
+    // Excluir registros especiales de capital inicial
+    const displayItems = items.filter(c => c.status !== "finished" && c.status !== "_capital").slice().sort((a,b) => {
       const aFinished = a.status === "finished";
       const bFinished = b.status === "finished";
 
@@ -15018,9 +15008,10 @@ if(addProviderBtn){
       inset:0;
       z-index:99999;
       display:flex;
-      align-items:center;
+      align-items:flex-start;
       justify-content:center;
       padding:18px;
+      overflow-y:auto;
       background:rgba(2,6,23,.76);
       backdrop-filter:blur(10px);
     `;
@@ -15028,6 +15019,7 @@ if(addProviderBtn){
     modal.innerHTML = `
       <div style="
         width:min(920px,100%);
+        margin:auto;
         max-height:90vh;
         overflow:auto;
         border:1px solid rgba(52,211,153,.25);
@@ -15240,6 +15232,19 @@ if(addProviderBtn){
       };
     }
     saveP2PCapacity(caps, true);
+
+    // También sincronizar al servidor (sin bloquear) para que el estado "finished"
+    // persista entre recargas de página.
+    for(const capStats of toFinish){
+      const finishedItem = caps.find(c => c.id === capStats.id);
+      if(!finishedItem) continue;
+      fetch('/api/p2p/capacity?confirm=manual', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: finishedItem })
+      }).catch(e => console.warn('Error syncing auto-finish to server:', e));
+    }
   }
 
   window.syncBinanceSales = function syncBinanceSales(silent = false){
@@ -15326,8 +15331,9 @@ if(addProviderBtn){
     // Cargar capacities desde la base de datos al iniciar
     if(typeof window.syncP2PCapacityFromServer === 'function'){
       window.syncP2PCapacityFromServer().then(()=>{
-        // Una vez cargados los capacities reales, recalcular baseline
-        localStorage.removeItem(P2P_CAPACITY_BASELINE_KEY);
+        // NO recalcular baseline aquí — la baseline debe mantenerse estable
+        // para que las ventas de días anteriores sigan siendo asignadas
+        // correctamente a los capacities activos.
 
         renderP2PCapacityPanel();
         updateP2PDashboardWithCapacity();
@@ -15366,7 +15372,6 @@ if(addProviderBtn){
   }
 
   window.deleteAllP2PCapacities = function(){
-    const saved = window.__p2pCapacityCache || [];
     window.__p2pCapacityCache = [];
     localStorage.removeItem('onze_p2p_capacity_items');
     localStorage.setItem('__p2pManualMode', 'true');
@@ -15377,6 +15382,66 @@ if(addProviderBtn){
     if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
     console.log("🧹 Todas las capacities P2P eliminadas localmente. Modo manual activado. Se limpiará el servidor en el próximo sync (30s).");
     if(typeof showToast === 'function') showToast("✅ Capacities limpiadas — modo manual activado");
+  };
+
+  // Limpieza completa: capacities + baseline + ventas + capital para empezar de cero
+  window.resetP2PFullFreshStart = function(){
+    if(!confirm("⚠️ ¿Resetear TODOS los datos P2P? Se borrarán capacities, ventas y capital. Esta acción no se puede deshacer.")) return;
+
+    // 1. Limpiar del servidor primero
+    fetch('/api/p2p/reset', { method: 'POST', credentials: 'include' })
+      .then(res => res.json())
+      .then(data => {
+        if(data.ok) console.log("✅ Datos P2P eliminados del servidor");
+        else console.warn("⚠️ No se pudo limpiar servidor:", data.error);
+      })
+      .catch(e => console.warn("⚠️ Error limpiando servidor:", e));
+
+    // 2. Limpiar local: capacities
+    window.__p2pCapacityCache = [];
+    window.__p2pCapacityPendingSync = {};
+    localStorage.removeItem('onze_p2p_capacity_items');
+
+    // 3. Limpiar baseline (se recalculará con la medianoche de Chile)
+    localStorage.removeItem(P2P_CAPACITY_BASELINE_KEY);
+
+    // 4. Limpiar ventas Binance
+    localStorage.removeItem('onze_p2p_binance_orders');
+    localStorage.removeItem('onze_binance_sales');
+    window.__p2pBinancePage = 1;
+
+    // 5. Limpiar capital inicial
+    localStorage.removeItem(P2P_INITIAL_CAPITAL_KEY);
+    localStorage.removeItem(P2P_PROFIT_DAY_KEY);
+    localStorage.removeItem(P2P_PROFIT_START_KEY);
+
+    // 6. Limpiar carryovers
+    localStorage.removeItem(CARRYOVER_KEY);
+    localStorage.removeItem('__p2pCapitalCarryoverDate');
+    localStorage.removeItem('__p2pCapitalCarryoverProfit');
+
+    // 7. Limpiar capital propio
+    localStorage.removeItem(OWN_CAPITAL_KEY);
+
+    // 8. Activar modo manual por 60s para que el servidor no resucite datos
+    localStorage.setItem('__p2pManualMode', 'true');
+    localStorage.setItem('__p2pCapacityLastClear', String(Date.now()));
+    window.__p2pCapacityLastClear = Date.now();
+    // Auto-limpiar el flag después de 70s para que los nuevos capacities se guarden
+    setTimeout(() => {
+      localStorage.removeItem('__p2pManualMode');
+      console.log("✅ Modo manual P2P desactivado — ahora los capacities se guardarán en el servidor");
+    }, 70000);
+
+    // 9. Forzar el reinicio del baseline ahora
+    const midnightTs = getP2PCapacityChileMidnightTs();
+    const value = new Date(midnightTs).toISOString();
+    localStorage.setItem(P2P_CAPACITY_BASELINE_KEY, value);
+
+    if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
+    if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
+    console.log("🧹 RESET COMPLETO P2P: capacities, baseline, ventas, capital limpiados.");
+    if(typeof showToast === 'function') showToast("✅ Reset completo — todo listo para empezar de cero");
   };
 
   }catch(e){ console.error("❌ P2P MODULE ERROR:", e); }
@@ -19081,7 +19146,30 @@ if(addProviderBtn){
 })();
 </script>
 
+<script>
+// Fallback global reset
+try{
+  window.resetP2PFullFreshStart = window.resetP2PFullFreshStart || function(){
+    if(!confirm("⚠️ ¿Resetear TODOS los datos P2P?")) return;
+    fetch('/api/p2p/reset', { method:'POST', credentials:'include' }).then(r=>r.json()).then(d=>{ if(d.ok) console.log("✅ Servidor limpiado"); }).catch(e=>console.warn(e));
+    'onze_p2p_capacity_items,onze_p2p_capacity_baseline_at,onze_p2p_binance_orders,onze_binance_sales,onze_p2p_initial_capital_usdt,onze_p2p_profit_day,onze_p2p_profit_start,onze_p2p_capacity_carryover,__p2pCapitalCarryoverDate,__p2pCapitalCarryoverProfit,onze_p2p_own_capital_items,__p2pManualMode,__p2pCapacityLastClear'.split(',').forEach(k => localStorage.removeItem(k));
+    console.log("🧹 RESET COMPLETO");
+    location.reload();
+  };
+}catch(e){}
 
+// Auto-reset via URL parameter ?fullreset=1
+try{
+  if(location.search.includes('fullreset=1')){
+    fetch('/api/p2p/reset', { method:'POST', credentials:'include' }).catch(()=>{});
+    'onze_p2p_capacity_items,onze_p2p_capacity_baseline_at,onze_p2p_binance_orders,onze_binance_sales,onze_p2p_initial_capital_usdt,onze_p2p_profit_day,onze_p2p_profit_start,onze_p2p_capacity_carryover,__p2pCapitalCarryoverDate,__p2pCapitalCarryoverProfit,onze_p2p_own_capital_items,__p2pManualMode,__p2pCapacityLastClear'.split(',').forEach(k => localStorage.removeItem(k));
+    const url = new URL(location.href);
+    url.searchParams.delete('fullreset');
+    history.replaceState({}, '', url);
+    location.reload();
+  }
+}catch(e){}
+</script>
 
 </body>
 </html>

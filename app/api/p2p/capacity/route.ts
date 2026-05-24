@@ -30,6 +30,7 @@ export async function GET() {
     finalCommissionUsdt: it.finalCommissionUsdt !== null ? Number(it.finalCommissionUsdt) : null,
     finalCommissionClp: it.finalCommissionClp !== null ? Number(it.finalCommissionClp) : null,
     finalSaleParts: it.finalSaleParts || [],
+    saleParts: it.finalSaleParts || [],
     manualPaymentClp: it.manualPaymentClp !== null ? Number(it.manualPaymentClp) : null,
     manualPaymentsClp: it.manualPaymentsClp !== null ? Number(it.manualPaymentsClp) : null,
     createdAt: it.createdAt.toISOString(),
@@ -73,7 +74,8 @@ export async function POST(req: NextRequest) {
     finalClpReceived: item.finalClpReceived !== undefined && item.finalClpReceived !== null ? Number(item.finalClpReceived) : null,
     finalCommissionUsdt: item.finalCommissionUsdt !== undefined && item.finalCommissionUsdt !== null ? Number(item.finalCommissionUsdt) : null,
     finalCommissionClp: item.finalCommissionClp !== undefined && item.finalCommissionClp !== null ? Number(item.finalCommissionClp) : null,
-    finalSaleParts: item.finalSaleParts || null,
+    finalSaleParts: (item.finalSaleParts && Array.isArray(item.finalSaleParts) ? item.finalSaleParts : null)
+      || (item.saleParts && Array.isArray(item.saleParts) ? item.saleParts : null),
     manualPaymentClp: item.manualPaymentClp !== undefined && item.manualPaymentClp !== null ? Number(item.manualPaymentClp) : null,
     manualPaymentsClp: item.manualPaymentsClp !== undefined && item.manualPaymentsClp !== null ? Number(item.manualPaymentsClp) : null,
   };
