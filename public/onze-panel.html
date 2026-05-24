@@ -12381,7 +12381,7 @@ if(addProviderBtn){
       (cap.saleParts || []).forEach(part => {
         const key = String(part.orderNumber || "");
         if(!key) return;
-        lockedByOrder[key] = (lockedByOrder[key] || 0) + Number(part.assignedUsdt || 0);
+        lockedByOrder[key] = (lockedByOrder[key] || 0) + Number(part.assignedClp || 0);
       });
     });
 
@@ -12396,13 +12396,13 @@ if(addProviderBtn){
       const saleCommissionUsdt = Number(sale.commission || 0);
       const saleOrder = String(sale.orderNumber || "");
 
-      const lockedUsdt = saleOrder ? Number(lockedByOrder[saleOrder] || 0) : 0;
-      let saleRemainingUsdt = Math.max(saleTotalUsdt - lockedUsdt, 0);
+      const lockedClp = saleOrder ? Number(lockedByOrder[saleOrder] || 0) : 0;
+      let saleRemainingClp = Math.max(saleTotalClp - lockedClp, 0);
 
-      if(saleRemainingUsdt <= 0) continue;
+      if(saleRemainingClp <= 0) continue;
 
       for(const cap of capacities){
-        if(saleRemainingUsdt <= 0) break;
+        if(saleRemainingClp <= 0) break;
 
         // Capacity finalizado queda congelado. Las nuevas ventas saltan al siguiente activo.
         if(cap.status === "finished") continue;
@@ -12420,20 +12420,18 @@ if(addProviderBtn){
           continue;
         }
 
-        // Ahora todos los capacities (activos y finalizados) pueden consumir ventas
-        // de cualquier día. Las ya asignadas están bloqueadas por lockedByOrder.
-        // Esto permite que un capacity continúe completándose día tras día.
+        // Asignar por CLP: el capacity se completa cuando el CLP recibido
+        // alcanza su capacityClp. El USDT se prorratea de la venta original.
+        const capTotalClp = Number(cap.capacityClp || 0);
+        const capUsedClp = Number(cap.clpReceived || 0);
+        const capAvailableClp = Math.max(capTotalClp - capUsedClp, 0);
 
-        const capTotalUsdt = Number(cap.usdtAmount || 0);
-        const capUsedUsdt = Number(cap.usedUsdt || 0);
-        const capAvailableUsdt = Math.max(capTotalUsdt - capUsedUsdt, 0);
+        if(capAvailableClp <= 0) continue;
 
-        if(capAvailableUsdt <= 0) continue;
+        const assignedClp = Math.min(capAvailableClp, saleRemainingClp);
+        const ratio = saleTotalClp > 0 ? assignedClp / saleTotalClp : 0;
 
-        const assignedUsdt = Math.min(capAvailableUsdt, saleRemainingUsdt);
-        const ratio = saleTotalUsdt > 0 ? assignedUsdt / saleTotalUsdt : 0;
-
-        const assignedClp = saleTotalClp > 0 ? saleTotalClp * ratio : assignedUsdt * saleUnitPrice;
+        const assignedUsdt = saleTotalUsdt * ratio;
         const assignedCommissionUsdt = saleCommissionUsdt * ratio;
         const assignedCommissionClp = assignedCommissionUsdt * (saleUnitPrice || 0);
 
@@ -12452,13 +12450,13 @@ if(addProviderBtn){
           originalSaleUsdt: saleTotalUsdt
         });
 
-        saleRemainingUsdt -= assignedUsdt;
+        saleRemainingClp -= assignedClp;
       }
 
-      if(saleRemainingUsdt > 0){
-        const remainingRatio = saleTotalUsdt > 0 ? saleRemainingUsdt / saleTotalUsdt : 0;
-        unassignedSaleUsdt += saleRemainingUsdt;
-        unassignedSaleClp += saleTotalClp * remainingRatio;
+      if(saleRemainingClp > 0){
+        const remainingRatio = saleTotalClp > 0 ? saleRemainingClp / saleTotalClp : 0;
+        unassignedSaleUsdt += saleTotalUsdt * remainingRatio;
+        unassignedSaleClp += saleRemainingClp;
         unassignedCommissionUsdt += saleCommissionUsdt * remainingRatio;
       }
     }
@@ -13219,7 +13217,8 @@ if(addProviderBtn){
 
           <div style="text-align:right;">
             <div class="p2p-capacity-value">${p2pCapMoney(item.usdtAmount, 2)} USDT</div>
-            <div class="p2p-capacity-meta">USDT estimados recibidos</div>
+            <div class="p2p-capacity-meta">USDT estimados · ${p2pCapMoney(item.buyPrice, 2)} CLP/USDT</div>
+            <div style="margin-top:6px;font-size:12px;color:#94a3b8;">${p2pCapMoney(item.clpReceived, 0)} CLP ÷ ${p2pCapMoney(item.buyPrice, 2)} = <strong style="color:#00ff88;">${p2pCapMoney(item.buyPrice > 0 ? item.clpReceived / item.buyPrice : 0, 2)} USDT</strong> recibidos</div>
           </div>
         </div>
 
