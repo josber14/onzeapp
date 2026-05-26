@@ -9193,7 +9193,7 @@ if(addProviderBtn){
     if(document.getElementById("view-p2p-bot")) return;
 
     const section = document.createElement("section");
-    section.className = "view";
+    section.className = "view admin-only-view";
     section.id = "view-p2p-bot";
     section.innerHTML = `
       <section class="section-card">
@@ -9287,6 +9287,16 @@ if(addProviderBtn){
     `;
 
     document.querySelector(".views-container")?.appendChild(section);
+
+    // Fallback: insertar después de la última vista existente
+    if(!document.querySelector(".views-container")){
+      const lastView = document.querySelector(".view:last-of-type");
+      if(lastView){
+        lastView.parentNode.insertBefore(section, lastView.nextSibling);
+      }else{
+        document.querySelector("main")?.appendChild(section);
+      }
+    }
   }
 
   function addP2PBotNavButton(){
@@ -9297,7 +9307,7 @@ if(addProviderBtn){
     if(!target || !target.parentNode) return;
 
     const btn = document.createElement("button");
-    btn.className = "nav-btn";
+    btn.className = "nav-btn admin-only-control";
     btn.type = "button";
     btn.dataset.viewTarget = "p2p-bot";
     btn.textContent = "P2P Bot";
@@ -9487,7 +9497,13 @@ if(addProviderBtn){
   };
 
   function initP2PBot(){
+    // Solo super admins pueden ver el bot
+    if(typeof isOnzeSuperAdminForP2PDashboard === "function" && !isOnzeSuperAdminForP2PDashboard()){
+      return;
+    }
+
     const container = document.querySelector(".views-container");
+    if(!container) return;
     if(!container) return;
 
     addP2PBotStyles();
