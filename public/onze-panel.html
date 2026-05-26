@@ -9497,14 +9497,13 @@ if(addProviderBtn){
   };
 
   function initP2PBot(){
-    // Solo super admins pueden ver el bot
-    if(typeof isOnzeSuperAdminForP2PDashboard === "function" && !isOnzeSuperAdminForP2PDashboard()){
+    try{
+      console.log("[P2P Bot] init started");
+    }catch(e){}
+    if(typeof IS_ADMIN_ROLE !== "undefined" && !IS_ADMIN_ROLE){
+      try{ console.log("[P2P Bot] not admin, skipping"); }catch(e){}
       return;
     }
-
-    const container = document.querySelector(".views-container");
-    if(!container) return;
-    if(!container) return;
 
     addP2PBotStyles();
     buildP2PBotView();
@@ -9513,9 +9512,11 @@ if(addProviderBtn){
   }
 
   if(document.readyState === "loading"){
-    document.addEventListener("DOMContentLoaded", initP2PBot);
+    document.addEventListener("DOMContentLoaded", ()=>{
+      setTimeout(initP2PBot, 500);
+    });
   }else{
-    initP2PBot();
+    setTimeout(initP2PBot, 500);
   }
 })();
 </script>
