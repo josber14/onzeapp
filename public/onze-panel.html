@@ -9221,7 +9221,7 @@ if(addProviderBtn){
           <div class="bot-config-grid">
             <label>
               Estrategia
-              <select id="botStrategy" onchange="window.botSaveConfig()">
+              <select id="botStrategy" onchange="window.botStrategyChanged()">
                 <option value="top1">Top 1 (seguir al mejor precio)</option>
                 <option value="spread">Spread fijo</option>
               </select>
@@ -9232,6 +9232,11 @@ if(addProviderBtn){
                 <option value="binance" selected>Binance</option>
                 <option value="bybit">Bybit</option>
               </select>
+            </label>
+            <label id="botTop1DiffLabel">
+              Diferencia con top 1 (CLP)
+              <input id="botTop1Diff" type="number" step="0.01" value="0.1" onchange="window.botSaveConfig()">
+              <span style="font-size:11px;color:#64748b;">Precio = mejor competidor − este valor</span>
             </label>
             <label>
               Spread minimo (%)
@@ -9399,6 +9404,7 @@ if(addProviderBtn){
   function updateBotConfig(config){
     if(!config) return;
     document.getElementById("botStrategy").value = config.strategy || "top1";
+    document.getElementById("botTop1Diff").value = config.top1Diff ?? 0.1;
     document.getElementById("botSpreadPct").value = config.spreadPct || 0.5;
     document.getElementById("botPriceFloorPct").value = config.priceFloorPct || 0.2;
     document.getElementById("botCircuitBreakPct").value = config.circuitBreakPct || 3;
@@ -9407,6 +9413,20 @@ if(addProviderBtn){
     const sel = document.getElementById("botExchanges");
     for(let opt of sel.options){
       opt.selected = Array.isArray(config.exchanges) && config.exchanges.includes(opt.value);
+    }
+
+    toggleBotStrategyFields();
+  }
+
+  function toggleBotStrategyFields(){
+    const strategy = document.getElementById("botStrategy").value;
+    document.getElementById("botTop1DiffLabel").style.display = strategy === "top1" ? "" : "none";
+    // Spread label is the next sibling label
+    const labels = document.querySelectorAll(".bot-config-grid label");
+    for(let label of labels){
+      if(label.querySelector("#botSpreadPct")){
+        label.style.display = strategy === "spread" ? "" : "none";
+      }
     }
   }
 
@@ -9456,8 +9476,15 @@ if(addProviderBtn){
 
   window.botRefresh = botRefresh;
 
+  window.botStrategyChanged = function(){
+    toggleBotStrategyFields();
+    window.botSaveConfig();
+  };
+
   window.botSaveConfig = async function(){
+    toggleBotStrategyFields();
     const strategy = document.getElementById("botStrategy").value;
+    const top1Diff = parseFloat(document.getElementById("botTop1Diff").value) || 0.1;
     const spreadPct = parseFloat(document.getElementById("botSpreadPct").value) || 0.5;
     const priceFloorPct = parseFloat(document.getElementById("botPriceFloorPct").value) || 0.2;
     const circuitBreakPct = parseFloat(document.getElementById("botCircuitBreakPct").value) || 3;
@@ -9471,7 +9498,7 @@ if(addProviderBtn){
       method:"POST",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ strategy, spreadPct, priceFloorPct, circuitBreakPct, dailyVolumeCapUsdt, exchanges })
+      body: JSON.stringify({ strategy, top1Diff, spreadPct, priceFloorPct, circuitBreakPct, dailyVolumeCapUsdt, exchanges })
     });
   };
 
@@ -9508,6 +9535,7 @@ if(addProviderBtn){
     addP2PBotStyles();
     buildP2PBotView();
     addP2PBotNavButton();
+    toggleBotStrategyFields();
     setTimeout(botRefresh, 300);
   }
 

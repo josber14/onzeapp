@@ -7,6 +7,7 @@ export interface P2PBotConfigData {
   tenantId: number;
   enabled: boolean;
   strategy: BotStrategy;
+  top1Diff: number; // CLP por debajo del mejor competidor
   spreadPct: number;
   priceFloorPct: number;
   dailyVolumeCapUsdt: number | null;

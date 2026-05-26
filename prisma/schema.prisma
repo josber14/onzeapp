@@ -749,6 +749,7 @@ model P2PBotConfig {
   tenantId              Int       @unique
   enabled               Boolean   @default(false)
   strategy              String    @default("top1") // top1 | spread
+  top1Diff              Decimal   @default(0.1) @db.Decimal(18, 8) // CLP por debajo del mejor competidor
   spreadPct             Decimal   @default(0.5) @db.Decimal(8, 4)
   priceFloorPct         Decimal   @default(0.2) @db.Decimal(8, 4) // min = buyPrice + floor%
   dailyVolumeCapUsdt    Decimal?  @db.Decimal(18, 8)

@@ -23,6 +23,7 @@ export async function getBotConfig(
     tenantId: config.tenantId,
     enabled: config.enabled,
     strategy: config.strategy as "top1" | "spread",
+    top1Diff: Number(config.top1Diff),
     spreadPct: Number(config.spreadPct),
     priceFloorPct: Number(config.priceFloorPct),
     dailyVolumeCapUsdt: config.dailyVolumeCapUsdt
@@ -44,6 +45,7 @@ export async function saveBotConfig(
 ) {
   const update: any = {};
   if (data.strategy !== undefined) update.strategy = data.strategy;
+  if (data.top1Diff !== undefined) update.top1Diff = data.top1Diff;
   if (data.spreadPct !== undefined) update.spreadPct = data.spreadPct;
   if (data.priceFloorPct !== undefined)
     update.priceFloorPct = data.priceFloorPct;
@@ -58,16 +60,17 @@ export async function saveBotConfig(
   await prisma.p2PBotConfig.upsert({
     where: { tenantId },
     update,
-    create: {
-      tenantId,
-      enabled: data.enabled ?? false,
-      strategy: data.strategy ?? "top1",
-      spreadPct: data.spreadPct ?? 0.5,
-      priceFloorPct: data.priceFloorPct ?? 0.2,
-      dailyVolumeCapUsdt: data.dailyVolumeCapUsdt ?? null,
-      circuitBreakPct: data.circuitBreakPct ?? 3,
-      exchanges: JSON.stringify(data.exchanges ?? ["binance", "bybit"]),
-    },
+      create: {
+        tenantId,
+        enabled: data.enabled ?? false,
+        strategy: data.strategy ?? "top1",
+        top1Diff: data.top1Diff ?? 0.1,
+        spreadPct: data.spreadPct ?? 0.5,
+        priceFloorPct: data.priceFloorPct ?? 0.2,
+        dailyVolumeCapUsdt: data.dailyVolumeCapUsdt ?? null,
+        circuitBreakPct: data.circuitBreakPct ?? 3,
+        exchanges: JSON.stringify(data.exchanges ?? ["binance", "bybit"]),
+      },
   });
 }
 
