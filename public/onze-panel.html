@@ -9151,10 +9151,358 @@ if(addProviderBtn){
     document.addEventListener("visibilitychange", ()=>{
       if(document.visibilityState === "visible"){
         syncOperationsUiFromApi();
-      }
-    });
-  </script>
+  }
+})();
+</script>
 
+<script>
+/* ===== ONZE P2P BOT ===== */
+(function(){
+  function addP2PBotStyles(){
+    if(document.getElementById("onze-bot-styles")) return;
+    const style = document.createElement("style");
+    style.id = "onze-bot-styles";
+    style.textContent = `
+      .bot-status-indicator{
+        display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:999px;font-size:13px;font-weight:950;
+      }
+      .bot-status-indicator.running{color:#34d399;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.26);}
+      .bot-status-indicator.stopped{color:#94a3b8;background:rgba(148,163,184,.10);border:1px solid rgba(148,163,184,.20);}
+      .bot-status-indicator.paused{color:#fbbf24;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.26);}
+      .bot-status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;}
+      .bot-status-dot.running{background:#34d399;box-shadow:0 0 8px rgba(52,211,153,.6);animation:pulse-dot 2s infinite;}
+      .bot-status-dot.stopped{background:#64748b;}
+      .bot-status-dot.paused{background:#fbbf24;}
+      @keyframes pulse-dot{0%,100%{opacity:1;}50%{opacity:.4;}}
+      .bot-config-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;}
+      .bot-config-grid label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#94a3b8;font-weight:700;}
+      .bot-config-grid input,.bot-config-grid select{padding:8px 12px;border-radius:8px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.6);color:#f8fafc;font-size:14px;outline:none;}
+      .bot-config-grid input:focus,.bot-config-grid select:focus{border-color:#00d4ff;}
+      .bot-log-entry{padding:8px 12px;border-radius:6px;margin-bottom:4px;font-size:12px;line-height:1.4;background:rgba(15,23,42,.4);border-left:3px solid transparent;}
+      .bot-log-entry.info{border-left-color:#00d4ff;}
+      .bot-log-entry.warn{border-left-color:#fbbf24;}
+      .bot-log-entry.error{border-left-color:#fb7185;background:rgba(251,113,133,.08);}
+      .bot-log-time{color:#64748b;font-size:10px;margin-right:8px;}
+      .bot-log-msg{color:#cbd5e1;}
+      .bot-log-exchange{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;margin-right:6px;background:rgba(148,163,184,.1);color:#94a3b8;}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function buildP2PBotView(){
+    if(document.getElementById("view-p2p-bot")) return;
+
+    const section = document.createElement("section");
+    section.className = "view";
+    section.id = "view-p2p-bot";
+    section.innerHTML = `
+      <section class="section-card">
+        <div class="section-top" style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+          <div>
+            <h2 class="section-title">ONZE P2P Bot</h2>
+            <p class="section-text" style="margin-top:4px;">Bot automatico de P2P Market Making</p>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <span id="botStatusIndicator" class="bot-status-indicator stopped">
+              <span class="bot-status-dot stopped" id="botStatusDot"></span>
+              <span id="botStatusText">Detenido</span>
+            </span>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
+          <button class="btn" type="button" id="botStartBtn" style="padding:10px 24px;" onclick="window.botStart()">Iniciar Bot</button>
+          <button class="btn secondary" type="button" id="botStopBtn" style="padding:10px 24px;" onclick="window.botStop()">Detener Bot</button>
+          <button class="btn secondary" type="button" id="botRefreshBtn" style="padding:10px 24px;" onclick="window.botRefresh()">Actualizar</button>
+        </div>
+
+        <div style="margin-top:24px;">
+          <h3 class="section-title" style="font-size:16px;">Configuracion</h3>
+          <div class="bot-config-grid">
+            <label>
+              Estrategia
+              <select id="botStrategy" onchange="window.botSaveConfig()">
+                <option value="top1">Top 1 (seguir al mejor precio)</option>
+                <option value="spread">Spread fijo</option>
+              </select>
+            </label>
+            <label>
+              Exchanges activos
+              <select id="botExchanges" multiple style="height:60px;" onchange="window.botSaveConfig()">
+                <option value="binance" selected>Binance</option>
+                <option value="bybit">Bybit</option>
+              </select>
+            </label>
+            <label>
+              Spread minimo (%)
+              <input id="botSpreadPct" type="number" step="0.1" value="0.5" onchange="window.botSaveConfig()">
+            </label>
+            <label>
+              Precio minimo sobre buyPrice (%)
+              <input id="botPriceFloorPct" type="number" step="0.1" value="0.2" onchange="window.botSaveConfig()">
+            </label>
+            <label>
+              Circuit breaker (% caida)
+              <input id="botCircuitBreakPct" type="number" step="0.1" value="3" onchange="window.botSaveConfig()">
+            </label>
+            <label>
+              Volumen maximo diario (USDT)
+              <input id="botDailyVolumeCap" type="number" value="" placeholder="Sin limite" onchange="window.botSaveConfig()">
+            </label>
+          </div>
+        </div>
+
+        <div style="margin-top:24px;">
+          <h3 class="section-title" style="font-size:16px;">Credenciales Bybit</h3>
+          <div class="bot-config-grid" style="grid-template-columns:1fr 1fr auto;">
+            <label>
+              API Key
+              <input id="botBybitApiKey" type="password" placeholder="Bybit API Key">
+            </label>
+            <label>
+              Secret Key
+              <input id="botBybitSecretKey" type="password" placeholder="Bybit Secret Key">
+            </label>
+            <label style="align-self:flex-end;">
+              <button class="btn" type="button" style="margin-top:18px;" onclick="window.botSaveBybit()">Guardar</button>
+            </label>
+          </div>
+          <div id="botBybitStatus" style="margin-top:8px;font-size:13px;color:#94a3b8;"></div>
+        </div>
+
+        <div style="margin-top:24px;">
+          <h3 class="section-title" style="font-size:16px;">Actividad del Bot</h3>
+          <div id="botLogContainer" style="max-height:300px;overflow-y:auto;margin-top:8px;border:1px solid rgba(148,163,184,.1);border-radius:8px;padding:8px;background:rgba(15,23,42,.3);">
+            <div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Cargando actividad...</div>
+          </div>
+        </div>
+
+        <div style="margin-top:24px;">
+          <h3 class="section-title" style="font-size:16px;">Ordenes del Bot</h3>
+          <div id="botOrdersContainer" style="max-height:300px;overflow-y:auto;margin-top:8px;border:1px solid rgba(148,163,184,.1);border-radius:8px;padding:8px;background:rgba(15,23,42,.3);">
+            <div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Sin ordenes registradas</div>
+          </div>
+        </div>
+      </section>
+    `;
+
+    document.querySelector(".views-container")?.appendChild(section);
+  }
+
+  function addP2PBotNavButton(){
+    if(document.querySelector('[data-view-target="p2p-bot"]')) return;
+
+    const target = document.querySelector('[data-view-target="p2p-dashboard"]')
+      || document.querySelector('[data-view-target="tasa-del-dia"]');
+    if(!target || !target.parentNode) return;
+
+    const btn = document.createElement("button");
+    btn.className = "nav-btn";
+    btn.type = "button";
+    btn.dataset.viewTarget = "p2p-bot";
+    btn.textContent = "P2P Bot";
+
+    target.parentNode.insertBefore(btn, target.nextSibling);
+
+    btn.addEventListener("click", function(){
+      if(typeof switchView === "function"){
+        switchView("p2p-bot");
+      }else{
+        document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+        document.getElementById("view-p2p-bot")?.classList.add("active");
+      }
+      document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+    });
+  }
+
+  async function botRefresh(){
+    try{
+      const statusRes = await fetch("/api/p2p/bot/status", { credentials: "include" });
+      const statusData = await statusRes.json();
+      if(statusData?.ok && statusData?.status){
+        updateBotUI(statusData.status);
+      }
+
+      const configRes = await fetch("/api/p2p/bot/config", { credentials: "include" });
+      const configData = await configRes.json();
+      if(configData?.ok && configData?.config){
+        updateBotConfig(configData.config);
+      }
+
+      const logsRes = await fetch("/api/p2p/bot/logs?limit=30", { credentials: "include" });
+      const logsData = await logsRes.json();
+      if(logsData?.ok){
+        renderBotLogs(logsData.logs);
+      }
+
+      const ordersRes = await fetch("/api/p2p/bot/orders?limit=20", { credentials: "include" });
+      const ordersData = await ordersRes.json();
+      if(ordersData?.ok){
+        renderBotOrders(ordersData.orders);
+      }
+
+      const bybitRes = await fetch("/api/p2p/bot/bybit-credentials", { credentials: "include" });
+      const bybitData = await bybitRes.json();
+      if(bybitData?.ok && bybitData?.credentials){
+        const creds = bybitData.credentials;
+        document.getElementById("botBybitApiKey").value = creds.apiKey || "";
+        document.getElementById("botBybitSecretKey").value = creds.secretKey || "";
+        const statusEl = document.getElementById("botBybitStatus");
+        if(creds.isActive){
+          statusEl.innerHTML = creds.testStatus === "success"
+            ? '<span style="color:#34d399;">Conectado</span>'
+            : creds.testStatus === "failed"
+              ? '<span style="color:#fb7185;">Error de conexion</span>'
+              : '<span style="color:#94a3b8;">Sin probar</span>';
+        }else{
+          statusEl.innerHTML = '<span style="color:#94a3b8;">No configurado</span>';
+        }
+      }
+    }catch(e){
+      console.warn("Bot refresh error:", e);
+    }
+  }
+
+  function updateBotUI(status){
+    const indicator = document.getElementById("botStatusIndicator");
+    const dot = document.getElementById("botStatusDot");
+    const text = document.getElementById("botStatusText");
+
+    if(!indicator || !dot || !text) return;
+
+    if(status.running){
+      indicator.className = "bot-status-indicator running";
+      dot.className = "bot-status-dot running";
+      text.textContent = "Ejecutando";
+    }else if(status.config?.pauseUntil){
+      indicator.className = "bot-status-indicator paused";
+      dot.className = "bot-status-dot paused";
+      text.textContent = "Pausado";
+    }else{
+      indicator.className = "bot-status-indicator stopped";
+      dot.className = "bot-status-dot stopped";
+      text.textContent = "Detenido";
+    }
+  }
+
+  function updateBotConfig(config){
+    if(!config) return;
+    document.getElementById("botStrategy").value = config.strategy || "top1";
+    document.getElementById("botSpreadPct").value = config.spreadPct || 0.5;
+    document.getElementById("botPriceFloorPct").value = config.priceFloorPct || 0.2;
+    document.getElementById("botCircuitBreakPct").value = config.circuitBreakPct || 3;
+    document.getElementById("botDailyVolumeCap").value = config.dailyVolumeCapUsdt || "";
+
+    const sel = document.getElementById("botExchanges");
+    for(let opt of sel.options){
+      opt.selected = Array.isArray(config.exchanges) && config.exchanges.includes(opt.value);
+    }
+  }
+
+  function renderBotLogs(logs){
+    const container = document.getElementById("botLogContainer");
+    if(!container) return;
+    if(!logs || !logs.length){
+      container.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Sin actividad registrada</div>';
+      return;
+    }
+    container.innerHTML = logs.map(l => `
+      <div class="bot-log-entry ${l.level}">
+        <span class="bot-log-time">${new Date(l.createdAt).toLocaleString("es-CL",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</span>
+        ${l.exchange ? `<span class="bot-log-exchange">${l.exchange.toUpperCase()}</span>` : ""}
+        <span class="bot-log-msg">${l.message}</span>
+      </div>
+    `).join("");
+  }
+
+  function renderBotOrders(orders){
+    const container = document.getElementById("botOrdersContainer");
+    if(!container) return;
+    if(!orders || !orders.length){
+      container.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Sin ordenes registradas</div>';
+      return;
+    }
+    container.innerHTML = orders.map(o => `
+      <div style="display:flex;justify-content:space-between;padding:6px 8px;border-bottom:1px solid rgba(148,163,184,.05);font-size:12px;">
+        <span style="color:#cbd5e1;">${o.exchange}</span>
+        <span style="color:#cbd5e1;">${Number(o.unitPrice).toFixed(2)}</span>
+        <span style="color:#34d399;">${Number(o.amount).toFixed(2)} USDT</span>
+        <span style="color:#f8fafc;">${Math.round(Number(o.totalPrice)).toLocaleString("es-CL")} CLP</span>
+        <span style="color:${o.status === "completed" ? "#34d399" : "#94a3b8"};">${o.status}</span>
+      </div>
+    `).join("");
+  }
+
+  window.botStart = async function(){
+    await fetch("/api/p2p/bot/start", { method:"POST", credentials:"include" });
+    await botRefresh();
+  };
+
+  window.botStop = async function(){
+    await fetch("/api/p2p/bot/stop", { method:"POST", credentials:"include" });
+    await botRefresh();
+  };
+
+  window.botRefresh = botRefresh;
+
+  window.botSaveConfig = async function(){
+    const strategy = document.getElementById("botStrategy").value;
+    const spreadPct = parseFloat(document.getElementById("botSpreadPct").value) || 0.5;
+    const priceFloorPct = parseFloat(document.getElementById("botPriceFloorPct").value) || 0.2;
+    const circuitBreakPct = parseFloat(document.getElementById("botCircuitBreakPct").value) || 3;
+    const dailyV = document.getElementById("botDailyVolumeCap").value;
+    const dailyVolumeCapUsdt = dailyV ? parseFloat(dailyV) : null;
+
+    const sel = document.getElementById("botExchanges");
+    const exchanges = Array.from(sel.options).filter(o => o.selected).map(o => o.value);
+
+    await fetch("/api/p2p/bot/config", {
+      method:"POST",
+      credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ strategy, spreadPct, priceFloorPct, circuitBreakPct, dailyVolumeCapUsdt, exchanges })
+    });
+  };
+
+  window.botSaveBybit = async function(){
+    const apiKey = document.getElementById("botBybitApiKey").value.trim();
+    const secretKey = document.getElementById("botBybitSecretKey").value.trim();
+    if(!apiKey || !secretKey){
+      document.getElementById("botBybitStatus").innerHTML = '<span style="color:#fb7185;">Completa ambos campos</span>';
+      return;
+    }
+    const res = await fetch("/api/p2p/bot/bybit-credentials", {
+      method:"POST",
+      credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ apiKey, secretKey, test: true })
+    });
+    const data = await res.json();
+    if(data?.testResult?.ok){
+      document.getElementById("botBybitStatus").innerHTML = '<span style="color:#34d399;">Conectado correctamente</span>';
+    }else{
+      document.getElementById("botBybitStatus").innerHTML = `<span style="color:#fb7185;">Error: ${data?.testResult?.error || "desconocido"}</span>`;
+    }
+  };
+
+  function initP2PBot(){
+    const container = document.querySelector(".views-container");
+    if(!container) return;
+
+    addP2PBotStyles();
+    buildP2PBotView();
+    addP2PBotNavButton();
+    setTimeout(botRefresh, 300);
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", initP2PBot);
+  }else{
+    initP2PBot();
+  }
+})();
+</script>
 <style>
   /* parche visual puntual */
   #sidebarProfileBtn{

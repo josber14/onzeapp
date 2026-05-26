@@ -138,6 +138,10 @@ model Tenant {
   binanceOrders BinanceOrder[]
   p2pCapacities P2PCapacity[]
   rateLists     RateList[]
+  p2pBotConfig  P2PBotConfig?
+  bybitCredentials BybitCredentials?
+  p2pBotOrders  P2PBotOrder[]
+  p2pBotLogs    P2PBotLog[]
 }
 
 model Subscription {
@@ -733,4 +737,82 @@ model RateListPair {
 
   @@unique([rateListId, originCountryId, destinationCountryId])
   @@index([rateListId])
+}
+
+// ============================================================
+// ONZE P2P BOT
+// Bot automático de P2P Market Making
+// ============================================================
+
+model P2PBotConfig {
+  id                    Int       @id @default(autoincrement())
+  tenantId              Int       @unique
+  enabled               Boolean   @default(false)
+  strategy              String    @default("top1") // top1 | spread
+  spreadPct             Decimal   @default(0.5) @db.Decimal(8, 4)
+  priceFloorPct         Decimal   @default(0.2) @db.Decimal(8, 4) // min = buyPrice + floor%
+  dailyVolumeCapUsdt    Decimal?  @db.Decimal(18, 8)
+  circuitBreakPct       Decimal   @default(3) @db.Decimal(8, 4) // % drop to pause
+  pauseUntil            DateTime?
+  lastStartedAt         DateTime?
+  lastStoppedAt         DateTime?
+  exchanges             Json      @default("[\"binance\",\"bybit\"]")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model BybitCredentials {
+  id           Int       @id @default(autoincrement())
+  tenantId     Int       @unique
+  apiKey       String    @db.Text
+  secretKey    String    @db.Text
+  isActive     Boolean   @default(true)
+  lastTestedAt DateTime?
+  testStatus   String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId])
+}
+
+model P2PBotOrder {
+  id          Int       @id @default(autoincrement())
+  tenantId    Int
+  exchange    String    // binance | bybit
+  orderNumber String
+  tradeType   String    // BUY | SELL
+  asset       String    @default("USDT")
+  fiat        String    @default("CLP")
+  amount      Decimal   @db.Decimal(18, 8)
+  totalPrice  Decimal   @db.Decimal(18, 8)
+  unitPrice   Decimal   @db.Decimal(18, 8)
+  commission  Decimal?  @db.Decimal(18, 8)
+  status      String    // completed | cancelled
+  counterparty String?
+  isBotOrder  Boolean   @default(true)
+  executedAt  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId])
+  @@index([exchange])
+  @@index([createdAt])
+}
+
+model P2PBotLog {
+  id        Int       @id @default(autoincrement())
+  tenantId  Int
+  level     String    // info | warn | error
+  exchange  String?
+  message   String
+  details   Json?
+  createdAt DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  @@index([tenantId])
+  @@index([level])
+  @@index([createdAt])
 }
