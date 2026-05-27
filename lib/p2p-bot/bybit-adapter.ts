@@ -115,23 +115,23 @@ export class BybitP2PClient {
   // ─── Ads ──────────────────────────────────────────────────────
 
   async getMyAds(page = 1, size = 50) {
-    return this.request("/v5/p2p/ad/list", { page, size });
+    return this.request("/v5/p2p/item/personal/list", { page, size });
   }
 
   async getAdDetail(id: string) {
-    return this.request("/v5/p2p/ad/detail", { id });
+    return this.request("/v5/p2p/item/detail", { id });
   }
 
   async postAd(params: BybitAdPostParams) {
-    return this.request("/v5/p2p/ad/post", params);
+    return this.request("/v5/p2p/item/create", params);
   }
 
   async updateAd(params: BybitAdUpdateParams) {
-    return this.request("/v5/p2p/ad/update", params);
+    return this.request("/v5/p2p/item/update", params);
   }
 
   async removeAd(id: string) {
-    return this.request("/v5/p2p/ad/remove", { id });
+    return this.request("/v5/p2p/item/cancel", { itemId: id });
   }
 
   // ─── Orders ───────────────────────────────────────────────────
@@ -156,12 +156,12 @@ export class BybitP2PClient {
     return this.request("/v5/p2p/order/detail", { id });
   }
 
-  async markAsPaid(orderId: string) {
-    return this.request("/v5/p2p/order/markPaid", { orderId });
+  async markAsPaid(orderId: string, paymentType: string, paymentId: string) {
+    return this.request("/v5/p2p/order/pay", { orderId, paymentType, paymentId });
   }
 
   async releaseAssets(orderId: string) {
-    return this.request("/v5/p2p/order/release", { orderId });
+    return this.request("/v5/p2p/order/finish", { orderId });
   }
 
   // ─── Chat ─────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ export class BybitP2PClient {
   // ─── Balance & Account ────────────────────────────────────────
 
   async getBalance(coin = "USDT") {
-    return this.request("/v5/account/wallet-balance", { accountType: "UNIFIED", coin }, "GET");
+    return this.request("/v5/asset/transfer/query-account-coins-balance", { accountType: "FUND", coin }, "GET");
   }
 
   async getAccountInfo() {

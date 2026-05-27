@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
 
       switch (action) {
         case "accept":
-          await client.markAsPaid(orderNumber);
+          await client.markAsPaid(orderNumber, body.paymentType || "", body.paymentId || "");
           return Response.json({ ok: true, action, result: "Orden marcada como pagada" });
 
         case "release":

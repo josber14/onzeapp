@@ -389,7 +389,7 @@ async function runBybitCycle(
     // 1. Get our current balance (non-critical, continue if fails)
     try {
       const balanceRes = await client.getBalance("USDT");
-      const usdtCoin = balanceRes?.result?.list?.[0]?.coin?.find((c: any) => c.coin === "USDT");
+      const usdtCoin = balanceRes?.result?.balance?.find((c: any) => c.coin === "USDT");
       const balance = usdtCoin ? Number(usdtCoin.walletBalance) : 0;
       await logBot(tenantId, "info", "bybit", `Saldo USDT: ${balance}`);
     } catch (e: any) {
