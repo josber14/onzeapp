@@ -9337,8 +9337,9 @@ if(addProviderBtn){
               <input id="botSpreadPct" type="number" step="0.1" value="0.5" onchange="window.botSaveExchangeConfig()">
             </label>
             <label>
-              Precio minimo sobre buyPrice (%)
-              <input id="botPriceFloorPct" type="number" step="0.1" value="0.2" onchange="window.botSaveExchangeConfig()">
+              Precio mínimo venta (CLP)
+              <input id="botPriceFloorPct" type="number" step="0.01" value="0" placeholder="0 = auto (capacity)" onchange="window.botSaveExchangeConfig()">
+              <span style="font-size:11px;color:#64748b;">0 = usa precio de compra del capacity activo</span>
             </label>
             <label>
               Circuit breaker (% caida)
@@ -9577,7 +9578,7 @@ if(addProviderBtn){
     document.getElementById("botStrategy").value = cfg.strategy || "top1";
     document.getElementById("botTop1Diff").value = cfg.top1Diff ?? 0.1;
     document.getElementById("botSpreadPct").value = cfg.spreadPct || 0.5;
-    document.getElementById("botPriceFloorPct").value = cfg.priceFloorPct || 0.2;
+    document.getElementById("botPriceFloorPct").value = cfg.priceFloorPct || 0;
     document.getElementById("botCircuitBreakPct").value = cfg.circuitBreakPct || 3;
     document.getElementById("botDailyVolumeCap").value = cfg.dailyVolumeCapUsdt || "";
     document.getElementById("botCycleInterval").value = cfg.cycleInterval ?? 30;
@@ -9640,7 +9641,8 @@ if(addProviderBtn){
     const strategy = document.getElementById("botStrategy").value;
     const top1Diff = parseFloat(document.getElementById("botTop1Diff").value) || 0.1;
     const spreadPct = parseFloat(document.getElementById("botSpreadPct").value) || 0.5;
-    const priceFloorPct = parseFloat(document.getElementById("botPriceFloorPct").value) || 0.2;
+    const priceFloorFl = document.getElementById("botPriceFloorPct").value;
+    const priceFloorPct = priceFloorFl ? parseFloat(priceFloorFl) || 0 : 0;
     const circuitBreakPct = parseFloat(document.getElementById("botCircuitBreakPct").value) || 3;
     const cycleInterval = parseInt(document.getElementById("botCycleInterval").value) || 30;
     const dailyV = document.getElementById("botDailyVolumeCap").value;

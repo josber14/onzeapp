@@ -68,7 +68,7 @@ export async function saveBotConfig(
         strategy: data.strategy ?? "top1",
         top1Diff: data.top1Diff ?? 0.1,
         spreadPct: data.spreadPct ?? 0.5,
-        priceFloorPct: data.priceFloorPct ?? 0.2,
+      priceFloorPct: data.priceFloorPct ?? 0,
         dailyVolumeCapUsdt: data.dailyVolumeCapUsdt ?? null,
         circuitBreakPct: data.circuitBreakPct ?? 3,
         exchanges: JSON.stringify(data.exchanges ?? ["binance", "bybit"]),
@@ -404,10 +404,26 @@ async function runBybitCycle(
     });
     const competitors = onlineRes?.result?.items || [];
 
-    // 4. Calculate viable competitors (price > buyPrice)
-    const buyPrice = config.priceFloorPct ? Number(config.priceFloorPct) : null;
-    const viable = buyPrice
-      ? competitors.filter((c: any) => Number(c.price) >= buyPrice)
+    // 4. Determine minimum sell price (absolute CLP, 0 = auto from active capacity)
+    let minSellPrice = Number(config.priceFloorPct) || 0;
+    if (!minSellPrice) {
+      const activeCap = await prisma.p2PCapacity.findFirst({
+        where: {
+          tenantId,
+          status: { not: "_capital" },
+          finishedAt: null,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      if (activeCap?.buyPrice) {
+        minSellPrice = Number(activeCap.buyPrice);
+        await logBot(tenantId, "info", "bybit", `Precio mínimo auto: ${minSellPrice} (capacity ${activeCap.provider})`);
+      }
+    }
+
+    // Filter viable competitors (price >= minSellPrice)
+    const viable = minSellPrice
+      ? competitors.filter((c: any) => Number(c.price) >= minSellPrice)
       : competitors;
 
     if (viable.length === 0) {
@@ -427,15 +443,14 @@ async function runBybitCycle(
       return { actions };
     }
 
-    // 7. Calculate our target price
+    // 7. Calculate target price
     const top1Diff = Number(config.top1Diff) || 0.1;
     const competitorPrice = Number(nextViable.price);
     let targetPrice = competitorPrice - top1Diff;
 
-    // Ensure minimum price threshold
-    const priceFloor = buyPrice ? buyPrice * (1 + Number(config.priceFloorPct || 0) / 100) : 0;
-    if (targetPrice < priceFloor) {
-      targetPrice = priceFloor;
+    // Apply minimum price floor (absolute)
+    if (minSellPrice && targetPrice < minSellPrice) {
+      targetPrice = minSellPrice;
     }
 
     // 8. Update or create our sell ad
