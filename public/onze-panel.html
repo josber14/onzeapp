@@ -9495,26 +9495,28 @@ if(addProviderBtn){
     const interval = parseInt(document.getElementById("botCycleInterval").value) || 30;
     if(botCycleTimers[ex]) clearInterval(botCycleTimers[ex]);
     botCycleTimers[ex] = setInterval(async () => {
+      if(window.__botCycleRunning) return;
+      window.__botCycleRunning = true;
       try{
         await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include" });
         window.botRefreshExchange();
       }catch(e){}
+      window.__botCycleRunning = false;
     }, interval * 1000);
     await window.botRefreshExchange();
   };
 
   window.botStopExchange = async function(){
     const ex = botSelectedExchange;
+    clearInterval(botCycleTimers[ex]);
+    delete botCycleTimers[ex];
+    await window.botRefreshExchange();
     await fetch("/api/p2p/bot/exchange-config", {
       method:"POST",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ exchange: ex, action: "stop" })
     });
-    if(botCycleTimers[ex]){
-      clearInterval(botCycleTimers[ex]);
-      delete botCycleTimers[ex];
-    }
     await window.botRefreshExchange();
   };
 
