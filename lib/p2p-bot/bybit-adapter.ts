@@ -63,6 +63,9 @@ export interface BybitAdUpdateParams {
   status?: BybitAdStatus;
   remark?: string;
   actionType?: "MODIFY" | "ACTIVE";
+  priceType?: string;
+  premium?: string;
+  tradingPreferenceSet?: any;
 }
 
 export class BybitP2PClient {
