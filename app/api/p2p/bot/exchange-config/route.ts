@@ -76,6 +76,12 @@ export async function POST(req: NextRequest) {
       update.enabled = true;
       update.pauseUntil = null;
       update.lastStartedAt = new Date();
+      // Also enable the global bot config so executeBotCycle runs
+      await prisma.p2PBotConfig.upsert({
+        where: { tenantId: session.tenantId },
+        update: { enabled: true },
+        create: { tenantId: session.tenantId, enabled: true },
+      });
     }
     if (data.action === "stop") {
       update.enabled = false;
@@ -94,7 +100,7 @@ export async function POST(req: NextRequest) {
         strategy: data.strategy ?? "top1",
         top1Diff: data.top1Diff ?? 0.1,
         spreadPct: data.spreadPct ?? 0.5,
-        priceFloorPct: data.priceFloorPct ?? 0.2,
+        priceFloorPct: data.priceFloorPct ?? 0,
         circuitBreakPct: data.circuitBreakPct ?? 3,
         cycleInterval: data.cycleInterval ?? 30,
         minCompetitorCapital: data.minCompetitorCapital ?? null,
