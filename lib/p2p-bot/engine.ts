@@ -56,7 +56,7 @@ export async function saveBotConfig(
   if (data.circuitBreakPct !== undefined)
     update.circuitBreakPct = data.circuitBreakPct;
   if (data.exchanges !== undefined)
-    update.exchanges = JSON.stringify(data.exchanges);
+    update.exchanges = data.exchanges;
   if (data.enabled !== undefined) update.enabled = data.enabled;
 
   await prisma.p2PBotConfig.upsert({
@@ -71,7 +71,7 @@ export async function saveBotConfig(
       priceFloorPct: data.priceFloorPct ?? 0,
         dailyVolumeCapUsdt: data.dailyVolumeCapUsdt ?? null,
         circuitBreakPct: data.circuitBreakPct ?? 3,
-        exchanges: JSON.stringify(data.exchanges ?? ["binance", "bybit"]),
+        exchanges: data.exchanges ?? ["binance", "bybit"],
       },
   });
 }
@@ -174,7 +174,7 @@ export async function saveExchangeConfig(
       strategy: data.strategy ?? "top1",
       top1Diff: data.top1Diff ?? 0.1,
       spreadPct: data.spreadPct ?? 0.5,
-      priceFloorPct: data.priceFloorPct ?? 0.2,
+      priceFloorPct: data.priceFloorPct ?? 0,
       circuitBreakPct: data.circuitBreakPct ?? 3,
       cycleInterval: data.cycleInterval ?? 30,
       minCompetitorCapital: data.minCompetitorCapital ?? null,

@@ -90,8 +90,8 @@ export async function POST(req: NextRequest) {
         : [...currentExchanges, exchange];
       await prisma.p2PBotConfig.upsert({
         where: { tenantId: session.tenantId },
-        update: { enabled: true, exchanges: JSON.stringify(updatedExchanges) },
-        create: { tenantId: session.tenantId, enabled: true, exchanges: JSON.stringify([exchange]) },
+        update: { enabled: true, exchanges: updatedExchanges },
+        create: { tenantId: session.tenantId, enabled: true, exchanges: [exchange] },
       });
     }
     if (data.action === "stop") {
