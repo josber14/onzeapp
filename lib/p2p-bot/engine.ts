@@ -386,15 +386,14 @@ async function runBybitCycle(
   const client = new BybitP2PClient(apiKey, secretKey);
 
   try {
-    // 1. Get our current balance
+    // 1. Get our current balance (non-critical, continue if fails)
     try {
       const balanceRes = await client.getBalance("USDT");
       const usdtCoin = balanceRes?.result?.list?.[0]?.coin?.find((c: any) => c.coin === "USDT");
       const balance = usdtCoin ? Number(usdtCoin.walletBalance) : 0;
       await logBot(tenantId, "info", "bybit", `Saldo USDT: ${balance}`);
     } catch (e: any) {
-      await logBot(tenantId, "error", "bybit", `Error getBalance: ${e.message}`);
-      throw e;
+      await logBot(tenantId, "warn", "bybit", `Balance no disponible: ${e.message}`);
     }
 
     // 2. Get our current ads from Bybit

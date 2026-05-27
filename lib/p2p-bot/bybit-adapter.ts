@@ -84,9 +84,10 @@ export class BybitP2PClient {
   private async request(endpoint: string, body: Record<string, any> = {}, method = "POST"): Promise<any> {
     const timestamp = Date.now().toString();
     const isGet = method === "GET";
-    const queryStr = isGet && Object.keys(body).length ? "?" + new URLSearchParams(body).toString() : "";
-    const jsonBody = isGet ? "" : JSON.stringify(body);
-    const signature = this.sign(timestamp, jsonBody);
+    const sortedKeys = isGet ? Object.keys(body).sort() : [];
+    const queryStr = isGet && sortedKeys.length ? "?" + sortedKeys.map(k => `${k}=${encodeURIComponent(body[k])}`).join("&") : "";
+    const payload = isGet ? queryStr.slice(1) : JSON.stringify(body);
+    const signature = this.sign(timestamp, payload);
 
     const res = await fetch(this.baseUrl + endpoint + queryStr, {
       method,
@@ -97,7 +98,7 @@ export class BybitP2PClient {
         "X-BAPI-RECV-WINDOW": this.recvWindow,
         "Content-Type": "application/json",
       },
-      ...(isGet ? {} : { body: jsonBody }),
+      ...(isGet ? {} : { body: payload }),
     });
 
     const text = await res.text();
