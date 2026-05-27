@@ -516,6 +516,14 @@ async function runBybitCycle(
           await logBot(tenantId, "info", "bybit", `Ad ${ourSellAd.id} precio actualizado: ${currentPrice} → ${targetPrice.toFixed(2)}`);
         } catch (e: any) {
           await logBot(tenantId, "warn", "bybit", `No se pudo actualizar precio: ${e.message}`);
+          if (e.message?.includes("912120050")) {
+            const pauseUntil = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+            await prisma.p2PBotExchangeConfig.update({
+              where: { tenantId_exchange: { tenantId, exchange: "bybit" } },
+              data: { pauseUntil },
+            });
+            await logBot(tenantId, "info", "bybit", `Rate limit detectado. Bot pausado 5 min hasta ${pauseUntil}.`);
+          }
         }
       }
     } else {
