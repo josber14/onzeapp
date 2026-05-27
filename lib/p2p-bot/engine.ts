@@ -493,11 +493,12 @@ async function runBybitCycle(
             quantity: String(ourSellAd.quantity ?? "0"),
             minAmount: String(ourSellAd.minAmount ?? "0"),
             maxAmount: String(ourSellAd.maxAmount ?? "0"),
-            paymentPeriod: Number(ourSellAd.paymentPeriod ?? "15"),
+            paymentPeriod: String(ourSellAd.paymentPeriod ?? "15"),
             paymentIds: ourSellAd.paymentIds ?? [],
-            remark: ourSellAd.remark ?? "",
+            remark: String(ourSellAd.remark ?? ""),
             tradingPreferenceSet: ourSellAd.tradingPreferenceSet ?? {},
           };
+          await logBot(tenantId, "debug", "bybit", `Update payload: ${JSON.stringify(updateFields)}`);
           await client.updateAd(updateFields);
           actions.push({ action: "update_price", exchange: "bybit", adId: ourSellAd.id, currentPrice: Number(ourSellAd.price), suggestedPrice: targetPrice, reason: `Precio actualizado a ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
           await logBot(tenantId, "info", "bybit", `Ad ${ourSellAd.id} precio actualizado: ${currentPrice} → ${targetPrice.toFixed(2)}`);
