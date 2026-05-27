@@ -483,12 +483,16 @@ async function runBybitCycle(
       const currentPrice = Number(ourSellAd.price);
       const diff = Math.abs(currentPrice - targetPrice);
       if (diff > 0.01) {
-        await client.updateAd({
-          id: ourSellAd.id,
-          price: targetPrice.toFixed(2),
-        });
-        actions.push({ action: "update_price", exchange: "bybit", adId: ourSellAd.id, currentPrice: Number(ourSellAd.price), suggestedPrice: targetPrice, reason: `Precio actualizado a ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
-        await logBot(tenantId, "info", "bybit", `Ad ${ourSellAd.id} precio actualizado: ${currentPrice} → ${targetPrice.toFixed(2)}`);
+        try {
+          await client.updateAd({
+            id: ourSellAd.id,
+            price: targetPrice.toFixed(2),
+          });
+          actions.push({ action: "update_price", exchange: "bybit", adId: ourSellAd.id, currentPrice: Number(ourSellAd.price), suggestedPrice: targetPrice, reason: `Precio actualizado a ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
+          await logBot(tenantId, "info", "bybit", `Ad ${ourSellAd.id} precio actualizado: ${currentPrice} → ${targetPrice.toFixed(2)}`);
+        } catch (e: any) {
+          await logBot(tenantId, "warn", "bybit", `No se pudo actualizar precio: ${e.message}`);
+        }
       }
     } else {
       await logBot(tenantId, "info", "bybit", "No hay anuncio de venta propio. Crear uno manualmente desde el panel.");
