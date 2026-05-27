@@ -412,7 +412,7 @@ async function runBybitCycle(
       const onlineRes = await client.getOnlineAds({
         tokenId: "USDT",
         currencyId: "CLP",
-        side: "0", // buyers (who show sell offers)
+        side: "1", // sellers
         size: 50,
       });
       competitors = onlineRes?.result?.items || [];
@@ -420,10 +420,10 @@ async function runBybitCycle(
       await logBot(tenantId, "error", "bybit", `Error getOnlineAds: ${e.message}`);
       throw e;
     }
-    await logBot(tenantId, "info", "bybit", `OnlineAds response: ${competitors.length} items`);
-    const samplePrices = competitors.slice(0, 5).map((c: any) => `${c.price}(side=${c.side})`).join(", ");
+    await logBot(tenantId, "info", "bybit", `OnlineAds: ${competitors.length} items`);
+    const samplePrices = competitors.slice(0, 5).map((c: any) => `${c.price}`).join(", ");
     if (competitors.length) {
-      await logBot(tenantId, "info", "bybit", `Muestras: ${samplePrices}`);
+      await logBot(tenantId, "info", "bybit", `Precios: ${samplePrices}`);
     }
 
     // 4. Determine minimum sell price (absolute CLP, 0 = auto from active capacity)
