@@ -387,22 +387,39 @@ async function runBybitCycle(
 
   try {
     // 1. Get our current balance
-    const balanceRes = await client.getBalance("USDT");
-    const balance = balanceRes?.result?.balance ? Number(balanceRes.result.balance) : 0;
-    await logBot(tenantId, "info", "bybit", `Saldo USDT: ${balance}`);
+    try {
+      const balanceRes = await client.getBalance("USDT");
+      const balance = balanceRes?.result?.balance ? Number(balanceRes.result.balance) : 0;
+      await logBot(tenantId, "info", "bybit", `Saldo USDT: ${balance}`);
+    } catch (e: any) {
+      await logBot(tenantId, "error", "bybit", `Error getBalance: ${e.message}`);
+      throw e;
+    }
 
     // 2. Get our current ads from Bybit
-    const myAdsRes = await client.getMyAds(1, 50);
-    const myAds = myAdsRes?.result?.items || [];
+    let myAds: any[] = [];
+    try {
+      const myAdsRes = await client.getMyAds(1, 50);
+      myAds = myAdsRes?.result?.items || [];
+    } catch (e: any) {
+      await logBot(tenantId, "error", "bybit", `Error getMyAds: ${e.message}`);
+      throw e;
+    }
 
     // 3. Get online competitor ads
-    const onlineRes = await client.getOnlineAds({
-      tokenId: "USDT",
-      currencyId: "CLP",
-      side: "1", // sellers
-      size: 50,
-    });
-    const competitors = onlineRes?.result?.items || [];
+    let competitors: any[] = [];
+    try {
+      const onlineRes = await client.getOnlineAds({
+        tokenId: "USDT",
+        currencyId: "CLP",
+        side: "1", // sellers
+        size: 50,
+      });
+      competitors = onlineRes?.result?.items || [];
+    } catch (e: any) {
+      await logBot(tenantId, "error", "bybit", `Error getOnlineAds: ${e.message}`);
+      throw e;
+    }
 
     // 4. Determine minimum sell price (absolute CLP, 0 = auto from active capacity)
     let minSellPrice = Number(config.priceFloorPct) || 0;
