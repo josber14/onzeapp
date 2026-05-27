@@ -59,6 +59,7 @@ export interface BybitAdUpdateParams {
   minAmount?: string;
   maxAmount?: string;
   payments?: string[];
+  paymentIds?: string[];
   paymentPeriod?: number;
   status?: BybitAdStatus;
   remark?: string;
