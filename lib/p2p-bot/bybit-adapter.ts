@@ -177,7 +177,7 @@ export class BybitP2PClient {
   // ─── Balance & Account ────────────────────────────────────────
 
   async getBalance(coin = "USDT") {
-    return this.request("/v5/account/wallet-balance", { accountType: "FUND", coin }, "GET");
+    return this.request("/v5/account/wallet-balance", { accountType: "UNIFIED", coin }, "GET");
   }
 
   async getAccountInfo() {
