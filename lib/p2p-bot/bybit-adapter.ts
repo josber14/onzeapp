@@ -81,13 +81,15 @@ export class BybitP2PClient {
     return createHmac("sha256", this.secretKey).update(str).digest("hex");
   }
 
-  private async request(endpoint: string, body: Record<string, any> = {}): Promise<any> {
+  private async request(endpoint: string, body: Record<string, any> = {}, method = "POST"): Promise<any> {
     const timestamp = Date.now().toString();
-    const jsonBody = JSON.stringify(body);
+    const isGet = method === "GET";
+    const queryStr = isGet && Object.keys(body).length ? "?" + new URLSearchParams(body).toString() : "";
+    const jsonBody = isGet ? "" : JSON.stringify(body);
     const signature = this.sign(timestamp, jsonBody);
 
-    const res = await fetch(this.baseUrl + endpoint, {
-      method: "POST",
+    const res = await fetch(this.baseUrl + endpoint + queryStr, {
+      method,
       headers: {
         "X-BAPI-API-KEY": this.apiKey,
         "X-BAPI-TIMESTAMP": timestamp,
@@ -95,7 +97,7 @@ export class BybitP2PClient {
         "X-BAPI-RECV-WINDOW": this.recvWindow,
         "Content-Type": "application/json",
       },
-      body: jsonBody,
+      ...(isGet ? {} : { body: jsonBody }),
     });
 
     const text = await res.text();
@@ -174,7 +176,7 @@ export class BybitP2PClient {
   // ─── Balance & Account ────────────────────────────────────────
 
   async getBalance(coin = "USDT") {
-    return this.request("/v5/account/wallet-balance", { accountType: "FUND", coin });
+    return this.request("/v5/account/wallet-balance", { accountType: "FUND", coin }, "GET");
   }
 
   async getAccountInfo() {
