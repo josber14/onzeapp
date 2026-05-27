@@ -76,11 +76,22 @@ export async function POST(req: NextRequest) {
       update.enabled = true;
       update.pauseUntil = null;
       update.lastStartedAt = new Date();
-      // Also enable the global bot config so executeBotCycle runs
+      // Also enable global bot config and ensure exchange is in list
+      const existingGlobal = await prisma.p2PBotConfig.findUnique({
+        where: { tenantId: session.tenantId },
+      });
+      const currentExchanges = existingGlobal?.exchanges
+        ? (typeof existingGlobal.exchanges === "string"
+            ? JSON.parse(existingGlobal.exchanges)
+            : existingGlobal.exchanges)
+        : [];
+      const updatedExchanges = currentExchanges.includes(exchange)
+        ? currentExchanges
+        : [...currentExchanges, exchange];
       await prisma.p2PBotConfig.upsert({
         where: { tenantId: session.tenantId },
-        update: { enabled: true },
-        create: { tenantId: session.tenantId, enabled: true },
+        update: { enabled: true, exchanges: JSON.stringify(updatedExchanges) },
+        create: { tenantId: session.tenantId, enabled: true, exchanges: JSON.stringify([exchange]) },
       });
     }
     if (data.action === "stop") {
