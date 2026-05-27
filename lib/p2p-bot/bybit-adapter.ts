@@ -117,11 +117,11 @@ export class BybitP2PClient {
   // ─── Ads ──────────────────────────────────────────────────────
 
   async getMyAds(page = 1, size = 50) {
-    return this.request("/v5/p2p/item/personal/list", { page, size });
+    return this.request("/v5/p2p/item/personal/list", {});
   }
 
-  async getAdDetail(id: string) {
-    return this.request("/v5/p2p/item/detail", { id });
+  async getAdDetail(itemId: string) {
+    return this.request("/v5/p2p/item/info", { itemId });
   }
 
   async postAd(params: BybitAdPostParams) {
@@ -150,12 +150,12 @@ export class BybitP2PClient {
     return this.request("/v5/p2p/order/simplifyList", params);
   }
 
-  async getPendingOrders() {
-    return this.request("/v5/p2p/order/pending", {});
+  async getPendingOrders(page = 1, size = 10) {
+    return this.request("/v5/p2p/order/pending/simplifyList", { page, size });
   }
 
-  async getOrderDetail(id: string) {
-    return this.request("/v5/p2p/order/detail", { id });
+  async getOrderDetail(orderId: string) {
+    return this.request("/v5/p2p/order/info", { orderId });
   }
 
   async markAsPaid(orderId: string, paymentType: string, paymentId: string) {
@@ -187,7 +187,7 @@ export class BybitP2PClient {
   }
 
   async getPaymentMethods() {
-    return this.request("/v5/p2p/user/payment", {});
+    return this.request("/v5/p2p/user/payment/list", {});
   }
 
   // ─── Online Ads (competitors) ────────────────────────────────
