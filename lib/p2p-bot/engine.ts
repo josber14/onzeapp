@@ -484,18 +484,21 @@ async function runBybitCycle(
       const diff = Math.abs(currentPrice - targetPrice);
       if (diff > 0.01) {
         try {
-          await client.updateAd({
+          const updateFields: any = {
             id: ourSellAd.id,
             price: targetPrice.toFixed(2),
             actionType: "MODIFY",
             priceType: String(ourSellAd.priceType ?? "0"),
+            premium: String(ourSellAd.premium ?? "0"),
             quantity: String(ourSellAd.quantity ?? "0"),
             minAmount: String(ourSellAd.minAmount ?? "0"),
             maxAmount: String(ourSellAd.maxAmount ?? "0"),
             paymentPeriod: Number(ourSellAd.paymentPeriod ?? "15"),
             paymentIds: ourSellAd.paymentIds ?? [],
             remark: ourSellAd.remark ?? "",
-          });
+            tradingPreferenceSet: ourSellAd.tradingPreferenceSet ?? {},
+          };
+          await client.updateAd(updateFields);
           actions.push({ action: "update_price", exchange: "bybit", adId: ourSellAd.id, currentPrice: Number(ourSellAd.price), suggestedPrice: targetPrice, reason: `Precio actualizado a ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
           await logBot(tenantId, "info", "bybit", `Ad ${ourSellAd.id} precio actualizado: ${currentPrice} → ${targetPrice.toFixed(2)}`);
         } catch (e: any) {

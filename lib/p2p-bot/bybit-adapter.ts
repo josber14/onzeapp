@@ -67,6 +67,7 @@ export interface BybitAdUpdateParams {
   priceType?: string;
   premium?: string;
   tradingPreferenceSet?: any;
+  [key: string]: any;
 }
 
 export class BybitP2PClient {
