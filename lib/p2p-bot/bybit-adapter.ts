@@ -106,8 +106,10 @@ export class BybitP2PClient {
       throw new Error(`Bybit empty response (HTTP ${res.status}) for ${endpoint}`);
     }
     const data = JSON.parse(text);
-    if (data.retCode !== 0 && data.retCode !== undefined) {
-      throw new Error(`Bybit error ${data.retCode}: ${data.retMsg}`);
+    const retCode = data.retCode ?? data.ret_code;
+    const retMsg = data.retMsg ?? data.ret_msg;
+    if (retCode !== 0 && retCode !== undefined) {
+      throw new Error(`Bybit error ${retCode}: ${retMsg}`);
     }
     return data;
   }
