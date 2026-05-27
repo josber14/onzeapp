@@ -413,7 +413,6 @@ async function runBybitCycle(
         tokenId: "USDT",
         currencyId: "CLP",
         side: "1", // sellers
-        size: 50,
       });
       competitors = onlineRes?.result?.items || [];
     } catch (e: any) {
