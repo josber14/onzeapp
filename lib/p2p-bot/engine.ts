@@ -503,7 +503,7 @@ async function runBybitCycle(
             actionType: "MODIFY",
             priceType: String(fullAd.priceType ?? "0"),
             premium: String(fullAd.premium ?? "0"),
-            quantity: String(fullAd.quantity ?? "0"),
+            quantity: String(fullAd.lastQuantity ?? fullAd.quantity ?? "0"),
             minAmount: String(fullAd.minAmount ?? "0"),
             maxAmount: String(fullAd.maxAmount ?? "0"),
             paymentPeriod: String(fullAd.paymentPeriod ?? "15"),
