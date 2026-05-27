@@ -420,6 +420,12 @@ async function runBybitCycle(
       await logBot(tenantId, "error", "bybit", `Error getOnlineAds: ${e.message}`);
       throw e;
     }
+    if (competitors.length) {
+      const samplePrices = competitors.slice(0, 5).map((c: any) => `${c.price}(${c.side === 0 ? "compra" : "venta"})`).join(", ");
+      await logBot(tenantId, "info", "bybit", `Competidores: ${competitors.length} total, ej: ${samplePrices}`);
+    } else {
+      await logBot(tenantId, "info", "bybit", "API devolvió 0 competidores");
+    }
 
     // 4. Determine minimum sell price (absolute CLP, 0 = auto from active capacity)
     let minSellPrice = Number(config.priceFloorPct) || 0;
