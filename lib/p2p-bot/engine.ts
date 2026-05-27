@@ -489,8 +489,9 @@ async function runBybitCycle(
           const fullAd = adDetailRes?.result?.item || adDetailRes?.result || ourSellAd;
           await logBot(tenantId, "debug", "bybit", `Ad detail keys: ${Object.keys(fullAd).join(", ")}`);
 
-          // Find payment IDs from any possible field name
-          const paymentIds = fullAd.paymentIds ?? fullAd.payments ?? fullAd.paymentTermList ?? fullAd.paymentMethodList ?? [];
+          // Extract payment IDs from payments array (objects with id field)
+          const payObjs = fullAd.payments ?? fullAd.paymentTerms ?? fullAd.paymentTermList ?? [];
+          const paymentIds = Array.isArray(payObjs) ? payObjs.map((p: any) => String(p.id ?? p.paymentId ?? p)) : [];
 
           // Build update with all fields, converting types to match SDK
           const strTps: any = {};
