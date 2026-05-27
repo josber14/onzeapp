@@ -1,5 +1,5 @@
 export type BotStrategy = "top1" | "spread";
-export type BotExchange = "binance" | "bybit";
+export type BotExchange = "binance" | "bybit" | "okx";
 export type BotOrderSide = "BUY" | "SELL";
 
 export interface P2PBotConfigData {
@@ -16,6 +16,24 @@ export interface P2PBotConfigData {
   lastStartedAt: string | null;
   lastStoppedAt: string | null;
   exchanges: BotExchange[];
+}
+
+export interface P2PBotExchangeConfigData {
+  id?: number;
+  tenantId: number;
+  exchange: BotExchange;
+  enabled: boolean;
+  strategy: BotStrategy;
+  top1Diff: number;
+  spreadPct: number;
+  priceFloorPct: number;
+  dailyVolumeCapUsdt: number | null;
+  circuitBreakPct: number;
+  cycleInterval: number;
+  minCompetitorCapital: number | null;
+  pauseUntil: string | null;
+  lastStartedAt: string | null;
+  lastStoppedAt: string | null;
 }
 
 export interface BotAd {

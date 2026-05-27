@@ -20,11 +20,12 @@ export async function GET() {
 
     const creds = await prisma.binanceCredentials.findUnique({
       where: { tenantId: session.tenantId },
-      select: { id: true, isActive: true, testStatus: true, lastTestedAt: true, updatedAt: true }
+      select: { apiKey: true, secretKey: true, isActive: true, testStatus: true, lastTestedAt: true, updatedAt: true }
     });
 
     return Response.json({
       ok: true,
+      credentials: creds || null,
       configured: !!creds,
       isActive: creds?.isActive || false,
       testStatus: creds?.testStatus || null,
