@@ -484,21 +484,30 @@ async function runBybitCycle(
       const diff = Math.abs(currentPrice - targetPrice);
       if (diff > 0.01) {
         try {
+          // Get full ad details to preserve all fields
+          const adDetailRes = await client.getAdDetail(ourSellAd.id);
+          const fullAd = adDetailRes?.result?.item || adDetailRes?.result || ourSellAd;
+
+          // Build update with all fields, converting types to match SDK
+          const strTps: any = {};
+          const tps = fullAd.tradingPreferenceSet ?? {};
+          for (const k of Object.keys(tps)) {
+            strTps[k] = String(tps[k] ?? "");
+          }
           const updateFields: any = {
-            id: ourSellAd.id,
+            id: fullAd.id,
             price: targetPrice.toFixed(2),
             actionType: "MODIFY",
-            priceType: String(ourSellAd.priceType ?? "0"),
-            premium: String(ourSellAd.premium ?? "0"),
-            quantity: String(ourSellAd.quantity ?? "0"),
-            minAmount: String(ourSellAd.minAmount ?? "0"),
-            maxAmount: String(ourSellAd.maxAmount ?? "0"),
-            paymentPeriod: String(ourSellAd.paymentPeriod ?? "15"),
-            paymentIds: ourSellAd.paymentIds ?? [],
-            remark: String(ourSellAd.remark ?? ""),
-            tradingPreferenceSet: ourSellAd.tradingPreferenceSet ?? {},
+            priceType: String(fullAd.priceType ?? "0"),
+            premium: String(fullAd.premium ?? "0"),
+            quantity: String(fullAd.quantity ?? "0"),
+            minAmount: String(fullAd.minAmount ?? "0"),
+            maxAmount: String(fullAd.maxAmount ?? "0"),
+            paymentPeriod: String(fullAd.paymentPeriod ?? "15"),
+            paymentIds: fullAd.paymentIds ?? [],
+            remark: String(fullAd.remark ?? ""),
+            tradingPreferenceSet: strTps,
           };
-          await logBot(tenantId, "debug", "bybit", `Update payload: ${JSON.stringify(updateFields)}`);
           await client.updateAd(updateFields);
           actions.push({ action: "update_price", exchange: "bybit", adId: ourSellAd.id, currentPrice: Number(ourSellAd.price), suggestedPrice: targetPrice, reason: `Precio actualizado a ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
           await logBot(tenantId, "info", "bybit", `Ad ${ourSellAd.id} precio actualizado: ${currentPrice} → ${targetPrice.toFixed(2)}`);
