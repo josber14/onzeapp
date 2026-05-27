@@ -487,6 +487,10 @@ async function runBybitCycle(
           // Get full ad details to preserve all fields
           const adDetailRes = await client.getAdDetail(ourSellAd.id);
           const fullAd = adDetailRes?.result?.item || adDetailRes?.result || ourSellAd;
+          await logBot(tenantId, "debug", "bybit", `Ad detail keys: ${Object.keys(fullAd).join(", ")}`);
+
+          // Find payment IDs from any possible field name
+          const paymentIds = fullAd.paymentIds ?? fullAd.payments ?? fullAd.paymentTermList ?? fullAd.paymentMethodList ?? [];
 
           // Build update with all fields, converting types to match SDK
           const strTps: any = {};
@@ -504,7 +508,7 @@ async function runBybitCycle(
             minAmount: String(fullAd.minAmount ?? "0"),
             maxAmount: String(fullAd.maxAmount ?? "0"),
             paymentPeriod: String(fullAd.paymentPeriod ?? "15"),
-            paymentIds: fullAd.paymentIds ?? [],
+            paymentIds,
             remark: String(fullAd.remark ?? ""),
             tradingPreferenceSet: strTps,
           };
