@@ -495,32 +495,36 @@ async function runBybitCycle(
     }
 
     // 9. Sync orders from Bybit to local DB
-    const ordersRes = await client.getOrders({ page: 1, size: 30 });
-    const bybitOrders = ordersRes?.result?.items || [];
-
-    for (const o of bybitOrders) {
-      const existing = await prisma.p2PBotOrder.findFirst({
-        where: { tenantId, orderNumber: o.id, exchange: "bybit" },
-      });
-      if (!existing) {
-        await prisma.p2PBotOrder.create({
-          data: {
-            tenantId,
-            exchange: "bybit",
-            orderNumber: o.id,
-            tradeType: o.side === 0 ? "BUY" : "SELL",
-            asset: o.tokenId || "USDT",
-            fiat: o.currencyId || "CLP",
-            amount: Number(o.amount) || 0,
-            totalPrice: Number(o.amount) * Number(o.price) || 0,
-            unitPrice: Number(o.price) || 0,
-            status: bybitOrderStatusLabel(Number(o.status)),
-            counterparty: o.targetNickName || "",
-            executedAt: new Date(Number(o.createDate)),
-          },
+    let bybitOrders: any[] = [];
+    try {
+      const ordersRes = await client.getOrders({ page: 1, size: 30 });
+      bybitOrders = ordersRes?.result?.items || [];
+      for (const o of bybitOrders) {
+        const existing = await prisma.p2PBotOrder.findFirst({
+          where: { tenantId, orderNumber: o.id, exchange: "bybit" },
         });
-        await logBot(tenantId, "info", "bybit", `Orden #${o.id} sincronizada (${bybitOrderStatusLabel(Number(o.status))})`);
+        if (!existing) {
+          await prisma.p2PBotOrder.create({
+            data: {
+              tenantId,
+              exchange: "bybit",
+              orderNumber: o.id,
+              tradeType: o.side === 0 ? "BUY" : "SELL",
+              asset: o.tokenId || "USDT",
+              fiat: o.currencyId || "CLP",
+              amount: Number(o.amount) || 0,
+              totalPrice: Number(o.amount) * Number(o.price) || 0,
+              unitPrice: Number(o.price) || 0,
+              status: bybitOrderStatusLabel(Number(o.status)),
+              counterparty: o.targetNickName || "",
+              executedAt: new Date(Number(o.createDate)),
+            },
+          });
+          await logBot(tenantId, "info", "bybit", `Orden #${o.id} sincronizada (${bybitOrderStatusLabel(Number(o.status))})`);
+        }
       }
+    } catch (e: any) {
+      await logBot(tenantId, "warn", "bybit", `Órdenes no disponibles: ${e.message}`);
     }
 
     await logBot(tenantId, "info", "bybit", `Ciclo completado: ${bybitOrders.length} órdenes, ${competitors.length} competidores`);
