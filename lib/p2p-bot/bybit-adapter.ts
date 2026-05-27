@@ -62,6 +62,7 @@ export interface BybitAdUpdateParams {
   paymentPeriod?: number;
   status?: BybitAdStatus;
   remark?: string;
+  actionType?: "MODIFY" | "ACTIVE";
 }
 
 export class BybitP2PClient {
