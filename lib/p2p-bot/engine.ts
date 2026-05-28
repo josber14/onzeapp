@@ -485,7 +485,7 @@ async function runBybitCycle(
     if (ourSellAd) {
       const currentPrice = Number(ourSellAd.price);
       const diff = Math.abs(currentPrice - targetPrice);
-      if (diff > 0.01) {
+      if (diff >= 0.005) {
         try {
           // Get full ad details to preserve all fields
           const adDetailRes = await client.getAdDetail(ourSellAd.id);
