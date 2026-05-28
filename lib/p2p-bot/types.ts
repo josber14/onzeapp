@@ -59,7 +59,7 @@ export interface BotCompetitorAd {
 }
 
 export interface BotAction {
-  action: "update_price" | "create_ad" | "pause" | "accept_order";
+  action: "update_price" | "create_ad" | "recreate_ad" | "pause" | "accept_order";
   exchange: BotExchange;
   adId?: string;
   currentPrice?: number;

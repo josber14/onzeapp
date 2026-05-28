@@ -8,6 +8,9 @@ import type {
   BotState,
 } from "./types";
 
+// Track update count per ad ID to bypass Bybit's 10-update rate limit
+const adUpdateCount = new Map<string, number>();
+
 function getBaseUrl(): string {
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
   return process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
@@ -487,33 +490,69 @@ async function runBybitCycle(
           // Get full ad details to preserve all fields
           const adDetailRes = await client.getAdDetail(ourSellAd.id);
           const fullAd = adDetailRes?.result?.item || adDetailRes?.result || ourSellAd;
-          // Extract payment IDs from paymentTerms array (objects with id field)
           const payObjs = fullAd.paymentTerms ?? fullAd.payments ?? [];
           const paymentIds = Array.isArray(payObjs) ? payObjs.map((p: any) => String(p.id ?? p.paymentId ?? p)) : [];
 
-          // Build update with all fields, converting types to match SDK
+          // Build update fields
           const strTps: any = {};
           const tps = fullAd.tradingPreferenceSet ?? {};
           for (const k of Object.keys(tps)) {
             strTps[k] = String(tps[k] ?? "");
           }
-          const updateFields: any = {
-            id: fullAd.id,
-            price: targetPrice.toFixed(2),
-            actionType: "MODIFY",
-            priceType: String(fullAd.priceType ?? "0"),
-            premium: String(fullAd.premium ?? "0"),
-            quantity: String(fullAd.lastQuantity ?? fullAd.quantity ?? "0"),
-            minAmount: String(fullAd.minAmount ?? "0"),
-            maxAmount: String(fullAd.maxAmount ?? "0"),
-            paymentPeriod: String(fullAd.paymentPeriod ?? "15"),
-            paymentIds,
-            remark: String(fullAd.remark ?? ""),
-            tradingPreferenceSet: strTps,
-          };
-          await client.updateAd(updateFields);
-          actions.push({ action: "update_price", exchange: "bybit", adId: ourSellAd.id, currentPrice: Number(ourSellAd.price), suggestedPrice: targetPrice, reason: `Precio actualizado a ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
-          await logBot(tenantId, "info", "bybit", `Ad ${ourSellAd.id} precio actualizado: ${currentPrice} → ${targetPrice.toFixed(2)}`);
+
+          // Check update count — recreate ad after 8 updates to bypass rate limit
+          const adId = ourSellAd.id;
+          const count = adUpdateCount.get(adId) || 0;
+
+          if (count >= 8) {
+            // Delete old ad and create a new one
+            await client.removeAd(adId);
+            await logBot(tenantId, "info", "bybit", `Anuncio ${adId} eliminado tras ${count} actualizaciones.`);
+
+            const newAdRes = await client.postAd({
+              tokenId: "USDT",
+              currencyId: "CLP",
+              side: "1",
+              price: targetPrice.toFixed(2),
+              priceType: String(fullAd.priceType ?? "0"),
+              premium: String(fullAd.premium ?? "0"),
+              quantity: String(fullAd.lastQuantity ?? fullAd.quantity ?? "0"),
+              minAmount: String(fullAd.minAmount ?? "0"),
+              maxAmount: String(fullAd.maxAmount ?? "0"),
+              paymentPeriod: Number(fullAd.paymentPeriod ?? 15),
+              paymentIds,
+              remark: String(fullAd.remark ?? ""),
+              tradingPreferenceSet: strTps,
+              itemType: String(fullAd.itemType ?? "ORIGIN"),
+            });
+
+            const newAdId = newAdRes?.result?.item?.id ?? newAdRes?.result?.id;
+            adUpdateCount.delete(adId); // old ad counter gone
+            if (newAdId) adUpdateCount.set(newAdId, 0);
+
+            actions.push({ action: "recreate_ad", exchange: "bybit", adId: newAdId, suggestedPrice: targetPrice, reason: `Anuncio recreado en ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
+            await logBot(tenantId, "info", "bybit", `Nuevo anuncio ${newAdId} creado en ${targetPrice.toFixed(2)}`);
+          } else {
+            // Normal update
+            const updateFields: any = {
+              id: adId,
+              price: targetPrice.toFixed(2),
+              actionType: "MODIFY",
+              priceType: String(fullAd.priceType ?? "0"),
+              premium: String(fullAd.premium ?? "0"),
+              quantity: String(fullAd.lastQuantity ?? fullAd.quantity ?? "0"),
+              minAmount: String(fullAd.minAmount ?? "0"),
+              maxAmount: String(fullAd.maxAmount ?? "0"),
+              paymentPeriod: String(fullAd.paymentPeriod ?? "15"),
+              paymentIds,
+              remark: String(fullAd.remark ?? ""),
+              tradingPreferenceSet: strTps,
+            };
+            await client.updateAd(updateFields);
+            adUpdateCount.set(adId, count + 1);
+            actions.push({ action: "update_price", exchange: "bybit", adId, currentPrice, suggestedPrice: targetPrice, reason: `Precio actualizado a ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
+            await logBot(tenantId, "info", "bybit", `Ad ${adId} precio actualizado: ${currentPrice} → ${targetPrice.toFixed(2)} (update #${count + 1})`);
+          }
         } catch (e: any) {
           await logBot(tenantId, "warn", "bybit", `No se pudo actualizar precio: ${e.message}`);
           if (e.message?.includes("912120050")) {

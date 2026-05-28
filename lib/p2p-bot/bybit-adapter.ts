@@ -47,9 +47,15 @@ export interface BybitAdPostParams {
   quantity: string;
   minAmount: string;
   maxAmount: string;
-  payments: string[];
+  payments?: string[];
+  paymentIds?: string[];
   paymentPeriod: number;
   remark?: string;
+  priceType?: string;
+  premium?: string;
+  itemType?: string;
+  tradingPreferenceSet?: any;
+  [key: string]: any;
 }
 
 export interface BybitAdUpdateParams {
