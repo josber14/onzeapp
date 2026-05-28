@@ -490,6 +490,7 @@ async function runBybitCycle(
           // Get full ad details to preserve all fields
           const adDetailRes = await client.getAdDetail(ourSellAd.id);
           const fullAd = adDetailRes?.result?.item || adDetailRes?.result || ourSellAd;
+          await logBot(tenantId, "debug", "bybit", `Ad detail: payTerms=${JSON.stringify(fullAd.paymentTerms?.slice(0,1))}, priceType=${fullAd.priceType}, qty=${fullAd.quantity}, lastQty=${fullAd.lastQuantity}`);
           const payObjs = fullAd.paymentTerms ?? fullAd.payments ?? [];
           const paymentIds = Array.isArray(payObjs) ? payObjs.map((p: any) => String(p.id ?? p.paymentId ?? p)) : [];
 
