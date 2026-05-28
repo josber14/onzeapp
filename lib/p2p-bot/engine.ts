@@ -261,31 +261,6 @@ export async function getBotOrders(
   }));
 }
 
-export async function incrementAdUpdateCount(
-  tenantId: number,
-  exchange: BotExchange,
-  amount = 1
-): Promise<number> {
-  const config = await getExchangeConfig(tenantId, exchange);
-  const current = config?.adUpdateCount ?? 0;
-  const next = current + amount;
-  await prisma.p2PBotExchangeConfig.update({
-    where: { tenantId_exchange: { tenantId, exchange } },
-    data: { adUpdateCount: next },
-  });
-  return next;
-}
-
-export async function resetAdUpdateCount(
-  tenantId: number,
-  exchange: BotExchange
-): Promise<void> {
-  await prisma.p2PBotExchangeConfig.update({
-    where: { tenantId_exchange: { tenantId, exchange } },
-    data: { adUpdateCount: 0 },
-  });
-}
-
 export async function logBot(
   tenantId: number,
   level: string,
@@ -511,34 +486,50 @@ async function runBybitCycle(
       const currentPrice = Number(ourSellAd.price);
       const diff = Math.abs(currentPrice - targetPrice);
       if (diff >= 0.005) {
+        let adId = ourSellAd.id;
+        let fullAd: any = ourSellAd;
+        let paymentIds: string[] = [];
+        let strTps: any = {};
         try {
           // Get full ad details to preserve all fields
           const adDetailRes = await client.getAdDetail(ourSellAd.id);
-          const fullAd = adDetailRes?.result?.item || adDetailRes?.result || ourSellAd;
+          fullAd = adDetailRes?.result?.item || adDetailRes?.result || ourSellAd;
           await logBot(tenantId, "debug", "bybit", `Ad detail: payTerms=${JSON.stringify(fullAd.paymentTerms?.slice(0,1))}, priceType=${fullAd.priceType}, qty=${fullAd.quantity}, lastQty=${fullAd.lastQuantity}`);
           const payObjs = fullAd.paymentTerms ?? fullAd.payments ?? [];
-          const paymentIds = Array.isArray(payObjs) ? payObjs.map((p: any) => String(p.id ?? p.paymentId ?? p)) : [];
+          paymentIds = Array.isArray(payObjs) ? payObjs.map((p: any) => String(p.id ?? p.paymentId ?? p)) : [];
 
           // Build update fields
-          const strTps: any = {};
           const tps = fullAd.tradingPreferenceSet ?? {};
           for (const k of Object.keys(tps)) {
             strTps[k] = String(tps[k] ?? "");
           }
 
-          // Check update count — recreate ad after 8 updates to bypass rate limit
-          const adId = ourSellAd.id;
-          const count = (config as P2PBotExchangeConfigData).adUpdateCount ?? 0;
-
-          if (count >= 8) {
-            // Delete old ad first, then create. If create fails, next cycle detects no ad and retries.
+          const updateFields: any = {
+            id: adId,
+            price: targetPrice.toFixed(2),
+            actionType: "MODIFY",
+            priceType: String(fullAd.priceType ?? "0"),
+            premium: String(fullAd.premium ?? "0"),
+            quantity: String(fullAd.lastQuantity ?? fullAd.quantity ?? "0"),
+            minAmount: String(fullAd.minAmount ?? "0"),
+            maxAmount: String(fullAd.maxAmount ?? "0"),
+            paymentPeriod: String(fullAd.paymentPeriod ?? "15"),
+            paymentIds,
+            remark: String(fullAd.remark ?? ""),
+            tradingPreferenceSet: strTps,
+          };
+          await client.updateAd(updateFields);
+          actions.push({ action: "update_price", exchange: "bybit", adId, currentPrice, suggestedPrice: targetPrice, reason: `Precio actualizado a ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
+          await logBot(tenantId, "info", "bybit", `Ad ${adId} precio actualizado: ${currentPrice} → ${targetPrice.toFixed(2)}`);
+        } catch (e: any) {
+          if (e.message?.includes("912120050")) {
+            // Rate limit hit — recreate the ad to get a fresh update counter
+            await logBot(tenantId, "info", "bybit", `Rate limit alcanzado, recreando anuncio ${adId}...`);
+            // Delete old ad
             await client.removeAd(adId);
-            await logBot(tenantId, "info", "bybit", `Anuncio ${adId} eliminado tras ${count} updates.`);
-            await resetAdUpdateCount(tenantId, "bybit");
-
-            // Use offset price so Bybit doesn't reject (same price as deleted ad = error 90043)
+            await logBot(tenantId, "info", "bybit", `Anuncio ${adId} eliminado.`);
+            // Create new ad with offset price so Bybit doesn't reject (error 90043)
             const recreatePrice = targetPrice + 0.5;
-
             const postFields: any = {
               tokenId: "USDT",
               currencyId: "CLP",
@@ -557,42 +548,13 @@ async function runBybitCycle(
             };
             await logBot(tenantId, "debug", "bybit", `postAd payload: ${JSON.stringify(postFields)}`);
             const newAdRes = await client.postAd(postFields);
-
             const newAdId = newAdRes?.result?.item?.id ?? newAdRes?.result?.id;
-            if (!newAdId) throw new Error("No se obtuvo ID del nuevo anuncio");
-
-            actions.push({ action: "recreate_ad", exchange: "bybit", adId: newAdId, suggestedPrice: targetPrice, reason: `Nuevo anuncio creado en ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
-            await logBot(tenantId, "info", "bybit", `Nuevo anuncio ${newAdId} creado en ${targetPrice.toFixed(2)}`);
+            if (newAdId) {
+              actions.push({ action: "recreate_ad", exchange: "bybit", adId: newAdId, suggestedPrice: targetPrice, reason: `Nuevo anuncio creado en ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
+              await logBot(tenantId, "info", "bybit", `Nuevo anuncio ${newAdId} creado en ${targetPrice.toFixed(2)}`);
+            }
           } else {
-            // Normal update
-            const updateFields: any = {
-              id: adId,
-              price: targetPrice.toFixed(2),
-              actionType: "MODIFY",
-              priceType: String(fullAd.priceType ?? "0"),
-              premium: String(fullAd.premium ?? "0"),
-              quantity: String(fullAd.lastQuantity ?? fullAd.quantity ?? "0"),
-              minAmount: String(fullAd.minAmount ?? "0"),
-              maxAmount: String(fullAd.maxAmount ?? "0"),
-              paymentPeriod: String(fullAd.paymentPeriod ?? "15"),
-              paymentIds,
-              remark: String(fullAd.remark ?? ""),
-              tradingPreferenceSet: strTps,
-            };
-            await client.updateAd(updateFields);
-            await incrementAdUpdateCount(tenantId, "bybit");
-            actions.push({ action: "update_price", exchange: "bybit", adId, currentPrice, suggestedPrice: targetPrice, reason: `Precio actualizado a ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
-            await logBot(tenantId, "info", "bybit", `Ad ${adId} precio actualizado: ${currentPrice} → ${targetPrice.toFixed(2)} (update #${count + 1})`);
-          }
-        } catch (e: any) {
-          await logBot(tenantId, "warn", "bybit", `No se pudo actualizar precio: ${e.message}`);
-          if (e.message?.includes("912120050")) {
-            const pauseUntil = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-            await prisma.p2PBotExchangeConfig.update({
-              where: { tenantId_exchange: { tenantId, exchange: "bybit" } },
-              data: { pauseUntil },
-            });
-            await logBot(tenantId, "info", "bybit", `Rate limit detectado. Bot pausado 5 min hasta ${pauseUntil}.`);
+            await logBot(tenantId, "warn", "bybit", `No se pudo actualizar precio: ${e.message}`);
           }
         }
       }
