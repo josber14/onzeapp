@@ -505,10 +505,7 @@ async function runBybitCycle(
           const count = adUpdateCount.get(adId) || 0;
 
           if (count >= 8) {
-            // Delete old ad and create a new one
-            await client.removeAd(adId);
-            await logBot(tenantId, "info", "bybit", `Anuncio ${adId} eliminado tras ${count} actualizaciones.`);
-
+            // Create new ad FIRST, then delete old one (so we never lose the ad)
             const newAdRes = await client.postAd({
               tokenId: "USDT",
               currencyId: "CLP",
@@ -527,10 +524,15 @@ async function runBybitCycle(
             });
 
             const newAdId = newAdRes?.result?.item?.id ?? newAdRes?.result?.id;
-            adUpdateCount.delete(adId); // old ad counter gone
-            if (newAdId) adUpdateCount.set(newAdId, 0);
+            if (!newAdId) throw new Error("No se obtuvo ID del nuevo anuncio");
 
-            actions.push({ action: "recreate_ad", exchange: "bybit", adId: newAdId, suggestedPrice: targetPrice, reason: `Anuncio recreado en ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
+            await client.removeAd(adId);
+            await logBot(tenantId, "info", "bybit", `Anuncio ${adId} eliminado.`);
+
+            adUpdateCount.delete(adId);
+            adUpdateCount.set(newAdId, 0);
+
+            actions.push({ action: "recreate_ad", exchange: "bybit", adId: newAdId, suggestedPrice: targetPrice, reason: `Nuevo anuncio creado en ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
             await logBot(tenantId, "info", "bybit", `Nuevo anuncio ${newAdId} creado en ${targetPrice.toFixed(2)}`);
           } else {
             // Normal update
