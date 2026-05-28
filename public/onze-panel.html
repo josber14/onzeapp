@@ -9510,14 +9510,16 @@ if(addProviderBtn){
     const ex = botSelectedExchange;
     clearInterval(botCycleTimers[ex]);
     delete botCycleTimers[ex];
-    await window.botRefreshExchange();
-    await fetch("/api/p2p/bot/exchange-config", {
+    // Update UI immediately
+    const btn = document.getElementById("botStopBtn");
+    if(btn) btn.textContent = "Deteniendo...";
+    // Fire-and-forget API calls (don't block the UI)
+    fetch("/api/p2p/bot/exchange-config", {
       method:"POST",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ exchange: ex, action: "stop" })
-    });
-    await window.botRefreshExchange();
+    }).finally(() => window.botRefreshExchange());
   };
 
   async function botRefreshExchange(){
