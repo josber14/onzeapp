@@ -506,7 +506,7 @@ async function runBybitCycle(
 
           if (count >= 8) {
             // Create new ad FIRST, then delete old one (so we never lose the ad)
-            const newAdRes = await client.postAd({
+            const postFields: any = {
               tokenId: "USDT",
               currencyId: "CLP",
               side: "1",
@@ -516,12 +516,14 @@ async function runBybitCycle(
               quantity: String(fullAd.lastQuantity ?? fullAd.quantity ?? "0"),
               minAmount: String(fullAd.minAmount ?? "0"),
               maxAmount: String(fullAd.maxAmount ?? "0"),
-              paymentPeriod: Number(fullAd.paymentPeriod ?? 15),
+              paymentPeriod: String(fullAd.paymentPeriod ?? "15"),
               paymentIds,
               remark: String(fullAd.remark ?? ""),
               tradingPreferenceSet: strTps,
               itemType: String(fullAd.itemType ?? "ORIGIN"),
-            });
+            };
+            await logBot(tenantId, "debug", "bybit", `postAd payload: ${JSON.stringify(postFields)}`);
+            const newAdRes = await client.postAd(postFields);
 
             const newAdId = newAdRes?.result?.item?.id ?? newAdRes?.result?.id;
             if (!newAdId) throw new Error("No se obtuvo ID del nuevo anuncio");
