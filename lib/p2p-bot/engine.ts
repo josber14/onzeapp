@@ -8,9 +8,6 @@ import type {
   BotState,
 } from "./types";
 
-// Track update count per ad ID to bypass Bybit's 10-update rate limit
-const adUpdateCount = new Map<string, number>();
-
 function getBaseUrl(): string {
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
   return process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
@@ -148,6 +145,7 @@ export async function getExchangeConfig(
     pauseUntil: config.pauseUntil?.toISOString() || null,
     lastStartedAt: config.lastStartedAt?.toISOString() || null,
     lastStoppedAt: config.lastStoppedAt?.toISOString() || null,
+    adUpdateCount: config.adUpdateCount,
   };
 }
 
@@ -166,6 +164,7 @@ export async function saveExchangeConfig(
   if (data.circuitBreakPct !== undefined) update.circuitBreakPct = data.circuitBreakPct;
   if (data.cycleInterval !== undefined) update.cycleInterval = data.cycleInterval;
   if (data.minCompetitorCapital !== undefined) update.minCompetitorCapital = data.minCompetitorCapital;
+  if (data.adUpdateCount !== undefined) update.adUpdateCount = data.adUpdateCount;
 
   await prisma.p2PBotExchangeConfig.upsert({
     where: { tenantId_exchange: { tenantId, exchange } },
@@ -181,6 +180,7 @@ export async function saveExchangeConfig(
       circuitBreakPct: data.circuitBreakPct ?? 3,
       cycleInterval: data.cycleInterval ?? 30,
       minCompetitorCapital: data.minCompetitorCapital ?? null,
+      adUpdateCount: data.adUpdateCount ?? 0,
     },
   });
 }
@@ -259,6 +259,31 @@ export async function getBotOrders(
     createdAt: o.createdAt.toISOString(),
     executedAt: o.executedAt.toISOString(),
   }));
+}
+
+export async function incrementAdUpdateCount(
+  tenantId: number,
+  exchange: BotExchange,
+  amount = 1
+): Promise<number> {
+  const config = await getExchangeConfig(tenantId, exchange);
+  const current = config?.adUpdateCount ?? 0;
+  const next = current + amount;
+  await prisma.p2PBotExchangeConfig.update({
+    where: { tenantId_exchange: { tenantId, exchange } },
+    data: { adUpdateCount: next },
+  });
+  return next;
+}
+
+export async function resetAdUpdateCount(
+  tenantId: number,
+  exchange: BotExchange
+): Promise<void> {
+  await prisma.p2PBotExchangeConfig.update({
+    where: { tenantId_exchange: { tenantId, exchange } },
+    data: { adUpdateCount: 0 },
+  });
 }
 
 export async function logBot(
@@ -503,12 +528,13 @@ async function runBybitCycle(
 
           // Check update count — recreate ad after 8 updates to bypass rate limit
           const adId = ourSellAd.id;
-          const count = adUpdateCount.get(adId) || 0;
+          const count = (config as P2PBotExchangeConfigData).adUpdateCount ?? 0;
 
           if (count >= 8) {
             // Delete old ad first, then create. If create fails, next cycle detects no ad and retries.
             await client.removeAd(adId);
             await logBot(tenantId, "info", "bybit", `Anuncio ${adId} eliminado tras ${count} updates.`);
+            await resetAdUpdateCount(tenantId, "bybit");
 
             // Use offset price so Bybit doesn't reject (same price as deleted ad = error 90043)
             const recreatePrice = targetPrice + 0.5;
@@ -535,9 +561,6 @@ async function runBybitCycle(
             const newAdId = newAdRes?.result?.item?.id ?? newAdRes?.result?.id;
             if (!newAdId) throw new Error("No se obtuvo ID del nuevo anuncio");
 
-            adUpdateCount.delete(adId);
-            adUpdateCount.set(newAdId, 0);
-
             actions.push({ action: "recreate_ad", exchange: "bybit", adId: newAdId, suggestedPrice: targetPrice, reason: `Nuevo anuncio creado en ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
             await logBot(tenantId, "info", "bybit", `Nuevo anuncio ${newAdId} creado en ${targetPrice.toFixed(2)}`);
           } else {
@@ -557,7 +580,7 @@ async function runBybitCycle(
               tradingPreferenceSet: strTps,
             };
             await client.updateAd(updateFields);
-            adUpdateCount.set(adId, count + 1);
+            await incrementAdUpdateCount(tenantId, "bybit");
             actions.push({ action: "update_price", exchange: "bybit", adId, currentPrice, suggestedPrice: targetPrice, reason: `Precio actualizado a ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
             await logBot(tenantId, "info", "bybit", `Ad ${adId} precio actualizado: ${currentPrice} → ${targetPrice.toFixed(2)} (update #${count + 1})`);
           }

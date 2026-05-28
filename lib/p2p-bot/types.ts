@@ -34,6 +34,7 @@ export interface P2PBotExchangeConfigData {
   pauseUntil: string | null;
   lastStartedAt: string | null;
   lastStoppedAt: string | null;
+  adUpdateCount: number;
 }
 
 export interface BotAd {

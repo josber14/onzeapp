@@ -753,6 +753,7 @@ model P2PBotExchangeConfig {
   updatedAt            DateTime  @default(now())
   cycleInterval        Int       @default(30)
   minCompetitorCapital Decimal?  @db.Decimal(18, 2)
+  adUpdateCount        Int       @default(0)
   Tenant               Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, exchange])
