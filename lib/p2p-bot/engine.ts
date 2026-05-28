@@ -506,12 +506,18 @@ async function runBybitCycle(
           const count = adUpdateCount.get(adId) || 0;
 
           if (count >= 8) {
-            // Create new ad FIRST, then delete old one (so we never lose the ad)
+            // Delete old ad first, then create. If create fails, next cycle detects no ad and retries.
+            await client.removeAd(adId);
+            await logBot(tenantId, "info", "bybit", `Anuncio ${adId} eliminado tras ${count} updates.`);
+
+            // Use offset price so Bybit doesn't reject (same price as deleted ad = error 90043)
+            const recreatePrice = targetPrice + 0.5;
+
             const postFields: any = {
               tokenId: "USDT",
               currencyId: "CLP",
               side: "1",
-              price: targetPrice.toFixed(2),
+              price: recreatePrice.toFixed(2),
               priceType: String(fullAd.priceType ?? "0"),
               premium: String(fullAd.premium ?? "0"),
               quantity: String(fullAd.lastQuantity ?? fullAd.quantity ?? "0"),
@@ -528,9 +534,6 @@ async function runBybitCycle(
 
             const newAdId = newAdRes?.result?.item?.id ?? newAdRes?.result?.id;
             if (!newAdId) throw new Error("No se obtuvo ID del nuevo anuncio");
-
-            await client.removeAd(adId);
-            await logBot(tenantId, "info", "bybit", `Anuncio ${adId} eliminado.`);
 
             adUpdateCount.delete(adId);
             adUpdateCount.set(newAdId, 0);
