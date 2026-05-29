@@ -9336,19 +9336,16 @@ if(addProviderBtn){
               Spread minimo (%)
               <input id="botSpreadPct" type="number" step="0.1" value="0.5" onchange="window.botSaveExchangeConfig()">
             </label>
-            <label style="display:flex;flex-direction:column;gap:4px;">
-              <span>Precio mínimo venta</span>
-              <select id="botPriceSource" onchange="togglePriceSource()" style="margin-bottom:2px;">
-                <option value="auto">Auto (desde capacity activo)</option>
-                <option value="manual">Manual</option>
-              </select>
-              <div id="botPriceManualRow">
-                <input id="botPriceFloorPct" type="number" step="0.01" value="0" placeholder="Ej: 895.83" onchange="window.botSaveExchangeConfig()" style="width:100%;">
-                <span style="font-size:11px;color:#64748b;">Precio fijo en CLP</span>
+            <label>
+              Precio mínimo venta (CLP)
+              <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+                <select id="botPriceSource" onchange="togglePriceSource();window.botSaveExchangeConfig()" style="flex:0 0 auto;width:130px;">
+                  <option value="auto">Auto</option>
+                  <option value="manual">Manual</option>
+                </select>
+                <input id="botPriceFloorPct" type="number" step="0.01" value="0" placeholder="895.83" onchange="window.botSaveExchangeConfig()" style="flex:1;min-width:0;">
               </div>
-              <div id="botPriceAutoInfo" style="font-size:11px;color:#64748b;display:none;">
-                Usando precio del capacity activo: <span id="botPriceAutoValue">—</span>
-              </div>
+              <span style="font-size:11px;color:#64748b;" id="botPriceHelpText">0 = usa precio de compra del capacity activo</span>
             </label>
             <label>
               Circuit breaker (% caida)
@@ -9593,7 +9590,7 @@ if(addProviderBtn){
     document.getElementById("botSpreadPct").value = cfg.spreadPct || 0.5;
     const isAuto = !cfg.priceFloorPct || cfg.priceFloorPct === 0;
     document.getElementById("botPriceSource").value = isAuto ? "auto" : "manual";
-    document.getElementById("botPriceFloorPct").value = cfg.priceFloorPct || 0;
+    document.getElementById("botPriceFloorPct").value = isAuto ? 0 : cfg.priceFloorPct;
     togglePriceSource();
     document.getElementById("botCircuitBreakPct").value = cfg.circuitBreakPct || 3;
     document.getElementById("botDailyVolumeCap").value = cfg.dailyVolumeCapUsdt || "";
@@ -9607,15 +9604,22 @@ if(addProviderBtn){
   }
 
   function togglePriceSource(){
-    const source = document.getElementById("botPriceSource").value;
-    document.getElementById("botPriceManualRow").style.display = source === "manual" ? "" : "none";
-    document.getElementById("botPriceAutoInfo").style.display = source === "auto" ? "" : "none";
+    const el = document.getElementById("botPriceSource");
+    const inp = document.getElementById("botPriceFloorPct");
+    const help = document.getElementById("botPriceHelpText");
+    if(!el || !inp || !help) return;
+    const source = el.value;
     if(source === "auto"){
+      inp.disabled = true;
+      inp.style.opacity = "0.5";
+      inp.value = "0";
       const cap = window.__p2pCapacityCache?.[0];
-      const buyPrice = cap?.buyPrice;
-      document.getElementById("botPriceAutoValue").textContent = buyPrice ? `$${Number(buyPrice).toLocaleString("es-CL")}` : "—";
+      help.textContent = cap?.buyPrice ? `Auto: $${Number(cap.buyPrice).toLocaleString("es-CL")} (desde capacity)` : "Auto: sin capacity activo";
+    }else{
+      inp.disabled = false;
+      inp.style.opacity = "1";
+      help.textContent = "Precio fijo en CLP";
     }
-    window.botSaveExchangeConfig();
   }
 
   function toggleBotStrategyFields(){
