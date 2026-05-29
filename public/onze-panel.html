@@ -9551,25 +9551,8 @@ if(addProviderBtn){
       if(exStatus){
         updateBotUI({ running: exStatus.enabled, config: exStatus });
         updateExchangeConfig(exStatus);
-        // Auto-start timer if bot was enabled but timer is not running (e.g. after page refresh)
-        if(exStatus.enabled && !botCycleTimers[ex]){
-          const interval = parseInt(document.getElementById("botCycleInterval").value) || 10;
-          botCycleTimers[ex] = setInterval(async () => {
-            if(window.__botCycleRunning) return;
-            window.__botCycleRunning = true;
-            try{
-              await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include" });
-              window.botRefreshExchange();
-            }catch(e){}
-            window.__botCycleRunning = false;
-          }, interval * 1000);
-        }
       }else{
         updateBotUI({ running: false });
-        if(botCycleTimers[ex]){
-          clearInterval(botCycleTimers[ex]);
-          delete botCycleTimers[ex];
-        }
       }
 
       await loadCredentials(ex);
@@ -9622,9 +9605,17 @@ if(addProviderBtn){
 
   function getActiveCapacityBuyPrice(){
     const cache = window.__p2pCapacityCache;
-    if(!cache || !Array.isArray(cache)) return null;
-    const active = cache.find(c => c.buyPrice && c.status !== "finished" && !c._capital);
-    return active?.buyPrice ? Number(active.buyPrice) : null;
+    if(cache && Array.isArray(cache)){
+      const active = cache.find(c => c.buyPrice && c.status !== "finished" && !c._capital);
+      if(active?.buyPrice) return Number(active.buyPrice);
+    }
+    // Fallback: use the value already shown in the buy price card
+    const cardValue = document.getElementById("botBuyPriceValue");
+    if(cardValue && cardValue.textContent !== "—"){
+      const v = parseFloat(cardValue.textContent);
+      if(!isNaN(v)) return v;
+    }
+    return null;
   }
 
   function togglePriceSource(){
