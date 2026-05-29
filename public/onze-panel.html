@@ -9637,6 +9637,7 @@ if(addProviderBtn){
     }
     botUpdateBuyPrice();
   }
+  window.togglePriceSource = togglePriceSource;
 
   function updateMinPriceDisplay(){
     const el = document.getElementById("botMinPriceDisplay");
@@ -9861,6 +9862,7 @@ if(addProviderBtn){
     value.textContent = Number(active.buyPrice).toFixed(2);
     provider.textContent = active.provider || active.country || "-";
   }
+  window.botUpdateBuyPrice = botUpdateBuyPrice;
 
   window.botOpenPanel = function(){
     const modal = document.getElementById("botPanelModal");
