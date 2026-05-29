@@ -9346,7 +9346,7 @@ if(addProviderBtn){
                   <option value="auto">Capacity</option>
                   <option value="manual">Manual</option>
                 </select>
-                <input id="botPriceFloorPct" type="number" step="0.01" value="0" placeholder="895.83" oninput="botUpdateBuyPrice();window.botSaveExchangeConfig()" style="flex:1;min-width:0;">
+                <input id="botPriceFloorPct" type="number" step="0.01" value="0" placeholder="895.83" onchange="botUpdateBuyPrice();window.botSaveExchangeConfig()" style="flex:1;min-width:0;">
               </div>
               <span style="font-size:11px;color:#64748b;" id="botPriceHelpText">0 = usa precio de compra del capacity activo</span>
             </label>
