@@ -178,7 +178,7 @@ export async function saveExchangeConfig(
       spreadPct: data.spreadPct ?? 0.5,
       priceFloorPct: data.priceFloorPct ?? 0,
       circuitBreakPct: data.circuitBreakPct ?? 3,
-      cycleInterval: data.cycleInterval ?? 30,
+      cycleInterval: data.cycleInterval ?? 10,
       minCompetitorCapital: data.minCompetitorCapital ?? null,
       adUpdateCount: data.adUpdateCount ?? 0,
     },

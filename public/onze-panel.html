@@ -9357,7 +9357,7 @@ if(addProviderBtn){
             </label>
             <label>
               Intervalo de ciclo (segundos)
-              <input id="botCycleInterval" type="number" step="1" value="30" min="1" onchange="window.botSaveExchangeConfig()">
+              <input id="botCycleInterval" type="number" step="1" value="10" min="1" onchange="window.botSaveExchangeConfig()">
               <span style="font-size:11px;color:#64748b;">Tiempo entre cada ciclo de actualizacion</span>
             </label>
             <label>
@@ -9701,6 +9701,8 @@ if(addProviderBtn){
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceFloorPct, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, minCompetitorCapital })
     });
+    botUpdateBuyPrice();
+    window.botRefreshExchange();
   };
 
   async function loadCredentials(exchange){
