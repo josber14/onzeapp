@@ -433,7 +433,7 @@ async function runBybitCycle(
 
     // 4. Determine minimum sell price (absolute CLP)
     let minSellPrice = Number(config.priceFloorPct) || 0;
-    if ((config as any).priceSource === "auto" || minSellPrice <= 0) {
+    if (minSellPrice <= 0) {
       const activeCap = await prisma.p2PCapacity.findFirst({
         where: {
           tenantId,
