@@ -9619,7 +9619,9 @@ if(addProviderBtn){
     if(el.value === "auto"){
       inp.value = buyPrice ? buyPrice.toFixed(2) : "0";
       help.textContent = buyPrice ? `$${buyPrice.toLocaleString("es-CL")}` : "Sin capacity activo";
+      inp.style.opacity = "0.6";
     }else{
+      inp.style.opacity = "1";
       if(inp.value === "0" || inp.value === "0.00" || inp.value === (buyPrice?.toFixed(2) ?? "0")){
         inp.value = buyPrice ? buyPrice.toFixed(2) : "895.00";
       }
