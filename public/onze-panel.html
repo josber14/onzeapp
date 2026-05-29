@@ -9360,7 +9360,7 @@ if(addProviderBtn){
             </label>
             <label>
               Intervalo de ciclo (segundos)
-              <input id="botCycleInterval" type="number" step="1" value="10" min="1" onchange="window.botSaveExchangeConfig()">
+              <input id="botCycleInterval" type="number" step="0.1" value="10" min="1" onchange="window.botSaveExchangeConfig()">
               <span style="font-size:11px;color:#64748b;">Tiempo entre cada ciclo de actualizacion</span>
             </label>
             <label>
@@ -9597,7 +9597,7 @@ if(addProviderBtn){
     togglePriceSource();
     document.getElementById("botCircuitBreakPct").value = cfg.circuitBreakPct || 3;
     document.getElementById("botDailyVolumeCap").value = cfg.dailyVolumeCapUsdt || "";
-    document.getElementById("botCycleInterval").value = cfg.cycleInterval ?? 30;
+    document.getElementById("botCycleInterval").value = cfg.cycleInterval ?? 10;
     document.getElementById("botMinCompetitorCapital").value = cfg.minCompetitorCapital ?? "";
     toggleBotStrategyFields();
   }
@@ -9700,7 +9700,7 @@ if(addProviderBtn){
     const priceSource = document.getElementById("botPriceSource").value;
     const priceFloorPct = priceSource === "auto" ? -1 : (parseFloat(document.getElementById("botPriceFloorPct").value) || 0);
     const circuitBreakPct = parseFloat(document.getElementById("botCircuitBreakPct").value) || 3;
-    const cycleInterval = parseInt(document.getElementById("botCycleInterval").value) || 30;
+    const cycleInterval = parseFloat(document.getElementById("botCycleInterval").value) || 30;
     const dailyV = document.getElementById("botDailyVolumeCap").value;
     const dailyVolumeCapUsdt = dailyV ? parseFloat(dailyV) : null;
     const minV = document.getElementById("botMinCompetitorCapital").value;

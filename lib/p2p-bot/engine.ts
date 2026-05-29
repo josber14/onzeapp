@@ -141,7 +141,7 @@ export async function getExchangeConfig(
     priceSource: config.priceSource || "manual",
     dailyVolumeCapUsdt: config.dailyVolumeCapUsdt ? Number(config.dailyVolumeCapUsdt) : null,
     circuitBreakPct: Number(config.circuitBreakPct),
-    cycleInterval: Number(config.cycleInterval) || 30,
+    cycleInterval: Number(config.cycleInterval) || 10,
     minCompetitorCapital: config.minCompetitorCapital ? Number(config.minCompetitorCapital) : null,
     pauseUntil: config.pauseUntil?.toISOString() || null,
     lastStartedAt: config.lastStartedAt?.toISOString() || null,
