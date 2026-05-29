@@ -138,6 +138,7 @@ export async function getExchangeConfig(
     top1Diff: Number(config.top1Diff),
     spreadPct: Number(config.spreadPct),
     priceFloorPct: Number(config.priceFloorPct),
+    priceSource: config.priceSource || "manual",
     dailyVolumeCapUsdt: config.dailyVolumeCapUsdt ? Number(config.dailyVolumeCapUsdt) : null,
     circuitBreakPct: Number(config.circuitBreakPct),
     cycleInterval: Number(config.cycleInterval) || 30,
@@ -160,6 +161,7 @@ export async function saveExchangeConfig(
   if (data.top1Diff !== undefined) update.top1Diff = data.top1Diff;
   if (data.spreadPct !== undefined) update.spreadPct = data.spreadPct;
   if (data.priceFloorPct !== undefined) update.priceFloorPct = data.priceFloorPct;
+  if (data.priceSource !== undefined) update.priceSource = data.priceSource;
   if (data.dailyVolumeCapUsdt !== undefined) update.dailyVolumeCapUsdt = data.dailyVolumeCapUsdt;
   if (data.circuitBreakPct !== undefined) update.circuitBreakPct = data.circuitBreakPct;
   if (data.cycleInterval !== undefined) update.cycleInterval = data.cycleInterval;
@@ -177,6 +179,7 @@ export async function saveExchangeConfig(
       top1Diff: data.top1Diff ?? 0.1,
       spreadPct: data.spreadPct ?? 0.5,
       priceFloorPct: data.priceFloorPct ?? 0,
+      priceSource: data.priceSource ?? "manual",
       circuitBreakPct: data.circuitBreakPct ?? 3,
       cycleInterval: data.cycleInterval ?? 10,
       minCompetitorCapital: data.minCompetitorCapital ?? null,
@@ -428,9 +431,9 @@ async function runBybitCycle(
       await logBot(tenantId, "info", "bybit", `Precios: ${samplePrices}`);
     }
 
-    // 4. Determine minimum sell price (absolute CLP, -1 = auto from active capacity)
+    // 4. Determine minimum sell price (absolute CLP)
     let minSellPrice = Number(config.priceFloorPct) || 0;
-    if (minSellPrice <= 0) {
+    if ((config as any).priceSource === "auto" || minSellPrice <= 0) {
       const activeCap = await prisma.p2PCapacity.findFirst({
         where: {
           tenantId,

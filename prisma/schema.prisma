@@ -744,6 +744,7 @@ model P2PBotExchangeConfig {
   top1Diff             Decimal   @default(0.1) @db.Decimal(18, 8)
   spreadPct            Decimal   @default(0.5) @db.Decimal(8, 4)
   priceFloorPct        Decimal   @default(0.2) @db.Decimal(8, 4)
+  priceSource          String    @default("manual")
   dailyVolumeCapUsdt   Decimal?  @db.Decimal(18, 8)
   circuitBreakPct      Decimal   @default(3) @db.Decimal(8, 4)
   pauseUntil           DateTime?

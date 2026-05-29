@@ -32,6 +32,7 @@ export async function GET() {
         top1Diff: Number(c.top1Diff),
         spreadPct: Number(c.spreadPct),
         priceFloorPct: Number(c.priceFloorPct),
+        priceSource: c.priceSource || "manual",
         dailyVolumeCapUsdt: c.dailyVolumeCapUsdt ? Number(c.dailyVolumeCapUsdt) : null,
         circuitBreakPct: Number(c.circuitBreakPct),
         cycleInterval: Number(c.cycleInterval) || 30,
@@ -68,6 +69,7 @@ export async function POST(req: NextRequest) {
     if (data.top1Diff !== undefined) update.top1Diff = data.top1Diff;
     if (data.spreadPct !== undefined) update.spreadPct = data.spreadPct;
     if (data.priceFloorPct !== undefined) update.priceFloorPct = data.priceFloorPct;
+    if (data.priceSource !== undefined) update.priceSource = data.priceSource;
     if (data.dailyVolumeCapUsdt !== undefined) update.dailyVolumeCapUsdt = data.dailyVolumeCapUsdt;
     if (data.circuitBreakPct !== undefined) update.circuitBreakPct = data.circuitBreakPct;
     if (data.cycleInterval !== undefined) update.cycleInterval = data.cycleInterval;
@@ -108,6 +110,7 @@ export async function POST(req: NextRequest) {
         top1Diff: data.top1Diff ?? 0.1,
         spreadPct: data.spreadPct ?? 0.5,
         priceFloorPct: data.priceFloorPct ?? 0,
+        priceSource: data.priceSource ?? "manual",
         circuitBreakPct: data.circuitBreakPct ?? 3,
         cycleInterval: data.cycleInterval ?? 30,
         minCompetitorCapital: data.minCompetitorCapital ?? null,

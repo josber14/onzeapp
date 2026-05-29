@@ -9348,7 +9348,7 @@ if(addProviderBtn){
                 </select>
                 <input id="botPriceFloorPct" type="number" step="0.01" value="0" placeholder="895.83" onchange="botUpdateBuyPrice();window.botSaveExchangeConfig()" style="flex:1;min-width:0;">
               </div>
-              <span style="font-size:11px;color:#64748b;" id="botPriceHelpText">0 = usa precio de compra del capacity activo</span>
+              <span style="font-size:11px;color:#64748b;" id="botPriceHelpText">Precio mínimo de venta en CLP</span>
             </label>
             <label>
               Circuit breaker (% caida)
@@ -9591,7 +9591,7 @@ if(addProviderBtn){
     document.getElementById("botStrategy").value = cfg.strategy || "top1";
     document.getElementById("botTop1Diff").value = cfg.top1Diff ?? 0.1;
     document.getElementById("botSpreadPct").value = cfg.spreadPct || 0.5;
-    const isAuto = cfg.priceFloorPct === -1 || !cfg.priceFloorPct;
+    const isAuto = cfg.priceSource === "auto" || cfg.priceFloorPct === -1 || !cfg.priceFloorPct;
     document.getElementById("botPriceSource").value = isAuto ? "auto" : "manual";
     document.getElementById("botPriceFloorPct").value = isAuto ? 0 : cfg.priceFloorPct;
     togglePriceSource();
@@ -9697,19 +9697,13 @@ if(addProviderBtn){
     const top1Diff = parseFloat(document.getElementById("botTop1Diff").value) || 0.1;
     const spreadPct = parseFloat(document.getElementById("botSpreadPct").value) || 0.5;
     const priceSource = document.getElementById("botPriceSource").value;
-    const priceFloorPct = priceSource === "auto" ? -1 : (parseFloat(document.getElementById("botPriceFloorPct").value) || 0);
-    const circuitBreakPct = parseFloat(document.getElementById("botCircuitBreakPct").value) || 3;
-    const cycleInterval = parseInt(document.getElementById("botCycleInterval").value) || 30;
-    const dailyV = document.getElementById("botDailyVolumeCap").value;
-    const dailyVolumeCapUsdt = dailyV ? parseFloat(dailyV) : null;
-    const minV = document.getElementById("botMinCompetitorCapital").value;
-    const minCompetitorCapital = minV ? parseFloat(minV) : null;
+    const priceFloorPct = priceSource === "auto" ? 0 : (parseFloat(document.getElementById("botPriceFloorPct").value) || 0);
 
     await fetch("/api/p2p/bot/exchange-config", {
       method:"POST",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceFloorPct, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, minCompetitorCapital })
+      body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceFloorPct, priceSource, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, minCompetitorCapital })
     });
     botUpdateBuyPrice();
     window.botRefreshExchange();

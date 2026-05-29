@@ -27,6 +27,7 @@ export interface P2PBotExchangeConfigData {
   top1Diff: number;
   spreadPct: number;
   priceFloorPct: number;
+  priceSource: string;
   dailyVolumeCapUsdt: number | null;
   circuitBreakPct: number;
   cycleInterval: number;
