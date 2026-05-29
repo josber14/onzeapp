@@ -9513,7 +9513,6 @@ if(addProviderBtn){
       window.__botCycleRunning = false;
     }, interval * 1000);
     await window.botRefreshExchange();
-    console.log("[P2P Bot] botStartExchange complete, cycleInterval:", interval);
   };
 
   window.botStopExchange = async function(){
@@ -9589,7 +9588,6 @@ if(addProviderBtn){
 
   function updateExchangeConfig(cfg){
     if(!cfg) return;
-    console.log("[P2P Bot] updateExchangeConfig", { priceFloorPct: cfg.priceFloorPct, strategy: cfg.strategy, enabled: cfg.enabled });
     document.getElementById("botStrategy").value = cfg.strategy || "top1";
     document.getElementById("botTop1Diff").value = cfg.top1Diff ?? 0.1;
     document.getElementById("botSpreadPct").value = cfg.spreadPct || 0.5;
@@ -9701,6 +9699,12 @@ if(addProviderBtn){
     const spreadPct = parseFloat(document.getElementById("botSpreadPct").value) || 0.5;
     const priceSource = document.getElementById("botPriceSource").value;
     const priceFloorPct = priceSource === "auto" ? -1 : (parseFloat(document.getElementById("botPriceFloorPct").value) || 0);
+    const circuitBreakPct = parseFloat(document.getElementById("botCircuitBreakPct").value) || 3;
+    const cycleInterval = parseInt(document.getElementById("botCycleInterval").value) || 30;
+    const dailyV = document.getElementById("botDailyVolumeCap").value;
+    const dailyVolumeCapUsdt = dailyV ? parseFloat(dailyV) : null;
+    const minV = document.getElementById("botMinCompetitorCapital").value;
+    const minCompetitorCapital = minV ? parseFloat(minV) : null;
 
     await fetch("/api/p2p/bot/exchange-config", {
       method:"POST",
@@ -9708,7 +9712,6 @@ if(addProviderBtn){
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceFloorPct, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, minCompetitorCapital })
     });
-    console.log("[P2P Bot] Saved config", { exchange: ex, priceSource, priceFloorPct });
     botUpdateBuyPrice();
     window.botRefreshExchange();
   };
