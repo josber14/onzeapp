@@ -9307,20 +9307,13 @@ if(addProviderBtn){
           <button class="btn" type="button" id="botStartBtn" style="padding:10px 24px;" onclick="window.botStartExchange()">Iniciar</button>
           <button class="btn secondary" type="button" id="botStopBtn" style="padding:10px 24px;" onclick="window.botStopExchange()">Detener</button>
           <button class="btn" type="button" id="botPanelBtn" style="padding:10px 24px;" onclick="window.botOpenPanel()">Panel P2P</button>
-          <div class="bot-buyprice-card" id="botBuyPriceCard" style="display:none;">
+          <div class="bot-buyprice-card" id="botBuyPriceCard">
             <div class="ticker">
-              <div class="label" id="botBuyPriceLabel">PRECIO COMPRA</div>
-              <div class="value" id="botBuyPriceValue">0</div>
+              <div class="label" id="botBuyPriceLabel">PRECIO MINIMO VENTA</div>
+              <div class="value" id="botBuyPriceValue">—</div>
               <div class="unit">CLP</div>
             </div>
-            <div class="provider" id="botBuyPriceProvider">-</div>
-          </div>
-          <div class="bot-buyprice-card" id="botMinPriceDisplayCard" style="margin-top:8px;">
-            <div class="ticker">
-              <div class="label">PRECIO MINIMO VENTA</div>
-              <div class="value" id="botMinPriceDisplay">—</div>
-              <div class="unit">CLP</div>
-            </div>
+            <div class="provider" id="botBuyPriceProvider"></div>
           </div>
         </div>
 
@@ -9350,7 +9343,7 @@ if(addProviderBtn){
                   <option value="auto">Capacity</option>
                   <option value="manual">Manual</option>
                 </select>
-                <input id="botPriceFloorPct" type="number" step="0.01" value="0" placeholder="895.83" oninput="window.botSaveExchangeConfig()" style="flex:1;min-width:0;">
+                <input id="botPriceFloorPct" type="number" step="0.01" value="0" placeholder="895.83" oninput="botUpdateBuyPrice();window.botSaveExchangeConfig()" style="flex:1;min-width:0;">
               </div>
               <span style="font-size:11px;color:#64748b;" id="botPriceHelpText">0 = usa precio de compra del capacity activo</span>
             </label>
@@ -9564,7 +9557,6 @@ if(addProviderBtn){
 
       await loadCredentials(ex);
       botUpdateBuyPrice();
-      updateMinPriceDisplay();
     }catch(e){
       console.warn("Bot refresh error:", e);
     }
@@ -9618,18 +9610,6 @@ if(addProviderBtn){
     return active?.buyPrice ? Number(active.buyPrice) : null;
   }
 
-  function getEffectiveMinPrice(){
-    const source = document.getElementById("botPriceSource");
-    const inp = document.getElementById("botPriceFloorPct");
-    if(!source || !inp) return null;
-    if(source.value === "auto"){
-      const buyPrice = getActiveCapacityBuyPrice();
-      return buyPrice;
-    }
-    const v = parseFloat(inp.value);
-    return isNaN(v) ? null : v;
-  }
-
   function togglePriceSource(){
     const el = document.getElementById("botPriceSource");
     const inp = document.getElementById("botPriceFloorPct");
@@ -9650,7 +9630,7 @@ if(addProviderBtn){
       }
       help.textContent = "Precio manual (CLP)";
     }
-    updateMinPriceDisplay();
+    botUpdateBuyPrice();
   }
 
   function updateMinPriceDisplay(){
@@ -9830,7 +9810,30 @@ if(addProviderBtn){
 
   function botUpdateBuyPrice(){
     const card = document.getElementById("botBuyPriceCard");
-    if(!card) return;
+    const label = document.getElementById("botBuyPriceLabel");
+    const value = document.getElementById("botBuyPriceValue");
+    const provider = document.getElementById("botBuyPriceProvider");
+    if(!card || !label || !value || !provider) return;
+
+    const source = document.getElementById("botPriceSource");
+    if(!source){
+      card.style.display = "none";
+      return;
+    }
+
+    if(source.value === "manual"){
+      const inp = document.getElementById("botPriceFloorPct");
+      const manualPrice = inp ? parseFloat(inp.value) : null;
+      if(manualPrice && !isNaN(manualPrice)){
+        card.style.display = "flex";
+        label.textContent = "PRECIO MINIMO VENTA";
+        value.textContent = manualPrice.toFixed(2);
+        provider.textContent = "Manual";
+        return;
+      }
+    }
+
+    // Capacity mode
     const cache = window.__p2pCapacityCache;
     if(!cache || !Array.isArray(cache)){
       card.style.display = "none";
@@ -9842,8 +9845,9 @@ if(addProviderBtn){
       return;
     }
     card.style.display = "flex";
-    document.getElementById("botBuyPriceValue").textContent = Number(active.buyPrice).toFixed(2);
-    document.getElementById("botBuyPriceProvider").textContent = active.provider || active.country || "-";
+    label.textContent = "PRECIO COMPRA (CAPACITY)";
+    value.textContent = Number(active.buyPrice).toFixed(2);
+    provider.textContent = active.provider || active.country || "-";
   }
 
   window.botOpenPanel = function(){
