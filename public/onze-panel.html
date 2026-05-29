@@ -9339,8 +9339,8 @@ if(addProviderBtn){
             <label>
               Precio mínimo venta (CLP)
               <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
-                <select id="botPriceSource" onchange="togglePriceSource();window.botSaveExchangeConfig()" style="flex:0 0 auto;width:130px;">
-                  <option value="auto">Auto</option>
+                <select id="botPriceSource" onchange="togglePriceSource();window.botSaveExchangeConfig()" style="flex:0 0 auto;width:120px;">
+                  <option value="auto">Capacity</option>
                   <option value="manual">Manual</option>
                 </select>
                 <input id="botPriceFloorPct" type="number" step="0.01" value="0" placeholder="895.83" onchange="window.botSaveExchangeConfig()" style="flex:1;min-width:0;">
@@ -9614,10 +9614,14 @@ if(addProviderBtn){
       inp.style.opacity = "0.5";
       inp.value = "0";
       const cap = window.__p2pCapacityCache?.[0];
-      help.textContent = cap?.buyPrice ? `Auto: $${Number(cap.buyPrice).toLocaleString("es-CL")} (desde capacity)` : "Auto: sin capacity activo";
+      help.textContent = cap?.buyPrice ? `$${Number(cap.buyPrice).toLocaleString("es-CL")} (capacity)` : "Sin capacity activo";
     }else{
       inp.disabled = false;
       inp.style.opacity = "1";
+      if(!inp.value || inp.value === "0"){
+        const cap = window.__p2pCapacityCache?.[0];
+        inp.value = cap?.buyPrice ? String(cap.buyPrice) : "895";
+      }
       help.textContent = "Precio fijo en CLP";
     }
   }
