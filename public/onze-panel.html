@@ -10547,7 +10547,25 @@ if(addProviderBtn){
     buildP2PBotView();
     addP2PBotNavButton();
     toggleBotStrategyFields();
-    setTimeout(() => window.botRefreshExchange(), 300);
+    setTimeout(async () => {
+      // Auto-stop any exchange that was left running from a prior session
+      try {
+        const res = await fetch("/api/p2p/bot/exchange-config", { credentials:"include" });
+        const data = await res.json();
+        if(data?.ok && data?.configs){
+          for(const ex of Object.keys(data.configs)){
+            if(data.configs[ex]?.enabled){
+              await fetch("/api/p2p/bot/exchange-config", {
+                method:"POST", credentials:"include",
+                headers:{"Content-Type":"application/json"},
+                body: JSON.stringify({ exchange: ex, action: "stop" })
+              });
+            }
+          }
+        }
+      } catch(e) {}
+      window.botRefreshExchange();
+    }, 400);
   }
 
   if(document.readyState === "loading"){
