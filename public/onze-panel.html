@@ -9501,7 +9501,7 @@ if(addProviderBtn){
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ exchange: ex, action: "start" })
     });
-    const interval = parseInt(document.getElementById("botCycleInterval").value) || 30;
+    const interval = Math.round(parseFloat(document.getElementById("botCycleInterval").value)) || 10;
     if(botCycleTimers[ex]) clearInterval(botCycleTimers[ex]);
     botCycleTimers[ex] = setInterval(async () => {
       if(window.__botCycleRunning) return;
@@ -9700,7 +9700,7 @@ if(addProviderBtn){
     const priceSource = document.getElementById("botPriceSource").value;
     const priceFloorPct = priceSource === "auto" ? -1 : (parseFloat(document.getElementById("botPriceFloorPct").value) || 0);
     const circuitBreakPct = parseFloat(document.getElementById("botCircuitBreakPct").value) || 3;
-    const cycleInterval = parseFloat(document.getElementById("botCycleInterval").value) || 30;
+    const cycleInterval = Math.round(parseFloat(document.getElementById("botCycleInterval").value)) || 10;
     const dailyV = document.getElementById("botDailyVolumeCap").value;
     const dailyVolumeCapUsdt = dailyV ? parseFloat(dailyV) : null;
     const minV = document.getElementById("botMinCompetitorCapital").value;
