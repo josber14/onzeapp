@@ -9551,8 +9551,25 @@ if(addProviderBtn){
       if(exStatus){
         updateBotUI({ running: exStatus.enabled, config: exStatus });
         updateExchangeConfig(exStatus);
+        // Auto-start timer if bot was enabled but timer is not running (e.g. after page refresh)
+        if(exStatus.enabled && !botCycleTimers[ex]){
+          const interval = parseInt(document.getElementById("botCycleInterval").value) || 10;
+          botCycleTimers[ex] = setInterval(async () => {
+            if(window.__botCycleRunning) return;
+            window.__botCycleRunning = true;
+            try{
+              await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include" });
+              window.botRefreshExchange();
+            }catch(e){}
+            window.__botCycleRunning = false;
+          }, interval * 1000);
+        }
       }else{
         updateBotUI({ running: false });
+        if(botCycleTimers[ex]){
+          clearInterval(botCycleTimers[ex]);
+          delete botCycleTimers[ex];
+        }
       }
 
       await loadCredentials(ex);
@@ -9588,7 +9605,7 @@ if(addProviderBtn){
     document.getElementById("botStrategy").value = cfg.strategy || "top1";
     document.getElementById("botTop1Diff").value = cfg.top1Diff ?? 0.1;
     document.getElementById("botSpreadPct").value = cfg.spreadPct || 0.5;
-    const isAuto = !cfg.priceFloorPct || cfg.priceFloorPct === 0;
+    const isAuto = cfg.priceFloorPct === -1 || !cfg.priceFloorPct;
     document.getElementById("botPriceSource").value = isAuto ? "auto" : "manual";
     document.getElementById("botPriceFloorPct").value = isAuto ? 0 : cfg.priceFloorPct;
     togglePriceSource();
@@ -9689,7 +9706,7 @@ if(addProviderBtn){
     const top1Diff = parseFloat(document.getElementById("botTop1Diff").value) || 0.1;
     const spreadPct = parseFloat(document.getElementById("botSpreadPct").value) || 0.5;
     const priceSource = document.getElementById("botPriceSource").value;
-    const priceFloorPct = priceSource === "auto" ? 0 : (parseFloat(document.getElementById("botPriceFloorPct").value) || 0);
+    const priceFloorPct = priceSource === "auto" ? -1 : (parseFloat(document.getElementById("botPriceFloorPct").value) || 0);
     const circuitBreakPct = parseFloat(document.getElementById("botCircuitBreakPct").value) || 3;
     const cycleInterval = parseInt(document.getElementById("botCycleInterval").value) || 30;
     const dailyV = document.getElementById("botDailyVolumeCap").value;
