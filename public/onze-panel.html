@@ -9307,7 +9307,7 @@ if(addProviderBtn){
           <button class="btn" type="button" id="botStartBtn" style="padding:10px 24px;" onclick="window.botStartExchange()">Iniciar</button>
           <button class="btn secondary" type="button" id="botStopBtn" style="padding:10px 24px;" onclick="window.botStopExchange()">Detener</button>
           <button class="btn" type="button" id="botPanelBtn" style="padding:10px 24px;" onclick="window.botOpenPanel()">Panel P2P</button>
-          <div class="bot-buyprice-card" id="botBuyPriceCard">
+          <div class="bot-buyprice-card" id="botBuyPriceCard" style="display:none;">
             <div class="ticker">
               <div class="label" id="botBuyPriceLabel">PRECIO MINIMO VENTA</div>
               <div class="value" id="botBuyPriceValue">—</div>
@@ -9617,16 +9617,11 @@ if(addProviderBtn){
     if(!el || !inp || !help) return;
     const buyPrice = getActiveCapacityBuyPrice();
     if(el.value === "auto"){
-      inp.disabled = true;
-      inp.style.opacity = "0.5";
       inp.value = buyPrice ? buyPrice.toFixed(2) : "0";
-      help.textContent = buyPrice ? `$${buyPrice.toLocaleString("es-CL")} (capacity)` : "Sin capacity activo";
+      help.textContent = buyPrice ? `$${buyPrice.toLocaleString("es-CL")}` : "Sin capacity activo";
     }else{
-      inp.disabled = false;
-      inp.style.opacity = "1";
       if(inp.value === "0" || inp.value === "0.00" || inp.value === (buyPrice?.toFixed(2) ?? "0")){
-        inp.value = buyPrice ? buyPrice.toFixed(2) : "";
-        inp.placeholder = buyPrice ? buyPrice.toFixed(2) : "895.83";
+        inp.value = buyPrice ? buyPrice.toFixed(2) : "895.00";
       }
       help.textContent = "Precio manual (CLP)";
     }
@@ -9825,7 +9820,7 @@ if(addProviderBtn){
       const inp = document.getElementById("botPriceFloorPct");
       const manualPrice = inp ? parseFloat(inp.value) : null;
       if(manualPrice && !isNaN(manualPrice)){
-        card.style.display = "flex";
+        card.style.display = "inline-flex";
         label.textContent = "PRECIO MINIMO VENTA";
         value.textContent = manualPrice.toFixed(2);
         provider.textContent = "Manual";
@@ -9844,8 +9839,8 @@ if(addProviderBtn){
       card.style.display = "none";
       return;
     }
-    card.style.display = "flex";
-    label.textContent = "PRECIO COMPRA (CAPACITY)";
+    card.style.display = "inline-flex";
+    label.textContent = "PRECIO COMPRA";
     value.textContent = Number(active.buyPrice).toFixed(2);
     provider.textContent = active.provider || active.country || "-";
   }
