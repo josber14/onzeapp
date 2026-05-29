@@ -458,18 +458,33 @@ async function runBybitCycle(
     // 5. Sort by price ascending
     viable.sort((a: any, b: any) => Number(a.price) - Number(b.price));
 
-    // 6. Find next viable competitor (skip our own ads)
+    // 6. Skip our own ads and find competitors by position
     const myAdIds = new Set(myAds.map((a: any) => a.id));
-    const nextViable = viable.find((c: any) => !myAdIds.has(c.id));
+    const sortedCompetitors = viable.filter((c: any) => !myAdIds.has(c.id));
 
-    if (!nextViable) {
+    if (sortedCompetitors.length === 0) {
       await logBot(tenantId, "info", "bybit", "Solo nuestros anuncios en el mercado");
       return { actions };
     }
 
-    // 7. Calculate target price
+    // 7. Calculate target price: position at #2 (0.01 below #3)
+    //    If fewer than 3 competitors, fall back to undercutting #2 or #1
     const top1Diff = Number(config.top1Diff) || 0.1;
-    const competitorPrice = Number(nextViable.price);
+    let targetCompetitor: any;
+
+    if (sortedCompetitors.length >= 3) {
+      // Target #3 (third cheapest), position at #2
+      targetCompetitor = sortedCompetitors[2];
+      await logBot(tenantId, "info", "bybit", `Objetivo: #3 a ${Number(targetCompetitor.price).toFixed(2)} (${sortedCompetitors.length} competidores)`);
+    } else if (sortedCompetitors.length === 2) {
+      // Target #2 (second cheapest), position at #1
+      targetCompetitor = sortedCompetitors[1];
+    } else {
+      // Target #1 (cheapest), position ahead
+      targetCompetitor = sortedCompetitors[0];
+    }
+
+    const competitorPrice = Number(targetCompetitor.price);
     let targetPrice = competitorPrice - top1Diff;
 
     // Apply minimum price floor (absolute)
