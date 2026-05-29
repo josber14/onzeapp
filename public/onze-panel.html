@@ -9633,9 +9633,6 @@ if(addProviderBtn){
       inp.style.opacity = "0.6";
     }else{
       inp.style.opacity = "1";
-      if(inp.value === "0" || inp.value === "0.00" || inp.value === (buyPrice?.toFixed(2) ?? "0")){
-        inp.value = buyPrice ? buyPrice.toFixed(2) : "895.00";
-      }
       help.textContent = "Precio manual (CLP)";
     }
     botUpdateBuyPrice();
@@ -9818,7 +9815,7 @@ if(addProviderBtn){
     else document.getElementById("botCredStatus").innerHTML = '<span style="color:#fb7185;">Error al conectar</span>';
   };
 
-  function botUpdateBuyPrice(){
+  async function botUpdateBuyPrice(){
     const card = document.getElementById("botBuyPriceCard");
     const label = document.getElementById("botBuyPriceLabel");
     const value = document.getElementById("botBuyPriceValue");
@@ -9844,8 +9841,19 @@ if(addProviderBtn){
     }
 
     // Capacity mode
-    const cache = window.__p2pCapacityCache;
-    if(!cache || !Array.isArray(cache)){
+    let cache = window.__p2pCapacityCache;
+    if(!cache || !Array.isArray(cache) || cache.length === 0){
+      // Try to fetch from server
+      try {
+        const res = await fetch('/api/p2p/capacity', { credentials: 'include' });
+        const data = await res.json();
+        if(data?.ok && Array.isArray(data.items)){
+          window.__p2pCapacityCache = data.items;
+          cache = data.items;
+        }
+      } catch(e) {}
+    }
+    if(!cache || !Array.isArray(cache) || cache.length === 0){
       card.style.display = "none";
       return;
     }
