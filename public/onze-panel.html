@@ -9315,6 +9315,13 @@ if(addProviderBtn){
             </div>
             <div class="provider" id="botBuyPriceProvider">-</div>
           </div>
+          <div class="bot-buyprice-card" id="botMinPriceDisplayCard" style="margin-top:8px;">
+            <div class="ticker">
+              <div class="label">PRECIO MINIMO VENTA</div>
+              <div class="value" id="botMinPriceDisplay">—</div>
+              <div class="unit">CLP</div>
+            </div>
+          </div>
         </div>
 
         <div id="botExchangeConfigSection" class="bot-section">
@@ -9557,6 +9564,7 @@ if(addProviderBtn){
 
       await loadCredentials(ex);
       botUpdateBuyPrice();
+      updateMinPriceDisplay();
     }catch(e){
       console.warn("Bot refresh error:", e);
     }
@@ -9610,6 +9618,18 @@ if(addProviderBtn){
     return active?.buyPrice ? Number(active.buyPrice) : null;
   }
 
+  function getEffectiveMinPrice(){
+    const source = document.getElementById("botPriceSource");
+    const inp = document.getElementById("botPriceFloorPct");
+    if(!source || !inp) return null;
+    if(source.value === "auto"){
+      const buyPrice = getActiveCapacityBuyPrice();
+      return buyPrice;
+    }
+    const v = parseFloat(inp.value);
+    return isNaN(v) ? null : v;
+  }
+
   function togglePriceSource(){
     const el = document.getElementById("botPriceSource");
     const inp = document.getElementById("botPriceFloorPct");
@@ -9617,16 +9637,27 @@ if(addProviderBtn){
     if(!el || !inp || !help) return;
     const buyPrice = getActiveCapacityBuyPrice();
     if(el.value === "auto"){
+      inp.disabled = true;
       inp.style.opacity = "0.5";
-      inp.value = "0";
+      inp.value = buyPrice ? buyPrice.toFixed(2) : "0";
       help.textContent = buyPrice ? `$${buyPrice.toLocaleString("es-CL")} (capacity)` : "Sin capacity activo";
     }else{
+      inp.disabled = false;
       inp.style.opacity = "1";
-      if(inp.value === "0" && buyPrice){
-        inp.value = buyPrice.toFixed(2);
+      if(inp.value === "0" || inp.value === "0.00" || inp.value === (buyPrice?.toFixed(2) ?? "0")){
+        inp.value = buyPrice ? buyPrice.toFixed(2) : "";
+        inp.placeholder = buyPrice ? buyPrice.toFixed(2) : "895.83";
       }
       help.textContent = "Precio manual (CLP)";
     }
+    updateMinPriceDisplay();
+  }
+
+  function updateMinPriceDisplay(){
+    const el = document.getElementById("botMinPriceDisplay");
+    if(!el) return;
+    const price = getEffectiveMinPrice();
+    el.textContent = price ? `$${price.toLocaleString("es-CL")}` : "—";
   }
 
   function toggleBotStrategyFields(){
