@@ -467,20 +467,20 @@ async function runBybitCycle(
       return { actions };
     }
 
-    // 7. Calculate target price: position at #2 (0.01 below #3)
-    //    If fewer than 3 competitors, fall back to undercutting #2 or #1
+    // 7. Calculate target price:
+    //    - If cheapest competitor is below cost → position at #2 (target #3)
+    //    - Otherwise → compete for #1 (target #1)
     const top1Diff = Number(config.top1Diff) || 0.1;
+    const cheapestPrice = Number(sortedCompetitors[0].price);
+    const firstBelowCost = minSellPrice ? cheapestPrice < minSellPrice : false;
     let targetCompetitor: any;
 
-    if (sortedCompetitors.length >= 3) {
-      // Target #3 (third cheapest), position at #2
+    if (firstBelowCost && sortedCompetitors.length >= 3) {
+      // #1 is below cost, target #3 to position at #2
       targetCompetitor = sortedCompetitors[2];
-      await logBot(tenantId, "info", "bybit", `Objetivo: #3 a ${Number(targetCompetitor.price).toFixed(2)} (${sortedCompetitors.length} competidores)`);
-    } else if (sortedCompetitors.length === 2) {
-      // Target #2 (second cheapest), position at #1
-      targetCompetitor = sortedCompetitors[1];
+      await logBot(tenantId, "info", "bybit", `#1 bajo costo (${cheapestPrice.toFixed(2)}), apuntando a #3: ${Number(targetCompetitor.price).toFixed(2)}`);
     } else {
-      // Target #1 (cheapest), position ahead
+      // Everyone is above cost, compete for #1
       targetCompetitor = sortedCompetitors[0];
     }
 
