@@ -9513,6 +9513,7 @@ if(addProviderBtn){
       window.__botCycleRunning = false;
     }, interval * 1000);
     await window.botRefreshExchange();
+    console.log("[P2P Bot] botStartExchange complete, cycleInterval:", interval);
   };
 
   window.botStopExchange = async function(){
@@ -9588,6 +9589,7 @@ if(addProviderBtn){
 
   function updateExchangeConfig(cfg){
     if(!cfg) return;
+    console.log("[P2P Bot] updateExchangeConfig", { priceFloorPct: cfg.priceFloorPct, strategy: cfg.strategy, enabled: cfg.enabled });
     document.getElementById("botStrategy").value = cfg.strategy || "top1";
     document.getElementById("botTop1Diff").value = cfg.top1Diff ?? 0.1;
     document.getElementById("botSpreadPct").value = cfg.spreadPct || 0.5;
@@ -9706,6 +9708,7 @@ if(addProviderBtn){
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceFloorPct, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, minCompetitorCapital })
     });
+    console.log("[P2P Bot] Saved config", { exchange: ex, priceSource, priceFloorPct });
     botUpdateBuyPrice();
     window.botRefreshExchange();
   };
