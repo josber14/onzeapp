@@ -9343,7 +9343,7 @@ if(addProviderBtn){
                   <option value="auto">Capacity</option>
                   <option value="manual">Manual</option>
                 </select>
-                <input id="botPriceFloorPct" type="number" step="0.01" value="0" placeholder="895.83" onchange="window.botSaveExchangeConfig()" style="flex:1;min-width:0;">
+                <input id="botPriceFloorPct" type="number" step="0.01" value="0" placeholder="895.83" oninput="window.botSaveExchangeConfig()" style="flex:1;min-width:0;">
               </div>
               <span style="font-size:11px;color:#64748b;" id="botPriceHelpText">0 = usa precio de compra del capacity activo</span>
             </label>
@@ -9603,26 +9603,29 @@ if(addProviderBtn){
     if(!config) return;
   }
 
+  function getActiveCapacityBuyPrice(){
+    const cache = window.__p2pCapacityCache;
+    if(!cache || !Array.isArray(cache)) return null;
+    const active = cache.find(c => c.buyPrice && c.status !== "finished" && !c._capital);
+    return active?.buyPrice ? Number(active.buyPrice) : null;
+  }
+
   function togglePriceSource(){
     const el = document.getElementById("botPriceSource");
     const inp = document.getElementById("botPriceFloorPct");
     const help = document.getElementById("botPriceHelpText");
     if(!el || !inp || !help) return;
-    const source = el.value;
-    if(source === "auto"){
-      inp.disabled = true;
+    const buyPrice = getActiveCapacityBuyPrice();
+    if(el.value === "auto"){
       inp.style.opacity = "0.5";
       inp.value = "0";
-      const cap = window.__p2pCapacityCache?.[0];
-      help.textContent = cap?.buyPrice ? `$${Number(cap.buyPrice).toLocaleString("es-CL")} (capacity)` : "Sin capacity activo";
+      help.textContent = buyPrice ? `$${buyPrice.toLocaleString("es-CL")} (capacity)` : "Sin capacity activo";
     }else{
-      inp.disabled = false;
       inp.style.opacity = "1";
-      if(!inp.value || inp.value === "0"){
-        const cap = window.__p2pCapacityCache?.[0];
-        inp.value = cap?.buyPrice ? String(cap.buyPrice) : "895";
+      if(inp.value === "0" && buyPrice){
+        inp.value = buyPrice.toFixed(2);
       }
-      help.textContent = "Precio fijo en CLP";
+      help.textContent = "Precio manual (CLP)";
     }
   }
 
