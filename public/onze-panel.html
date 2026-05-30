@@ -11098,10 +11098,6 @@ function addP2PBotStyles(){
 
   function initP2PBot(){
     try{ console.log("[P2P Bot] init started"); }catch(e){}
-    if(typeof IS_ADMIN_ROLE !== "undefined" && !IS_ADMIN_ROLE){
-      try{ console.log("[P2P Bot] not admin, skipping"); }catch(e){}
-      return;
-    }
 
     addP2PBotStyles();
     buildP2PBotView();
