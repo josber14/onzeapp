@@ -9503,14 +9503,9 @@ function addP2PBotStyles(){
                 <span class="help-text">Competir solo con anuncios que tengan tus mismos m\u00E9todos de pago</span>
               </label>
               <label>
-                Comisi\u00F3n comerciante
-                <select id="botCommissionTier" onchange="window.botSaveExchangeConfig()">
-                  <option value="sin_comision">Sin comisi\u00F3n (0%)</option>
-                  <option value="bronce">Bronce (0.175%)</option>
-                  <option value="plata" selected>Plata (0.14%)</option>
-                  <option value="oro">Oro (0.12%)</option>
-                </select>
-                <span class="help-text">Nivel comerciante Binance (Bybit no cobra comisi\u00F3n)</span>
+                Comisi\u00F3n exchange (%)
+                <input id="botCommissionPct" type="number" step="0.01" value="0.14" onchange="window.botSaveExchangeConfig()">
+                <span class="help-text">Comisi\u00F3n del exchange (Binance 0.14%, Bybit 0%)</span>
               </label>
               <label>
                 Margen seguridad (%)
@@ -9806,9 +9801,7 @@ function addP2PBotStyles(){
     document.getElementById("botMinCompetitorCapital").value = cfg.minCompetitorCapital ?? "";
     const payTypes = cfg.competePayTypes;
     document.getElementById("botCompetePayType").value = (payTypes && payTypes.length > 0 && payTypes[0] === "__match_ad__") ? "match" : "all";
-    const pct = cfg.commissionPct ?? 0.14;
-    const tierReverse: Record<string, string> = { "0": "sin_comision", "0.175": "bronce", "0.14": "plata", "0.12": "oro" };
-    document.getElementById("botCommissionTier").value = tierReverse[String(pct)] || "plata";
+    document.getElementById("botCommissionPct").value = cfg.commissionPct ?? 0.14;
     document.getElementById("botSafeMarginPct").value = cfg.safeMarginPct ?? 0;
     toggleBotStrategyFields();
   }
@@ -9918,9 +9911,7 @@ function addP2PBotStyles(){
     const minCompetitorCapital = minV ? parseFloat(minV) : null;
     const competePayType = document.getElementById("botCompetePayType").value;
     const competePayTypes = competePayType === "all" ? null : ["__match_ad__"];
-    const commissionTier = document.getElementById("botCommissionTier").value;
-    const tierMap: Record<string, number> = { sin_comision: 0, bronce: 0.175, plata: 0.14, oro: 0.12 };
-    const commissionPct = tierMap[commissionTier] ?? 0.14;
+    const commissionPct = parseFloat(document.getElementById("botCommissionPct").value) || 0;
     const safeMarginPct = parseFloat(document.getElementById("botSafeMarginPct").value) || 0;
 
     await fetch("/api/p2p/bot/exchange-config", {
