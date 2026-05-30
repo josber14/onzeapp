@@ -82,15 +82,15 @@ export class BinanceP2PClient {
 
     const res = await fetch(url, opts);
     const text = await res.text();
-    if (!text) throw new Error(`Binance empty response (HTTP ${res.status}) for ${endpoint} [url: ${url}]`);
+    if (!text) throw new Error(`Binance empty response (HTTP ${res.status}) for ${endpoint}`);
     let data: any;
     try {
       data = JSON.parse(text);
     } catch {
-      throw new Error(`Binance respuesta inválida (HTTP ${res.status}) para ${endpoint}: ${text.slice(0, 200)} [url: ${url}]`);
+      throw new Error(`Binance respuesta inválida (HTTP ${res.status}) para ${endpoint}: ${text.slice(0, 200)}`);
     }
     if (data?.code && data.code !== "000000") {
-      throw new Error(`Binance error: ${data.message || data.msg || "unknown"} (code: ${data.code}) [url: ${url}]`);
+      throw new Error(`Binance error: ${data.message || data.msg || "unknown"} (code: ${data.code})`);
     }
     return data;
   }
