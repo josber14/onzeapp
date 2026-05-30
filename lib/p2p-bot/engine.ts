@@ -493,11 +493,11 @@ async function runBinanceCycle(
           );
           if (ourSell?.payments?.length) {
             adPayTypes = ourSell.payments;
-            await logBot(tenantId, "info", "binance", `Filtrando competidores por métodos de pago del anuncio: ${adPayTypes.join(", ")}`);
+            await logBot(tenantId, "info", "binance", `Filtrando competidores por métodos de pago del anuncio: ${ourSell.payments.join(", ")}`);
           }
         } else {
           adPayTypes = competePayTypes;
-          await logBot(tenantId, "info", "binance", `Filtrando competidores por métodos de pago: ${adPayTypes.join(", ")}`);
+          await logBot(tenantId, "info", "binance", `Filtrando competidores por métodos de pago: ${competePayTypes!.join(", ")}`);
         }
       }
 
