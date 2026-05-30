@@ -75,7 +75,7 @@ export async function saveBotConfig(
         dailyVolumeCapUsdt: data.dailyVolumeCapUsdt ?? null,
         circuitBreakPct: data.circuitBreakPct ?? 3,
         exchanges: data.exchanges ?? ["binance", "bybit"],
-        competePayTypes: data.competePayTypes ?? null,
+        competePayTypes: (data.competePayTypes ?? null) as any,
       },
   });
 }
@@ -189,7 +189,7 @@ export async function saveExchangeConfig(
       circuitBreakPct: data.circuitBreakPct ?? 3,
       cycleInterval: data.cycleInterval ?? 10,
       minCompetitorCapital: data.minCompetitorCapital ?? null,
-      competePayTypes: data.competePayTypes ?? null,
+      competePayTypes: (data.competePayTypes ?? null) as any,
       adUpdateCount: data.adUpdateCount ?? 0,
     },
   });

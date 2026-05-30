@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
         circuitBreakPct: data.circuitBreakPct ?? 3,
         cycleInterval: data.cycleInterval ?? 30,
         minCompetitorCapital: data.minCompetitorCapital ?? null,
-        competePayTypes: data.competePayTypes ?? null,
+        competePayTypes: (data.competePayTypes ?? null) as any,
       },
     });
 
