@@ -149,7 +149,7 @@ export class BinanceP2PClient {
   }
 
   async getAdDetail(adId: string) {
-    return this.privateRequest("/sapi/v1/c2c/ads/getDetailByNo", { advNo: adId });
+    return this.privateRequest("/sapi/v1/c2c/ads/getDetailByNo", { adsNo: adId });
   }
 
   async postAd(params: Record<string, any>) {
@@ -158,7 +158,7 @@ export class BinanceP2PClient {
 
   async updateAd(params: Record<string, any>) {
     const { adId, advNo, currencyId, tokenId, side, status, id, ...rest } = params;
-    const body: Record<string, any> = { advNo: advNo || adId };
+    const body: Record<string, any> = { adsNo: advNo || adId };
     if (rest.price !== undefined) body.price = rest.price;
     if (rest.quantity !== undefined) body.totalQuantity = rest.quantity;
     if (rest.minAmount !== undefined) body.minSingleTransAmount = String(rest.minAmount);
@@ -170,7 +170,7 @@ export class BinanceP2PClient {
   }
 
   async removeAd(adId: string) {
-    return this.privateRequest("/sapi/v1/c2c/ads/batchUpdateStatus", {}, { advNos: [adId], advStatus: "close" });
+    return this.privateRequest("/sapi/v1/c2c/ads/batchUpdateStatus", {}, { adsNos: [adId], advStatus: "close" });
   }
 
   // ─── Orders ──────────────────────────────────────────────────
