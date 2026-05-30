@@ -21,7 +21,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const limit = Number(searchParams.get("limit") || 50);
     const level = searchParams.get("level") || undefined;
-    const logs = await getBotLogs(session.tenantId, limit, level);
+    const exchange = searchParams.get("exchange") || undefined;
+    const logs = await getBotLogs(session.tenantId, limit, level, exchange);
     return Response.json({ ok: true, logs });
   } catch (error: any) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });

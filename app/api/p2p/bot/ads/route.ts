@@ -48,8 +48,10 @@ export async function GET(req: NextRequest) {
         if (client) {
           const res = await client.getMyAds(1, 50);
           const items = res?.result?.items || [];
-          bybitAds = items.map((a: any) => ({
-            id: a.id,
+          bybitAds = items.map((a: any) => {
+            const localAd = ads.find(la => la.adId === a.id);
+            return {
+            id: localAd?.id || a.id,
             adId: a.id,
             exchange: "bybit",
             tradeType: a.side === 0 ? "BUY" : "SELL",
@@ -64,9 +66,11 @@ export async function GET(req: NextRequest) {
             payTime: a.paymentPeriod || 15,
             status: a.status === 10 ? "online" : "offline",
             isActive: a.isOnline,
+            botManaged: localAd?.botManaged || false,
             createdAt: a.createDate ? new Date(Number(a.createDate)).toISOString() : new Date().toISOString(),
             fromBybit: true,
-          }));
+            };
+          });
         }
       } catch (e) {
         // silent
@@ -90,6 +94,7 @@ export async function GET(req: NextRequest) {
       payTime: a.payTime,
       status: a.status,
       isActive: a.isActive,
+      botManaged: a.botManaged,
       createdAt: a.createdAt.toISOString(),
       fromBybit: false,
     }))];
@@ -116,7 +121,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { id, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive } = body;
+    const { id, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged } = body;
 
     if (!exchange || !tradeType) {
       return Response.json({ ok: false, error: "exchange y tradeType son requeridos" }, { status: 400 });
@@ -179,6 +184,7 @@ export async function POST(req: NextRequest) {
           payTime: payTime || 15,
           status: status || "online",
           isActive: isActive !== undefined ? isActive : true,
+          botManaged: botManaged !== undefined ? botManaged : false,
           updatedAt: new Date(),
         },
       });
@@ -201,6 +207,7 @@ export async function POST(req: NextRequest) {
         payTime: payTime || 15,
         status: status || "online",
         isActive: isActive !== undefined ? isActive : true,
+        botManaged: botManaged !== undefined ? botManaged : false,
         updatedAt: new Date(),
       },
     });

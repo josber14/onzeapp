@@ -59,6 +59,7 @@ model Tenant {
   p2pBotLogs           P2PBotLog[]
   p2pBotOrders         P2PBotOrder[]
   p2pBotAds            P2PBotAd[]
+  p2pBotMarketSnapshots P2PBotMarketSnapshot[]
   p2pCapacities        P2PCapacity[]
   rateLists            RateList[]
   subscriptions        Subscription[]
@@ -779,12 +780,30 @@ model P2PBotAd {
   payTime        Int      @default(15)
   status         String   @default("online")
   isActive       Boolean  @default(true)
+  botManaged     Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @default(now())
   Tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([exchange])
+}
+
+model P2PBotMarketSnapshot {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int
+  exchange    String
+  side        String   @default("1")
+  cycleAt     DateTime @default(now())
+  competitors Json     @default("[]")
+  ourAd       Json?
+  targetPrice Decimal? @db.Decimal(18, 4)
+  createdAt   DateTime @default(now())
+
+  Tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, exchange, cycleAt])
+  @@index([tenantId, cycleAt])
 }
 
 enum AccountRole {

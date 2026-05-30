@@ -272,6 +272,12 @@
       border-color:#7f1d1d;
       box-shadow:none;
     }
+    .btn.active{
+      background:#1a4b2e;
+      border-color:#22c55e;
+      color:#86efac;
+      box-shadow:none;
+    }
 
     .quick-grid{
       display:grid;
@@ -9165,110 +9171,207 @@ if(addProviderBtn){
   let botSelectedExchange = "binance";
   let botCycleTimers = {};
 
-  function addP2PBotStyles(){
-    if(document.getElementById("onze-bot-styles")) return;
-    const style = document.createElement("style");
-    style.id = "onze-bot-styles";
-    style.textContent = `
-      .bot-exchange-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
-      .bot-exchange-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:14px;border:2px solid rgba(148,163,184,.2);background:rgba(15,23,42,.5);color:#94a3b8;cursor:pointer;font-weight:800;font-size:14px;transition:.15s ease;font-family:inherit;}
-      .bot-exchange-btn:hover{border-color:rgba(148,163,184,.4);color:#cbd5e1;}
-      .bot-exchange-btn.active{border-color:var(--brand);background:rgba(37,99,235,.15);color:#fff;box-shadow:0 0 0 2px rgba(37,99,235,.2);}
-      .bot-exchange-btn img,.bot-exchange-btn svg{width:22px;height:22px;flex:0 0 auto;border-radius:4px;}
-      .bot-exchange-btn .exchange-label{font-size:13px;}
-      .bot-control-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;}
-      .bot-buyprice-card{display:inline-flex;align-items:center;gap:10px;padding:8px 18px;border-radius:14px;border-left:4px solid var(--brand);background:var(--panel-2);margin-left:auto;}
-      .bot-buyprice-card .label{font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
-      .bot-buyprice-card .value{font-size:22px;font-weight:900;color:var(--green);line-height:1;}
-      .bot-buyprice-card .unit{font-size:11px;color:#64748b;font-weight:700;margin-left:2px;}
-      .bot-buyprice-card .provider{font-size:11px;color:#94a3b8;}
-      .bot-section{margin-top:24px;}
-      .bot-section-title{font-size:16px;font-weight:800;color:#fff;margin:0 0 12px;}
-      .bot-status-indicator{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:999px;font-size:13px;font-weight:950;}
-      .bot-status-indicator.running{color:#34d399;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.26);}
-      .bot-status-indicator.stopped{color:#94a3b8;background:rgba(148,163,184,.10);border:1px solid rgba(148,163,184,.20);}
-      .bot-status-indicator.paused{color:#fbbf24;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.26);}
-      .bot-status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;}
-      .bot-status-dot.running{background:#34d399;box-shadow:0 0 8px rgba(52,211,153,.6);animation:pulse-dot 2s infinite;}
-      .bot-status-dot.stopped{background:#64748b;}
-      .bot-status-dot.paused{background:#fbbf24;}
-      @keyframes pulse-dot{0%,100%{opacity:1;}50%{opacity:.4;}}
-      .bot-config-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;}
-      .bot-config-grid label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#94a3b8;font-weight:700;}
-      .bot-config-grid input,.bot-config-grid select{padding:8px 12px;border-radius:8px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.6);color:#f8fafc;font-size:14px;outline:none;font-family:inherit;}
-      .bot-config-grid input:focus,.bot-config-grid select:focus{border-color:var(--brand);}
-      .bot-cred-fields{display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;margin-top:12px;}
-      .bot-cred-fields label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:#94a3b8;font-weight:700;}
-      .bot-cred-fields input{padding:8px 12px;border-radius:8px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.6);color:#f8fafc;font-size:14px;outline:none;font-family:inherit;}
-      .bot-cred-fields input:focus{border-color:var(--brand);}
-      .bot-log-container{max-height:300px;overflow-y:auto;margin-top:8px;border:1px solid rgba(148,163,184,.1);border-radius:8px;padding:8px;background:rgba(15,23,42,.3);}
-      .bot-log-entry{padding:8px 12px;border-radius:6px;margin-bottom:4px;font-size:12px;line-height:1.4;background:rgba(15,23,42,.4);border-left:3px solid transparent;}
-      .bot-log-entry.info{border-left-color:var(--brand);}
-      .bot-log-entry.warn{border-left-color:#fbbf24;}
-      .bot-log-entry.error{border-left-color:#fb7185;background:rgba(251,113,133,.08);}
-      .bot-log-time{color:#64748b;font-size:10px;margin-right:8px;}
-      .bot-log-msg{color:#cbd5e1;}
-      .bot-log-exchange{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;margin-right:6px;background:rgba(148,163,184,.1);color:#94a3b8;}
-      .bot-orders-container{max-height:300px;overflow-y:auto;margin-top:8px;border:1px solid rgba(148,163,184,.1);border-radius:8px;padding:8px;background:rgba(15,23,42,.3);}
-      .bot-accounts-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;}
-      .bot-account-card{background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:12px;padding:12px;}
-      .bot-account-card .acct-label{font-weight:700;color:#fff;font-size:14px;}
-      .bot-account-card .acct-detail{font-size:12px;color:#94a3b8;margin-top:4px;}
-      .bot-account-card .acct-actions{display:flex;gap:6px;margin-top:8px;justify-content:flex-end;}
-      .bot-chat-box{max-height:200px;overflow-y:auto;border:1px solid rgba(148,163,184,.1);border-radius:8px;padding:8px;background:rgba(15,23,42,.3);margin-top:8px;}
-      .bot-chat-msg{padding:6px 10px;border-radius:6px;margin-bottom:4px;font-size:12px;background:rgba(37,99,235,.1);border-left:2px solid var(--brand);}
-      .bot-chat-msg .sender{font-weight:700;color:#cbd5e1;}
-      .bot-chat-msg .text{color:#e2e8f0;}
-      .bot-chat-msg .time{font-size:10px;color:#64748b;margin-left:8px;}
-      @keyframes botTicker{0%{opacity:1;}50%{opacity:.6;}100%{opacity:1;}}
-      .bot-buyprice-card .ticker{animation:botTicker 2s ease-in-out infinite;}
-      .bot-panel-tab{background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.15);color:#94a3b8;border-radius:10px;padding:8px 16px;cursor:pointer;font-weight:700;font-size:13px;transition:.15s ease;font-family:inherit;}
-      .bot-panel-tab:hover{border-color:rgba(148,163,184,.3);color:#cbd5e1;}
-      .bot-panel-tab.active{background:var(--brand);border-color:var(--brand);color:#fff;}
-      .bot-panel-tab-content{animation:fadeIn .2s ease;}
-      .bot-order-actions{display:flex;gap:6px;flex-wrap:wrap;}
-      .bot-order-actions .btn{min-height:32px;padding:4px 12px;font-size:12px;}
+function addP2PBotStyles(){
+  if(document.getElementById("onze-bot-styles")) return;
+  const style = document.createElement("style");
+  style.id = "onze-bot-styles";
+  style.textContent = `
+    /* ===== TRADING DASHBOARD THEME ===== */
+    .bot-view-inner{display:flex;flex-direction:column;gap:16px;}
+    .bot-exchange-tabs{display:flex;gap:6px;flex-wrap:wrap;}
+    .bot-exchange-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:12px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.5);color:#94a3b8;cursor:pointer;font-weight:700;font-size:13px;transition:all .15s;font-family:inherit;backdrop-filter:blur(8px);}
+    .bot-exchange-btn:hover{border-color:rgba(148,163,184,.3);background:rgba(15,23,42,.7);color:#e2e8f0;}
+    .bot-exchange-btn.active{border-color:var(--brand);background:linear-gradient(135deg,rgba(37,99,235,.2),rgba(37,99,235,.08));color:#fff;box-shadow:0 0 20px rgba(37,99,235,.15),inset 0 1px 0 rgba(255,255,255,.06);}
+    .bot-exchange-btn img,.bot-exchange-btn svg{width:20px;height:20px;flex:0 0 auto;border-radius:3px;}
+    .bot-exchange-btn .exchange-label{font-size:12px;}
+    .bot-control-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px;background:rgba(15,23,42,.35);border:1px solid rgba(148,163,184,.08);border-radius:14px;backdrop-filter:blur(8px);}
+    .bot-control-row .btn{font-size:12px;padding:8px 18px;border-radius:8px;font-weight:700;letter-spacing:.2px;}
+    .bot-buyprice-card{display:inline-flex;align-items:center;gap:12px;padding:6px 16px 6px 14px;border-radius:10px;background:linear-gradient(135deg,rgba(16,185,129,.08),rgba(16,185,129,.02));border:1px solid rgba(16,185,129,.15);margin-left:auto;}
+    .bot-buyprice-card .ticker{display:flex;flex-direction:column;gap:1px;}
+    .bot-buyprice-card .label{font-size:9px;color:#6ee7b7;font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+    .bot-buyprice-card .value{font-size:20px;font-weight:900;color:#34d399;line-height:1.1;font-variant-numeric:tabular-nums;}
+    .bot-buyprice-card .unit{font-size:10px;color:#6ee7b7;font-weight:600;margin-left:1px;}
+    .bot-buyprice-card .provider{font-size:10px;color:#64748b;}
+    @keyframes botTicker{0%{opacity:1;}50%{opacity:.5;}100%{opacity:1;}}
+    .bot-buyprice-card .ticker.pulse{animation:botTicker 2s ease-in-out infinite;}
+    .bot-section{margin-top:8px;}
+    .bot-section-title{font-size:13px;font-weight:700;color:#e2e8f0;margin:0 0 10px;display:flex;align-items:center;gap:8px;letter-spacing:.2px;}
+    .bot-section-title .badge{font-size:9px;background:rgba(99,102,241,.15);color:#818cf8;padding:2px 8px;border-radius:8px;font-weight:500;}
 
-      /* Ads / Accounts Panel Styles */
-      .bot-panel-form{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;background:rgba(15,23,42,.4);border-radius:10px;border:1px solid rgba(148,163,184,.1);margin-bottom:12px;}
-      .bot-panel-form .full{grid-column:1/-1;}
-      .bot-panel-form label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:#94a3b8;}
-      .bot-panel-form input,.bot-panel-form select{width:100%;padding:7px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.6);color:#f8fafc;font-size:13px;font-family:inherit;box-sizing:border-box;}
-      .bot-panel-form input:focus,.bot-panel-form select:focus{outline:none;border-color:var(--brand);}
-      .bot-panel-form .radio-group{display:flex;gap:12px;align-items:center;padding:4px 0;}
-      .bot-panel-form .radio-group label{flex-direction:row;align-items:center;gap:4px;cursor:pointer;font-size:13px;color:#cbd5e1;}
-      .bot-panel-form .radio-group input[type=radio]{width:auto;}
-      .bot-panel-form .form-row{display:flex;gap:8px;align-items:flex-end;}
-      .bot-panel-form .form-row > *{flex:1;}
-      .bot-panel-form .form-row .btn{flex:0 0 auto;}
-      .bot-payment-methods{display:flex;flex-wrap:wrap;gap:6px;padding:4px 0;}
-      .bot-payment-methods .pm-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:12px;background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.25);color:#93c5fd;cursor:pointer;}
-      .bot-payment-methods .pm-chip.selected{background:rgba(37,99,235,.3);border-color:var(--brand);color:#fff;}
-      .bot-payment-methods .pm-chip .remove{color:#fb7185;font-size:14px;line-height:1;margin-left:2px;}
-      .bot-payment-input{display:flex;gap:6px;}
-      .bot-payment-input input{flex:1;padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.6);color:#f8fafc;font-size:12px;font-family:inherit;}
-      .bot-ads-list{display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;}
-      .bot-ad-card{background:rgba(15,23,42,.4);border-radius:10px;padding:12px;border:1px solid rgba(148,163,184,.1);}
-      .bot-ad-card .ad-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}
-      .bot-ad-card .ad-header .ad-type{font-weight:700;font-size:14px;padding:2px 8px;border-radius:6px;}
-      .bot-ad-card .ad-header .ad-type.buy{color:#34d399;background:rgba(52,211,153,.1);}
-      .bot-ad-card .ad-header .ad-type.sell{color:#fb7185;background:rgba(251,113,133,.1);}
-      .bot-ad-card .ad-body{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;font-size:12px;color:#94a3b8;}
-      .bot-ad-card .ad-body span{display:flex;flex-direction:column;}
-      .bot-ad-card .ad-body .val{color:#cbd5e1;font-weight:600;}
-      .bot-ad-card .ad-footer{display:flex;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;gap:6px;}
-      .bot-ad-card .ad-status{font-size:11px;padding:2px 8px;border-radius:10px;}
-      .bot-ad-card .ad-status.online{background:rgba(52,211,139,.15);color:#34d399;}
-      .bot-ad-card .ad-status.private{background:rgba(251,191,36,.15);color:#fbbf24;}
-      .bot-ad-card .ad-status.offline{background:rgba(148,163,184,.15);color:#94a3b8;}
-      .bot-ad-card .ad-actions{display:flex;gap:6px;}
-      .bot-panel-form .tag-list{display:flex;flex-wrap:wrap;gap:4px;}
-      .bot-panel-form .tag-list .tag{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:12px;font-size:11px;background:rgba(37,99,235,.15);color:#93c5fd;}
-      .bot-panel-form .tag-list .tag .remove{color:#fb7185;cursor:pointer;font-size:13px;line-height:1;}
-      .bot-accounts-grid .acct-detail{font-size:11px;color:#94a3b8;margin-top:2px;line-height:1.6;}
-    `;
-    document.head.appendChild(style);
-  }
+    /* KPI Cards */
+    .bot-kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;}
+    .bot-kpi{display:flex;flex-direction:column;padding:12px 14px;background:rgba(15,23,42,.35);border:1px solid rgba(148,163,184,.08);border-radius:12px;backdrop-filter:blur(8px);transition:border-color .15s;}
+    .bot-kpi:hover{border-color:rgba(148,163,184,.18);}
+    .bot-kpi .kpi-label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.6px;font-weight:600;}
+    .bot-kpi .kpi-value{font-size:20px;font-weight:800;color:#f1f5f9;margin-top:2px;font-variant-numeric:tabular-nums;}
+    .bot-kpi .kpi-sub{font-size:10px;color:#64748b;margin-top:1px;}
+    .bot-kpi .kpi-trend{font-size:10px;font-weight:600;margin-top:2px;}
+
+    /* Status Indicator */
+    .bot-status-indicator{display:inline-flex;align-items:center;gap:8px;padding:5px 14px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.2px;}
+    .bot-status-indicator.running{color:#34d399;background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.2);}
+    .bot-status-indicator.stopped{color:#94a3b8;background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.15);}
+    .bot-status-indicator.paused{color:#fbbf24;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.2);}
+    .bot-status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+    .bot-status-dot.running{background:#34d399;box-shadow:0 0 10px rgba(52,211,153,.5);animation:pulse-dot 1.5s infinite;}
+    .bot-status-dot.stopped{background:#64748b;}
+    .bot-status-dot.paused{background:#fbbf24;}
+    @keyframes pulse-dot{0%,100%{opacity:1;}50%{opacity:.3;}}
+
+    /* Config Grid */
+    .bot-config-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .bot-config-grid label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:#94a3b8;font-weight:600;letter-spacing:.2px;}
+    .bot-config-grid input,.bot-config-grid select{padding:7px 10px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:13px;outline:none;font-family:inherit;transition:border-color .15s;}
+    .bot-config-grid input:focus,.bot-config-grid select:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(37,99,235,.1);}
+    .bot-config-grid input::placeholder{color:#475569;}
+    .bot-config-grid .help-text{font-size:9px;color:#475569;margin-top:1px;}
+
+    /* Credentials */
+    .bot-cred-fields{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;}
+    .bot-cred-fields label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:#94a3b8;font-weight:600;}
+    .bot-cred-fields input{padding:7px 10px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:13px;outline:none;font-family:inherit;transition:border-color .15s;}
+    .bot-cred-fields input:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(37,99,235,.1);}
+
+    /* Log Container */
+    .bot-log-container{max-height:260px;overflow-y:auto;border:1px solid rgba(148,163,184,.08);border-radius:10px;background:rgba(15,23,42,.25);backdrop-filter:blur(4px);}
+    .bot-log-entry{padding:7px 12px;font-size:11px;line-height:1.5;border-bottom:1px solid rgba(148,163,184,.04);display:flex;align-items:flex-start;gap:6px;}
+    .bot-log-entry:last-child{border-bottom:none;}
+    .bot-log-entry.info{border-left:2px solid var(--brand);}
+    .bot-log-entry.warn{border-left:2px solid #fbbf24;}
+    .bot-log-entry.error{border-left:2px solid #fb7185;background:rgba(251,113,133,.04);}
+    .bot-log-time{color:#475569;font-size:10px;white-space:nowrap;flex:0 0 auto;font-variant-numeric:tabular-nums;}
+    .bot-log-msg{color:#cbd5e1;flex:1;}
+    .bot-log-exchange{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;background:rgba(148,163,184,.08);color:#94a3b8;text-transform:uppercase;flex:0 0 auto;}
+
+    /* Orders Container */
+    .bot-orders-container{max-height:300px;overflow-y:auto;}
+
+    /* Accounts Grid */
+    .bot-accounts-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+    .bot-account-card{background:rgba(15,23,42,.35);border:1px solid rgba(148,163,184,.08);border-radius:10px;padding:12px;transition:border-color .15s;}
+    .bot-account-card:hover{border-color:rgba(148,163,184,.18);}
+    .bot-account-card .acct-label{font-weight:700;color:#f1f5f9;font-size:13px;}
+    .bot-account-card .acct-detail{font-size:11px;color:#94a3b8;margin-top:3px;line-height:1.5;}
+    .bot-account-card .acct-actions{display:flex;gap:6px;margin-top:8px;justify-content:flex-end;}
+
+    /* Chat */
+    .bot-chat-box{max-height:200px;overflow-y:auto;border:1px solid rgba(148,163,184,.08);border-radius:8px;padding:8px;background:rgba(15,23,42,.25);}
+    .bot-chat-msg{padding:5px 10px;border-radius:6px;margin-bottom:4px;font-size:12px;background:rgba(37,99,235,.08);border-left:2px solid var(--brand);}
+    .bot-chat-msg .sender{font-weight:700;color:#cbd5e1;}
+    .bot-chat-msg .text{color:#e2e8f0;}
+    .bot-chat-msg .time{font-size:10px;color:#64748b;margin-left:8px;}
+
+    /* Panel Tabs */
+    .bot-panel-tab{padding:8px 18px;border-radius:8px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.4);color:#94a3b8;cursor:pointer;font-weight:600;font-size:12px;transition:all .15s;font-family:inherit;}
+    .bot-panel-tab:hover{border-color:rgba(148,163,184,.25);color:#e2e8f0;background:rgba(15,23,42,.6);}
+    .bot-panel-tab.active{background:var(--brand);border-color:var(--brand);color:#fff;box-shadow:0 0 20px rgba(37,99,235,.2);}
+    .bot-panel-tab-content{animation:fadeIn .2s ease;}
+
+    /* Panel Modal - Full screen */
+    #botPanelModal .modal-dialog{max-width:1100px;width:95vw;}
+    #botPanelModal .modal-card{max-width:100% !important;background:linear-gradient(145deg,rgba(15,23,42,.97),rgba(15,23,42,.99));border:1px solid rgba(148,163,184,.1);border-radius:16px;backdrop-filter:blur(20px);box-shadow:0 25px 80px rgba(0,0,0,.5);}
+    #botPanelModal .modal-head{border-bottom:1px solid rgba(148,163,184,.08);padding:16px 20px;}
+    #botPanelModal .modal-head .modal-title{font-size:16px;font-weight:800;color:#f1f5f9;letter-spacing:.2px;}
+    #botPanelModal .modal-head .close-btn{width:32px;height:32px;border-radius:8px;border:1px solid rgba(148,163,184,.1);background:rgba(15,23,42,.5);color:#94a3b8;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;}
+    #botPanelModal .modal-head .close-btn:hover{border-color:rgba(248,113,113,.3);background:rgba(248,113,113,.1);color:#fb7185;}
+    #botPanelModal .modal-content{padding:16px 20px;max-height:75vh;overflow-y:auto;}
+
+    /* Stat cards (small) */
+    #botMercadoStats{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;width:100%;}
+    .stat-card-sm{display:flex;flex-direction:column;background:linear-gradient(135deg,rgba(15,23,42,.5),rgba(15,23,42,.3));border:1px solid rgba(148,163,184,.08);border-radius:10px;padding:10px 14px;min-width:0;overflow:hidden;}
+    .stat-card-sm .stat-label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;font-weight:600;}
+    .stat-card-sm .stat-value{font-size:15px;font-weight:800;color:#f1f5f9;font-variant-numeric:tabular-nums;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+    /* Market sections */
+    .mercado-section-title{font-size:12px;font-weight:700;color:#e2e8f0;margin:14px 0 8px;display:flex;align-items:center;gap:8px;letter-spacing:.2px;}
+    .mercado-section-title .badge{font-size:9px;background:rgba(99,102,241,.12);color:#818cf8;padding:2px 7px;border-radius:8px;font-weight:500;}
+
+    /* Merchant cards */
+    .merchant-card{background:linear-gradient(135deg,rgba(15,23,42,.45),rgba(15,23,42,.25));border:1px solid rgba(148,163,184,.08);border-radius:10px;padding:10px 14px;flex:1;min-width:160px;max-width:220px;transition:all .15s;}
+    .merchant-card:hover{border-color:rgba(148,163,184,.2);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.2);}
+    .merchant-card .m-rank{font-size:10px;font-weight:700;color:#fbbf24;margin-bottom:2px;}
+    .merchant-card .m-name{font-size:12px;font-weight:600;color:#f1f5f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .merchant-card .m-price{font-size:16px;font-weight:800;color:#34d399;font-variant-numeric:tabular-nums;margin-top:1px;}
+    .merchant-card .m-meta{display:flex;gap:8px;margin-top:3px;font-size:10px;color:#64748b;flex-wrap:wrap;}
+    .merchant-card .m-meta span{display:flex;align-items:center;gap:3px;}
+    .merchant-card .m-banks{display:flex;flex-wrap:wrap;gap:2px;margin-top:4px;}
+    .merchant-card .m-bank-chip{background:rgba(99,102,241,.1);color:#818cf8;padding:1px 5px;border-radius:3px;font-size:8px;}
+
+    /* Bank bars */
+    .bank-bar{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px;}
+    .bank-bar .bank-name{min-width:80px;color:#cbd5e1;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;}
+    .bank-bar .bank-track{flex:1;height:16px;background:rgba(15,23,42,.4);border-radius:3px;overflow:hidden;}
+    .bank-bar .bank-fill{height:100%;border-radius:3px;transition:width .4s ease;display:flex;align-items:center;justify-content:flex-end;padding-right:3px;font-size:8px;color:#fff;font-weight:700;min-width:18px;background:linear-gradient(90deg,rgba(99,102,241,.5),rgba(99,102,241,.8));}
+    .bank-bar .bank-pct{min-width:30px;text-align:right;color:#64748b;font-size:10px;font-variant-numeric:tabular-nums;}
+
+    /* Insight cards */
+    .insight-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(130px,1fr));gap:8px;}
+    .insight-card{background:linear-gradient(135deg,rgba(15,23,42,.4),rgba(15,23,42,.2));border:1px solid rgba(148,163,184,.06);border-radius:10px;padding:10px;text-align:center;}
+    .insight-card .i-value{font-size:17px;font-weight:800;color:#f1f5f9;font-variant-numeric:tabular-nums;}
+    .insight-card .i-label{font-size:9px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-top:2px;font-weight:600;}
+    .insight-card .i-sub{font-size:10px;color:#64748b;margin-top:1px;}
+
+    /* Orders */
+    .bot-order-actions{display:flex;gap:6px;flex-wrap:wrap;}
+    .bot-order-actions .btn{min-height:30px;padding:4px 12px;font-size:11px;border-radius:6px;}
+
+    /* Ads / Accounts Panel */
+    .bot-panel-form{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:14px;background:rgba(15,23,42,.3);border:1px solid rgba(148,163,184,.08);border-radius:12px;margin-bottom:12px;}
+    .bot-panel-form .full{grid-column:1/-1;}
+    .bot-panel-form label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:#94a3b8;font-weight:600;}
+    .bot-panel-form input,.bot-panel-form select{width:100%;padding:7px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;font-family:inherit;box-sizing:border-box;transition:border-color .15s;}
+    .bot-panel-form input:focus,.bot-panel-form select:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px rgba(37,99,235,.1);}
+    .bot-panel-form .radio-group{display:flex;gap:12px;align-items:center;padding:4px 0;}
+    .bot-panel-form .radio-group label{flex-direction:row;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#cbd5e1;}
+    .bot-panel-form .radio-group input[type=radio]{width:auto;}
+    .bot-panel-form .form-row{display:flex;gap:8px;align-items:flex-end;}
+    .bot-panel-form .form-row > *{flex:1;}
+    .bot-panel-form .form-row .btn{flex:0 0 auto;}
+    .bot-payment-methods{display:flex;flex-wrap:wrap;gap:4px;padding:4px 0;}
+    .bot-payment-methods .pm-chip{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:16px;font-size:11px;background:rgba(37,99,235,.12);border:1px solid rgba(37,99,235,.2);color:#93c5fd;cursor:pointer;transition:all .1s;}
+    .bot-payment-methods .pm-chip.selected{background:rgba(37,99,235,.3);border-color:var(--brand);color:#fff;}
+    .bot-payment-methods .pm-chip .remove{color:#fb7185;font-size:13px;line-height:1;margin-left:2px;}
+    .bot-payment-input{display:flex;gap:6px;}
+    .bot-payment-input input{flex:1;padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;font-family:inherit;}
+    .bot-ads-list{display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;}
+    .bot-ad-card{background:rgba(15,23,42,.3);border:1px solid rgba(148,163,184,.08);border-radius:10px;padding:12px;transition:border-color .15s;}
+    .bot-ad-card:hover{border-color:rgba(148,163,184,.18);}
+    .bot-ad-card .ad-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}
+    .bot-ad-card .ad-header .ad-type{font-weight:700;font-size:12px;padding:2px 8px;border-radius:5px;}
+    .bot-ad-card .ad-header .ad-type.buy{color:#34d399;background:rgba(52,211,153,.1);}
+    .bot-ad-card .ad-header .ad-type.sell{color:#fb7185;background:rgba(251,113,133,.1);}
+    .bot-ad-card .ad-body{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;font-size:11px;color:#94a3b8;}
+    .bot-ad-card .ad-body span{display:flex;flex-direction:column;}
+    .bot-ad-card .ad-body .val{color:#cbd5e1;font-weight:600;font-variant-numeric:tabular-nums;}
+    .bot-ad-card .ad-footer{display:flex;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;gap:6px;}
+    .bot-ad-card .ad-status{font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;}
+    .bot-ad-card .ad-status.online{background:rgba(52,211,139,.12);color:#34d399;}
+    .bot-ad-card .ad-status.private{background:rgba(251,191,36,.12);color:#fbbf24;}
+    .bot-ad-card .ad-status.offline{background:rgba(148,163,184,.12);color:#94a3b8;}
+    .bot-ad-card .ad-actions{display:flex;gap:6px;}
+    .bot-panel-form .tag-list{display:flex;flex-wrap:wrap;gap:4px;}
+    .bot-panel-form .tag-list .tag{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:10px;font-size:10px;background:rgba(37,99,235,.12);color:#93c5fd;}
+    .bot-panel-form .tag-list .tag .remove{color:#fb7185;cursor:pointer;font-size:12px;line-height:1;}
+
+    /* Chart container */
+    .bot-chart-wrap{background:rgba(15,23,42,.3);border:1px solid rgba(148,163,184,.06);border-radius:12px;padding:14px;position:relative;}
+
+    /* Sub-header for panel */
+    .bot-panel-sub{padding:0 20px 12px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid rgba(148,163,184,.06);}
+
+    /* Two-column layout for main view */
+    .bot-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .bot-cols-full{grid-column:1/-1;}
+    .bot-card{background:rgba(15,23,42,.3);border:1px solid rgba(148,163,184,.06);border-radius:12px;padding:14px;}
+
+    /* Config collapsible */
+    .bot-config-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 0;font-size:11px;color:#64748b;font-weight:600;transition:color .15s;background:none;border:none;font-family:inherit;}
+    .bot-config-toggle:hover{color:#94a3b8;}
+    .bot-config-toggle .arrow{transition:transform .2s;display:inline-block;}
+    .bot-config-toggle .arrow.open{transform:rotate(90deg);}
+  `;
+  document.head.appendChild(style);
+}
 
   function buildP2PBotView(){
     if(document.getElementById("view-p2p-bot")) return;
@@ -9277,133 +9380,164 @@ if(addProviderBtn){
     section.className = "view admin-only-view";
     section.id = "view-p2p-bot";
     section.innerHTML = `
-      <section class="section-card">
-        <div class="section-top">
-          <div>
-            <h2 class="section-title">ONZE P2P Bot</h2>
-            <p class="section-text" style="margin-top:4px;">Bot automatico de P2P Market Making</p>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <span id="botStatusIndicator" class="bot-status-indicator stopped">
-              <span class="bot-status-dot stopped" id="botStatusDot"></span>
-              <span id="botStatusText">Detenido</span>
-            </span>
-          </div>
+    <section class="section-card">
+      <div class="section-top">
+        <div>
+          <h2 class="section-title" style="font-size:18px;">ONZE P2P Bot</h2>
+          <p class="section-text" style="margin-top:2px;font-size:12px;color:#64748b;">Bot autom\u00E1tico de P2P Market Making</p>
         </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <span id="botStatusIndicator" class="bot-status-indicator stopped">
+            <span class="bot-status-dot stopped" id="botStatusDot"></span>
+            <span id="botStatusText">Detenido</span>
+          </span>
+        </div>
+      </div>
 
+      <div class="bot-view-inner">
+        <!-- Exchange Tabs -->
         <div class="bot-exchange-tabs" id="botExchangeTabs">
           <button class="bot-exchange-btn active" data-exchange="binance" onclick="window.botSelectExchange('binance')">
-            <svg viewBox="0 0 127 127" width="22" height="22"><polygon fill="#F3BA2F" points="38.2,53.2 62.8,28.6 87.4,53.2 101.7,38.9 62.8,0 23.9,38.9"/><rect x="3.6" y="53.2" transform="matrix(0.7071 0.7071 -0.7071 0.7071 48.8 8.8)" fill="#F3BA2F" width="20.2" height="20.2"/><polygon fill="#F3BA2F" points="38.2,73.4 62.8,98 87.4,73.4 101.7,87.7 101.7,87.7 62.8,126.6 23.9,87.7 23.8,87.7"/><rect x="101.6" y="53.2" transform="matrix(-0.7071 0.7071 -0.7071 -0.7071 235.5 29.1)" fill="#F3BA2F" width="20.2" height="20.2"/><polygon fill="#F3BA2F" points="77.3,63.3 77.3,63.3 62.8,48.8 52,59.5 52,59.5 50.8,60.7 48.3,63.3 48.3,63.3 48.2,63.3 48.3,63.3 62.8,77.8 77.3,63.3 77.3,63.3"/></svg>
+            <svg viewBox="0 0 127 127" width="20" height="20"><polygon fill="#F3BA2F" points="38.2,53.2 62.8,28.6 87.4,53.2 101.7,38.9 62.8,0 23.9,38.9"/><rect x="3.6" y="53.2" transform="matrix(0.7071 0.7071 -0.7071 0.7071 48.8 8.8)" fill="#F3BA2F" width="20.2" height="20.2"/><polygon fill="#F3BA2F" points="38.2,73.4 62.8,98 87.4,73.4 101.7,87.7 101.7,87.7 62.8,126.6 23.9,87.7 23.8,87.7"/><rect x="101.6" y="53.2" transform="matrix(-0.7071 0.7071 -0.7071 -0.7071 235.5 29.1)" fill="#F3BA2F" width="20.2" height="20.2"/><polygon fill="#F3BA2F" points="77.3,63.3 77.3,63.3 62.8,48.8 52,59.5 52,59.5 50.8,60.7 48.3,63.3 48.3,63.3 48.2,63.3 48.3,63.3 62.8,77.8 77.3,63.3 77.3,63.3"/></svg>
             <span class="exchange-label">Binance</span>
           </button>
           <button class="bot-exchange-btn" data-exchange="bybit" onclick="window.botSelectExchange('bybit')">
-            <svg viewBox="0 0 2500 2500" width="22" height="22"><rect y="0" fill="#1B1B2F" width="2500" height="2500"/><polygon fill="#F7A600" points="1622,1408 1622,958 1713,958 1713,1408"/><path fill="#fff" d="M569,1542H375v-450h186c90,0,143,49,143,126c0,50-34,82-57,93c28,13,64,41,64,101c0,84-59,129-142,129V1542z M554,1171h-89v104h89c38,0,60-21,60-52S592,1171,554,1171z M560,1354h-94v111h94c41,0,61-25,61-56c0-30-20-55-60-55H560z"/><polygon fill="#fff" points="986,1357 986,1542 896,1542 896,1357 757,1092 856,1092 942,1273 1027,1092 1125,1092"/><path fill="#fff" d="M1382,1542h-194v-450h186c90,0,143,49,143,126c0,50-34,82-57,93c28,13,64,41,64,101c0,84-59,129-142,129V1542z M1367,1171h-88v104h88c38,0,60-21,60-52S1405,1171,1367,1171z M1373,1354h-94v111h94c41,0,61-25,61-56C1434,1379,1414,1354,1373,1354z"/><polygon fill="#fff" points="2004,1170 2004,1542 1914,1542 1914,1170 1793,1170 1793,1092 2125,1092 2125,1170"/></svg>
+            <svg viewBox="0 0 2500 2500" width="20" height="20"><rect y="0" fill="#1B1B2F" width="2500" height="2500"/><polygon fill="#F7A600" points="1622,1408 1622,958 1713,958 1713,1408"/><path fill="#fff" d="M569,1542H375v-450h186c90,0,143,49,143,126c0,50-34,82-57,93c28,13,64,41,64,101c0,84-59,129-142,129V1542z M554,1171h-89v104h89c38,0,60-21,60-52S592,1171,554,1171z M560,1354h-94v111h94c41,0,61-25,61-56c0-30-20-55-60-55H560z"/><polygon fill="#fff" points="986,1357 986,1542 896,1542 896,1357 757,1092 856,1092 942,1273 1027,1092 1125,1092"/><path fill="#fff" d="M1382,1542h-194v-450h186c90,0,143,49,143,126c0,50-34,82-57,93c28,13,64,41,64,101c0,84-59,129-142,129V1542z M1367,1171h-88v104h88c38,0,60-21,60-52S1405,1171,1367,1171z M1373,1354h-94v111h94c41,0,61-25,61-56C1434,1379,1414,1354,1373,1354z"/><polygon fill="#fff" points="2004,1170 2004,1542 1914,1542 1914,1170 1793,1170 1793,1092 2125,1092 2125,1170"/></svg>
             <span class="exchange-label">Bybit</span>
           </button>
           <button class="bot-exchange-btn" data-exchange="okx" onclick="window.botSelectExchange('okx')">
-            <svg viewBox="0 0 1024 1024" width="22" height="22"><rect width="1024" height="1024" rx="140" fill="#000"/><g transform="translate(512,512)" fill="#fff"><rect x="-320" y="-320" width="160" height="160" rx="28"/><rect x="160" y="-320" width="160" height="160" rx="28"/><rect x="-320" y="160" width="160" height="160" rx="28"/><rect x="160" y="160" width="160" height="160" rx="28"/><rect x="-130" y="-130" width="260" height="260" rx="40"/></g></svg>
+            <svg viewBox="0 0 1024 1024" width="20" height="20"><rect width="1024" height="1024" rx="140" fill="#000"/><g transform="translate(512,512)" fill="#fff"><rect x="-320" y="-320" width="160" height="160" rx="28"/><rect x="160" y="-320" width="160" height="160" rx="28"/><rect x="-320" y="160" width="160" height="160" rx="28"/><rect x="160" y="160" width="160" height="160" rx="28"/><rect x="-130" y="-130" width="260" height="260" rx="40"/></g></svg>
             <span class="exchange-label">OKX</span>
           </button>
         </div>
 
+        <!-- Control Bar -->
         <div class="bot-control-row">
-          <button class="btn" type="button" id="botStartBtn" style="padding:10px 24px;" onclick="window.botStartExchange()">Iniciar</button>
-          <button class="btn secondary" type="button" id="botStopBtn" style="padding:10px 24px;" onclick="window.botStopExchange()">Detener</button>
-          <button class="btn" type="button" id="botPanelBtn" style="padding:10px 24px;" onclick="window.botOpenPanel()">Panel P2P</button>
+          <button class="btn" type="button" id="botStartBtn" onclick="window.botStartExchange()" style="background:linear-gradient(135deg,#059669,#047857);border:none;color:#fff;">▶ Iniciar</button>
+          <button class="btn secondary" type="button" id="botStopBtn" onclick="window.botStopExchange()">■ Detener</button>
+          <button class="btn" type="button" id="botPanelBtn" onclick="window.botOpenPanel()" style="background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.25);color:#93c5fd;">📊 Panel P2P</button>
           <div class="bot-buyprice-card" id="botBuyPriceCard" style="display:none;">
-            <div class="ticker">
-              <div class="label" id="botBuyPriceLabel">PRECIO MINIMO VENTA</div>
-              <div class="value" id="botBuyPriceValue">—</div>
-              <div class="unit">CLP</div>
+            <div>
+              <div class="label" id="botBuyPriceLabel">PRECIO MIN VENTA</div>
+              <div><span class="value" id="botBuyPriceValue">—</span><span class="unit">CLP</span></div>
             </div>
-            <div class="provider" id="botBuyPriceProvider"></div>
+            <div id="botBuyPriceProvider" style="font-size:10px;color:#64748b;text-align:right;"></div>
           </div>
         </div>
 
-        <div id="botExchangeConfigSection" class="bot-section">
-          <h3 class="bot-section-title">Configuracion</h3>
-          <div class="bot-config-grid">
-            <label>
-              Estrategia
-              <select id="botStrategy" onchange="window.botSaveExchangeConfig()">
-                <option value="top1">Top 1 (seguir al mejor precio)</option>
-                <option value="spread">Spread fijo</option>
-              </select>
-            </label>
-            <label id="botTop1DiffLabel">
-              Diferencia con top 1 (CLP)
-              <input id="botTop1Diff" type="number" step="0.01" value="0.1" onchange="window.botSaveExchangeConfig()">
-              <span style="font-size:11px;color:#64748b;">Precio = mejor competidor − este valor</span>
-            </label>
-            <label>
-              Spread minimo (%)
-              <input id="botSpreadPct" type="number" step="0.1" value="0.5" onchange="window.botSaveExchangeConfig()">
-            </label>
-            <label>
-              Precio mínimo venta (CLP)
-              <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
-                <select id="botPriceSource" onchange="togglePriceSource();window.botSaveExchangeConfig()" style="flex:0 0 auto;width:120px;">
-                  <option value="auto">Capacity</option>
-                  <option value="manual">Manual</option>
+        <!-- KPI Dashboard -->
+        <div class="bot-kpi-grid" id="botKpiGrid">
+          <div class="bot-kpi"><div class="kpi-label">Exchange</div><div class="kpi-value" id="botKpiExchange" style="font-size:14px;font-weight:600;">—</div><div class="kpi-sub" id="botKpiExchangeStatus"></div></div>
+          <div class="bot-kpi"><div class="kpi-label">Ciclos</div><div class="kpi-value" id="botKpiCycles">0</div><div class="kpi-sub">ejecutados</div></div>
+          <div class="bot-kpi"><div class="kpi-label">Ordenes</div><div class="kpi-value" id="botKpiOrders">0</div><div class="kpi-sub">totales</div></div>
+          <div class="bot-kpi"><div class="kpi-label">Spread #1-#2</div><div class="kpi-value" id="botKpiSpread">—</div><div class="kpi-sub">CLP</div></div>
+          <div class="bot-kpi"><div class="kpi-label">Competidores</div><div class="kpi-value" id="botKpiCompetitors">0</div><div class="kpi-sub">en mercado</div></div>
+          <div class="bot-kpi"><div class="kpi-label">Anuncio propio</div><div class="kpi-value" id="botKpiOurAd" style="font-size:14px;">—</div><div class="kpi-sub" id="botKpiOurAdStatus"></div></div>
+        </div>
+
+        <!-- Two-column: Config + Credentials -->
+        <div class="bot-cols">
+          <div id="botExchangeConfigSection" class="bot-card bot-cols-full">
+            <button class="bot-config-toggle" id="botConfigToggle" onclick="var c=document.getElementById('botConfigGrid');var a=this.querySelector('.arrow');c.style.display=c.style.display==='none'?'grid':'none';a.classList.toggle('open');">
+              <span class="arrow">▶</span> Configuraci\u00F3n del exchange
+            </button>
+            <div class="bot-config-grid" id="botConfigGrid">
+              <label>
+                Estrategia
+                <select id="botStrategy" onchange="window.botSaveExchangeConfig()">
+                  <option value="top1">Top 1 (seguir al mejor precio)</option>
+                  <option value="spread">Spread fijo</option>
                 </select>
-                <input id="botPriceFloorPct" type="number" step="0.01" value="0" placeholder="895.83" onchange="botUpdateBuyPrice();window.botSaveExchangeConfig()" style="flex:1;min-width:0;">
-              </div>
-              <span style="font-size:11px;color:#64748b;" id="botPriceHelpText">Precio mínimo de venta en CLP</span>
-            </label>
-            <label>
-              Circuit breaker (% caida)
-              <input id="botCircuitBreakPct" type="number" step="0.1" value="3" onchange="window.botSaveExchangeConfig()">
-            </label>
-            <label>
-              Volumen maximo diario (USDT)
-              <input id="botDailyVolumeCap" type="number" value="" placeholder="Sin limite" onchange="window.botSaveExchangeConfig()">
-            </label>
-            <label>
-              Intervalo de ciclo (segundos)
-              <input id="botCycleInterval" type="number" step="0.1" value="10" min="1" onchange="window.botSaveExchangeConfig()">
-              <span style="font-size:11px;color:#64748b;">Tiempo entre cada ciclo de actualizacion</span>
-            </label>
-            <label>
-              Capital minimo competidor (USDT)
-              <input id="botMinCompetitorCapital" type="number" step="1" value="" placeholder="Sin filtro" onchange="window.botSaveExchangeConfig()">
-              <span style="font-size:11px;color:#64748b;">Ignorar competidores con menos capital</span>
-            </label>
-          </div>
-        </div>
-
-        <div id="botCredentialsSection" class="bot-section">
-          <h3 class="bot-section-title">Credenciales <span id="botCredExchangeLabel">Binance</span></h3>
-          <div id="botCredFields" class="bot-cred-fields"></div>
-          <div id="botCredStatus" style="margin-top:8px;font-size:13px;color:#94a3b8;"></div>
-        </div>
-
-        <div class="bot-section">
-          <h3 class="bot-section-title">Actividad del Bot</h3>
-          <div id="botLogContainer" class="bot-log-container">
-            <div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Cargando actividad...</div>
-          </div>
-        </div>
-
-        <div class="bot-section">
-          <h3 class="bot-section-title">Ordenes del Bot</h3>
-          <div id="botOrdersContainer" class="bot-orders-container">
-            <div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Sin ordenes registradas</div>
-          </div>
-        </div>
-      </section>
-      <!-- Panel P2P Modal -->
-      <div id="botPanelModal" class="modal" style="display:none;" onclick="if(event.target===this)window.botClosePanel()">
-        <div class="modal-dialog">
-          <div class="modal-card" style="max-width:800px;">
-            <div class="modal-head">
-              <h3 class="modal-title">Panel P2P — <span id="botPanelExchangeLabel">Binance</span></h3>
-              <button class="close-btn" type="button" onclick="window.botClosePanel()">&times;</button>
+              </label>
+              <label id="botTop1DiffLabel" style="position:relative;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span>Diferencia top 1 (CLP)</span>
+                  <span style="flex:1;"></span>
+                  <button type="button" onclick="window.botSaveExchangeConfig();window.botRefreshExchange();" title="Guardar y actualizar" style="flex:0 0 auto;width:28px;height:28px;border-radius:5px;border:1px solid rgba(148,163,184,.12);background:rgba(37,99,235,.1);color:#818cf8;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:all .15s;" onmouseover="this.style.background='rgba(37,99,235,.25)'" onmouseout="this.style.background='rgba(37,99,235,.1)'">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                  </button>
+                </div>
+                <input id="botTop1Diff" type="number" step="0.01" value="0.1" onchange="window.botSaveExchangeConfig()">
+                <span class="help-text">Precio = mejor competidor − este valor</span>
+              </label>
+              <label>
+                Spread m\u00EDnimo (%)
+                <input id="botSpreadPct" type="number" step="0.1" value="0.5" onchange="window.botSaveExchangeConfig()">
+              </label>
+              <label>
+                Precio m\u00EDnimo venta (CLP)
+                <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
+                  <select id="botPriceSource" onchange="togglePriceSource();window.botSaveExchangeConfig()" style="flex:0 0 100px;padding:7px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;outline:none;font-family:inherit;">
+                    <option value="auto">Capacity</option>
+                    <option value="manual">Manual</option>
+                  </select>
+                  <input id="botPriceFloorPct" type="number" step="0.01" value="0" placeholder="895.83" onchange="botUpdateBuyPrice();window.botSaveExchangeConfig()" style="flex:1;min-width:0;">
+                </div>
+                <span class="help-text" id="botPriceHelpText">Precio m\u00EDnimo de venta en CLP</span>
+              </label>
+              <label>
+                Circuit breaker (% ca\u00EDda)
+                <input id="botCircuitBreakPct" type="number" step="0.1" value="3" onchange="window.botSaveExchangeConfig()">
+              </label>
+              <label>
+                Vol. m\u00E1ximo diario (USDT)
+                <input id="botDailyVolumeCap" type="number" value="" placeholder="Sin l\u00EDmite" onchange="window.botSaveExchangeConfig()">
+              </label>
+              <label>
+                Intervalo ciclo (seg)
+                <input id="botCycleInterval" type="number" step="0.1" value="10" min="1" onchange="window.botSaveExchangeConfig()">
+                <span class="help-text">Tiempo entre cada ciclo</span>
+              </label>
+              <label>
+                Capital m\u00EDnimo competidor (USDT)
+                <input id="botMinCompetitorCapital" type="number" step="1" value="" placeholder="Sin filtro" onchange="window.botSaveExchangeConfig()">
+                <span class="help-text">Ignorar competidores con menos capital</span>
+              </label>
             </div>
-            <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
-              <button class="btn small bot-panel-tab active" data-paneltab="orders" onclick="window.botSwitchPanelTab('orders')">Ordenes</button>
-              <button class="btn small bot-panel-tab" data-paneltab="ads" onclick="window.botSwitchPanelTab('ads')">Anuncios</button>
-              <button class="btn small bot-panel-tab" data-paneltab="accounts" onclick="window.botSwitchPanelTab('accounts')">Cuentas</button>
+          </div>
+
+          <div id="botCredentialsSection" class="bot-card" style="grid-column:1/-1;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span style="font-size:13px;font-weight:700;color:#e2e8f0;">Credenciales</span>
+              <span style="font-size:11px;color:#64748b;" id="botCredExchangeLabel">Binance</span>
             </div>
+            <div id="botCredFields" class="bot-cred-fields"></div>
+            <div id="botCredStatus" style="margin-top:8px;font-size:12px;color:#94a3b8;"></div>
+          </div>
+        </div>
+
+        <!-- Two-column: Log + Orders -->
+        <div class="bot-cols">
+          <div class="bot-card">
+            <div class="bot-section-title">Actividad <span class="badge">en vivo</span></div>
+            <div id="botLogContainer" class="bot-log-container">
+              <div style="color:#64748b;font-size:11px;text-align:center;padding:16px 0;">Cargando actividad...</div>
+            </div>
+          </div>
+          <div class="bot-card">
+            <div class="bot-section-title">Ordenes <span class="badge">recientes</span></div>
+            <div id="botOrdersContainer" class="bot-orders-container">
+              <div style="color:#64748b;font-size:11px;text-align:center;padding:16px 0;">Sin ordenes registradas</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!-- Panel P2P Modal -->
+    <div id="botPanelModal" class="modal" style="display:none;" onclick="if(event.target===this)window.botClosePanel()">
+      <div class="modal-dialog">
+        <div class="modal-card" style="max-width:800px;">
+          <div class="modal-head">
+            <h3 class="modal-title"><span style="color:var(--brand);">●</span> Panel P2P &mdash; <span id="botPanelExchangeLabel">Binance</span></h3>
+            <button class="close-btn" type="button" onclick="window.botClosePanel()">&times;</button>
+          </div>
+          <div class="bot-panel-sub">
+            <button class="bot-panel-tab active" data-paneltab="orders" onclick="window.botSwitchPanelTab('orders')">📋 Ordenes</button>
+            <button class="bot-panel-tab" data-paneltab="ads" onclick="window.botSwitchPanelTab('ads')">📢 Anuncios</button>
+            <button class="bot-panel-tab" data-paneltab="accounts" onclick="window.botSwitchPanelTab('accounts')">🏦 Cuentas</button>
+            <button class="bot-panel-tab" data-paneltab="mercado" onclick="window.botSwitchPanelTab('mercado')">📈 Mercado</button>
+          </div>
+          <div class="modal-content">
             <!-- Tab: Ordenes activas -->
             <div id="botPanelOrders" class="bot-panel-tab-content" style="">
               <p class="section-text" style="margin-bottom:10px;">Ordenes activas del exchange. Acepta, libera o chatea con la contraparte.</p>
@@ -9445,8 +9579,33 @@ if(addProviderBtn){
               </div>
               <div id="botPanelAccountsList" class="bot-accounts-grid"></div>
             </div>
+            <!-- Tab: Mercado -->
+            <div id="botPanelMercado" class="bot-panel-tab-content" style="display:none;">
+              <div style="margin-bottom:12px;">
+                <div id="botMercadoStats"></div>
+              </div>
+              <div id="botMercadoChartContainer" style="background:rgba(15,23,42,.4);border-radius:8px;padding:12px;margin-bottom:12px;height:260px;">
+                <canvas id="botMercadoChart"></canvas>
+              </div>
+              <!-- Top 5 merchants -->
+              <div class="mercado-section-title">Top merchants <span class="badge">más activos</span></div>
+              <div id="botMercadoTopMerchants" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;"></div>
+              <!-- Banks distribution -->
+              <div class="mercado-section-title">Bancos m&aacute;s usados <span class="badge">entre competidores</span></div>
+              <div id="botMercadoBanks" style="margin-bottom:4px;"></div>
+              <!-- Bot insights -->
+              <div class="mercado-section-title">Rendimiento del bot <span class="badge">insights</span></div>
+              <div id="botMercadoInsights" style="margin-bottom:12px;"></div>
+              <!-- Ranking -->
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;margin-top:4px;">
+                <p class="section-text" style="margin:0;font-weight:600;">Ranking de competidores</p>
+                <span id="botMercadoUpdatedAt" style="font-size:11px;color:#64748b;"></span>
+              </div>
+              <div id="botMercadoRanking" style="max-height:380px;overflow-y:auto;"></div>
+            </div>
           </div>
         </div>
+      </div>
       </div>
     `;
     if(!document.querySelector(".views-container")){
@@ -9536,7 +9695,7 @@ if(addProviderBtn){
     try{
       const [configRes, logsRes, ordersRes, exRes] = await Promise.all([
         fetch("/api/p2p/bot/config", { credentials:"include" }),
-        fetch("/api/p2p/bot/logs?limit=30", { credentials:"include" }),
+        fetch("/api/p2p/bot/logs?limit=30&exchange=" + encodeURIComponent(ex), { credentials:"include" }),
         fetch("/api/p2p/bot/orders?limit=20&exchange=" + ex, { credentials:"include" }),
         fetch("/api/p2p/bot/exchange-config", { credentials:"include" })
       ]);
@@ -9550,12 +9709,25 @@ if(addProviderBtn){
       if(logsData?.ok) renderBotLogs(logsData.logs);
       if(ordersData?.ok) renderBotOrders(ordersData.orders);
 
-      const exStatus = exData?.ok && exData?.configs?.[ex];
+      var allExchanges = {};
+      var anyRunning = false;
+      var runningLabel = "";
+      if(exData?.ok && exData?.configs){
+        for(var exKey in exData.configs){
+          var enabled = exData.configs[exKey]?.enabled;
+          allExchanges[exKey] = enabled;
+          if(enabled){
+            anyRunning = true;
+            runningLabel = runningLabel ? runningLabel + ", " + exKey.charAt(0).toUpperCase() + exKey.slice(1) : exKey.charAt(0).toUpperCase() + exKey.slice(1);
+          }
+        }
+      }
+      var exStatus = exData?.ok && exData?.configs?.[ex];
       if(exStatus){
-        updateBotUI({ running: exStatus.enabled, config: exStatus });
+        updateBotUI({ running: exStatus.enabled, config: exStatus, _allExchanges: allExchanges, _runningLabel: runningLabel });
         updateExchangeConfig(exStatus);
       }else{
-        updateBotUI({ running: false });
+        updateBotUI({ running: false, _allExchanges: allExchanges, _runningLabel: runningLabel });
       }
 
       await loadCredentials(ex);
@@ -9566,15 +9738,19 @@ if(addProviderBtn){
   }
 
   function updateBotUI(status){
-    const indicator = document.getElementById("botStatusIndicator");
-    const dot = document.getElementById("botStatusDot");
-    const text = document.getElementById("botStatusText");
+    var indicator = document.getElementById("botStatusIndicator");
+    var dot = document.getElementById("botStatusDot");
+    var text = document.getElementById("botStatusText");
     if(!indicator || !dot || !text) return;
 
-    if(status.running){
+    // If we have all exchange statuses, use the aggregate
+    var anyRunning = status._allExchanges ? Object.values(status._allExchanges).some(function(v){ return v; }) : status.running;
+    var runningLabel = status._runningLabel || (status.running ? botSelectedExchange : "");
+
+    if(anyRunning){
       indicator.className = "bot-status-indicator running";
       dot.className = "bot-status-dot running";
-      text.textContent = "Ejecutando";
+      text.textContent = runningLabel ? "Ejecutando (" + runningLabel + ")" : "Ejecutando";
     }else if(status.config?.pauseUntil && new Date(status.config.pauseUntil) > new Date()){
       indicator.className = "bot-status-indicator paused";
       dot.className = "bot-status-dot paused";
@@ -9584,6 +9760,11 @@ if(addProviderBtn){
       dot.className = "bot-status-dot stopped";
       text.textContent = "Detenido";
     }
+    // Update exchange KPI
+    var kpiEx = document.getElementById("botKpiExchange");
+    var kpiExStatus = document.getElementById("botKpiExchangeStatus");
+    if(kpiEx) kpiEx.textContent = botSelectedExchange.charAt(0).toUpperCase() + botSelectedExchange.slice(1);
+    if(kpiExStatus) kpiExStatus.textContent = anyRunning ? "En ejecución" : "Detenido";
   }
 
   function updateExchangeConfig(cfg){
@@ -9881,6 +10062,7 @@ if(addProviderBtn){
   };
 
   window.botClosePanel = function(){
+    window.botStopMercadoRefresh();
     const modal = document.getElementById("botPanelModal");
     if(modal) modal.style.display = "none";
   };
@@ -9888,12 +10070,13 @@ if(addProviderBtn){
   window.botSwitchPanelTab = function(tab){
     document.querySelectorAll(".bot-panel-tab").forEach(t => t.classList.toggle("active", t.dataset.paneltab === tab));
     document.querySelectorAll(".bot-panel-tab-content").forEach(c => c.style.display = "none");
-    const map = { orders:"botPanelOrders", ads:"botPanelAds", accounts:"botPanelAccounts" };
+    const map = { orders:"botPanelOrders", ads:"botPanelAds", accounts:"botPanelAccounts", mercado:"botPanelMercado" };
     const el = document.getElementById(map[tab]);
     if(el) el.style.display = "";
-    if(tab === "orders") loadPanelOrders();
-    else if(tab === "ads") loadPanelAds();
-    else if(tab === "accounts") loadPanelAccounts();
+    if(tab === "orders"){ loadPanelOrders(); window.botStopMercadoRefresh(); }
+    else if(tab === "ads"){ loadPanelAds(); window.botStopMercadoRefresh(); }
+    else if(tab === "accounts"){ loadPanelAccounts(); window.botStopMercadoRefresh(); }
+    else if(tab === "mercado"){ loadPanelMercado(); window.botStartMercadoRefresh(); }
   };
 
   async function loadPanelOrders(){
@@ -10016,7 +10199,10 @@ if(addProviderBtn){
           </div>
           <div class="ad-footer">
             <span class="ad-status ${a.status}">${a.status === 'online' ? 'Online' : a.status === 'private' ? 'Privado' : 'Desconectado'}</span>
-            <span style="font-size:11px;color:#64748b;">${new Date(a.createdAt).toLocaleDateString('es-CL')} ${isLive ? '· Sincronizado' : ''}</span>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <button class="btn small ${a.botManaged ? 'active' : 'ghost'}" type="button" style="font-size:10px;padding:2px 8px;" onclick="toggleBotManaged(${a.id})">${a.botManaged ? 'Bot ON' : 'Bot OFF'}</button>
+              <span style="font-size:11px;color:#64748b;">${new Date(a.createdAt).toLocaleDateString('es-CL')} ${isLive ? '· Sincronizado' : ''}</span>
+            </div>
           </div>
         </div>`;
       }).join("");
@@ -10348,6 +10534,21 @@ if(addProviderBtn){
     }catch(e){}
   };
 
+  window.toggleBotManaged = async function(id){
+    try{
+      const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange, { credentials:"include" });
+      const d = await r.json();
+      const ad = d?.ads?.find(a => a.id === id);
+      if(!ad) return;
+      await fetch("/api/p2p/bot/ads", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ id, exchange: botSelectedExchange, botManaged: !ad.botManaged })
+      });
+      loadPanelAds();
+    }catch(e){}
+  };
+
   window.botPanelAddPaymentMethod = function(){
     const input = document.getElementById("p2pAdCustomPm");
     if(!input || !input.value.trim()) return;
@@ -10418,6 +10619,324 @@ if(addProviderBtn){
         </div>
       `}).join("");
     }catch(e){}
+  }
+
+  let mercadoChartInstance = null;
+  let mercadoChartJsLoaded = false;
+
+  var mercadoRefreshTimer = null;
+  var mercadoFullRefreshCount = 0;
+
+  async function loadPanelMercado(){
+    const container = document.getElementById("botPanelMercado");
+    if(!container) return;
+
+    var isFull = mercadoFullRefreshCount === 0 || mercadoFullRefreshCount % 4 === 0;
+
+    try{
+      var r = await fetch("/api/p2p/bot/market?type=latest&limit=50", { credentials:"include" });
+      var d = await r.json();
+      if(d?.ok && d?.data) renderMercadoRanking(d.data);
+    }catch(e){}
+
+    if(isFull){
+      try{
+        var r = await fetch("/api/p2p/bot/market?type=history&limit=60", { credentials:"include" });
+        var d = await r.json();
+        if(d?.ok && d?.data) renderMercadoChart(d.data);
+      }catch(e){}
+    }
+
+    try{
+      var r = await fetch("/api/p2p/bot/market?type=stats", { credentials:"include" });
+      var d = await r.json();
+      if(d?.ok && d?.data) renderMercadoStats(d.data);
+    }catch(e){}
+
+    if(isFull){
+      try{
+        var r = await fetch("/api/p2p/bot/market?type=merchants", { credentials:"include" });
+        var d = await r.json();
+        if(d?.ok && d?.data) renderMercadoTopMerchants(d.data);
+      }catch(e){}
+    }
+
+    try{
+      var r = await fetch("/api/p2p/bot/market?type=banks", { credentials:"include" });
+      var d = await r.json();
+      if(d?.ok && d?.data) renderMercadoBanks(d.data);
+    }catch(e){}
+
+    if(isFull){
+      try{
+        var r = await fetch("/api/p2p/bot/market?type=insights", { credentials:"include" });
+        var d = await r.json();
+        if(d?.ok && d?.data) renderMercadoInsights(d.data);
+      }catch(e){}
+    }
+
+    mercadoFullRefreshCount++;
+  }
+
+  // Auto-refresh mercado every 8 seconds
+  window.botStartMercadoRefresh = function(){
+    window.botStopMercadoRefresh();
+    mercadoRefreshTimer = setInterval(loadPanelMercado, 8000);
+  };
+
+  window.botStopMercadoRefresh = function(){
+    if(mercadoRefreshTimer){
+      clearInterval(mercadoRefreshTimer);
+      mercadoRefreshTimer = null;
+    }
+  };
+
+  function renderMercadoStats(stats){
+    const el = document.getElementById("botMercadoStats");
+    if(!el) return;
+    el.innerHTML = [
+      '<div class="stat-card-sm"><span class="stat-label">Ordenes totales</span><span class="stat-value">' + stats.totalOrders + '</span></div>',
+      '<div class="stat-card-sm"><span class="stat-label">Completadas</span><span class="stat-value" style="color:#34d399">' + stats.completedOrders + '</span></div>',
+      '<div class="stat-card-sm"><span class="stat-label">Pendientes</span><span class="stat-value" style="color:#fbbf24">' + stats.pendingOrders + '</span></div>',
+      '<div class="stat-card-sm"><span class="stat-label">Vol. total USDT</span><span class="stat-value">' + Number(stats.totalVolumeUsdt).toLocaleString("es-CL", { maximumFractionDigits: 0 }) + '</span></div>',
+      '<div class="stat-card-sm"><span class="stat-label">Precio prom.</span><span class="stat-value">$' + stats.avgUnitPrice.toFixed(2) + '</span></div>',
+      '<div class="stat-card-sm"><span class="stat-label">Ciclos</span><span class="stat-value">' + stats.totalSnapshots + '</span></div>',
+    ].join("");
+    // Update main KPIs
+    var kpiOrders = document.getElementById("botKpiOrders");
+    if(kpiOrders) kpiOrders.textContent = stats.totalOrders;
+    var kpiCycles = document.getElementById("botKpiCycles");
+    if(kpiCycles) kpiCycles.textContent = stats.totalSnapshots;
+  }
+
+  async function renderMercadoChart(history){
+    const canvas = document.getElementById("botMercadoChart");
+    if(!canvas || !history.length) return;
+    if(!mercadoChartJsLoaded){
+      await new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = "https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js";
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+      mercadoChartJsLoaded = true;
+    }
+    if(mercadoChartInstance) mercadoChartInstance.destroy();
+    const labels = history.map(h => {
+      const d = new Date(h.cycleAt);
+      return d.toLocaleTimeString("es-CL", { hour:"2-digit", minute:"2-digit" });
+    });
+    const datasets = [
+      { label:"#1", data:history.map(h => h.top1Price), borderColor:"#ef4444", backgroundColor:"transparent", tension:0.3, pointRadius:0 },
+      { label:"#2", data:history.map(h => h.top2Price), borderColor:"#f97316", backgroundColor:"transparent", tension:0.3, pointRadius:0 },
+      { label:"#3", data:history.map(h => h.top3Price), borderColor:"#eab308", backgroundColor:"transparent", tension:0.3, pointRadius:0 },
+      { label:"Tu precio", data:history.map(h => h.ourPrice ?? h.targetPrice), borderColor:"#22d3ee", backgroundColor:"transparent", borderDash:[4,3], tension:0.3, pointRadius:0 },
+    ];
+    const ctx = canvas.getContext("2d");
+    mercadoChartInstance = new Chart(ctx, {
+      type:"line",
+      data:{ labels, datasets },
+      options:{
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{ legend:{ labels:{ color:"#94a3b8", font:{ size:10 } }, position:"top" } },
+        scales:{
+          x:{ ticks:{ color:"#64748b", font:{ size:9 }, maxTicksLimit:10 }, grid:{ color:"rgba(148,163,184,0.1)" } },
+          y:{ ticks:{ color:"#64748b", font:{ size:9 } }, grid:{ color:"rgba(148,163,184,0.1)" } }
+        }
+      }
+    });
+  }
+
+  function renderMercadoRanking(data){
+    const updatedEl = document.getElementById("botMercadoUpdatedAt");
+    if(updatedEl && data.cycleAt){
+      updatedEl.textContent = "Actualizado: " + new Date(data.cycleAt).toLocaleTimeString("es-CL", { hour:"2-digit", minute:"2-digit" });
+    // Update main KPIs
+    var kpiComp = document.getElementById("botKpiCompetitors");
+    if(kpiComp) kpiComp.textContent = data.totalCompetitors || 0;
+    var kpiOurAd = document.getElementById("botKpiOurAd");
+    var kpiOurAdStatus = document.getElementById("botKpiOurAdStatus");
+    if(kpiOurAd && data.ourAd && data.ourAd.price){
+      kpiOurAd.textContent = "$" + Number(data.ourAd.price).toFixed(2);
+      if(kpiOurAdStatus) kpiOurAdStatus.textContent = "En ranking";
+    }else{
+      if(kpiOurAd) kpiOurAd.textContent = "Sin anuncio";
+      if(kpiOurAdStatus) kpiOurAdStatus.textContent = "No publicado";
+    }
+    // Update spread KPI from first 2 competitors
+    if(data.ranked && data.ranked.length >= 2){
+      var spread = Math.abs(Number(data.ranked[1].price) - Number(data.ranked[0].price));
+      var kpiSpread = document.getElementById("botKpiSpread");
+      if(kpiSpread) kpiSpread.textContent = spread.toFixed(2);
+    }
+    }
+    const container = document.getElementById("botMercadoRanking");
+    if(!container) return;
+    if(!data.ranked || !data.ranked.length){
+      container.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px;">Sin datos de mercado</div>';
+      return;
+    }
+    const ourPrice = data.ourAd?.price;
+    container.innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr style="color:#64748b;border-bottom:1px solid rgba(148,163,184,0.2);">
+            <th style="padding:4px 6px;text-align:left;">#</th>
+            <th style="padding:4px 6px;text-align:left;">Merchant</th>
+            <th style="padding:4px 6px;text-align:right;">Precio</th>
+            <th style="padding:4px 6px;text-align:right;">Disp.</th>
+            <th style="padding:4px 6px;text-align:right;">Min</th>
+            <th style="padding:4px 6px;text-align:right;">Max</th>
+            <th style="padding:4px 6px;text-align:center;">% Compl.</th>
+            <th style="padding:4px 6px;text-align:center;">Ordenes</th>
+            <th style="padding:4px 6px;text-align:left;">Formas de pago</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.ranked.map(c => {
+            const isOurs = ourPrice && Math.abs(Number(c.price) - ourPrice) < 0.01;
+            const banks = (c.paymentMethods || []).map(p => p.name).filter(Boolean);
+            const uniqueBanks = [...new Set(banks)].slice(0, 3);
+            return `
+            <tr style="${isOurs ? 'background:rgba(34,211,238,0.08);' : ''}border-bottom:1px solid rgba(148,163,184,0.1);${isOurs ? 'outline:1px solid rgba(34,211,238,0.3);' : ''}">
+              <td style="padding:4px 6px;font-weight:600;${c.rank <= 3 ? 'color:#fbbf24;' : ''}">${c.rank}</td>
+              <td style="padding:4px 6px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(c.nickName)}">${escHtml(c.nickName || "")}</td>
+              <td style="padding:4px 6px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;">$${Number(c.price).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+              <td style="padding:4px 6px;text-align:right;font-variant-numeric:tabular-nums;">${Number(c.available).toFixed(0)}</td>
+              <td style="padding:4px 6px;text-align:right;font-variant-numeric:tabular-nums;">$${Number(c.minAmount).toLocaleString("es-CL", { maximumFractionDigits: 0 })}</td>
+              <td style="padding:4px 6px;text-align:right;font-variant-numeric:tabular-nums;">$${Number(c.maxAmount).toLocaleString("es-CL", { maximumFractionDigits: 0 })}</td>
+              <td style="padding:4px 6px;text-align:center;">${c.completionRate}%</td>
+              <td style="padding:4px 6px;text-align:center;">${c.orderCount}</td>
+              <td style="padding:4px 6px;max-width:140px;">
+                ${uniqueBanks.length ? uniqueBanks.map(b => `<span style="display:inline-block;background:rgba(99,102,241,0.15);color:#818cf8;padding:1px 5px;border-radius:3px;font-size:10px;margin:1px;">${escHtml(b)}</span>`).join("") : '<span style="color:#64748b;">-</span>'}
+                ${banks.length > 3 ? `<span style="color:#64748b;font-size:10px;">+${banks.length - 3}</span>` : ""}
+              </td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function renderMercadoTopMerchants(merchants){
+    const el = document.getElementById("botMercadoTopMerchants");
+    if(!el) return;
+    if(!merchants || !merchants.length){
+      el.innerHTML = '<div style="color:#64748b;font-size:11px;padding:8px 0;">A&uacute;n sin datos suficientes</div>';
+      return;
+    }
+    const top5 = merchants.slice(0, 5);
+    el.innerHTML = top5.map((m, i) => {
+      const rankColors = ["#fbbf24","#94a3b8","#cd7f32","#64748b","#64748b"];
+      return `
+        <div class="merchant-card">
+          <div class="m-rank" style="color:${rankColors[i]}">#${i + 1}</div>
+          <div class="m-name" title="${escHtml(m.nickName)}">${escHtml(m.nickName)}</div>
+          <div class="m-price">$${m.avgPrice.toFixed(2)}</div>
+          <div class="m-meta">
+            <span>📦 ${m.avgAvailable.toFixed(0)} USDT</span>
+            <span>🏆 ${m.avgRank.toFixed(1)}° prom.</span>
+            <span>✅ ${m.avgCompletionRate.toFixed(0)}%</span>
+          </div>
+          <div class="m-meta">
+            <span>${m.appearances} apariciones</span>
+            <span>${m.avgOrdersPerCycle.toFixed(1)} ord/ciclo</span>
+          </div>
+          ${m.banks && m.banks.length ? `
+          <div class="m-banks">
+            ${m.banks.slice(0, 5).map(b => `<span class="m-bank-chip">${escHtml(b)}</span>`).join("")}
+            ${m.banks.length > 5 ? `<span class="m-bank-chip" style="background:rgba(148,163,184,.1);color:#94a3b8;">+${m.banks.length - 5}</span>` : ""}
+          </div>` : ""}
+        </div>`;
+    }).join("");
+  }
+
+  function renderMercadoBanks(data){
+    const el = document.getElementById("botMercadoBanks");
+    if(!el) return;
+    if(!data?.banks || !data.banks.length){
+      el.innerHTML = '<div style="color:#64748b;font-size:11px;padding:8px 0;">Sin datos de bancos</div>';
+      return;
+    }
+    const maxCount = data.banks[0].merchantCount;
+    el.innerHTML = `
+      <div style="font-size:10px;color:#64748b;margin-bottom:4px;">
+        Basado en ${data.merchantsWithBanks} competidores &middot; ${data.banks.length} bancos distintos
+      </div>
+      ${data.banks.slice(0, 10).map(b => `
+        <div class="bank-bar">
+          <span class="bank-name">${escHtml(b.name)}</span>
+          <div class="bank-track">
+            <div class="bank-fill" style="width:${Math.max((b.merchantCount / maxCount) * 100, 3)}%">${b.merchantCount}</div>
+          </div>
+          <span class="bank-pct">${b.pct}%</span>
+        </div>
+      `).join("")}
+    `;
+  }
+
+  function renderMercadoInsights(insights){
+    const el = document.getElementById("botMercadoInsights");
+    if(!el) return;
+    if(!insights){
+      el.innerHTML = '<div style="color:#64748b;font-size:11px;padding:8px 0;">A&uacute;n sin datos de rendimiento</div>';
+      return;
+    }
+    var rd = insights.rankDistribution || {};
+    var totalRanked = 0;
+    for(var k in rd){ totalRanked += rd[k]; }
+    var rankBars = "";
+    var rankLabels = { top1:"#1", top2:"#2", top3:"#3", top5:"#4-#5", top10:"#6-#10", otros:"+10" };
+    var rankColors = { top1:"#34d399", top2:"#60a5fa", top3:"#fbbf24", top5:"#f97316", top10:"#a78bfa", otros:"#64748b" };
+    for(var key in rankLabels){
+      var count = rd[key] || 0;
+      var pct = totalRanked > 0 ? (count / totalRanked) * 100 : 0;
+      rankBars += [
+        '<div class="bank-bar" style="padding:2px 0;">',
+          '<span class="bank-name" style="min-width:50px;">' + rankLabels[key] + '</span>',
+          '<div class="bank-track" style="height:14px;">',
+            '<div class="bank-fill" style="width:' + pct + '%;background:' + rankColors[key] + ';font-size:8px;">' + count + '</div>',
+          '</div>',
+          '<span class="bank-pct">' + pct.toFixed(0) + '%</span>',
+        '</div>'
+      ].join("");
+    }
+    el.innerHTML = [
+      '<div class="insight-grid" style="margin-bottom:8px;">',
+        '<div class="insight-card">',
+          '<div class="i-value">' + insights.totalSnapshots + '</div>',
+          '<div class="i-label">Ciclos totales</div>',
+        '</div>',
+        '<div class="insight-card">',
+          '<div class="i-value" style="color:' + (insights.ourAdPresentPct > 80 ? "#34d399" : "#fbbf24") + '">' + insights.ourAdPresentPct + '%</div>',
+          '<div class="i-label">Tiempo con anuncio</div>',
+        '</div>',
+        '<div class="insight-card">',
+          '<div class="i-value">$' + insights.avgSpread12.toFixed(2) + '</div>',
+          '<div class="i-label">Spread #1-#2</div>',
+        '</div>',
+        '<div class="insight-card">',
+          '<div class="i-value">$' + insights.avgSpread13.toFixed(2) + '</div>',
+          '<div class="i-label">Spread #1-#3</div>',
+        '</div>',
+        '<div class="insight-card">',
+          '<div class="i-value">' + insights.avgDepthFirst10.toLocaleString("es-CL") + '</div>',
+          '<div class="i-label">Profundidad top 10</div>',
+          '<div class="i-sub">USDT disponibles</div>',
+        '</div>',
+        '<div class="insight-card">',
+          '<div class="i-value" style="color:' + (insights.avgPriceDeviation < 1 ? "#34d399" : "#fbbf24") + '">$' + insights.avgPriceDeviation.toFixed(2) + '</div>',
+          '<div class="i-label">Desviaci&oacute;n precio</div>',
+          '<div class="i-sub">vs precio objetivo</div>',
+        '</div>',
+      '</div>',
+      totalRanked > 0 ? [
+        '<div style="font-size:11px;font-weight:600;color:#94a3b8;margin:4px 0 2px;">Distribuci&oacute;n de posici&oacute;n</div>',
+        rankBars
+      ].join("") : ""
+    ].join("");
   }
 
   let botPanelAccountEditingId = null;
@@ -10553,25 +11072,7 @@ if(addProviderBtn){
     buildP2PBotView();
     addP2PBotNavButton();
     toggleBotStrategyFields();
-    setTimeout(async () => {
-      // Auto-stop any exchange that was left running from a prior session
-      try {
-        const res = await fetch("/api/p2p/bot/exchange-config", { credentials:"include" });
-        const data = await res.json();
-        if(data?.ok && data?.configs){
-          for(const ex of Object.keys(data.configs)){
-            if(data.configs[ex]?.enabled){
-              await fetch("/api/p2p/bot/exchange-config", {
-                method:"POST", credentials:"include",
-                headers:{"Content-Type":"application/json"},
-                body: JSON.stringify({ exchange: ex, action: "stop" })
-              });
-            }
-          }
-        }
-      } catch(e) {}
-      window.botRefreshExchange();
-    }, 400);
+    setTimeout(window.botRefreshExchange, 400);
   }
 
   if(document.readyState === "loading"){
