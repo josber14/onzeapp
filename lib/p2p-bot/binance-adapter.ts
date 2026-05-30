@@ -157,12 +157,7 @@ export class BinanceP2PClient {
 
   async updateAd(params: Record<string, any>) {
     const { adId, advNo, price } = params;
-    const adsNo = advNo || adId;
-    return this.privateRequest(
-      "/sapi/v1/c2c/ads/update",
-      {},
-      { adsNo, price: String(price) }
-    );
+    return this.privateRequest("/sapi/v1/c2c/ads/update", {}, { advNo: advNo || adId, price: String(price) });
   }
 
   async removeAd(adId: string) {
