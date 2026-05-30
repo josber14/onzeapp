@@ -82,17 +82,16 @@ export class BinanceP2PClient {
     if (bodyPayload) opts.body = JSON.stringify(bodyPayload);
 
     const res = await fetch(url, opts);
-
     const text = await res.text();
-    if (!text) throw new Error(`Binance empty response (HTTP ${res.status}) for ${endpoint}`);
+    if (!text) throw new Error(`Binance empty response (HTTP ${res.status}) for ${endpoint} [url: ${url}]`);
     let data: any;
     try {
       data = JSON.parse(text);
     } catch {
-      throw new Error(`Binance respuesta inválida (HTTP ${res.status}) para ${endpoint}: ${text.slice(0, 200)}`);
+      throw new Error(`Binance respuesta inválida (HTTP ${res.status}) para ${endpoint}: ${text.slice(0, 200)} [url: ${url}]`);
     }
-    if (data?.success === false || (data?.code && data.code !== "000000")) {
-      throw new Error(`Binance error: ${data.message || data.msg || "unknown"} (code: ${data.code})`);
+    if (data?.code && data.code !== "000000") {
+      throw new Error(`Binance error: ${data.message || data.msg || "unknown"} (code: ${data.code}) [url: ${url}]`);
     }
     return data;
   }
@@ -159,10 +158,11 @@ export class BinanceP2PClient {
 
   async updateAd(params: Record<string, any>) {
     const { adId, advNo, price } = params;
+    const adsNo = advNo || adId;
     return this.privateRequest(
       "/sapi/v1/c2c/ads/update",
-      { adsNo: advNo || adId },
-      { price: String(price) }
+      {},
+      { adsNo, price: String(price) }
     );
   }
 
