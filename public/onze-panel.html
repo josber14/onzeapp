@@ -2156,6 +2156,7 @@
         <button class="nav-btn" data-view-target="calculadora">Calculadora</button>
         <button class="nav-btn" data-view-target="tasa-del-dia">Crea tu tasa del día</button>
         <button class="nav-btn" data-view-target="dashboard">Dashboard</button>
+        <button class="nav-btn" data-view-target="p2p-bot" onclick="(function(e){if(typeof switchView==='function')switchView('p2p-bot');else{document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById('view-p2p-bot')?.classList.add('active');}document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));e.currentTarget.classList.add('active');setTimeout(()=>window.botRefreshExchange?.(),200);})(event)">P2P Bot</button>
         <button class="nav-btn" data-view-target="historial">Historial</button>
         <button class="nav-btn" data-view-target="noticias">Noticias</button>
         <button class="nav-btn admin-only-control" data-view-target="ajustes" onclick="(window.switchView||function(v){document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));var el=document.getElementById('view-'+v);if(el)el.classList.add('active');})( 'ajustes')">Ajustes</button>
@@ -9639,20 +9640,20 @@ function addP2PBotStyles(){
   }
 
   function addP2PBotNavButton(){
-    if(document.querySelector('[data-view-target="p2p-bot"]')) return;
-
-    const target = document.querySelector('[data-view-target="p2p-dashboard"]')
-      || document.querySelector('[data-view-target="tasa-del-dia"]');
-    if(!target || !target.parentNode) return;
-
-    const btn = document.createElement("button");
-    btn.className = "nav-btn";
-    btn.type = "button";
-    btn.dataset.viewTarget = "p2p-bot";
-    btn.textContent = "P2P Bot";
-
-    target.parentNode.insertBefore(btn, target.nextSibling);
-
+    const btn = document.querySelector('[data-view-target="p2p-bot"]')
+      || (() => {
+        const target = document.querySelector('[data-view-target="p2p-dashboard"]')
+          || document.querySelector('[data-view-target="tasa-del-dia"]');
+        if(!target || !target.parentNode) return null;
+        const b = document.createElement("button");
+        b.className = "nav-btn";
+        b.type = "button";
+        b.dataset.viewTarget = "p2p-bot";
+        b.textContent = "P2P Bot";
+        target.parentNode.insertBefore(b, target.nextSibling);
+        return b;
+      })();
+    if(!btn) return;
     btn.addEventListener("click", function(){
       if(typeof switchView === "function") switchView("p2p-bot");
       else{
