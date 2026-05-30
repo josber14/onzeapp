@@ -59,7 +59,11 @@ export class BinanceP2PClient {
       .join("&");
   }
 
-  private async privateRequest(endpoint: string, params: Record<string, any> = {}, bodyPayload?: any): Promise<any> {
+  private async privateRequest(endpoint: string, params: Record<string, any> = {}, bodyPayload?: any, paramsInBody = false): Promise<any> {
+    if (paramsInBody) {
+      bodyPayload = { ...(bodyPayload || {}), ...params };
+      params = {};
+    }
     params.recvWindow = 60000;
     params.timestamp = Date.now();
     const queryStr = this.buildQueryString(params);
@@ -140,7 +144,7 @@ export class BinanceP2PClient {
   // ─── Private: own ads ────────────────────────────────────────
 
   async getMyAds(page = 1, rows = 50) {
-    return this.privateRequest("/sapi/v1/c2c/ads/listWithPagination", { page, rows });
+    return this.privateRequest("/sapi/v1/c2c/ads/listWithPagination", { page, rows }, undefined, true);
   }
 
   async getAdDetail(adId: string) {
