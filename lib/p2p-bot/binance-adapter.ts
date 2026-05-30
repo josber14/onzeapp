@@ -158,7 +158,8 @@ export class BinanceP2PClient {
 
   async updateAd(params: Record<string, any>) {
     const { adId, advNo, currencyId, tokenId, side, status, id, ...rest } = params;
-    const body: Record<string, any> = { adsNo: advNo || adId };
+    const adsNo = advNo || adId;
+    const body: Record<string, any> = {};
     if (rest.price !== undefined) body.price = rest.price;
     if (rest.quantity !== undefined) body.totalQuantity = rest.quantity;
     if (rest.minAmount !== undefined) body.minSingleTransAmount = String(rest.minAmount);
@@ -166,7 +167,7 @@ export class BinanceP2PClient {
     if (rest.paymentPeriod !== undefined) body.payTimeLimit = rest.paymentPeriod;
     if (rest.remark !== undefined) body.advRemark = rest.remark;
     if (rest.payIds !== undefined) body.tradeMethods = rest.payIds;
-    return this.privateRequest("/sapi/v1/c2c/ads/update", {}, body);
+    return this.privateRequest("/sapi/v1/c2c/ads/update", { adsNo }, body);
   }
 
   async removeAd(adId: string) {
