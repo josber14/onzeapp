@@ -9377,7 +9377,7 @@ function addP2PBotStyles(){
     if(document.getElementById("view-p2p-bot")) return;
 
     const section = document.createElement("section");
-    section.className = "view admin-only-view";
+    section.className = "view";
     section.id = "view-p2p-bot";
     section.innerHTML = `
     <section class="section-card">
@@ -9646,7 +9646,7 @@ function addP2PBotStyles(){
     if(!target || !target.parentNode) return;
 
     const btn = document.createElement("button");
-    btn.className = "nav-btn admin-only-control";
+    btn.className = "nav-btn";
     btn.type = "button";
     btn.dataset.viewTarget = "p2p-bot";
     btn.textContent = "P2P Bot";
