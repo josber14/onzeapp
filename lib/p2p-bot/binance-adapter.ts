@@ -60,8 +60,13 @@ export class BinanceP2PClient {
   }
 
   private async privateRequest(endpoint: string, params: Record<string, any> = {}, bodyPayload?: any): Promise<any> {
-    params.recvWindow = 60000;
-    params.timestamp = Date.now();
+    if (!bodyPayload && Object.keys(params).length > 0) {
+      bodyPayload = params;
+      params = { recvWindow: 60000, timestamp: Date.now() };
+    } else {
+      params.recvWindow = 60000;
+      params.timestamp = Date.now();
+    }
     const queryStr = this.buildQueryString(params);
     const signature = this.sign(queryStr);
     const url = `${this.apiBase}${endpoint}?${queryStr}&signature=${encodeURIComponent(signature)}`;
