@@ -9501,6 +9501,16 @@ function addP2PBotStyles(){
                 </select>
                 <span class="help-text">Competir solo con anuncios que tengan tus mismos m\u00E9todos de pago</span>
               </label>
+              <label>
+                Comisi\u00F3n exchange (%)
+                <input id="botCommissionPct" type="number" step="0.01" value="0.14" onchange="window.botSaveExchangeConfig()">
+                <span class="help-text">Comisi\u00F3n del exchange (Binance 0.14%, Bybit 0%)</span>
+              </label>
+              <label>
+                Margen seguridad (%)
+                <input id="botSafeMarginPct" type="number" step="0.01" value="0" onchange="window.botSaveExchangeConfig()">
+                <span class="help-text">No competir si el #1 est\u00E1 a menos de este % sobre tu costo real</span>
+              </label>
             </div>
           </div>
 
@@ -9790,6 +9800,8 @@ function addP2PBotStyles(){
     document.getElementById("botMinCompetitorCapital").value = cfg.minCompetitorCapital ?? "";
     const payTypes = cfg.competePayTypes;
     document.getElementById("botCompetePayType").value = (payTypes && payTypes.length > 0 && payTypes[0] === "__match_ad__") ? "match" : "all";
+    document.getElementById("botCommissionPct").value = cfg.commissionPct ?? 0.14;
+    document.getElementById("botSafeMarginPct").value = cfg.safeMarginPct ?? 0;
     toggleBotStrategyFields();
   }
 
@@ -9898,12 +9910,14 @@ function addP2PBotStyles(){
     const minCompetitorCapital = minV ? parseFloat(minV) : null;
     const competePayType = document.getElementById("botCompetePayType").value;
     const competePayTypes = competePayType === "all" ? null : ["__match_ad__"];
+    const commissionPct = parseFloat(document.getElementById("botCommissionPct").value) || 0;
+    const safeMarginPct = parseFloat(document.getElementById("botSafeMarginPct").value) || 0;
 
     await fetch("/api/p2p/bot/exchange-config", {
       method:"POST",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceFloorPct, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, minCompetitorCapital, competePayTypes })
+      body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceFloorPct, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, minCompetitorCapital, competePayTypes, commissionPct, safeMarginPct })
     });
     botUpdateBuyPrice();
     window.botRefreshExchange();

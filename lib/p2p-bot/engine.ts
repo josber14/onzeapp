@@ -40,6 +40,8 @@ export async function getBotConfig(
       ? config.exchanges
       : ["binance"]) as BotExchange[],
     competePayTypes: config.competePayTypes as string[] | null,
+    commissionPct: Number(config.commissionPct) || 0.14,
+    safeMarginPct: Number(config.safeMarginPct) || 0,
   };
 }
 
@@ -61,6 +63,8 @@ export async function saveBotConfig(
     update.exchanges = data.exchanges;
   if (data.enabled !== undefined) update.enabled = data.enabled;
   if (data.competePayTypes !== undefined) update.competePayTypes = data.competePayTypes;
+  if (data.commissionPct !== undefined) update.commissionPct = data.commissionPct;
+  if (data.safeMarginPct !== undefined) update.safeMarginPct = data.safeMarginPct;
 
   await prisma.p2PBotConfig.upsert({
     where: { tenantId },
@@ -76,6 +80,8 @@ export async function saveBotConfig(
         circuitBreakPct: data.circuitBreakPct ?? 3,
         exchanges: data.exchanges ?? ["binance", "bybit"],
         competePayTypes: (data.competePayTypes ?? null) as any,
+        commissionPct: data.commissionPct ?? 0.14,
+        safeMarginPct: data.safeMarginPct ?? 0,
       },
   });
 }
@@ -152,6 +158,8 @@ export async function getExchangeConfig(
     lastStoppedAt: config.lastStoppedAt?.toISOString() || null,
     adUpdateCount: config.adUpdateCount,
     competePayTypes: config.competePayTypes as string[] | null,
+    commissionPct: Number(config.commissionPct) || 0.14,
+    safeMarginPct: Number(config.safeMarginPct) || 0,
   };
 }
 
@@ -172,6 +180,8 @@ export async function saveExchangeConfig(
   if (data.cycleInterval !== undefined) update.cycleInterval = data.cycleInterval;
   if (data.minCompetitorCapital !== undefined) update.minCompetitorCapital = data.minCompetitorCapital;
   if (data.competePayTypes !== undefined) update.competePayTypes = data.competePayTypes;
+  if (data.commissionPct !== undefined) update.commissionPct = data.commissionPct;
+  if (data.safeMarginPct !== undefined) update.safeMarginPct = data.safeMarginPct;
   if (data.adUpdateCount !== undefined) update.adUpdateCount = data.adUpdateCount;
 
   await prisma.p2PBotExchangeConfig.upsert({
@@ -190,6 +200,8 @@ export async function saveExchangeConfig(
       cycleInterval: data.cycleInterval ?? 10,
       minCompetitorCapital: data.minCompetitorCapital ?? null,
       competePayTypes: (data.competePayTypes ?? null) as any,
+      commissionPct: data.commissionPct ?? (exchange === "binance" ? 0.14 : 0),
+      safeMarginPct: data.safeMarginPct ?? 0,
       adUpdateCount: data.adUpdateCount ?? 0,
     },
   });
@@ -566,17 +578,38 @@ async function runBinanceCycle(
       return { actions };
     }
 
-    // 7. Calculate target price
+    // 7. Calculate target price with safe margin
     const top1Diff = Number(config.top1Diff) || 0.1;
-    const cheapestPrice = Number(sortedCompetitors[0].price);
-    const firstBelowCost = minSellPrice ? cheapestPrice < minSellPrice : false;
-    let targetCompetitor: any;
+    const commissionPct = Number((config as any).commissionPct) || 0.14;
+    const safeMarginPct = Number((config as any).safeMarginPct) || 0;
 
-    if (firstBelowCost && sortedCompetitors.length >= 3) {
-      targetCompetitor = sortedCompetitors[2];
-      await logBot(tenantId, "info", "binance", `#1 bajo costo (${cheapestPrice.toFixed(2)}), apuntando a #3: ${Number(targetCompetitor.price).toFixed(2)}`);
-    } else {
-      targetCompetitor = sortedCompetitors[0];
+    // Real cost = minSellPrice + commission (solo Binance aplica comisión)
+    const isBinance = "commissionPct" in (config as any);
+    const realCost = minSellPrice ? minSellPrice * (1 + (isBinance ? commissionPct : 0) / 100) : 0;
+
+    // Find the best competitor respecting safe margin
+    let targetCompetitor: any = null;
+    let targetIndex = 0;
+
+    for (let i = 0; i < sortedCompetitors.length; i++) {
+      const comp = sortedCompetitors[i];
+      const marginPct = realCost > 0 ? ((Number(comp.price) - realCost) / realCost) * 100 : 999;
+      if (marginPct >= safeMarginPct) {
+        targetCompetitor = comp;
+        targetIndex = i;
+        break;
+      }
+    }
+
+    // Fallback: if no competitor meets margin, use the highest price competitor
+    if (!targetCompetitor && sortedCompetitors.length > 0) {
+      targetCompetitor = sortedCompetitors[sortedCompetitors.length - 1];
+      targetIndex = sortedCompetitors.length - 1;
+      await logBot(tenantId, "warn", "binance", `Ningún competidor cumple margen seguro (${safeMarginPct}%), usando el más caro: ${Number(targetCompetitor.price).toFixed(2)}`);
+    }
+
+    if (targetCompetitor) {
+      await logBot(tenantId, "info", "binance", `Target #${targetIndex + 1}: ${Number(targetCompetitor.price).toFixed(2)} (costo real: ${realCost.toFixed(2)}, margen: ${(((Number(targetCompetitor.price) - realCost) / realCost) * 100).toFixed(2)}%)`);
     }
 
     const competitorPrice = Number(targetCompetitor.price);
@@ -820,21 +853,37 @@ async function runBybitCycle(
       return { actions };
     }
 
-    // 7. Calculate target price:
-    //    - If cheapest competitor is below cost → position at #2 (target #3)
-    //    - Otherwise → compete for #1 (target #1)
+    // 7. Calculate target price with safe margin
     const top1Diff = Number(config.top1Diff) || 0.1;
-    const cheapestPrice = Number(sortedCompetitors[0].price);
-    const firstBelowCost = minSellPrice ? cheapestPrice < minSellPrice : false;
-    let targetCompetitor: any;
+    const commissionPct = Number((config as any).commissionPct) || 0;
+    const safeMarginPct = Number((config as any).safeMarginPct) || 0;
 
-    if (firstBelowCost && sortedCompetitors.length >= 3) {
-      // #1 is below cost, target #3 to position at #2
-      targetCompetitor = sortedCompetitors[2];
-      await logBot(tenantId, "info", "bybit", `#1 bajo costo (${cheapestPrice.toFixed(2)}), apuntando a #3: ${Number(targetCompetitor.price).toFixed(2)}`);
-    } else {
-      // Everyone is above cost, compete for #1
-      targetCompetitor = sortedCompetitors[0];
+    // Bybit no cobra comisión
+    const realCost = minSellPrice || 0;
+
+    // Find the best competitor respecting safe margin
+    let targetCompetitor: any = null;
+    let targetIndex = 0;
+
+    for (let i = 0; i < sortedCompetitors.length; i++) {
+      const comp = sortedCompetitors[i];
+      const marginPct = realCost > 0 ? ((Number(comp.price) - realCost) / realCost) * 100 : 999;
+      if (marginPct >= safeMarginPct) {
+        targetCompetitor = comp;
+        targetIndex = i;
+        break;
+      }
+    }
+
+    // Fallback: if no competitor meets margin, use the highest price competitor
+    if (!targetCompetitor && sortedCompetitors.length > 0) {
+      targetCompetitor = sortedCompetitors[sortedCompetitors.length - 1];
+      targetIndex = sortedCompetitors.length - 1;
+      await logBot(tenantId, "warn", "bybit", `Ningún competidor cumple margen seguro (${safeMarginPct}%), usando el más caro: ${Number(targetCompetitor.price).toFixed(2)}`);
+    }
+
+    if (targetCompetitor) {
+      await logBot(tenantId, "info", "bybit", `Target #${targetIndex + 1}: ${Number(targetCompetitor.price).toFixed(2)} (costo: ${realCost.toFixed(2)}, margen: ${(((Number(targetCompetitor.price) - realCost) / realCost) * 100).toFixed(2)}%)`);
     }
 
     const competitorPrice = Number(targetCompetitor.price);

@@ -38,6 +38,8 @@ export async function GET() {
         cycleInterval: c.cycleInterval ?? 10,
         minCompetitorCapital: c.minCompetitorCapital ? Number(c.minCompetitorCapital) : null,
         competePayTypes: c.competePayTypes as string[] | null,
+        commissionPct: Number(c.commissionPct) || 0.14,
+        safeMarginPct: Number(c.safeMarginPct) || 0,
         pauseUntil: c.pauseUntil?.toISOString() || null,
         lastStartedAt: c.lastStartedAt?.toISOString() || null,
         lastStoppedAt: c.lastStoppedAt?.toISOString() || null,
@@ -76,6 +78,8 @@ export async function POST(req: NextRequest) {
     if (data.cycleInterval !== undefined) update.cycleInterval = data.cycleInterval;
     if (data.minCompetitorCapital !== undefined) update.minCompetitorCapital = data.minCompetitorCapital;
     if (data.competePayTypes !== undefined) update.competePayTypes = data.competePayTypes;
+    if (data.commissionPct !== undefined) update.commissionPct = data.commissionPct;
+    if (data.safeMarginPct !== undefined) update.safeMarginPct = data.safeMarginPct;
     if (data.action === "start") {
       update.enabled = true;
       update.pauseUntil = null;
@@ -117,6 +121,8 @@ export async function POST(req: NextRequest) {
         cycleInterval: data.cycleInterval ?? 30,
         minCompetitorCapital: data.minCompetitorCapital ?? null,
         competePayTypes: (data.competePayTypes ?? null) as any,
+        commissionPct: data.commissionPct ?? 0.14,
+        safeMarginPct: data.safeMarginPct ?? 0,
       },
     });
 
@@ -134,6 +140,8 @@ export async function POST(req: NextRequest) {
         cycleInterval: config.cycleInterval ?? 10,
         minCompetitorCapital: config.minCompetitorCapital ? Number(config.minCompetitorCapital) : null,
         competePayTypes: config.competePayTypes as string[] | null,
+        commissionPct: Number(config.commissionPct) || 0.14,
+        safeMarginPct: Number(config.safeMarginPct) || 0,
         pauseUntil: config.pauseUntil?.toISOString() || null,
         lastStartedAt: config.lastStartedAt?.toISOString() || null,
         lastStoppedAt: config.lastStoppedAt?.toISOString() || null,

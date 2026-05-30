@@ -648,6 +648,8 @@ model P2PBotConfig {
   updatedAt          DateTime  @updatedAt
   top1Diff           Decimal   @default(0.1) @db.Decimal(18, 8)
   competePayTypes    Json?
+  commissionPct      Decimal   @default(0.14) @db.Decimal(8, 4)
+  safeMarginPct      Decimal   @default(0) @db.Decimal(8, 4)
   tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
@@ -758,6 +760,8 @@ model P2PBotExchangeConfig {
   minCompetitorCapital Decimal?  @db.Decimal(18, 2)
   adUpdateCount        Int       @default(0)
   competePayTypes      Json?
+  commissionPct        Decimal   @default(0.14) @db.Decimal(8, 4)
+  safeMarginPct        Decimal   @default(0) @db.Decimal(8, 4)
   Tenant               Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, exchange])

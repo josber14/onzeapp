@@ -17,6 +17,8 @@ export interface P2PBotConfigData {
   lastStoppedAt: string | null;
   exchanges: BotExchange[];
   competePayTypes: string[] | null;
+  commissionPct: number;
+  safeMarginPct: number;
 }
 
 export interface P2PBotExchangeConfigData {
@@ -38,6 +40,8 @@ export interface P2PBotExchangeConfigData {
   lastStartedAt: string | null;
   lastStoppedAt: string | null;
   adUpdateCount: number;
+  commissionPct: number;
+  safeMarginPct: number;
 }
 
 export interface BotAd {
