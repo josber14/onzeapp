@@ -76,6 +76,7 @@ export class BinanceP2PClient {
       headers: {
         "X-MBX-APIKEY": this.apiKey,
         "Content-Type": "application/json",
+        "clientType": "web",
       },
     };
     if (bodyPayload) opts.body = JSON.stringify(bodyPayload);
@@ -157,17 +158,12 @@ export class BinanceP2PClient {
   }
 
   async updateAd(params: Record<string, any>) {
-    const { adId, advNo, currencyId, tokenId, side, status, id, ...rest } = params;
-    const adsNo = advNo || adId;
-    const body: Record<string, any> = {};
-    if (rest.price !== undefined) body.price = rest.price;
-    if (rest.quantity !== undefined) body.totalQuantity = rest.quantity;
-    if (rest.minAmount !== undefined) body.minSingleTransAmount = String(rest.minAmount);
-    if (rest.maxAmount !== undefined) body.maxSingleTransAmount = String(rest.maxAmount);
-    if (rest.paymentPeriod !== undefined) body.payTimeLimit = rest.paymentPeriod;
-    if (rest.remark !== undefined) body.advRemark = rest.remark;
-    if (rest.payIds !== undefined) body.tradeMethods = rest.payIds;
-    return this.privateRequest("/sapi/v1/c2c/ads/update", { adsNo }, body);
+    const { adId, advNo, price } = params;
+    return this.privateRequest(
+      "/sapi/v1/c2c/ads/update",
+      { adsNo: advNo || adId },
+      { price: String(price) }
+    );
   }
 
   async removeAd(adId: string) {
