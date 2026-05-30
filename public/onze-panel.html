@@ -9493,6 +9493,14 @@ function addP2PBotStyles(){
                 <input id="botMinCompetitorCapital" type="number" step="1" value="" placeholder="Sin filtro" onchange="window.botSaveExchangeConfig()">
                 <span class="help-text">Ignorar competidores con menos capital</span>
               </label>
+              <label>
+                Filtrar por m\u00E9todo de pago
+                <select id="botCompetePayType" onchange="window.botSaveExchangeConfig()">
+                  <option value="all">Todos</option>
+                  <option value="match">Solo mismos m\u00E9todos del anuncio</option>
+                </select>
+                <span class="help-text">Competir solo con anuncios que tengan tus mismos m\u00E9todos de pago</span>
+              </label>
             </div>
           </div>
 
@@ -9780,6 +9788,8 @@ function addP2PBotStyles(){
     document.getElementById("botDailyVolumeCap").value = cfg.dailyVolumeCapUsdt || "";
     document.getElementById("botCycleInterval").value = cfg.cycleInterval ?? 10;
     document.getElementById("botMinCompetitorCapital").value = cfg.minCompetitorCapital ?? "";
+    const payTypes = cfg.competePayTypes;
+    document.getElementById("botCompetePayType").value = (payTypes && payTypes.length > 0 && payTypes[0] === "__match_ad__") ? "match" : "all";
     toggleBotStrategyFields();
   }
 
@@ -9886,12 +9896,14 @@ function addP2PBotStyles(){
     const dailyVolumeCapUsdt = dailyV ? parseFloat(dailyV) : null;
     const minV = document.getElementById("botMinCompetitorCapital").value;
     const minCompetitorCapital = minV ? parseFloat(minV) : null;
+    const competePayType = document.getElementById("botCompetePayType").value;
+    const competePayTypes = competePayType === "all" ? null : ["__match_ad__"];
 
     await fetch("/api/p2p/bot/exchange-config", {
       method:"POST",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceFloorPct, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, minCompetitorCapital })
+      body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceFloorPct, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, minCompetitorCapital, competePayTypes })
     });
     botUpdateBuyPrice();
     window.botRefreshExchange();

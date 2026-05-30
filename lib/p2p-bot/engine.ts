@@ -39,6 +39,7 @@ export async function getBotConfig(
     exchanges: (Array.isArray(config.exchanges)
       ? config.exchanges
       : ["binance"]) as BotExchange[],
+    competePayTypes: config.competePayTypes as string[] | null,
   };
 }
 
@@ -59,6 +60,7 @@ export async function saveBotConfig(
   if (data.exchanges !== undefined)
     update.exchanges = data.exchanges;
   if (data.enabled !== undefined) update.enabled = data.enabled;
+  if (data.competePayTypes !== undefined) update.competePayTypes = data.competePayTypes;
 
   await prisma.p2PBotConfig.upsert({
     where: { tenantId },
@@ -69,10 +71,11 @@ export async function saveBotConfig(
         strategy: data.strategy ?? "top1",
         top1Diff: data.top1Diff ?? 0.1,
         spreadPct: data.spreadPct ?? 0.5,
-      priceFloorPct: data.priceFloorPct ?? 0,
+        priceFloorPct: data.priceFloorPct ?? 0,
         dailyVolumeCapUsdt: data.dailyVolumeCapUsdt ?? null,
         circuitBreakPct: data.circuitBreakPct ?? 3,
         exchanges: data.exchanges ?? ["binance", "bybit"],
+        competePayTypes: data.competePayTypes ?? null,
       },
   });
 }
@@ -148,6 +151,7 @@ export async function getExchangeConfig(
     lastStartedAt: config.lastStartedAt?.toISOString() || null,
     lastStoppedAt: config.lastStoppedAt?.toISOString() || null,
     adUpdateCount: config.adUpdateCount,
+    competePayTypes: config.competePayTypes as string[] | null,
   };
 }
 
@@ -167,6 +171,7 @@ export async function saveExchangeConfig(
   if (data.circuitBreakPct !== undefined) update.circuitBreakPct = data.circuitBreakPct;
   if (data.cycleInterval !== undefined) update.cycleInterval = data.cycleInterval;
   if (data.minCompetitorCapital !== undefined) update.minCompetitorCapital = data.minCompetitorCapital;
+  if (data.competePayTypes !== undefined) update.competePayTypes = data.competePayTypes;
   if (data.adUpdateCount !== undefined) update.adUpdateCount = data.adUpdateCount;
 
   await prisma.p2PBotExchangeConfig.upsert({
@@ -184,6 +189,7 @@ export async function saveExchangeConfig(
       circuitBreakPct: data.circuitBreakPct ?? 3,
       cycleInterval: data.cycleInterval ?? 10,
       minCompetitorCapital: data.minCompetitorCapital ?? null,
+      competePayTypes: data.competePayTypes ?? null,
       adUpdateCount: data.adUpdateCount ?? 0,
     },
   });
@@ -472,15 +478,36 @@ async function runBinanceCycle(
       // fall back to all ads
     }
 
+    // Determine pay types for competitor filtering
+    const competePayTypes = (config as any).competePayTypes as string[] | null | undefined;
+
     // 3. Get online competitor ads
     let competitors: any[] = [];
     try {
+      let adPayTypes: string[] | undefined;
+      if (competePayTypes && competePayTypes.length > 0 && competePayTypes[0] !== "*") {
+        if (competePayTypes[0] === "__match_ad__") {
+          // Auto-detect: find our sell ad and use its payment methods
+          const ourSell = myAds.find(
+            (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
+          );
+          if (ourSell?.payments?.length) {
+            adPayTypes = ourSell.payments;
+            await logBot(tenantId, "info", "binance", `Filtrando competidores por métodos de pago del anuncio: ${adPayTypes.join(", ")}`);
+          }
+        } else {
+          adPayTypes = competePayTypes;
+          await logBot(tenantId, "info", "binance", `Filtrando competidores por métodos de pago: ${adPayTypes.join(", ")}`);
+        }
+      }
+
       // tradeType: "BUY" → returns SELL ads (other sellers we compete with)
       const onlineRes = await client.getOnlineAds({
         asset: "USDT",
         fiat: "CLP",
         tradeType: "BUY",
         rows: 20,
+        payTypes: adPayTypes,
       });
       const raw = onlineRes?.data ?? [];
       competitors = raw.map(normalizeBinanceAd);

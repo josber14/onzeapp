@@ -37,6 +37,7 @@ export async function GET() {
         circuitBreakPct: Number(c.circuitBreakPct),
         cycleInterval: c.cycleInterval ?? 10,
         minCompetitorCapital: c.minCompetitorCapital ? Number(c.minCompetitorCapital) : null,
+        competePayTypes: c.competePayTypes as string[] | null,
         pauseUntil: c.pauseUntil?.toISOString() || null,
         lastStartedAt: c.lastStartedAt?.toISOString() || null,
         lastStoppedAt: c.lastStoppedAt?.toISOString() || null,
@@ -74,6 +75,7 @@ export async function POST(req: NextRequest) {
     if (data.circuitBreakPct !== undefined) update.circuitBreakPct = data.circuitBreakPct;
     if (data.cycleInterval !== undefined) update.cycleInterval = data.cycleInterval;
     if (data.minCompetitorCapital !== undefined) update.minCompetitorCapital = data.minCompetitorCapital;
+    if (data.competePayTypes !== undefined) update.competePayTypes = data.competePayTypes;
     if (data.action === "start") {
       update.enabled = true;
       update.pauseUntil = null;
@@ -114,6 +116,7 @@ export async function POST(req: NextRequest) {
         circuitBreakPct: data.circuitBreakPct ?? 3,
         cycleInterval: data.cycleInterval ?? 30,
         minCompetitorCapital: data.minCompetitorCapital ?? null,
+        competePayTypes: data.competePayTypes ?? null,
       },
     });
 
@@ -130,6 +133,7 @@ export async function POST(req: NextRequest) {
         circuitBreakPct: Number(config.circuitBreakPct),
         cycleInterval: config.cycleInterval ?? 10,
         minCompetitorCapital: config.minCompetitorCapital ? Number(config.minCompetitorCapital) : null,
+        competePayTypes: config.competePayTypes as string[] | null,
         pauseUntil: config.pauseUntil?.toISOString() || null,
         lastStartedAt: config.lastStartedAt?.toISOString() || null,
         lastStoppedAt: config.lastStoppedAt?.toISOString() || null,

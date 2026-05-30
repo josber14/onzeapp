@@ -16,6 +16,7 @@ export interface P2PBotConfigData {
   lastStartedAt: string | null;
   lastStoppedAt: string | null;
   exchanges: BotExchange[];
+  competePayTypes: string[] | null;
 }
 
 export interface P2PBotExchangeConfigData {
@@ -32,6 +33,7 @@ export interface P2PBotExchangeConfigData {
   circuitBreakPct: number;
   cycleInterval: number;
   minCompetitorCapital: number | null;
+  competePayTypes: string[] | null;
   pauseUntil: string | null;
   lastStartedAt: string | null;
   lastStoppedAt: string | null;
