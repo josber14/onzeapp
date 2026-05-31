@@ -29,7 +29,7 @@ export async function getBotConfig(
     top1Diff: Number(config.top1Diff),
     spreadPct: Number(config.spreadPct),
     priceFloorPct: Number(config.priceFloorPct),
-    priceSource: config.priceSource || "manual",
+    priceSource: (config as any).priceSource || "manual",
     dailyVolumeCapUsdt: config.dailyVolumeCapUsdt
       ? Number(config.dailyVolumeCapUsdt)
       : null,
@@ -150,7 +150,7 @@ export async function getExchangeConfig(
     top1Diff: Number(config.top1Diff),
     spreadPct: Number(config.spreadPct),
     priceFloorPct: Number(config.priceFloorPct),
-    priceSource: config.priceSource || "manual",
+    priceSource: (config as any).priceSource || "manual",
     dailyVolumeCapUsdt: config.dailyVolumeCapUsdt ? Number(config.dailyVolumeCapUsdt) : null,
     circuitBreakPct: Number(config.circuitBreakPct),
     cycleInterval: Number(config.cycleInterval) || 10,
@@ -590,7 +590,7 @@ async function runBinanceCycle(
     const safeMarginPct = Number((config as any).safeMarginPct) || 0;
 
     // Real cost: si es manual el usuario ya incluyó comisión, si es capacity hay que sumarla
-    const isManualPrice = String(config.priceSource || "manual") === "manual";
+    const isManualPrice = String((config as any).priceSource || "manual") === "manual";
     const isBinance = "commissionPct" in (config as any);
     const realCost = minSellPrice ? minSellPrice * (1 + (isBinance && !isManualPrice ? commissionPct : 0) / 100) : 0;
 
