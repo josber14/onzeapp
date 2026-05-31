@@ -407,7 +407,9 @@ function normalizeBinanceAd(ad: any): any {
     minAmount: Number(adv.minSingleTransAmount ?? adv.minAmount ?? 0),
     maxAmount: Number(adv.maxSingleTransAmount ?? adv.maxAmount ?? 0),
     paymentMethods: (adv.tradeMethods ?? adv.paymentMethods ?? []).map((pm: any) => pm.tradeMethodName ?? pm.name ?? String(pm)),
-    payments: (adv.tradeMethods ?? adv.paymentMethods ?? []).map((pm: any) => pm.identifier ?? pm.payType ?? String(pm)),
+    payments: (adv.tradeMethods ?? adv.paymentMethods ?? []).map((pm: any) =>
+      pm.paymentMethodId ?? pm.identifier ?? pm.payType ?? String(pm)
+    ),
     paymentPeriod: Number(adv.payTimeLimit ?? adv.paymentPeriod ?? adv.payTime ?? 15),
     status,
     priceType: adv.priceType === "FIXED" ? "0" : adv.priceType === "DYNAMIC" ? "1" : String(adv.priceType ?? "0"),
