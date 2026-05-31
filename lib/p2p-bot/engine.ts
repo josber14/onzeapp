@@ -944,6 +944,12 @@ async function runBybitCycle(
     // Bybit no cobra comisión
     const realCost = minSellPrice || 0;
 
+    // Look up our sell ad and current price
+    const ourSellAd = myAds.find(
+      (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
+    );
+    const currentPrice = ourSellAd ? Number(ourSellAd.price) : 0;
+
     // Find the best competitor respecting safe margin and staying strictly above floor
     let targetCompetitor: any = null;
     let targetIndex = 0;
@@ -968,6 +974,7 @@ async function runBybitCycle(
       await logBot(tenantId, "warn", "bybit", `Ningún competidor cumple margen/piso, usando el más caro: ${Number(targetCompetitor.price).toFixed(2)}`);
     }
 
+    let targetPrice: number;
     if (targetCompetitor) {
       await logBot(tenantId, "info", "bybit", `Target #${targetIndex + 1}: ${Number(targetCompetitor.price).toFixed(2)} (costo: ${realCost.toFixed(2)}, margen: ${(((Number(targetCompetitor.price) - realCost) / realCost) * 100).toFixed(2)}%)`);
       const targetPriceRaw = Number(targetCompetitor.price) - top1Diff;
@@ -987,12 +994,7 @@ async function runBybitCycle(
     }
 
     // 8. Update or create our sell ad
-    const ourSellAd = myAds.find(
-      (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
-    );
-
     if (ourSellAd) {
-      const currentPrice = Number(ourSellAd.price);
       const diff = Math.abs(currentPrice - targetPrice);
       if (diff >= 0.005) {
         let adId = ourSellAd.id;
