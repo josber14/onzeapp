@@ -10215,14 +10215,15 @@ function addP2PBotStyles(){
         return;
       }
       container.innerHTML = d.ads.map(a => {
-        const isLive = a.fromBybit;
+        const isLive = a.fromBybit || a.fromBinance;
+        const exchangeLabel = a.fromBybit ? 'Bybit' : a.fromBinance ? 'Binance' : null;
         return `
         <div class="bot-ad-card">
           <div class="ad-header">
             <div>
               <span class="ad-type ${a.tradeType === 'BUY' ? 'buy' : 'sell'}">${a.tradeType === 'BUY' ? 'Compra' : 'Venta'}</span>
               <span style="font-weight:700;color:#fff;font-size:14px;margin-left:8px;">${escHtml(a.asset)} / ${escHtml(a.fiat)}</span>
-              ${isLive ? '<span style="font-size:10px;background:rgba(37,99,235,.2);color:#93c5fd;padding:1px 6px;border-radius:4px;margin-left:4px;">Bybit</span>' : ''}
+              ${isLive ? '<span style="font-size:10px;background:rgba(37,99,235,.2);color:#93c5fd;padding:1px 6px;border-radius:4px;margin-left:4px;">' + exchangeLabel + '</span>' : ''}
             </div>
             <div class="ad-actions">
               <button class="btn small ghost" type="button" onclick="window.botPanelEditAd(${isLive ? "'" + a.adId + "'" : a.id})">Editar</button>

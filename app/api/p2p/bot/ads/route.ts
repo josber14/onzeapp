@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { BinanceP2PClient, getBinanceCredentials } from "@/lib/p2p-bot/binance-adapter";
 import { BybitP2PClient } from "@/lib/p2p-bot/bybit-adapter";
 
 export const runtime = "nodejs";
@@ -19,6 +20,12 @@ async function getBybitClient(tenantId: number) {
   });
   if (!creds) return null;
   return new BybitP2PClient(creds.apiKey, creds.secretKey);
+}
+
+async function getBinanceClient(tenantId: number) {
+  const creds = await getBinanceCredentials(tenantId);
+  if (!creds) return null;
+  return new BinanceP2PClient(creds.apiKey, creds.secretKey);
 }
 
 export async function GET(req: NextRequest) {
@@ -39,6 +46,46 @@ export async function GET(req: NextRequest) {
       where,
       orderBy: { createdAt: "desc" },
     });
+
+    // If Binance, also try fetching live ads from Binance API
+    let binanceAds: any[] = [];
+    if (!exchange || exchange === "binance") {
+      try {
+        const client = await getBinanceClient(session.tenantId);
+        if (client) {
+          const res = await client.getMyAds(1, 50);
+          const raw = Array.isArray(res?.data)
+            ? res.data
+            : res?.data?.items || res?.data?.list || res?.data?.records || res?.data?.result || res?.result || res?.list || [];
+          binanceAds = raw.map((a: any) => {
+            const localAd = ads.find(la => la.adId === String(a.advNo || a.id || a.advId));
+            const methods = (a.tradeMethods || []).map((pm: any) => pm.identifier || pm.paymentMethodId || pm.payType || String(pm));
+            return {
+              id: localAd?.id || a.advNo || a.id,
+              adId: String(a.advNo || a.id || a.advId),
+              exchange: "binance",
+              tradeType: a.side === 0 ? "BUY" : "SELL",
+              asset: a.tokenId || "USDT",
+              fiat: a.currencyId || "CLP",
+              priceType: a.priceType === 0 ? "fixed" : "float",
+              price: Number(a.price) || 0,
+              amount: Number(a.lastQuantity || a.quantity) || 0,
+              minAmount: Number(a.minAmount) || 0,
+              maxAmount: Number(a.maxAmount) || 0,
+              paymentMethods: methods,
+              payTime: a.paymentPeriod || a.payTime || 15,
+              status: a.status === 10 || a.publishStatus === "online" ? "online" : "offline",
+              isActive: a.isOnline ?? true,
+              botManaged: localAd?.botManaged || false,
+              createdAt: a.createDate || a.createdAt || new Date().toISOString(),
+              fromBinance: true,
+            };
+          });
+        }
+      } catch (e) {
+        // silent (geo-restricted from some locations)
+      }
+    }
 
     // If Bybit, also try fetching live ads from Bybit API
     let bybitAds: any[] = [];
@@ -77,7 +124,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const merged = [...bybitAds, ...ads.map(a => ({
+    const merged = [...binanceAds, ...bybitAds, ...ads.map(a => ({
       id: a.id,
       exchange: a.exchange,
       adId: a.adId,
