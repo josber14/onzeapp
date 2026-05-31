@@ -555,6 +555,11 @@ async function runBinanceCycle(
       }
     }
 
+    if (minSellPrice <= 0) {
+      await logBot(tenantId, "warn", "binance", "Sin precio mínimo configurado (sin capacity activo ni precio manual). Ciclo cancelado.");
+      return { actions };
+    }
+
     // Filter viable competitors: only verified merchants, with min capital
     const minCapital = Number((config as any).minCompetitorCapital) || 0;
     const viable = competitors.filter((c: any) => {
@@ -858,6 +863,11 @@ async function runBybitCycle(
         minSellPrice = Number(activeCap.buyPrice);
         await logBot(tenantId, "info", "bybit", `Precio mínimo auto: ${minSellPrice} (capacity ${activeCap.provider})`);
       }
+    }
+
+    if (minSellPrice <= 0) {
+      await logBot(tenantId, "warn", "bybit", "Sin precio mínimo configurado (sin capacity activo ni precio manual). Ciclo cancelado.");
+      return { actions };
     }
 
     // Filter viable competitors (price >= minSellPrice) and (capital >= minCompetitorCapital if set)

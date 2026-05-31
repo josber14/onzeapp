@@ -9797,7 +9797,7 @@ function addP2PBotStyles(){
     document.getElementById("botStrategy").value = cfg.strategy || "top1";
     document.getElementById("botTop1Diff").value = cfg.top1Diff ?? 0.1;
     document.getElementById("botSpreadPct").value = cfg.spreadPct || 0.5;
-    const isAuto = cfg.priceFloorPct === -1 || !cfg.priceFloorPct;
+    const isAuto = cfg.priceSource === "auto";
     document.getElementById("botPriceSource").value = isAuto ? "auto" : "manual";
     document.getElementById("botPriceFloorPct").value = isAuto ? 0 : cfg.priceFloorPct;
     togglePriceSource();
@@ -9902,7 +9902,7 @@ function addP2PBotStyles(){
     const top1Diff = parseFloat(document.getElementById("botTop1Diff").value) || 0.1;
     const spreadPct = parseFloat(document.getElementById("botSpreadPct").value) || 0.5;
     const priceSource = document.getElementById("botPriceSource").value;
-    const priceFloorPct = priceSource === "auto" ? -1 : (parseFloat(document.getElementById("botPriceFloorPct").value) || 0);
+    const priceFloorPct = parseFloat(document.getElementById("botPriceFloorPct").value) || 0;
     const circuitBreakPct = parseFloat(document.getElementById("botCircuitBreakPct").value) || 3;
     const cycleInterval = Math.round(parseFloat(document.getElementById("botCycleInterval").value)) || 10;
     const dailyV = document.getElementById("botDailyVolumeCap").value;
@@ -10043,7 +10043,7 @@ function addP2PBotStyles(){
     if(source.value === "manual"){
       const inp = document.getElementById("botPriceFloorPct");
       const manualPrice = inp ? parseFloat(inp.value) : null;
-      if(manualPrice && !isNaN(manualPrice)){
+      if(manualPrice !== null && !isNaN(manualPrice)){
         basePrice = manualPrice;
         priceSource = "Manual";
       }
@@ -15074,6 +15074,21 @@ function addP2PBotStyles(){
       closeP2PCapacityModal();
       renderP2PCapacityPanel();
       updateP2PDashboardWithCapacity();
+
+      // Auto-switch bot to capacity mode and read the new buy price
+      const ps = document.getElementById("botPriceSource");
+      if(ps){
+        ps.value = "auto";
+        togglePriceSource();
+      }
+      window.__p2pCapacityCache = null;
+      botUpdateBuyPrice();
+      const ex = window.botSelectedExchange || "binance";
+      fetch("/api/p2p/bot/exchange-config", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ exchange: ex, priceSource: "auto", priceFloorPct: 0 })
+      }).catch(()=>{});
 
       if(typeof showToast === "function"){
         showToast("Capacity P2P registrado");
