@@ -632,13 +632,17 @@ async function runBinanceCycle(
     let targetIndex = -1;
     const priceFloor = isBinance && realCost ? realCost : minSellPrice;
 
-    if (viableCompetitors.length === 0) {
-      if (sortedCompetitors.length > 0) {
-        targetCompetitor = sortedCompetitors[sortedCompetitors.length - 1];
+    if (viableCompetitors.length === 0 && sortedCompetitors.length > 0) {
+      // No competitor passes safeMargin. Try the highest-priced sorted competitor
+      // to see if it gives a price above the floor
+      const highest = sortedCompetitors[sortedCompetitors.length - 1];
+      const testPrice = Number(highest.price) - top1Diff;
+      if (testPrice > priceFloor) {
+        targetCompetitor = highest;
         targetIndex = sortedCompetitors.length - 1;
         await logBot(tenantId, "warn", "binance", `Ningún competidor cumple margen seguro (${safeMarginPct}%), usando el más caro: ${Number(targetCompetitor.price).toFixed(2)}`);
       }
-    } else {
+    } else if (viableCompetitors.length > 0) {
       // Find the first viable competitor whose resulting price is STRICTLY above the floor
       for (let i = 0; i < viableCompetitors.length; i++) {
         const comp = viableCompetitors[i];
@@ -650,17 +654,21 @@ async function runBinanceCycle(
         }
       }
 
-      // If none give a price above floor, use the most expensive viable as fallback
+      // If none give a price above floor, try the most expensive viable as fallback
       if (!targetCompetitor) {
-        targetCompetitor = viableCompetitors[viableCompetitors.length - 1];
-        targetIndex = viableCompetitors.length - 1;
-        await logBot(tenantId, "warn", "binance",
-          `Todos los competidores viables quedan en o bajo el piso, usando el más caro: ${Number(targetCompetitor.price).toFixed(2)}`
-        );
+        const highest = viableCompetitors[viableCompetitors.length - 1];
+        const testPrice = Number(highest.price) - top1Diff;
+        if (testPrice > priceFloor) {
+          targetCompetitor = highest;
+          targetIndex = viableCompetitors.length - 1;
+          await logBot(tenantId, "warn", "binance",
+            `Todos los competidores viables dan precio bajo piso, usando el más caro: ${Number(targetCompetitor.price).toFixed(2)}`
+          );
+        }
       }
 
       // Apply skip-to-#2 when bot is already cheaper than #1 and target stays below #1
-      const targetIdxInViable = viableCompetitors.indexOf(targetCompetitor);
+      const targetIdxInViable = targetCompetitor ? viableCompetitors.indexOf(targetCompetitor) : -1;
       if (targetIdxInViable === 0 && currentPrice > 0 && currentPrice < Number(targetCompetitor.price) && viableCompetitors.length > 1) {
         const skipPrice = Number(viableCompetitors[1].price) - top1Diff;
         if (skipPrice > priceFloor && skipPrice < Number(targetCompetitor.price)) {
@@ -673,18 +681,24 @@ async function runBinanceCycle(
       }
     }
 
-    if (!targetCompetitor) {
-      await logBot(tenantId, "warn", "binance", "Sin competidores para targetear");
-      return { actions };
-    }
-
-    const competitorPrice = Number(targetCompetitor.price);
-    let targetPrice = competitorPrice - top1Diff;
-
-    // Safety: never go at or below floor
-    if (targetPrice <= priceFloor) {
-      targetPrice = priceFloor;
-      await logBot(tenantId, "warn", "binance", `Target (${targetPrice.toFixed(2)}) en el piso, sin margen sobre costo`);
+    // If no target competitor found or target would be at/below floor, keep current price
+    let targetPrice = currentPrice;
+    if (targetCompetitor) {
+      targetPrice = Number(targetCompetitor.price) - top1Diff;
+      if (targetPrice <= priceFloor) {
+        targetPrice = Math.max(currentPrice, priceFloor);
+        await logBot(tenantId, "warn", "binance",
+          `Target (${(Number(targetCompetitor.price) - top1Diff).toFixed(2)}) bajo piso (${priceFloor.toFixed(2)}), manteniendo precio actual`
+        );
+      } else {
+        await logBot(tenantId, "info", "binance",
+          `Target #${targetIndex + 1}: ${Number(targetCompetitor.price).toFixed(2)} → ${targetPrice.toFixed(2)} (piso: ${priceFloor.toFixed(2)})`
+        );
+      }
+    } else {
+      await logBot(tenantId, "warn", "binance",
+        `Sin competidores que den precio sobre el piso (${priceFloor.toFixed(2)}), manteniendo precio actual: ${currentPrice.toFixed(2)}`
+      );
     }
 
     // 8. Update or create our sell ad
@@ -956,12 +970,17 @@ async function runBybitCycle(
 
     if (targetCompetitor) {
       await logBot(tenantId, "info", "bybit", `Target #${targetIndex + 1}: ${Number(targetCompetitor.price).toFixed(2)} (costo: ${realCost.toFixed(2)}, margen: ${(((Number(targetCompetitor.price) - realCost) / realCost) * 100).toFixed(2)}%)`);
+      const targetPriceRaw = Number(targetCompetitor.price) - top1Diff;
+      if (targetPriceRaw > minSellPrice) {
+        targetPrice = targetPriceRaw;
+      } else {
+        targetPrice = currentPrice;
+        await logBot(tenantId, "warn", "bybit", `Target (${targetPriceRaw.toFixed(2)}) bajo piso (${minSellPrice.toFixed(2)}), manteniendo precio actual: ${currentPrice.toFixed(2)}`);
+      }
+    } else {
+      targetPrice = currentPrice;
+      await logBot(tenantId, "warn", "bybit", `Sin competidores que den precio sobre el piso (${minSellPrice.toFixed(2)}), manteniendo precio actual: ${currentPrice.toFixed(2)}`);
     }
-
-    const competitorPrice = Number(targetCompetitor.price);
-    let targetPrice = competitorPrice - top1Diff;
-
-    // Apply minimum price floor (strictly above)
     if (targetPrice <= minSellPrice) {
       targetPrice = minSellPrice;
       await logBot(tenantId, "warn", "bybit", `Target en el piso (${targetPrice.toFixed(2)}), sin margen sobre costo`);
