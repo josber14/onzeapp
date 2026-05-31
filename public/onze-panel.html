@@ -9672,6 +9672,8 @@ function addP2PBotStyles(){
     const commissionField = document.getElementById("botCommissionField");
     if(commissionField) commissionField.style.display = exchange === "binance" ? "" : "none";
 
+    // Update buy price card instantly (sin esperar API)
+    botUpdateBuyPrice();
     window.botRefreshExchange();
   };
 
