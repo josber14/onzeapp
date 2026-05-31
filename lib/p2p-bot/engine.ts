@@ -408,7 +408,7 @@ function normalizeBinanceAd(ad: any): any {
     quantity: Number(adv.surplusAmount ?? adv.tradableQuantity ?? adv.quantity ?? 0),
     minAmount: Number(adv.minSingleTransAmount ?? adv.minAmount ?? 0),
     maxAmount: Number(adv.maxSingleTransAmount ?? adv.maxAmount ?? 0),
-    paymentMethods: (adv.tradeMethods ?? adv.paymentMethods ?? []).map((pm: any) => pm.tradeMethodName ?? pm.name ?? String(pm)),
+    paymentMethods: (adv.tradeMethods ?? adv.paymentMethods ?? []).map((pm: any) => pm.tradeMethodName ?? pm.paymentMethodName ?? pm.name ?? String(pm)),
     payments: (adv.tradeMethods ?? adv.paymentMethods ?? []).map((pm: any) =>
       pm.paymentMethodId ?? pm.identifier ?? pm.payType ?? String(pm)
     ),
@@ -507,9 +507,9 @@ async function runBinanceCycle(
           const ourSell = myAds.find(
             (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
           );
-          if (ourSell?.payments?.length) {
-            ourPayMethods = ourSell.payments;
-            await logBot(tenantId, "info", "binance", `Filtrando competidores por métodos de pago del anuncio: ${ourSell.payments.join(", ")}`);
+          if (ourSell?.paymentMethods?.length) {
+            ourPayMethods = ourSell.paymentMethods;
+            await logBot(tenantId, "info", "binance", `Filtrando competidores por métodos de pago del anuncio: ${ourSell.paymentMethods.join(", ")}`);
           }
         } else {
           ourPayMethods = competePayTypes;
@@ -534,14 +534,14 @@ async function runBinanceCycle(
         await logBot(tenantId, "info", "binance", `Precios: ${samplePrices}`);
       }
 
-      // Client-side payment method filter (más confiable que el parámetro API)
+      // Client-side payment method filter by display name (más confiable que IDs internos)
       if (ourPayMethods && ourPayMethods.length > 0) {
         const before = competitors.length;
         competitors = competitors.filter((c: any) => {
-          const cmpPayments: string[] = (c.payments || []).map((p: any) => String(p));
-          return cmpPayments.some((p: string) => ourPayMethods!.includes(p));
+          const cmpNames: string[] = (c.paymentMethods || []).map((p: any) => String(p));
+          return cmpNames.some((p: string) => ourPayMethods!.includes(p));
         });
-        await logBot(tenantId, "info", "binance", `Filtro de pago: ${before} → ${competitors.length} competidores (coinciden métodos)`);
+        await logBot(tenantId, "info", "binance", `Filtro de pago: ${before} → ${competitors.length} competidores (coinciden nombres)`);
       }
 
       if (competitors.length === 0) {
