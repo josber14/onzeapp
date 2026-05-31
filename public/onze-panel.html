@@ -10071,7 +10071,7 @@ function addP2PBotStyles(){
 
     if(basePrice !== null && !isNaN(basePrice)){
       card.style.display = "inline-flex";
-      const exchange = window.botSelectedExchange || "binance";
+      const exchange = botSelectedExchange || "binance";
       if(exchange === "binance"){
         const commissionPct = parseFloat(document.getElementById("botCommissionPct")?.value || "0.14");
         const realCost = basePrice * (1 + commissionPct / 100);
