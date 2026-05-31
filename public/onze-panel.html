@@ -9675,8 +9675,6 @@ function addP2PBotStyles(){
     window.botRefreshExchange();
   };
 
-  let botCycleTimer = null;
-
   window.botStartExchange = async function(){
     const ex = botSelectedExchange;
     await fetch("/api/p2p/bot/exchange-config", {
