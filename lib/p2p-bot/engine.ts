@@ -661,13 +661,13 @@ async function runBinanceCycle(
         // #1 competitor is valid. Check if we're already cheaper than it.
         if (currentPrice > 0 && currentPrice < Number(firstComp.price) && viableCompetitors.length > 1) {
           // Bot is already #1. Find the next viable competitor whose target
-          // is below #1's price (evita oscilación) and above the floor
+          // is different from #1's target (evita oscilación) and above the floor
           let skipTarget: any = null;
           let skipIdx = -1;
           for (let i = firstIdx + 1; i < viableCompetitors.length; i++) {
             const candidate = viableCompetitors[i];
             const candidateTarget = Number(candidate.price) - top1Diff;
-            if (candidateTarget > priceFloor && candidateTarget < Number(firstComp.price)) {
+            if (candidateTarget > priceFloor && candidateTarget !== firstTargetRaw) {
               skipTarget = candidate;
               skipIdx = i;
               break;
@@ -683,7 +683,7 @@ async function runBinanceCycle(
             targetCompetitor = firstComp;
             targetIndex = firstIdx;
             await logBot(tenantId, "info", "binance",
-              `Bot ya es #1 pero ningún skip da precio menor a #1, manteniendo target #1: ${Number(firstComp.price).toFixed(2)}`
+              `Bot ya es #1 pero todos dan mismo target, manteniendo #1: ${Number(firstComp.price).toFixed(2)}`
             );
           }
         } else {
