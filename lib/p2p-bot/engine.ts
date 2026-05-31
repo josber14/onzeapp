@@ -517,17 +517,24 @@ async function runBinanceCycle(
         }
       }
 
-      // Fetch competitors WITHOUT payTypes filter (API may ignore mismatched identifiers)
-      // Then filter client-side for reliability
-      const onlineRes = await client.getOnlineAds({
-        asset: "USDT",
-        fiat: "CLP",
-        tradeType: "BUY",
-        rows: 100,
-        payTypes: [],
-      });
-      const raw = onlineRes?.data ?? [];
-      competitors = raw.map(normalizeBinanceAd);
+      // Fetch competitors (paginate to get more than 20)
+      const rowsPerPage = 20;
+      const maxPages = 3;
+      let allRaw: any[] = [];
+      for (let page = 1; page <= maxPages; page++) {
+        const onlineRes = await client.getOnlineAds({
+          asset: "USDT",
+          fiat: "CLP",
+          tradeType: "BUY",
+          rows: rowsPerPage,
+          page,
+          payTypes: [],
+        });
+        const pageData = onlineRes?.data ?? [];
+        if (pageData.length === 0) break;
+        allRaw = allRaw.concat(pageData);
+      }
+      competitors = allRaw.map(normalizeBinanceAd);
       await logBot(tenantId, "info", "binance", `OnlineAds: ${competitors.length} items`);
       const samplePrices = competitors.slice(0, 5).map((c: any) => `${c.price}`).join(", ");
       if (competitors.length) {
