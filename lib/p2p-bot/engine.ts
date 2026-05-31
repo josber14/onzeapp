@@ -653,17 +653,57 @@ async function runBinanceCycle(
       }
     } else if (viableCompetitors.length > 0) {
       // Find the first viable competitor whose resulting price is STRICTLY above the floor
-      for (let i = 0; i < viableCompetitors.length; i++) {
-        const comp = viableCompetitors[i];
-        const testPrice = Number(comp.price) - top1Diff;
-        if (testPrice > priceFloor) {
-          targetCompetitor = comp;
-          targetIndex = i;
-          break;
+      const firstIdx = 0;
+      const firstComp = viableCompetitors[firstIdx];
+      const firstTargetRaw = Number(firstComp.price) - top1Diff;
+
+      if (firstTargetRaw > priceFloor) {
+        // #1 competitor is valid. Check if we're already cheaper than it.
+        if (currentPrice > 0 && currentPrice < Number(firstComp.price) && viableCompetitors.length > 1) {
+          // Bot is already #1. Find the next viable competitor whose target
+          // is below #1's price (evita oscilación) and above the floor
+          let skipTarget: any = null;
+          let skipIdx = -1;
+          for (let i = firstIdx + 1; i < viableCompetitors.length; i++) {
+            const candidate = viableCompetitors[i];
+            const candidateTarget = Number(candidate.price) - top1Diff;
+            if (candidateTarget > priceFloor && candidateTarget < Number(firstComp.price)) {
+              skipTarget = candidate;
+              skipIdx = i;
+              break;
+            }
+          }
+          if (skipTarget) {
+            targetCompetitor = skipTarget;
+            targetIndex = skipIdx;
+            await logBot(tenantId, "info", "binance",
+              `Bot ya es #1 (${currentPrice.toFixed(2)} < ${Number(firstComp.price).toFixed(2)}), apuntando a #${targetIndex + 1} (${Number(targetCompetitor.price).toFixed(2)}) para evitar oscilación`
+            );
+          } else {
+            targetCompetitor = firstComp;
+            targetIndex = firstIdx;
+            await logBot(tenantId, "info", "binance",
+              `Bot ya es #1 pero ningún skip da precio menor a #1, manteniendo target #1: ${Number(firstComp.price).toFixed(2)}`
+            );
+          }
+        } else {
+          targetCompetitor = firstComp;
+          targetIndex = firstIdx;
+        }
+      } else {
+        // First competitor gives target at/below floor. Find the first that doesn't.
+        for (let i = 1; i < viableCompetitors.length; i++) {
+          const comp = viableCompetitors[i];
+          const testPrice = Number(comp.price) - top1Diff;
+          if (testPrice > priceFloor) {
+            targetCompetitor = comp;
+            targetIndex = i;
+            break;
+          }
         }
       }
 
-      // If none give a price above floor, try the most expensive viable as fallback
+      // If still none give a price above floor, try the most expensive viable as fallback
       if (!targetCompetitor) {
         const highest = viableCompetitors[viableCompetitors.length - 1];
         const testPrice = Number(highest.price) - top1Diff;
@@ -672,19 +712,6 @@ async function runBinanceCycle(
           targetIndex = viableCompetitors.length - 1;
           await logBot(tenantId, "warn", "binance",
             `Todos los competidores viables dan precio bajo piso, usando el más caro: ${Number(targetCompetitor.price).toFixed(2)}`
-          );
-        }
-      }
-
-      // Apply skip-to-#2 when bot is already cheaper than #1 and target stays below #1
-      const targetIdxInViable = targetCompetitor ? viableCompetitors.indexOf(targetCompetitor) : -1;
-      if (targetIdxInViable === 0 && currentPrice > 0 && currentPrice < Number(targetCompetitor.price) && viableCompetitors.length > 1) {
-        const skipPrice = Number(viableCompetitors[1].price) - top1Diff;
-        if (skipPrice > priceFloor && skipPrice < Number(targetCompetitor.price)) {
-          targetCompetitor = viableCompetitors[1];
-          targetIndex = 1;
-          await logBot(tenantId, "info", "binance",
-            `Bot ya es #1, apuntando a #${targetIndex + 1} (${Number(targetCompetitor.price).toFixed(2)}) para evitar oscilación`
           );
         }
       }
