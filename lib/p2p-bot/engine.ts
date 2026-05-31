@@ -507,9 +507,9 @@ async function runBinanceCycle(
           const ourSell = myAds.find(
             (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
           );
-          if (ourSell?.paymentMethods?.length) {
-            ourPayMethods = ourSell.paymentMethods;
-            await logBot(tenantId, "info", "binance", `Filtrando competidores por métodos de pago del anuncio: ${ourSell.paymentMethods.join(", ")}`);
+          if (ourSell?.payments?.length) {
+            ourPayMethods = ourSell.payments.map((p: any) => String(p));
+            await logBot(tenantId, "info", "binance", `Filtrando competidores por métodos de pago del anuncio (IDs): ${ourPayMethods.join(", ")}`);
           }
         } else {
           ourPayMethods = competePayTypes;
@@ -541,14 +541,14 @@ async function runBinanceCycle(
         await logBot(tenantId, "info", "binance", `Precios: ${samplePrices}`);
       }
 
-      // Client-side payment method filter by display name (más confiable que IDs internos)
+      // Client-side payment method filter by internal IDs
       if (ourPayMethods && ourPayMethods.length > 0) {
         const before = competitors.length;
         competitors = competitors.filter((c: any) => {
-          const cmpNames: string[] = (c.paymentMethods || []).map((p: any) => String(p));
-          return cmpNames.some((p: string) => ourPayMethods!.includes(p));
+          const cmpIds: string[] = (c.payments || []).map((p: any) => String(p));
+          return cmpIds.some((p: string) => ourPayMethods!.includes(p));
         });
-        await logBot(tenantId, "info", "binance", `Filtro de pago: ${before} → ${competitors.length} competidores (coinciden nombres)`);
+        await logBot(tenantId, "info", "binance", `Filtro de pago: ${before} → ${competitors.length} competidores (coinciden IDs)`);
       }
 
       if (competitors.length === 0) {
