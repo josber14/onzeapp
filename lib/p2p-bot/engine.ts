@@ -497,34 +497,34 @@ async function runBinanceCycle(
 
     // Determine pay types for competitor filtering
     const competePayTypes = (config as any).competePayTypes as string[] | null | undefined;
+    let ourPayMethods: string[] | undefined;
 
     // 3. Get online competitor ads
     let competitors: any[] = [];
     try {
-      let adPayTypes: string[] | undefined;
       if (competePayTypes && competePayTypes.length > 0 && competePayTypes[0] !== "*") {
         if (competePayTypes[0] === "__match_ad__") {
-          // Auto-detect: find our sell ad and use its payment methods
           const ourSell = myAds.find(
             (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
           );
           if (ourSell?.payments?.length) {
-            adPayTypes = ourSell.payments;
+            ourPayMethods = ourSell.payments;
             await logBot(tenantId, "info", "binance", `Filtrando competidores por métodos de pago del anuncio: ${ourSell.payments.join(", ")}`);
           }
         } else {
-          adPayTypes = competePayTypes;
+          ourPayMethods = competePayTypes;
           await logBot(tenantId, "info", "binance", `Filtrando competidores por métodos de pago: ${competePayTypes!.join(", ")}`);
         }
       }
 
-      // tradeType: "BUY" → returns SELL ads (other sellers we compete with)
+      // Fetch competitors WITHOUT payTypes filter (API may ignore mismatched identifiers)
+      // Then filter client-side for reliability
       const onlineRes = await client.getOnlineAds({
         asset: "USDT",
         fiat: "CLP",
         tradeType: "BUY",
         rows: 20,
-        payTypes: adPayTypes,
+        payTypes: [],
       });
       const raw = onlineRes?.data ?? [];
       competitors = raw.map(normalizeBinanceAd);
@@ -532,6 +532,21 @@ async function runBinanceCycle(
       const samplePrices = competitors.slice(0, 5).map((c: any) => `${c.price}`).join(", ");
       if (competitors.length) {
         await logBot(tenantId, "info", "binance", `Precios: ${samplePrices}`);
+      }
+
+      // Client-side payment method filter (más confiable que el parámetro API)
+      if (ourPayMethods && ourPayMethods.length > 0) {
+        const before = competitors.length;
+        competitors = competitors.filter((c: any) => {
+          const cmpPayments: string[] = (c.payments || []).map((p: any) => String(p));
+          return cmpPayments.some((p: string) => ourPayMethods!.includes(p));
+        });
+        await logBot(tenantId, "info", "binance", `Filtro de pago: ${before} → ${competitors.length} competidores (coinciden métodos)`);
+      }
+
+      if (competitors.length === 0) {
+        await logBot(tenantId, "warn", "binance", "Sin competidores después del filtro de pago");
+        return { actions };
       }
     } catch (e: any) {
       await logBot(tenantId, "error", "binance", `Error getOnlineAds: ${e.message}`);
