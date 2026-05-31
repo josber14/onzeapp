@@ -587,29 +587,45 @@ async function runBinanceCycle(
     const isBinance = "commissionPct" in (config as any);
     const realCost = minSellPrice ? minSellPrice * (1 + (isBinance ? commissionPct : 0) / 100) : 0;
 
-    // Find the best competitor respecting safe margin
-    let targetCompetitor: any = null;
-    let targetIndex = 0;
+    // Find the bot's current price to know if we're already #1
+    const ourSellAd = myAds.find(
+      (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
+    );
+    const currentPrice = ourSellAd ? Number(ourSellAd.price) : 0;
 
+    // Collect competitors that pass safe margin
+    const viableCompetitors: any[] = [];
     for (let i = 0; i < sortedCompetitors.length; i++) {
       const comp = sortedCompetitors[i];
       const marginPct = realCost > 0 ? ((Number(comp.price) - realCost) / realCost) * 100 : 999;
       if (marginPct >= safeMarginPct) {
-        targetCompetitor = comp;
-        targetIndex = i;
-        break;
+        viableCompetitors.push(comp);
       }
     }
 
-    // Fallback: if no competitor meets margin, use the highest price competitor
-    if (!targetCompetitor && sortedCompetitors.length > 0) {
-      targetCompetitor = sortedCompetitors[sortedCompetitors.length - 1];
-      targetIndex = sortedCompetitors.length - 1;
-      await logBot(tenantId, "warn", "binance", `Ningún competidor cumple margen seguro (${safeMarginPct}%), usando el más caro: ${Number(targetCompetitor.price).toFixed(2)}`);
+    let targetCompetitor: any = null;
+    let targetIndex = 0;
+
+    if (viableCompetitors.length === 0) {
+      if (sortedCompetitors.length > 0) {
+        targetCompetitor = sortedCompetitors[sortedCompetitors.length - 1];
+        targetIndex = sortedCompetitors.length - 1;
+        await logBot(tenantId, "warn", "binance", `Ningún competidor cumple margen seguro (${safeMarginPct}%), usando el más caro: ${Number(targetCompetitor.price).toFixed(2)}`);
+      }
+    } else if (currentPrice > 0 && Number(viableCompetitors[0].price) > currentPrice) {
+      // Bot is already cheaper than the #1 viable competitor → skip to the next
+      targetCompetitor = viableCompetitors.length > 1 ? viableCompetitors[1] : viableCompetitors[0];
+      targetIndex = sortedCompetitors.indexOf(targetCompetitor);
+      await logBot(tenantId, "info", "binance", `Bot ya es #1 (${currentPrice.toFixed(2)} < ${Number(viableCompetitors[0].price).toFixed(2)}), apuntando a #${targetIndex + 1}: ${Number(targetCompetitor.price).toFixed(2)}`);
+    } else {
+      targetCompetitor = viableCompetitors[0];
+      targetIndex = sortedCompetitors.indexOf(targetCompetitor);
+      await logBot(tenantId, "info", "binance", `Target #${targetIndex + 1}: ${Number(targetCompetitor.price).toFixed(2)} (costo real: ${realCost.toFixed(2)}, margen: ${(((Number(targetCompetitor.price) - realCost) / realCost) * 100).toFixed(2)}%)`);
     }
 
-    if (targetCompetitor) {
-      await logBot(tenantId, "info", "binance", `Target #${targetIndex + 1}: ${Number(targetCompetitor.price).toFixed(2)} (costo real: ${realCost.toFixed(2)}, margen: ${(((Number(targetCompetitor.price) - realCost) / realCost) * 100).toFixed(2)}%)`);
+    if (!targetCompetitor) {
+      await logBot(tenantId, "warn", "binance", "Sin competidores para targetear");
+      return { actions };
     }
 
     const competitorPrice = Number(targetCompetitor.price);
@@ -623,12 +639,8 @@ async function runBinanceCycle(
     }
 
     // 8. Update or create our sell ad
-    const ourSellAd = myAds.find(
-      (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
-    );
 
     if (ourSellAd) {
-      const currentPrice = Number(ourSellAd.price);
       const diff = Math.abs(currentPrice - targetPrice);
       if (diff >= 0.005) {
         let adId = ourSellAd.id;
