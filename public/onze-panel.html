@@ -9918,7 +9918,7 @@ function addP2PBotStyles(){
       method:"POST",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceFloorPct, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, minCompetitorCapital, competePayTypes, commissionPct, safeMarginPct })
+      body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceSource, priceFloorPct, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, minCompetitorCapital, competePayTypes, commissionPct, safeMarginPct })
     });
     botUpdateBuyPrice();
     window.botRefreshExchange();
