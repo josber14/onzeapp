@@ -414,6 +414,7 @@ function normalizeBinanceAd(ad: any): any {
     orderCount: Number(advertiser.monthOrderCount ?? adv.orderCount ?? 0),
     completionRate: Number(advertiser.monthFinishRate ?? adv.completionRate ?? adv.completedOrderRate ?? 0),
     nickName: advertiser.nickName ?? adv.nickName ?? "",
+    userType: advertiser.userType ?? "",
     monthOrderCount: Number(advertiser.monthOrderCount ?? adv.monthOrderCount ?? 0),
     monthExecuteRate: Number(advertiser.monthFinishRate ?? adv.monthExecuteRate ?? 0),
     recentOrderCount: Number(adv.recentOrderCount ?? 0),
@@ -550,10 +551,11 @@ async function runBinanceCycle(
       }
     }
 
-    // Filter viable competitors
+    // Filter viable competitors: only verified merchants, with min capital
     const minCapital = Number((config as any).minCompetitorCapital) || 0;
     const viable = competitors.filter((c: any) => {
       if (minSellPrice && Number(c.price) < minSellPrice) return false;
+      if (c.userType && c.userType !== "merchant") return false;
       if (minCapital > 0) {
         const cap = Number(c.lastQuantity ?? c.quantity ?? 0);
         if (cap < minCapital) return false;
@@ -613,10 +615,23 @@ async function runBinanceCycle(
         await logBot(tenantId, "warn", "binance", `Ningún competidor cumple margen seguro (${safeMarginPct}%), usando el más caro: ${Number(targetCompetitor.price).toFixed(2)}`);
       }
     } else if (currentPrice > 0 && Number(viableCompetitors[0].price) > currentPrice) {
-      // Bot is already cheaper than the #1 viable competitor → skip to the next
-      targetCompetitor = viableCompetitors.length > 1 ? viableCompetitors[1] : viableCompetitors[0];
+      // Bot is already cheaper than #1
+      // Try skipping to #2 only if target stays below #1's price (evita oscilación)
+      let skipTarget: any = null;
+      if (viableCompetitors.length > 1) {
+        const skipTargetPrice = Number(viableCompetitors[1].price) - top1Diff;
+        const firstPrice = Number(viableCompetitors[0].price);
+        if (skipTargetPrice < firstPrice) {
+          skipTarget = viableCompetitors[1];
+        }
+      }
+      targetCompetitor = skipTarget || viableCompetitors[0];
       targetIndex = sortedCompetitors.indexOf(targetCompetitor);
-      await logBot(tenantId, "info", "binance", `Bot ya es #1 (${currentPrice.toFixed(2)} < ${Number(viableCompetitors[0].price).toFixed(2)}), apuntando a #${targetIndex + 1}: ${Number(targetCompetitor.price).toFixed(2)}`);
+      await logBot(tenantId, "info", "binance",
+        skipTarget
+          ? `Bot ya es #1 (${currentPrice.toFixed(2)} < ${Number(viableCompetitors[0].price).toFixed(2)}), apuntando a #${targetIndex + 1}: ${Number(targetCompetitor.price).toFixed(2)}`
+          : `Bot ya es #1, target #1 (${Number(targetCompetitor.price).toFixed(2)}) para no oscilar`
+      );
     } else {
       targetCompetitor = viableCompetitors[0];
       targetIndex = sortedCompetitors.indexOf(targetCompetitor);
