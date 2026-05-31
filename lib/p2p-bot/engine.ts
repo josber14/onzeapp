@@ -523,7 +523,7 @@ async function runBinanceCycle(
         asset: "USDT",
         fiat: "CLP",
         tradeType: "BUY",
-        rows: 20,
+        rows: 100,
         payTypes: [],
       });
       const raw = onlineRes?.data ?? [];

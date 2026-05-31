@@ -135,7 +135,7 @@ export class BinanceP2PClient {
       fiat: params.fiat,
       tradeType: params.tradeType,
       page: params.page || 1,
-      rows: Math.min(params.rows || 20, 20),
+        rows: Math.min(params.rows || 50, 100),
       payTypes: params.payTypes || [],
       publisherType: null,
     });
