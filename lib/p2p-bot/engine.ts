@@ -615,7 +615,10 @@ async function runBinanceCycle(
     const competitorPrice = Number(targetCompetitor.price);
     let targetPrice = competitorPrice - top1Diff;
 
-    if (minSellPrice && targetPrice < minSellPrice) {
+    // Use realCost as floor for Binance (incl. comisión), minSellPrice for others
+    if (isBinance && realCost && targetPrice < realCost) {
+      targetPrice = realCost;
+    } else if (minSellPrice && targetPrice < minSellPrice) {
       targetPrice = minSellPrice;
     }
 

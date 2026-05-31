@@ -9419,7 +9419,7 @@ function addP2PBotStyles(){
           <button class="btn" type="button" id="botPanelBtn" onclick="window.botOpenPanel()" style="background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.25);color:#93c5fd;">📊 Panel P2P</button>
           <div class="bot-buyprice-card" id="botBuyPriceCard" style="display:none;">
             <div>
-              <div class="label" id="botBuyPriceLabel">PRECIO MIN VENTA</div>
+              <div class="label" id="botBuyPriceLabel">COSTO REAL</div>
               <div><span class="value" id="botBuyPriceValue">—</span><span class="unit">CLP</span></div>
             </div>
             <div id="botBuyPriceProvider" style="font-size:10px;color:#64748b;text-align:right;"></div>
@@ -9816,12 +9816,6 @@ function addP2PBotStyles(){
       const active = cache.find(c => c.buyPrice && c.status !== "finished" && !c._capital);
       if(active?.buyPrice) return Number(active.buyPrice);
     }
-    // Fallback: use the value already shown in the buy price card
-    const cardValue = document.getElementById("botBuyPriceValue");
-    if(cardValue && cardValue.textContent !== "—"){
-      const v = parseFloat(cardValue.textContent);
-      if(!isNaN(v)) return v;
-    }
     return null;
   }
 
@@ -10037,44 +10031,57 @@ function addP2PBotStyles(){
       return;
     }
 
+    let basePrice = null;
+    let priceSource = "";
+
     if(source.value === "manual"){
       const inp = document.getElementById("botPriceFloorPct");
       const manualPrice = inp ? parseFloat(inp.value) : null;
       if(manualPrice && !isNaN(manualPrice)){
-        card.style.display = "inline-flex";
-        label.textContent = "PRECIO MINIMO VENTA";
-        value.textContent = manualPrice.toFixed(2);
-        provider.textContent = "Manual";
-        return;
+        basePrice = manualPrice;
+        priceSource = "Manual";
       }
     }
 
-    // Capacity mode
-    let cache = window.__p2pCapacityCache;
-    if(!cache || !Array.isArray(cache) || cache.length === 0){
-      // Try to fetch from server
-      try {
-        const res = await fetch('/api/p2p/capacity', { credentials: 'include' });
-        const data = await res.json();
-        if(data?.ok && Array.isArray(data.items)){
-          window.__p2pCapacityCache = data.items;
-          cache = data.items;
+    if(basePrice === null){
+      // Capacity mode
+      let cache = window.__p2pCapacityCache;
+      if(!cache || !Array.isArray(cache) || cache.length === 0){
+        try {
+          const res = await fetch('/api/p2p/capacity', { credentials: 'include' });
+          const data = await res.json();
+          if(data?.ok && Array.isArray(data.items)){
+            window.__p2pCapacityCache = data.items;
+            cache = data.items;
+          }
+        } catch(e) {}
+      }
+      if(cache && Array.isArray(cache)){
+        const active = cache.find(c => c.buyPrice && c.status !== "finished" && !c._capital);
+        if(active?.buyPrice){
+          basePrice = Number(active.buyPrice);
+          priceSource = active.provider || active.country || "Capacity";
         }
-      } catch(e) {}
+      }
     }
-    if(!cache || !Array.isArray(cache) || cache.length === 0){
+
+    if(basePrice !== null && !isNaN(basePrice)){
+      card.style.display = "inline-flex";
+      const exchange = window.botSelectedExchange || "binance";
+      if(exchange === "binance"){
+        const commissionPct = parseFloat(document.getElementById("botCommissionPct")?.value || "0.14");
+        const realCost = basePrice * (1 + commissionPct / 100);
+        label.textContent = "COSTO REAL (con comisi\u00F3n)";
+        value.textContent = realCost.toFixed(2);
+        provider.textContent = `${priceSource} + ${commissionPct}% comisi\u00F3n`;
+      }else{
+        label.textContent = "PRECIO MINIMO VENTA";
+        value.textContent = basePrice.toFixed(2);
+        provider.textContent = priceSource;
+      }
+    }else{
       card.style.display = "none";
-      return;
     }
-    const active = cache.find(c => c.buyPrice && c.status !== "finished" && !c._capital);
-    if(!active || !active.buyPrice){
-      card.style.display = "none";
-      return;
-    }
-    card.style.display = "inline-flex";
-    label.textContent = "PRECIO COMPRA";
-    value.textContent = Number(active.buyPrice).toFixed(2);
-    provider.textContent = active.provider || active.country || "-";
   }
   window.botUpdateBuyPrice = botUpdateBuyPrice;
 
