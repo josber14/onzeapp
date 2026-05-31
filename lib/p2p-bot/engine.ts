@@ -29,6 +29,7 @@ export async function getBotConfig(
     top1Diff: Number(config.top1Diff),
     spreadPct: Number(config.spreadPct),
     priceFloorPct: Number(config.priceFloorPct),
+    priceSource: config.priceSource || "manual",
     dailyVolumeCapUsdt: config.dailyVolumeCapUsdt
       ? Number(config.dailyVolumeCapUsdt)
       : null,
@@ -55,6 +56,7 @@ export async function saveBotConfig(
   if (data.spreadPct !== undefined) update.spreadPct = data.spreadPct;
   if (data.priceFloorPct !== undefined)
     update.priceFloorPct = data.priceFloorPct;
+  if (data.priceSource !== undefined) update.priceSource = data.priceSource;
   if (data.dailyVolumeCapUsdt !== undefined)
     update.dailyVolumeCapUsdt = data.dailyVolumeCapUsdt;
   if (data.circuitBreakPct !== undefined)

@@ -10,6 +10,7 @@ export interface P2PBotConfigData {
   top1Diff: number; // CLP por debajo del mejor competidor
   spreadPct: number;
   priceFloorPct: number;
+  priceSource: string;
   dailyVolumeCapUsdt: number | null;
   circuitBreakPct: number;
   pauseUntil: string | null;
