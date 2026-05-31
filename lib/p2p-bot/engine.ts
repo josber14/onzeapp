@@ -634,6 +634,8 @@ async function runBinanceCycle(
         viableCompetitors.push(comp);
       }
     }
+    await logBot(tenantId, "debug", "binance", `sortedCompetitors: ${sortedCompetitors.length} items, precios: ${sortedCompetitors.slice(0,5).map(c => c.price).join(",")}... últimos: ${sortedCompetitors.slice(-3).map(c => `${c.price}(u:${c.userType||'-'})`).join(",")}`);
+    await logBot(tenantId, "debug", "binance", `viableCompetitors: ${viableCompetitors.length} items, ${viableCompetitors.slice(0,10).map(c => `${c.price}(u:${c.userType||'-'})`).join(",")}`);
 
     let targetCompetitor: any = null;
     let targetIndex = -1;
