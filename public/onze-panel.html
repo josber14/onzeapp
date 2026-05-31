@@ -9170,7 +9170,7 @@ if(addProviderBtn){
 /* ===== ONZE P2P BOT ===== */
 (function(){
   let botSelectedExchange = "binance";
-  let botCycleTimers = {};
+  let botCycleTimer = null;
 
 function addP2PBotStyles(){
   if(document.getElementById("onze-bot-styles")) return;
@@ -9419,7 +9419,7 @@ function addP2PBotStyles(){
           <button class="btn" type="button" id="botPanelBtn" onclick="window.botOpenPanel()" style="background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.25);color:#93c5fd;">📊 Panel P2P</button>
           <div class="bot-buyprice-card" id="botBuyPriceCard" style="display:none;">
             <div>
-              <div class="label" id="botBuyPriceLabel">COSTO REAL</div>
+              <div class="label" id="botBuyPriceLabel">PRECIO MINIMO VENTA</div>
               <div><span class="value" id="botBuyPriceValue">—</span><span class="unit">CLP</span></div>
             </div>
             <div id="botBuyPriceProvider" style="font-size:10px;color:#64748b;text-align:right;"></div>
@@ -9502,12 +9502,12 @@ function addP2PBotStyles(){
                 </select>
                 <span class="help-text">Competir solo con anuncios que tengan tus mismos m\u00E9todos de pago</span>
               </label>
-              <label>
+              <label id="botCommissionField">
                 Comisi\u00F3n exchange (%)
                 <input id="botCommissionPct" type="number" step="0.01" value="0.14" onchange="window.botSaveExchangeConfig()">
                 <span class="help-text">Comisi\u00F3n del exchange (Binance 0.14%, Bybit 0%)</span>
               </label>
-              <label>
+              <label id="botSafeMarginField">
                 Margen seguridad (%)
                 <input id="botSafeMarginPct" type="number" step="0.01" value="0" onchange="window.botSaveExchangeConfig()">
                 <span class="help-text">No competir si el #1 est\u00E1 a menos de este % sobre tu costo real</span>
@@ -9668,8 +9668,14 @@ function addP2PBotStyles(){
     });
     document.getElementById("botCredExchangeLabel").textContent = exchange.charAt(0).toUpperCase() + exchange.slice(1);
 
+    // Show/hide fields per exchange
+    const commissionField = document.getElementById("botCommissionField");
+    if(commissionField) commissionField.style.display = exchange === "binance" ? "" : "none";
+
     window.botRefreshExchange();
   };
+
+  let botCycleTimer = null;
 
   window.botStartExchange = async function(){
     const ex = botSelectedExchange;
@@ -9680,8 +9686,8 @@ function addP2PBotStyles(){
       body: JSON.stringify({ exchange: ex, action: "start" })
     });
     const interval = Math.round(parseFloat(document.getElementById("botCycleInterval").value)) || 10;
-    if(botCycleTimers[ex]) clearInterval(botCycleTimers[ex]);
-    botCycleTimers[ex] = setInterval(async () => {
+    if(botCycleTimer) clearInterval(botCycleTimer);
+    botCycleTimer = setInterval(async () => {
       if(window.__botCycleRunning) return;
       window.__botCycleRunning = true;
       try{
@@ -9695,8 +9701,8 @@ function addP2PBotStyles(){
 
   window.botStopExchange = async function(){
     const ex = botSelectedExchange;
-    clearInterval(botCycleTimers[ex]);
-    delete botCycleTimers[ex];
+    if(botCycleTimer) clearInterval(botCycleTimer);
+    botCycleTimer = null;
     // Update UI immediately
     const btn = document.getElementById("botStopBtn");
     if(btn) btn.textContent = "Deteniendo...";
