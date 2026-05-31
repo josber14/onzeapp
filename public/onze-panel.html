@@ -10075,7 +10075,7 @@ function addP2PBotStyles(){
       card.style.display = "inline-flex";
       const exchange = botSelectedExchange || "binance";
       const source = document.getElementById("botPriceSource")?.value || "manual";
-      if(exchange === "binance" && source === "auto"){
+      if(exchange === "binance"){
         const commissionPct = parseFloat(document.getElementById("botCommissionPct")?.value || "0.14");
         const realCost = basePrice * (1 + commissionPct / 100);
         label.textContent = "COSTO REAL (con comisi\u00F3n)";
