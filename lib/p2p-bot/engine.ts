@@ -585,9 +585,10 @@ async function runBinanceCycle(
     const commissionPct = Number((config as any).commissionPct) || 0.14;
     const safeMarginPct = Number((config as any).safeMarginPct) || 0;
 
-    // Real cost = minSellPrice + commission (solo Binance aplica comisión)
+    // Real cost: si es manual el usuario ya incluyó comisión, si es capacity hay que sumarla
+    const isManualPrice = String(config.priceSource || "manual") === "manual";
     const isBinance = "commissionPct" in (config as any);
-    const realCost = minSellPrice ? minSellPrice * (1 + (isBinance ? commissionPct : 0) / 100) : 0;
+    const realCost = minSellPrice ? minSellPrice * (1 + (isBinance && !isManualPrice ? commissionPct : 0) / 100) : 0;
 
     // Find the bot's current price to know if we're already #1
     const ourSellAd = myAds.find(
