@@ -160,14 +160,13 @@ export class BinanceP2PClient {
     const { adId, price } = params;
     const body = { advNo: String(adId), price: String(price) };
     let lastErr: any;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
         return await this.privateRequest("/sapi/v1/c2c/ads/update", {}, body);
       } catch (e: any) {
         lastErr = e;
         if (e.message?.includes("code: -9000")) {
-          const delay = (attempt + 1) * 1000;
-          await new Promise(r => setTimeout(r, delay));
+          await new Promise(r => setTimeout(r, 500));
           continue;
         }
         throw e;

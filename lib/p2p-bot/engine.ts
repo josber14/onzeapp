@@ -786,7 +786,7 @@ async function runBinanceCycle(
       }
       // Delay between ads to avoid Binance rate-limit
       if (managedAds.length > 1 && managedAds.indexOf(managedAd) < managedAds.length - 1) {
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 500));
       }
     }
 
@@ -1099,7 +1099,7 @@ async function runBybitCycle(
         });
       } catch (e: any) {}
       if (managedAds.length > 1 && managedAds.indexOf(managedAd) < managedAds.length - 1) {
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 500));
       }
     }
 

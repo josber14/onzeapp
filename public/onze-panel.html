@@ -10063,22 +10063,21 @@ function addP2PBotStyles(){
       body: JSON.stringify({ exchange: ex, action: "start" })
     });
     const interval = Math.round(parseFloat(document.getElementById("botCycleInterval").value)) || 10;
-    if(botCycleTimer) clearInterval(botCycleTimer);
-    botCycleTimer = setInterval(async () => {
-      if(window.__botCycleRunning) return;
-      window.__botCycleRunning = true;
+    if(botCycleTimer) clearTimeout(botCycleTimer);
+    async function scheduleBotCycle(){
       try{
         await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include" });
         window.botRefreshExchange();
       }catch(e){}
-      window.__botCycleRunning = false;
-    }, interval * 1000);
+      botCycleTimer = setTimeout(scheduleBotCycle, interval * 1000);
+    }
+    scheduleBotCycle();
     await window.botRefreshExchange();
   };
 
   window.botStopExchange = async function(){
     const ex = botSelectedExchange;
-    if(botCycleTimer) clearInterval(botCycleTimer);
+    if(botCycleTimer) clearTimeout(botCycleTimer);
     botCycleTimer = null;
     // Update UI immediately
     const btn = document.getElementById("botStopBtn");
