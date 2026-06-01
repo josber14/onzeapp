@@ -67,6 +67,26 @@ export interface BotCompetitorAd {
   paymentMethods: string[];
 }
 
+export interface P2PBotAdConfigData {
+  id?: number;
+  tenantId: number;
+  exchange: string;
+  adId: string | null;
+  botEnabled: boolean;
+  botStrategy: string;
+  botTop1Diff: number;
+  botSpreadPct: number;
+  botPriceFloorPct: number;
+  botPriceSource: string;
+  botCommissionPct: number;
+  botSafeMarginPct: number;
+  botMinCompetitorCapital: number | null;
+  botCompetePayTypes: string[] | null;
+  botCycleInterval: number | null;
+  botCircuitBreakPct: number | null;
+  botDailyVolumeCapUsdt: number | null;
+}
+
 export interface BotAction {
   action: "update_price" | "create_ad" | "recreate_ad" | "pause" | "accept_order";
   exchange: BotExchange;

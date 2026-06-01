@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 
     const ads = await prisma.p2PBotAd.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: "asc" },
     });
 
     // If Binance, also try fetching live ads from Binance API
@@ -69,14 +69,24 @@ export async function GET(req: NextRequest) {
               fiat: a.currencyId || "CLP",
               priceType: a.priceType === 0 ? "fixed" : "float",
               price: Number(a.price) || 0,
-              amount: Number(a.lastQuantity || a.quantity) || 0,
-              minAmount: Number(a.minAmount) || 0,
-              maxAmount: Number(a.maxAmount) || 0,
+              amount: Number(a.surplusAmount ?? a.tradableQuantity ?? a.lastQuantity ?? a.quantity ?? 0) || 0,
+              minAmount: Number(a.minSingleTransAmount ?? a.minAmount) || 0,
+              maxAmount: Number(a.maxSingleTransAmount ?? a.maxAmount) || 0,
               paymentMethods: methods,
               payTime: a.paymentPeriod || a.payTime || 15,
               status: a.status === 10 || a.publishStatus === "online" ? "online" : "offline",
               isActive: a.isOnline ?? true,
               botManaged: localAd?.botManaged || false,
+              botEnabled: localAd?.botEnabled || false,
+              botStrategy: localAd?.botStrategy || "top1",
+              botTop1Diff: localAd?.botTop1Diff ? Number(localAd.botTop1Diff) : null,
+              botSpreadPct: localAd?.botSpreadPct ? Number(localAd.botSpreadPct) : null,
+              botPriceFloorPct: localAd?.botPriceFloorPct ? Number(localAd.botPriceFloorPct) : null,
+              botPriceSource: localAd?.botPriceSource || "manual",
+              botCommissionPct: localAd?.botCommissionPct ? Number(localAd.botCommissionPct) : null,
+              botSafeMarginPct: localAd?.botSafeMarginPct ? Number(localAd.botSafeMarginPct) : null,
+              botMinCompetitorCapital: localAd?.botMinCompetitorCapital ? Number(localAd.botMinCompetitorCapital) : null,
+              botCompetePayTypes: localAd?.botCompetePayTypes as string[] | null || null,
               createdAt: a.createDate || a.createdAt || new Date().toISOString(),
               fromBinance: true,
             };
@@ -106,14 +116,24 @@ export async function GET(req: NextRequest) {
             fiat: a.currencyId || "CLP",
             priceType: a.priceType === 0 ? "fixed" : "float",
             price: Number(a.price) || 0,
-            amount: Number(a.lastQuantity) || 0,
-            minAmount: Number(a.minAmount) || 0,
-            maxAmount: Number(a.maxAmount) || 0,
+            amount: Number(a.surplusAmount ?? a.tradableQuantity ?? a.lastQuantity ?? a.quantity ?? 0) || 0,
+            minAmount: Number(a.minSingleTransAmount ?? a.minAmount) || 0,
+            maxAmount: Number(a.maxSingleTransAmount ?? a.maxAmount) || 0,
             paymentMethods: a.payments || [],
             payTime: a.paymentPeriod || 15,
             status: a.status === 10 ? "online" : "offline",
             isActive: a.isOnline,
             botManaged: localAd?.botManaged || false,
+            botEnabled: localAd?.botEnabled || false,
+            botStrategy: localAd?.botStrategy || "top1",
+            botTop1Diff: localAd?.botTop1Diff ? Number(localAd.botTop1Diff) : null,
+            botSpreadPct: localAd?.botSpreadPct ? Number(localAd.botSpreadPct) : null,
+            botPriceFloorPct: localAd?.botPriceFloorPct ? Number(localAd.botPriceFloorPct) : null,
+            botPriceSource: localAd?.botPriceSource || "manual",
+            botCommissionPct: localAd?.botCommissionPct ? Number(localAd.botCommissionPct) : null,
+            botSafeMarginPct: localAd?.botSafeMarginPct ? Number(localAd.botSafeMarginPct) : null,
+            botMinCompetitorCapital: localAd?.botMinCompetitorCapital ? Number(localAd.botMinCompetitorCapital) : null,
+            botCompetePayTypes: localAd?.botCompetePayTypes as string[] | null || null,
             createdAt: a.createDate ? new Date(Number(a.createDate)).toISOString() : new Date().toISOString(),
             fromBybit: true,
             };
@@ -142,6 +162,16 @@ export async function GET(req: NextRequest) {
       status: a.status,
       isActive: a.isActive,
       botManaged: a.botManaged,
+      botEnabled: a.botEnabled,
+      botStrategy: a.botStrategy || "top1",
+      botTop1Diff: a.botTop1Diff ? Number(a.botTop1Diff) : null,
+      botSpreadPct: a.botSpreadPct ? Number(a.botSpreadPct) : null,
+      botPriceFloorPct: a.botPriceFloorPct ? Number(a.botPriceFloorPct) : null,
+      botPriceSource: a.botPriceSource || "manual",
+      botCommissionPct: a.botCommissionPct ? Number(a.botCommissionPct) : null,
+      botSafeMarginPct: a.botSafeMarginPct ? Number(a.botSafeMarginPct) : null,
+      botMinCompetitorCapital: a.botMinCompetitorCapital ? Number(a.botMinCompetitorCapital) : null,
+      botCompetePayTypes: a.botCompetePayTypes as string[] | null || null,
       createdAt: a.createdAt.toISOString(),
       fromBybit: false,
     }))];
@@ -161,6 +191,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  return PUT(req);
+}
+
+export async function PUT(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session?.tenantId) {
@@ -168,18 +202,18 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { id, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged } = body;
+    const { id, adId, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged, botEnabled, botTop1Diff, botSafeMarginPct, botCompetePayTypes, botPriceFloorPct, botPriceSource, botCommissionPct, botMinCompetitorCapital, botStrategy, botSpreadPct, botCycleInterval, botCircuitBreakPct, botDailyVolumeCapUsdt } = body;
 
-    if (!exchange || !tradeType) {
-      return Response.json({ ok: false, error: "exchange y tradeType son requeridos" }, { status: 400 });
+    if (!exchange) {
+      return Response.json({ ok: false, error: "exchange es requerido" }, { status: 400 });
     }
 
-    // For Bybit, also post to Bybit API
+    // For Bybit: auto-delete old ad before creating new one
     if (exchange === "bybit") {
       try {
         const client = await getBybitClient(session.tenantId);
         if (client) {
-          if (id) {
+          if (tradeType && id) {
             // Update existing ad on Bybit
             const updateParams: any = { id: String(id) };
             if (price !== undefined) updateParams.price = String(price);
@@ -190,19 +224,19 @@ export async function POST(req: NextRequest) {
             if (payTime) updateParams.paymentPeriod = payTime;
             if (status) updateParams.status = status === "online" ? 10 : 20;
             await client.updateAd(updateParams);
-          } else {
-            // Create new ad on Bybit
-            await client.postAd({
-              tokenId: asset || "USDT",
-              currencyId: fiat || "CLP",
-              side: tradeType === "BUY" ? "0" : "1",
-              price: String(price || 0),
-              quantity: String(amount || 0),
-              minAmount: String(minAmount || 0),
-              maxAmount: String(maxAmount || 0),
-              payments: paymentMethods || [],
-              paymentPeriod: payTime || 15,
+          } else if (!id) {
+            // Creating new ad: delete ALL existing Bybit ads first
+            const existingAds = await prisma.p2PBotAd.findMany({
+              where: { tenantId: session.tenantId, exchange: "bybit" },
             });
+            for (const existing of existingAds) {
+              try {
+                if (existing.adId) await client.removeAd(existing.adId);
+              } catch (_) {}
+              await prisma.p2PBotAd.deleteMany({
+                where: { id: existing.id, tenantId: session.tenantId },
+              });
+            }
           }
         }
       } catch (e: any) {
@@ -210,53 +244,89 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Save to local DB
-    if (id) {
-      const existing = await prisma.p2PBotAd.findUnique({ where: { id } });
-      if (!existing || existing.tenantId !== session.tenantId) {
-        return Response.json({ ok: false, error: "No encontrado" }, { status: 404 });
-      }
+    // Resolve local DB record: by id, or by adId+exchange, or create new
+    let dbRecord = null;
+    const numericId = Number(id);
+    // Only try findUnique by id if numericId is a safe positive integer (DB auto-increment IDs are small)
+    if (!isNaN(numericId) && numericId > 0 && numericId < 2147483647) {
+      const found = await prisma.p2PBotAd.findUnique({ where: { id: numericId } });
+      if (found && found.tenantId === session.tenantId) dbRecord = found;
+    }
+    if (!dbRecord && adId) {
+      const found = await prisma.p2PBotAd.findFirst({
+        where: { tenantId: session.tenantId, exchange, adId: String(adId) },
+      });
+      if (found) dbRecord = found;
+    }
+    // If id was given but not a DB id, try it as adId (only if it's a safe string length)
+    if (!dbRecord && !adId && id && numericId < 2147483647) {
+      const found = await prisma.p2PBotAd.findFirst({
+        where: { tenantId: session.tenantId, exchange, adId: String(id) },
+      });
+      if (found) dbRecord = found;
+    }
+
+    const updateData: any = {};
+    if (tradeType !== undefined) updateData.tradeType = tradeType;
+    if (asset !== undefined) updateData.asset = asset;
+    if (fiat !== undefined) updateData.fiat = fiat;
+    if (priceType !== undefined) updateData.priceType = priceType;
+    if (price !== undefined) updateData.price = price;
+    if (amount !== undefined) updateData.amount = amount;
+    if (minAmount !== undefined) updateData.minAmount = minAmount;
+    if (maxAmount !== undefined) updateData.maxAmount = maxAmount;
+    if (paymentMethods !== undefined) updateData.paymentMethods = paymentMethods;
+    if (payTime !== undefined) updateData.payTime = payTime;
+    if (status !== undefined) updateData.status = status;
+    if (isActive !== undefined) updateData.isActive = isActive;
+    if (botManaged !== undefined) updateData.botManaged = botManaged;
+    if (botEnabled !== undefined) updateData.botEnabled = botEnabled;
+    if (botStrategy !== undefined) updateData.botStrategy = botStrategy;
+    if (botTop1Diff !== undefined) updateData.botTop1Diff = botTop1Diff;
+    if (botSpreadPct !== undefined) updateData.botSpreadPct = botSpreadPct;
+    if (botPriceFloorPct !== undefined) updateData.botPriceFloorPct = botPriceFloorPct;
+    if (botPriceSource !== undefined) updateData.botPriceSource = botPriceSource;
+    if (botCommissionPct !== undefined) updateData.botCommissionPct = botCommissionPct;
+    if (botSafeMarginPct !== undefined) updateData.botSafeMarginPct = botSafeMarginPct;
+    if (botMinCompetitorCapital !== undefined) updateData.botMinCompetitorCapital = botMinCompetitorCapital;
+    if (botCompetePayTypes !== undefined) updateData.botCompetePayTypes = botCompetePayTypes;
+    if (botCycleInterval !== undefined) updateData.botCycleInterval = botCycleInterval;
+    if (botCircuitBreakPct !== undefined) updateData.botCircuitBreakPct = botCircuitBreakPct;
+    if (botDailyVolumeCapUsdt !== undefined) updateData.botDailyVolumeCapUsdt = botDailyVolumeCapUsdt;
+
+    if (dbRecord) {
+      updateData.updatedAt = new Date();
       const updated = await prisma.p2PBotAd.update({
-        where: { id },
-        data: {
-          tradeType,
-          asset: asset || "USDT",
-          fiat: fiat || "CLP",
-          priceType: priceType || "fixed",
-          price: price || 0,
-          amount: amount || 0,
-          minAmount: minAmount || 0,
-          maxAmount: maxAmount || 0,
-          paymentMethods: paymentMethods || [],
-          payTime: payTime || 15,
-          status: status || "online",
-          isActive: isActive !== undefined ? isActive : true,
-          botManaged: botManaged !== undefined ? botManaged : false,
-          updatedAt: new Date(),
-        },
+        where: { id: dbRecord.id },
+        data: updateData,
       });
       return Response.json({ ok: true, ad: updated });
     }
 
+    // Create new
+    const createData: any = {
+      tenantId: session.tenantId,
+      exchange,
+      tradeType: tradeType || "SELL",
+      asset: asset || "USDT",
+      fiat: fiat || "CLP",
+      priceType: priceType || "fixed",
+      price: price || 0,
+      amount: amount || 0,
+      minAmount: minAmount || 0,
+      maxAmount: maxAmount || 0,
+      paymentMethods: paymentMethods || [],
+      payTime: payTime || 15,
+      status: status || "online",
+      isActive: isActive !== undefined ? isActive : true,
+      updatedAt: new Date(),
+      ...updateData,
+    };
+    if (adId) createData.adId = String(adId);
+    else if (id && numericId > 0) createData.adId = String(id); // id from exchange adNo
+
     const created = await prisma.p2PBotAd.create({
-      data: {
-        tenantId: session.tenantId,
-        exchange,
-        tradeType,
-        asset: asset || "USDT",
-        fiat: fiat || "CLP",
-        priceType: priceType || "fixed",
-        price: price || 0,
-        amount: amount || 0,
-        minAmount: minAmount || 0,
-        maxAmount: maxAmount || 0,
-        paymentMethods: paymentMethods || [],
-        payTime: payTime || 15,
-        status: status || "online",
-        isActive: isActive !== undefined ? isActive : true,
-        botManaged: botManaged !== undefined ? botManaged : false,
-        updatedAt: new Date(),
-      },
+      data: createData,
     });
 
     return Response.json({ ok: true, ad: created });

@@ -75,7 +75,6 @@ export class BinanceP2PClient {
       headers: {
         "X-MBX-APIKEY": this.apiKey,
         "Content-Type": "application/json",
-        "clientType": "web",
       },
     };
     if (bodyPayload) opts.body = JSON.stringify(bodyPayload);
@@ -90,6 +89,8 @@ export class BinanceP2PClient {
       throw new Error(`Binance respuesta inválida (HTTP ${res.status}) para ${endpoint}: ${text.slice(0, 200)}`);
     }
     if (data?.code && data.code !== "000000") {
+      // Log full response for debugging
+      console.error(`[Binance API] ${endpoint} returned:`, JSON.stringify(data));
       throw new Error(`Binance error: ${data.message || data.msg || "unknown"} (code: ${data.code})`);
     }
     return data;
@@ -156,8 +157,39 @@ export class BinanceP2PClient {
   }
 
   async updateAd(params: Record<string, any>) {
-    const { adId, advNo, price } = params;
-    return this.privateRequest("/sapi/v1/c2c/ads/update", {}, { advNo: advNo || adId, price: String(price) });
+    const { adId, price } = params;
+    const body = { advNo: String(adId), price: String(price) };
+    let lastErr: any;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await this.privateRequest("/sapi/v1/c2c/ads/update", {}, body);
+      } catch (e: any) {
+        lastErr = e;
+        if (e.message?.includes("code: -9000")) {
+          const delay = (attempt + 1) * 1000;
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw lastErr;
+  }
+
+  async updateAdQuantity(adId: string, quantity: number) {
+    const body: Record<string, any> = { advNo: String(adId) };
+    if (quantity > 0) body.surplusAmount = String(quantity);
+    try {
+      return await this.privateRequest("/sapi/v1/c2c/ads/update", {}, body);
+    } catch (e: any) {
+      if (e.message?.includes("187049")) {
+        // Binance rejects quantity update; try updating price instead to "wake up" the ad
+        const detailRes = await this.getAdDetail(adId);
+        const currentPrice = detailRes?.data?.adv?.price || "0";
+        return await this.privateRequest("/sapi/v1/c2c/ads/update", {}, { advNo: String(adId), price: String(currentPrice) });
+      }
+      throw e;
+    }
   }
 
   async removeAd(adId: string) {
@@ -173,20 +205,11 @@ export class BinanceP2PClient {
   // ─── Balance ─────────────────────────────────────────────────
 
   async getBalance(coin = "USDT") {
-    const params = { recvWindow: 60000, timestamp: Date.now(), accountType: "FUND" };
-    const queryStr = this.buildQueryString(params);
-    const signature = this.sign(queryStr);
-    const url = `${this.apiBase}/sapi/v1/asset/transfer/query/account-balance?${queryStr}&signature=${encodeURIComponent(signature)}`;
-    const res = await fetch(url, {
-      headers: { "X-MBX-APIKEY": this.apiKey },
-    });
-    const text = await res.text();
-    let data: any;
-    try { data = JSON.parse(text); } catch { throw new Error(`Binance balance error: ${text.slice(0, 200)}`); }
-    if (Array.isArray(data)) {
-      const asset = data.find((b: any) => b.coin === coin);
-      return { balance: asset ? [{ coin: asset.coin, balance: asset.balance }] : [] };
+    const res = await this.privateRequest("/sapi/v1/asset/get-funding-asset", {}, { asset: coin });
+    if (Array.isArray(res)) {
+      const asset = res.find((b: any) => b.asset === coin);
+      return asset ? { free: asset.free, locked: asset.locked, balance: asset.free } : { free: "0", locked: "0", balance: "0" };
     }
-    return data;
+    return { free: "0", locked: "0", balance: "0" };
   }
 }

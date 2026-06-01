@@ -2174,11 +2174,11 @@
             <div id="binance-creds-status" style="margin-bottom:16px; padding:10px; border-radius:8px; background:#1a3a5a; font-size:13px; color:#aaa;">Verificando estado...</div>
             <div style="margin-bottom:12px;">
               <label style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">API Key</label>
-              <input id="input-binance-api-key" type="password" placeholder="Ingresa tu Binance API Key" style="width:100%; padding:10px; background:#071828; border:1px solid #1a3a5a; border-radius:6px; color:#fff; font-size:13px; box-sizing:border-box;">
+              <input id="input-binance-api-key" type="password" autocomplete="new-password" placeholder="Ingresa tu Binance API Key" style="width:100%; padding:10px; background:#071828; border:1px solid #1a3a5a; border-radius:6px; color:#fff; font-size:13px; box-sizing:border-box;">
             </div>
             <div style="margin-bottom:16px;">
               <label style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">Secret Key</label>
-              <input id="input-binance-secret-key" type="password" placeholder="Ingresa tu Binance Secret Key" style="width:100%; padding:10px; background:#071828; border:1px solid #1a3a5a; border-radius:6px; color:#fff; font-size:13px; box-sizing:border-box;">
+              <input id="input-binance-secret-key" type="password" autocomplete="new-password" placeholder="Ingresa tu Binance Secret Key" style="width:100%; padding:10px; background:#071828; border:1px solid #1a3a5a; border-radius:6px; color:#fff; font-size:13px; box-sizing:border-box;">
             </div>
             <button id="btn-save-binance-creds" style="padding:10px 20px; background:#007bff; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:14px;">Guardar credenciales</button>
           </div>
@@ -9350,6 +9350,10 @@ function addP2PBotStyles(){
     .bot-ad-card .ad-status.private{background:rgba(251,191,36,.12);color:#fbbf24;}
     .bot-ad-card .ad-status.offline{background:rgba(148,163,184,.12);color:#94a3b8;}
     .bot-ad-card .ad-actions{display:flex;gap:6px;}
+    .ad-bot-config{margin-top:10px;border-top:1px solid rgba(148,163,184,.1);padding-top:10px;}
+    .ad-bot-config-inner{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+    .ad-bot-config-inner label{display:flex;flex-direction:column;font-size:10px;color:#94a3b8;gap:2px;}
+    .ad-bot-config-inner label input,.ad-bot-config-inner label select{padding:4px 6px;border-radius:4px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.5);color:#f8fafc;font-size:11px;outline:none;}
     .bot-panel-form .tag-list{display:flex;flex-wrap:wrap;gap:4px;}
     .bot-panel-form .tag-list .tag{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:10px;font-size:10px;background:rgba(37,99,235,.12);color:#93c5fd;}
     .bot-panel-form .tag-list .tag .remove{color:#fb7185;cursor:pointer;font-size:12px;line-height:1;}
@@ -9370,6 +9374,55 @@ function addP2PBotStyles(){
     .bot-config-toggle:hover{color:#94a3b8;}
     .bot-config-toggle .arrow{transition:transform .2s;display:inline-block;}
     .bot-config-toggle .arrow.open{transform:rotate(90deg);}
+    /* Ads row layout */
+    .bot-ads-row{display:flex;flex-direction:column;gap:6px;}
+    .bot-ad-pill{display:flex;flex-direction:column;border-radius:12px;background:linear-gradient(135deg,rgba(15,23,42,.5),rgba(15,23,42,.3));border:1px solid rgba(148,163,184,.1);transition:all .12s;overflow:hidden;}
+
+    .bot-ad-pill:hover{border-color:rgba(148,163,184,.2);background:linear-gradient(135deg,rgba(15,23,42,.6),rgba(15,23,42,.4));}
+
+    .bot-ad-pill.selected{border-color:var(--brand);background:rgba(37,99,235,.08);}
+
+    .bot-ad-card-header{display:flex;align-items:center;gap:8px;padding:10px 12px 0;font-size:12px;font-weight:600;color:#e2e8f0;}
+
+    .bot-ad-card-header .sell-label{color:#ef4444;font-weight:700;}
+
+    .bot-ad-card-header .status-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:500;margin-left:auto;padding:2px 8px;border-radius:4px;white-space:nowrap;}
+
+    .bot-ad-card-header .status-badge .dot{width:6px;height:6px;border-radius:50%;background:#34d399;}
+
+    .bot-ad-card-body{padding:8px 12px 4px;display:flex;flex-direction:column;gap:6px;}
+
+    .bot-ad-card-price{font-size:22px;font-weight:800;color:#34d399;line-height:1.2;padding:4px 0 2px;}
+
+    .bot-ad-card-rows{display:flex;flex-direction:column;gap:2px;font-size:11px;color:#94a3b8;}
+
+    .bot-ad-card-rows .row{display:flex;align-items:center;gap:6px;}
+
+    .bot-ad-card-rows .row .label{color:#64748b;min-width:52px;}
+
+    .bot-ad-card-rows .row .value{color:#e2e8f0;font-weight:600;margin-left:auto;}
+
+    .bot-ad-card-rows .row .sync-btn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:rgba(148,163,184,.08);color:#94a3b8;font-size:10px;cursor:pointer;transition:all .12s;flex-shrink:0;}
+    .bot-ad-card-rows .row .sync-btn:hover{background:rgba(52,211,153,.15);color:#34d399;}
+    .bot-ad-card-rows .row .sync-btn:active{transform:rotate(180deg);}
+
+    .bot-ad-card-methods{display:flex;flex-wrap:wrap;gap:4px;padding:4px 12px 6px;}
+
+    .bot-ad-card-methods .pm-badge{font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(37,99,235,.12);color:#93c5fd;font-weight:500;white-space:nowrap;}
+
+    .bot-ad-card-actions{display:flex;align-items:center;justify-content:space-between;padding:6px 12px 8px;border-top:1px solid rgba(148,163,184,.06);}
+
+    .bot-ad-card-header .menu-btn{background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;padding:2px 4px;line-height:1;letter-spacing:1px;transition:color .12s;}
+
+    .bot-ad-card-header .menu-btn:hover{color:#e2e8f0;}
+
+    /* iOS toggle switch */
+    .toggle-switch{position:relative;display:inline-block;width:40px;height:22px;flex-shrink:0;}
+    .toggle-switch input{opacity:0;width:0;height:0;}
+    .toggle-switch .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#475569;border-radius:22px;transition:.2s;}
+    .toggle-switch .slider::before{content:"";position:absolute;height:18px;width:18px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
+    .toggle-switch input:checked+.slider{background:#22c55e;}
+    .toggle-switch input:checked+.slider::before{transform:translateX(18px);}
   `;
   document.head.appendChild(style);
 }
@@ -9436,93 +9489,103 @@ function addP2PBotStyles(){
           <div class="bot-kpi"><div class="kpi-label">Anuncio propio</div><div class="kpi-value" id="botKpiOurAd" style="font-size:14px;">—</div><div class="kpi-sub" id="botKpiOurAdStatus"></div></div>
         </div>
 
-        <!-- Two-column: Config + Credentials -->
+        <!-- Four cards: Config exchange → Anuncios → Credenciales → Config anuncio -->
         <div class="bot-cols">
+          <!-- Exchange-level config (first, collapsible) -->
           <div id="botExchangeConfigSection" class="bot-card bot-cols-full">
-            <button class="bot-config-toggle" id="botConfigToggle" onclick="var c=document.getElementById('botConfigGrid');var a=this.querySelector('.arrow');c.style.display=c.style.display==='none'?'grid':'none';a.classList.toggle('open');">
-              <span class="arrow">▶</span> Configuraci\u00F3n del exchange
+            <button class="bot-config-toggle" id="botExConfigToggle" onclick="var c=document.getElementById('botExchangeConfigGrid');var a=this.querySelector('.arrow');c.style.display=c.style.display==='none'?'grid':'none';a.classList.toggle('open');">
+              <span class="arrow open">▶</span> Config del exchange <span style="font-size:10px;color:#64748b;font-weight:400;">(default para todos los anuncios)</span>
             </button>
-            <div class="bot-config-grid" id="botConfigGrid">
+            <div class="bot-config-grid" id="botExchangeConfigGrid">
               <label>
                 Estrategia
-                <select id="botStrategy" onchange="window.botSaveExchangeConfig()">
-                  <option value="top1">Top 1 (seguir al mejor precio)</option>
+                <select id="botExStrategy" onchange="window.botSaveExchangeConfig();var g=document.getElementById('botExchangeConfigGrid');var t=g.querySelector('#botExTop1DiffLabel');var s=g.querySelector('#botExSpreadPctLabel');if(t)t.style.display=this.value==='spread'?'none':'';if(s)s.style.display=this.value==='top1'?'none':''">
+                  <option value="top1">Top 1</option>
                   <option value="spread">Spread fijo</option>
                 </select>
               </label>
-              <label id="botTop1DiffLabel" style="position:relative;">
-                <div style="display:flex;align-items:center;gap:6px;">
-                  <span>Diferencia top 1 (CLP)</span>
-                  <span style="flex:1;"></span>
-                  <button type="button" onclick="window.botSaveExchangeConfig();window.botRefreshExchange();" title="Guardar y actualizar" style="flex:0 0 auto;width:28px;height:28px;border-radius:5px;border:1px solid rgba(148,163,184,.12);background:rgba(37,99,235,.1);color:#818cf8;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:all .15s;" onmouseover="this.style.background='rgba(37,99,235,.25)'" onmouseout="this.style.background='rgba(37,99,235,.1)'">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                  </button>
-                </div>
-                <input id="botTop1Diff" type="number" step="0.01" value="0.1" onchange="window.botSaveExchangeConfig()">
+              <label id="botExTop1DiffLabel">
+                <span style="display:flex;align-items:center;justify-content:space-between;width:100%;"><span>Diferencia top 1 (CLP)</span><button class="btn small ghost" type="button" onclick="window.botSaveExchangeConfig()" title="Guardar" style="font-size:12px;padding:2px 6px;">💾</button></span>
+                <input id="botExTop1Diff" type="number" step="0.01" value="0.1" onchange="window.botSaveExchangeConfig()">
                 <span class="help-text">Precio = mejor competidor − este valor</span>
               </label>
-              <label>
-                Spread m\u00EDnimo (%)
-                <input id="botSpreadPct" type="number" step="0.1" value="0.5" onchange="window.botSaveExchangeConfig()">
+              <label id="botExSpreadPctLabel" style="display:none;">
+                Spread (%)
+                <input id="botExSpreadPct" type="number" step="0.1" value="0.5" onchange="window.botSaveExchangeConfig()">
               </label>
               <label>
-                Precio m\u00EDnimo venta (CLP)
+                Precio fuente
                 <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
-                  <select id="botPriceSource" onchange="togglePriceSource();window.botSaveExchangeConfig()" style="flex:0 0 100px;padding:7px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;outline:none;font-family:inherit;">
-                    <option value="auto">Capacity</option>
+                  <select id="botExPriceSource" onchange="window.botSaveExchangeConfig();botUpdateBuyPrice()" style="flex:0 0 100px;padding:7px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;outline:none;font-family:inherit;">
+                    <option value="capacity">Capacity</option>
                     <option value="manual">Manual</option>
                   </select>
-                  <input id="botPriceFloorPct" type="number" step="0.01" value="0" placeholder="895.83" onchange="botUpdateBuyPrice();window.botSaveExchangeConfig()" style="flex:1;min-width:0;">
+                  <input id="botExPriceFloorPct" type="number" step="0.01" value="0" placeholder="895.83" onchange="botUpdateBuyPrice();window.botSaveExchangeConfig()" style="flex:1;min-width:0;">
                 </div>
-                <span class="help-text" id="botPriceHelpText">Precio m\u00EDnimo de venta en CLP</span>
+                <span class="help-text">Precio mínimo de venta en CLP</span>
+              </label>
+              <label id="botExCommissionPctLabel" style="display:none;">
+                Comisión (%)
+                <input id="botExCommissionPct" type="number" step="0.01" value="0.14" onchange="window.botSaveExchangeConfig()">
               </label>
               <label>
-                Circuit breaker (% ca\u00EDda)
-                <input id="botCircuitBreakPct" type="number" step="0.1" value="3" onchange="window.botSaveExchangeConfig()">
+                Margen seguridad (%)
+                <input id="botExSafeMarginPct" type="number" step="0.01" value="0" onchange="window.botSaveExchangeConfig();window.botExUpdateSafeMarginHint()" oninput="window.botExUpdateSafeMarginHint()">
+                <span id="botExSafeMarginHint" style="font-size:10px;color:#64748b;"></span>
+                <span class="help-text">No competir si el #1 está a menos de este % sobre tu costo real</span>
               </label>
               <label>
-                Vol. m\u00E1ximo diario (USDT)
-                <input id="botDailyVolumeCap" type="number" value="" placeholder="Sin l\u00EDmite" onchange="window.botSaveExchangeConfig()">
+                Capital min competidor (USDT)
+                <input id="botExMinCompetitorCapital" type="number" step="1" value="" placeholder="Sin filtro" onchange="window.botSaveExchangeConfig()">
+              </label>
+              <label>
+                Filtrar pago
+                <select id="botExCompetePayType" onchange="window.botSaveExchangeConfig()">
+                  <option value="all">Todos</option>
+                  <option value="match">Mismos del anuncio</option>
+                </select>
+              </label>
+              <label>
+                Circuit breaker (% caída)
+                <input id="botCircuitBreakPct" type="number" step="0.1" value="3" autocomplete="off" onblur="window.botSaveExchangeConfig()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+              </label>
+              <label>
+                Vol. máximo diario (USDT)
+                <input id="botDailyVolumeCap" type="number" value="" placeholder="Sin límite" autocomplete="off" onblur="window.botSaveExchangeConfig()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
               </label>
               <label>
                 Intervalo ciclo (seg)
-                <input id="botCycleInterval" type="number" step="0.1" value="10" min="1" onchange="window.botSaveExchangeConfig()">
+                <input id="botCycleInterval" type="number" step="0.1" value="10" min="1" autocomplete="off" onblur="window.botSaveExchangeConfig()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
                 <span class="help-text">Tiempo entre cada ciclo</span>
-              </label>
-              <label>
-                Capital m\u00EDnimo competidor (USDT)
-                <input id="botMinCompetitorCapital" type="number" step="1" value="" placeholder="Sin filtro" onchange="window.botSaveExchangeConfig()">
-                <span class="help-text">Ignorar competidores con menos capital</span>
-              </label>
-              <label>
-                Filtrar por m\u00E9todo de pago
-                <select id="botCompetePayType" onchange="window.botSaveExchangeConfig()">
-                  <option value="all">Todos</option>
-                  <option value="match">Solo mismos m\u00E9todos del anuncio</option>
-                </select>
-                <span class="help-text">Competir solo con anuncios que tengan tus mismos m\u00E9todos de pago</span>
-              </label>
-              <label id="botCommissionField">
-                Comisi\u00F3n exchange (%)
-                <input id="botCommissionPct" type="number" step="0.01" value="0.14" onchange="window.botSaveExchangeConfig()">
-                <span class="help-text">Comisi\u00F3n del exchange (Binance 0.14%, Bybit 0%)</span>
-              </label>
-              <label id="botSafeMarginField">
-                Margen seguridad (%)
-                <input id="botSafeMarginPct" type="number" step="0.01" value="0" onchange="window.botSaveExchangeConfig()">
-                <span class="help-text">No competir si el #1 est\u00E1 a menos de este % sobre tu costo real</span>
               </label>
             </div>
           </div>
 
+          <!-- Anuncios (second) -->
+          <div id="botAdsSection" class="bot-card" style="grid-column:1/-1;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+              <span style="font-size:13px;font-weight:700;color:#e2e8f0;">Anuncios</span>
+              <span style="font-size:11px;color:#64748b;" id="botAdsExchangeLabel">Binance</span>
+              <span style="flex:1;"></span>
+              <button class="btn small ghost" type="button" onclick="window.botLoadAds()" style="font-size:10px;">↻</button>
+              <button class="btn small ghost" type="button" onclick="window.botPanelNewAd()" style="font-size:10px;">+ Nuevo</button>
+            </div>
+            <div id="botAdsList" class="bot-ads-row">
+              <div style="color:#64748b;font-size:12px;text-align:center;padding:12px 0;">Cargando anuncios...</div>
+            </div>
+          </div>
+
+          <!-- Credenciales (third) -->
           <div id="botCredentialsSection" class="bot-card" style="grid-column:1/-1;">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-size:13px;font-weight:700;color:#e2e8f0;">Credenciales</span>
               <span style="font-size:11px;color:#64748b;" id="botCredExchangeLabel">Binance</span>
             </div>
-            <div id="botCredFields" class="bot-cred-fields"></div>
+            <div id="botCredFields" class="bot-cred-fields" style="margin-top:10px;"></div>
             <div id="botCredStatus" style="margin-top:8px;font-size:12px;color:#94a3b8;"></div>
           </div>
+
+          <!-- no more separate per-ad config container -- config is inline in each ad pill -->
         </div>
 
         <!-- Two-column: Log + Orders -->
@@ -9657,25 +9720,339 @@ function addP2PBotStyles(){
       }
       document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
-      setTimeout(() => window.botRefreshExchange(), 200);
+      if(!window.botSelectedExchange) window.botSelectedExchange = "binance";
+      setTimeout(function(){ window.botSelectExchange(window.botSelectedExchange); }, 50);
+      setTimeout(window.botRefreshExchange, 300);
     });
   }
 
   window.botSelectExchange = function(exchange){
     botSelectedExchange = exchange;
+    botSelectedAdId = null;
     document.querySelectorAll(".bot-exchange-btn").forEach(b => {
       b.classList.toggle("active", b.dataset.exchange === exchange);
     });
     document.getElementById("botCredExchangeLabel").textContent = exchange.charAt(0).toUpperCase() + exchange.slice(1);
+    document.getElementById("botAdsExchangeLabel").textContent = exchange.charAt(0).toUpperCase() + exchange.slice(1);
 
-    // Show/hide fields per exchange
-    const commissionField = document.getElementById("botCommissionField");
-    if(commissionField) commissionField.style.display = exchange === "binance" ? "" : "none";
+    // Show sections
+    const adsSection = document.getElementById("botAdsSection");
+    if(adsSection) adsSection.style.display = "";
 
-    // Update buy price card instantly (sin esperar API)
+    // Show exchange config grid (circuit breaker, volume, interval)
+    const exchangeConfigGrid = document.getElementById("botExchangeConfigGrid");
+    if(exchangeConfigGrid) exchangeConfigGrid.style.display = "grid";
+
+    // Show/hide commission fields based on exchange
+    var commLabel = document.getElementById("botExCommissionPctLabel");
+    if(commLabel) commLabel.style.display = exchange === "bybit" ? "none" : "";
     botUpdateBuyPrice();
     window.botRefreshExchange();
+    window.botLoadAds();
   };
+
+  /* Per-ad functions for main view */
+
+  window.botLoadAds = async function(){
+    const container = document.getElementById("botAdsList");
+    if(!container) return;
+    try{
+      const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange, { credentials:"include" });
+      const d = await r.json();
+      if(!d?.ok || !d?.ads?.length){
+        container.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:12px 0;">Sin anuncios</div>';
+        return;
+      }
+      const sellAds = d.ads.filter(a => (a.tradeType||'').toUpperCase() === 'SELL' && (a.asset||'').toUpperCase() === 'USDT' && (a.fiat||'').toUpperCase() === 'CLP');
+      if(!sellAds.length){
+        container.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:12px 0;">Sin anuncios de venta USDT/CLP</div>';
+        return;
+      }
+      container.innerHTML = sellAds.map(function(a, idx){
+        return botRenderAdPill(a, idx);
+      }).join('');
+      botUpdateBuyPrice();
+    }catch(e){ console.warn("[P2P Bot] botLoadAds error:", e); }
+  };
+
+  function botRenderAdPill(a, idx){
+    const isFirst = idx === 0;
+    const botEnabled = a.botEnabled === true;
+    const realId = a.id;
+    var pms = a.paymentMethods;
+    if(pms && typeof pms === 'string') pms = [pms];
+    var pmStr = (pms && Array.isArray(pms) && pms.length) ? pms.slice(0,2).join(', ') + (pms.length > 2 ? '...' : '') : '-';
+    var pmBadges = (pms && Array.isArray(pms)) ? pms.slice(0,3) : [];
+    var pmExtra = (pms && Array.isArray(pms) && pms.length > 3) ? '+' + (pms.length - 3) : '';
+    const isOnline = botEnabled && (a.status === 'online' || a.isActive === true);
+    const cfgDisplay = (!isFirst && window['_adCfgOpen'] && window['_adCfgOpen'][realId]) ? '' : 'none';
+    // Config grid template
+    var strategy = a.botStrategy || 'top1';
+    var top1Diff = a.botTop1Diff != null ? a.botTop1Diff : '';
+    var spreadPct = a.botSpreadPct != null ? a.botSpreadPct : '';
+    var priceSource = a.botPriceSource || 'manual';
+    var priceFloor = a.botPriceFloorPct != null ? a.botPriceFloorPct : '';
+    var commission = a.botCommissionPct != null ? a.botCommissionPct : '';
+    var safeMargin = a.botSafeMarginPct != null ? a.botSafeMarginPct : '';
+    var minCapital = a.botMinCompetitorCapital != null ? a.botMinCompetitorCapital : '';
+    var payType = (a.botCompetePayTypes && a.botCompetePayTypes.length && a.botCompetePayTypes[0] === '__match_ad__') ? 'match' : 'all';
+    var top1Style = strategy === 'spread' ? 'display:none;' : '';
+    var spreadStyle = strategy === 'top1' ? 'display:none;' : '';
+    return `<div class="bot-ad-pill" data-ad-real-id="${realId}" data-ad-adid="${a.adId||''}">
+      <div class="bot-ad-card-header">
+        <span class="sell-label">Vender</span><span style="flex:1;">${a.asset||'USDT'} con ${a.fiat||'CLP'}</span>
+        <span class="status-badge" style="background:${isOnline?'rgba(52,211,153,.12)':'rgba(100,116,139,.12)'};color:${isOnline?'#34d399':'#94a3b8'};"><span class="dot" style="background:${isOnline?'#34d399':'#64748b'};"></span>${isOnline ? 'En línea' : 'Desconectado'}</span>
+        <label class="toggle-switch">
+          <input type="checkbox" ${botEnabled?'checked':''} onchange="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',this.checked)">
+          <span class="slider"></span>
+        </label>
+        <button class="menu-btn" onclick="event.stopPropagation();window.botOpenPanel();setTimeout(function(){window.botSwitchPanelTab('ads');setTimeout(function(){window.botPanelEditAd(${realId});},100);},100);" title="Editar anuncio">⋯</button>
+      </div>
+      <div class="bot-ad-card-body" style="cursor:${isFirst?'default':'pointer'};" onclick="${isFirst?'':'botToggleAdCfg('+realId+')'}">
+        <div class="bot-ad-card-price"><span id="botAdPrice_${realId}" style="color:#34d399;">${fmt(a.price)}</span> CLP</div>
+        <div class="bot-ad-card-rows">
+          <div class="row"><span class="label">Balance</span><span class="value" id="botAdAmount_${realId}">${fmtFlex(a.amount)} ${a.asset||'USDT'}</span><span class="sync-btn" onclick="event.stopPropagation();botSyncQuantity(${realId})" title="Sincronizar saldo">↻</span></div>
+          <div class="row"><span class="label">Límite</span><span class="value" id="botAdLimits_${realId}">$${fmtInt(a.minAmount||0)} - $${fmtInt(a.maxAmount||0)} CLP</span></div>
+        </div>
+      </div>
+      <div class="bot-ad-card-methods">
+        ${pmBadges.map(function(pm){ return '<span class="pm-badge">'+fmtPayName(pm)+'</span>'; }).join('')}
+        ${pmExtra ? '<span class="pm-badge" style="background:rgba(148,163,184,.1);color:#94a3b8;">'+escHtml(pmExtra)+'</span>' : ''}
+      </div>
+      ${isFirst?'':`<div style="padding:0 12px 4px;cursor:pointer;" onclick="botToggleAdCfg(${realId})">
+        <div style="display:flex;align-items:center;gap:4px;font-size:10px;color:#64748b;padding:2px 0;">
+          <span style="flex:1;border-top:1px solid rgba(148,163,184,.06);"></span>
+          <span id="adCfgArrow_${realId}" style="transition:transform .2s;font-size:8px;">▼</span>
+          <span style="font-weight:500;">Config</span>
+          <span style="flex:1;border-top:1px solid rgba(148,163,184,.06);"></span>
+        </div>
+      </div>`}
+      ${isFirst?'':`<div class="bot-ad-pill-cfg" id="adCfg_${realId}" style="display:${cfgDisplay};padding:6px 12px 10px;">
+        <div class="bot-config-grid">
+          <label>Estrategia
+            <select id="adCfg_${realId}_Strategy" onchange="botAdCfgStrategyChange(${realId},this.value);botSaveAdCfgField(${realId},'botStrategy',this.value)">
+              <option value="top1" ${strategy==='top1'?'selected':''}>Top 1</option>
+              <option value="spread" ${strategy==='spread'?'selected':''}>Spread fijo</option>
+            </select>
+          </label>
+          <label id="adCfg_${realId}_Top1DiffLabel" style="${top1Style}">Diferencia top 1 (CLP)
+            <span style="display:flex;align-items:center;gap:4px;"><input id="adCfg_${realId}_Top1Diff" type="number" step="0.01" value="${top1Diff}" placeholder="0.10" onchange="botSaveAdCfgField(${realId},'botTop1Diff',this.value)" style="flex:1;"><button class="btn small ghost" type="button" onclick="botSaveAdCfgBulk(${realId})" title="Guardar" style="font-size:12px;padding:1px 4px;">💾</button></span>
+          </label>
+          <label id="adCfg_${realId}_SpreadPctLabel" style="${spreadStyle}">Spread (%)
+            <input id="adCfg_${realId}_SpreadPct" type="number" step="0.1" value="${spreadPct}" placeholder="0.5" onchange="botSaveAdCfgField(${realId},'botSpreadPct',this.value)">
+          </label>
+          <label>Precio fuente
+            <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
+              <select id="adCfg_${realId}_PriceSource" onchange="botSaveAdCfgField(${realId},'botPriceSource',this.value);botUpdateAdCostBadge(${realId})" style="flex:0 0 100px;padding:7px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;outline:none;font-family:inherit;">
+                <option value="capacity" ${priceSource==='capacity'?'selected':''}>Capacity</option>
+                <option value="manual" ${priceSource==='manual'?'selected':''}>Manual</option>
+              </select>
+              <input id="adCfg_${realId}_PriceFloorPct" type="number" step="0.01" value="${priceFloor}" placeholder="895.83" onchange="botUpdateAdCostBadge(${realId});botSaveAdCfgField(${realId},'botPriceFloorPct',this.value);botAdUpdateRealCost(${realId})" oninput="botAdUpdateRealCost(${realId})" style="flex:1;min-width:0;">
+            </div>
+          </label>
+          <label id="adCfg_${realId}_CommissionPctLabel" class="ad-pill-comm-field" style="display:${botSelectedExchange==='bybit'?'none':''};">Comisión (%)
+            <input id="adCfg_${realId}_CommissionPct" type="number" step="0.01" value="${commission}" placeholder="0.14" onchange="botSaveAdCfgField(${realId},'botCommissionPct',this.value);botUpdateAdCostBadge(${realId})">
+            <span id="adCfg_${realId}_RealCost" style="font-size:11px;color:#34d399;font-weight:600;"></span>
+          </label>
+          <label>Margen seguridad (%)
+            <input id="adCfg_${realId}_SafeMarginPct" type="number" step="0.01" value="${safeMargin}" placeholder="0" onchange="botSaveAdCfgField(${realId},'botSafeMarginPct',this.value);botAdUpdateSafeMarginHint(${realId})" oninput="botAdUpdateSafeMarginHint(${realId})">
+            <span id="adCfg_${realId}_SafeMarginHint" style="font-size:10px;color:#34d399;"></span>
+          </label>
+          <label>Capital min competidor (USDT)
+            <input id="adCfg_${realId}_MinCompetitorCapital" type="number" step="1" value="${minCapital}" placeholder="Sin filtro" onchange="botSaveAdCfgField(${realId},'botMinCompetitorCapital',this.value)">
+          </label>
+          <label>Filtrar pago
+            <select id="adCfg_${realId}_CompetePayType" onchange="botSaveAdCfgField(${realId},'botCompetePayTypes',this.value)">
+              <option value="all" ${payType==='all'?'selected':''}>Todos</option>
+              <option value="match" ${payType==='match'?'selected':''}>Mismos del anuncio</option>
+            </select>
+          </label>
+          <label>Intervalo ciclo (seg)
+            <input id="adCfg_${realId}_CycleInterval" type="number" step="1" min="1" value="${a.botCycleInterval != null ? a.botCycleInterval : ''}" placeholder="10" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botCycleInterval',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+          </label>
+          <label>Circuit breaker (% caída)
+            <input id="adCfg_${realId}_CircuitBreakPct" type="number" step="0.1" value="${a.botCircuitBreakPct != null ? a.botCircuitBreakPct : ''}" placeholder="3" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botCircuitBreakPct',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+          </label>
+          <label>Vol. máximo diario (USDT)
+            <input id="adCfg_${realId}_DailyVolumeCapUsdt" type="number" step="1" value="${a.botDailyVolumeCapUsdt != null ? a.botDailyVolumeCapUsdt : ''}" placeholder="Sin límite" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botDailyVolumeCapUsdt',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+          </label>
+        </div>
+      </div>`}
+    </div>`;
+  }
+
+  window.botToggleAdCfg = function(realId){
+    if(!window._adCfgOpen) window._adCfgOpen = {};
+    var open = !window._adCfgOpen[realId];
+    window._adCfgOpen[realId] = open;
+    var el = document.getElementById("adCfg_" + realId);
+    if(el) el.style.display = open ? '' : 'none';
+    var arrow = document.getElementById("adCfgArrow_" + realId);
+    if(arrow) arrow.style.transform = open ? 'rotate(180deg)' : '';
+    botUpdateAdCostBadge(realId);
+    botAdUpdateSafeMarginHint(realId);
+    botAdUpdateRealCost(realId);
+  };
+
+  window.botAdCfgStrategyChange = function(realId, value){
+    var t = document.getElementById("adCfg_" + realId + "_Top1DiffLabel");
+    var s = document.getElementById("adCfg_" + realId + "_SpreadPctLabel");
+    if(t) t.style.display = value === 'spread' ? 'none' : '';
+    if(s) s.style.display = value === 'top1' ? 'none' : '';
+  };
+
+  window.botSaveAdCfgField = function(realId, field, value){
+    var body = { exchange: botSelectedExchange, id: realId };
+    if(field === 'botCompetePayTypes'){
+      body[field] = value === 'match' ? ['__match_ad__'] : null;
+    } else {
+      body[field] = value === '' ? null : (field === 'botStrategy' || field === 'botPriceSource' ? value : Number(value));
+    }
+    fetch("/api/p2p/bot/ads", {
+      method:"PUT", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(body)
+    }).catch(function(e){ console.warn("[P2P Bot] save cfg error:", e); });
+  };
+
+  window.botSaveAdCfgBulk = function(realId){
+    if(!realId) return;
+    var body = { exchange: botSelectedExchange, id: realId };
+    body.botStrategy       = document.getElementById("adCfg_" + realId + "_Strategy").value;
+    body.botTop1Diff       = parseFloat(document.getElementById("adCfg_" + realId + "_Top1Diff").value) || null;
+    body.botSpreadPct      = parseFloat(document.getElementById("adCfg_" + realId + "_SpreadPct").value) || null;
+    body.botPriceSource    = document.getElementById("adCfg_" + realId + "_PriceSource").value;
+    body.botPriceFloorPct  = parseFloat(document.getElementById("adCfg_" + realId + "_PriceFloorPct").value) || null;
+    body.botCommissionPct  = parseFloat(document.getElementById("adCfg_" + realId + "_CommissionPct").value) || null;
+    body.botSafeMarginPct  = parseFloat(document.getElementById("adCfg_" + realId + "_SafeMarginPct").value) || null;
+    body.botMinCompetitorCapital = parseFloat(document.getElementById("adCfg_" + realId + "_MinCompetitorCapital").value) || null;
+    var payType = document.getElementById("adCfg_" + realId + "_CompetePayType").value;
+    body.botCompetePayTypes = payType === "match" ? ["__match_ad__"] : null;
+    var cycleInp = document.getElementById("adCfg_" + realId + "_CycleInterval");
+    body.botCycleInterval = cycleInp ? parseInt(cycleInp.value) || null : null;
+    var cbInp = document.getElementById("adCfg_" + realId + "_CircuitBreakPct");
+    body.botCircuitBreakPct = cbInp ? parseFloat(cbInp.value) || null : null;
+    var dvInp = document.getElementById("adCfg_" + realId + "_DailyVolumeCapUsdt");
+    body.botDailyVolumeCapUsdt = dvInp ? parseFloat(dvInp.value) || null : null;
+    var _r = Math.random().toString(36).slice(2);
+    fetch("/api/p2p/bot/ads?_=" + _r, {
+      method:"PUT", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(body)
+    }).then(function(){ window.botLoadAds(); }).catch(function(e){ console.warn("[P2P Bot] save bulk error:", e); });
+  };
+
+  window.botUpdateAdCostBadge = function(realId){
+    var source = document.getElementById("adCfg_" + realId + "_PriceSource")?.value || 'manual';
+    if(source === 'manual') { botRefreshAdPrices(); botAdUpdateRealCost(realId); return; }
+    var cache = window.__p2pCapacityCache;
+    if(!cache || !Array.isArray(cache) || cache.length === 0){
+      fetch('/api/p2p/capacity', { credentials: 'include' }).then(function(r){ return r.json(); }).then(function(data){
+        if(data?.ok && Array.isArray(data.items)) window.__p2pCapacityCache = data.items;
+        botUpdateAdCostBadge(realId);
+      }).catch(function(){});
+      return;
+    }
+    var active = cache.find(function(c){ return c.buyPrice && c.status !== "finished" && !c._capital; });
+    if(active){
+      var floorInp = document.getElementById("adCfg_" + realId + "_PriceFloorPct");
+      if(floorInp) floorInp.value = Number(active.buyPrice).toFixed(2);
+    }
+    botRefreshAdPrices();
+    botAdUpdateRealCost(realId);
+  };
+
+  window.botAdUpdateRealCost = function(realId){
+    var costEl = document.getElementById("adCfg_" + realId + "_RealCost");
+    if(!costEl) return;
+    var source = document.getElementById("adCfg_" + realId + "_PriceSource")?.value || 'manual';
+    var basePrice = 0;
+    var priceSource = "";
+    if(source === 'capacity'){
+      var cache = window.__p2pCapacityCache;
+      if(cache && Array.isArray(cache)){
+        var active = cache.find(function(c){ return c.buyPrice && c.status !== "finished" && !c._capital; });
+        if(active?.buyPrice){
+          basePrice = Number(active.buyPrice);
+          priceSource = active.provider || active.country || "Capacity";
+        }
+      }
+    }else{
+      var manualVal = document.getElementById("adCfg_" + realId + "_PriceFloorPct")?.value;
+      basePrice = parseFloat(manualVal) || 0;
+      priceSource = "Manual";
+    }
+    if(basePrice > 0){
+      var commPct = parseFloat(document.getElementById("adCfg_" + realId + "_CommissionPct").value);
+      if(!commPct || isNaN(commPct)) commPct = parseFloat(document.getElementById("botExCommissionPct").value) || 0.14;
+      var realCost = basePrice * (1 + commPct / 100);
+      if(botSelectedExchange === 'binance'){
+        costEl.textContent = "COSTO REAL: $" + realCost.toFixed(2) + " (" + priceSource + " + " + commPct + "%)";
+      }else{
+        costEl.textContent = "PRECIO: $" + basePrice.toFixed(2);
+      }
+      costEl.style.display = '';
+    }else{
+      costEl.style.display = 'none';
+    }
+  };
+
+  window.botRefreshAdPrices = async function(){
+    var ex = botSelectedExchange;
+    if(!ex) return;
+    try{
+      var r = await fetch("/api/p2p/bot/ads?exchange=" + encodeURIComponent(ex), { credentials:"include" });
+      var d = await r.json();
+      if(!d?.ok || !Array.isArray(d.ads)) return;
+      d.ads.forEach(function(a){
+        var priceSpan = document.getElementById("botAdPrice_" + a.id);
+        if(priceSpan && a.price != null) priceSpan.textContent = a.price.toFixed(2);
+        var amountSpan = document.getElementById("botAdAmount_" + a.id);
+        if(amountSpan && a.amount != null) amountSpan.textContent = fmtFlex(a.amount) + " " + (a.asset||'USDT');
+        var limitsSpan = document.getElementById("botAdLimits_" + a.id);
+        if(limitsSpan && a.minAmount != null) limitsSpan.textContent = "$" + fmtInt(a.minAmount) + " - $" + fmtInt(a.maxAmount) + " CLP";
+      });
+    }catch(e){}
+  };
+
+  window.botToggleAdMain = function(id, adId, enabled){
+    var body = { exchange: botSelectedExchange, botEnabled: enabled, botManaged: enabled };
+    if(adId) body.adId = String(adId);
+    else if(id) body.id = Number(id);
+    fetch("/api/p2p/bot/ads", {
+      method:"PUT", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(body)
+    }).then(function(r){
+      return r.json().then(function(d){
+        if(!d.ok) console.warn("[P2P Bot] toggle error:", d);
+        window.botLoadAds();
+      });
+    }).catch(function(e){ console.warn("[P2P Bot] toggle error", e); });
+  };
+
+  window.botSyncQuantity = async function(realId){
+    var adId = document.querySelector('[data-ad-real-id="' + realId + '"]')?.dataset?.adAdid;
+    if(!adId) return;
+    var btn = document.querySelector('[data-ad-real-id="' + realId + '"] .bot-ad-card-rows .sync-btn');
+    if(btn) btn.textContent = '···';
+    try{
+      var r = await fetch("/api/p2p/bot/sync-quantity", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ exchange: botSelectedExchange, adId: adId })
+      });
+      var d = await r.json();
+      if(d?.ok){
+        window.botLoadAds();
+      }else{
+        console.warn("[P2P Bot] sync error:", d?.error);
+      }
+    }catch(e){ console.warn("[P2P Bot] sync error", e); }
+    if(btn) btn.textContent = '↻';
+  };
+
+  /* end per-ad functions */
 
   window.botStartExchange = async function(){
     const ex = botSelectedExchange;
@@ -9717,23 +10094,20 @@ function addP2PBotStyles(){
 
   async function botRefreshExchange(){
     const ex = botSelectedExchange;
+    // Each fetch is independent so one failure doesn't block the rest
     try{
-      const [configRes, logsRes, ordersRes, exRes] = await Promise.all([
-        fetch("/api/p2p/bot/config", { credentials:"include" }),
-        fetch("/api/p2p/bot/logs?limit=30&exchange=" + encodeURIComponent(ex), { credentials:"include" }),
-        fetch("/api/p2p/bot/orders?limit=20&exchange=" + ex, { credentials:"include" }),
-        fetch("/api/p2p/bot/exchange-config", { credentials:"include" })
-      ]);
+      fetch("/api/p2p/bot/config", { credentials:"include" }).then(r=>r.json()).then(d=>{ if(d?.ok && d?.config) updateBotConfig(d.config); }).catch(()=>{});
+    }catch(e){}
+    try{
+      fetch("/api/p2p/bot/logs?limit=30&exchange=" + encodeURIComponent(ex), { credentials:"include" }).then(r=>r.json()).then(d=>{ if(d?.ok) renderBotLogs(d.logs); }).catch(()=>{});
+    }catch(e){}
+    try{
+      fetch("/api/p2p/bot/orders?limit=20&exchange=" + ex, { credentials:"include" }).then(r=>r.json()).then(d=>{ if(d?.ok) renderBotOrders(d.orders); }).catch(()=>{});
+    }catch(e){}
 
-      const configData = await configRes.json();
-      const logsData = await logsRes.json();
-      const ordersData = await ordersRes.json();
+    try{
+      const exRes = await fetch("/api/p2p/bot/exchange-config", { credentials:"include" });
       const exData = await exRes.json();
-
-      if(configData?.ok && configData?.config) updateBotConfig(configData.config);
-      if(logsData?.ok) renderBotLogs(logsData.logs);
-      if(ordersData?.ok) renderBotOrders(ordersData.orders);
-
       var allExchanges = {};
       var anyRunning = false;
       var runningLabel = "";
@@ -9754,12 +10128,13 @@ function addP2PBotStyles(){
       }else{
         updateBotUI({ running: false, _allExchanges: allExchanges, _runningLabel: runningLabel });
       }
-
-      await loadCredentials(ex);
-      botUpdateBuyPrice();
     }catch(e){
-      console.warn("Bot refresh error:", e);
+      console.warn("Bot refresh exchange-config error:", e);
     }
+
+    await loadCredentials(ex);
+    botUpdateBuyPrice();
+    botRefreshAdPrices();
   }
 
   function updateBotUI(status){
@@ -9792,24 +10167,84 @@ function addP2PBotStyles(){
     if(kpiExStatus) kpiExStatus.textContent = anyRunning ? "En ejecución" : "Detenido";
   }
 
+  function setField(id, value){
+    var el = document.getElementById(id);
+    if(el){
+      if(el.type === 'checkbox') el.checked = !!value;
+      else el.value = value;
+    }
+  }
+
+  window.botExUpdateSafeMarginHint = function(){
+    var pct = parseFloat(document.getElementById("botExSafeMarginPct").value) || 0;
+    var hint = document.getElementById("botExSafeMarginHint");
+    if(!hint) return;
+    if(pct <= 0){ hint.textContent = ""; return; }
+    var refPrice = getActiveCapacityBuyPrice();
+    if(!refPrice){
+      var priceEl = document.querySelector(".bot-ad-card-price span");
+      if(priceEl){
+        var txt = priceEl.textContent.replace(/[^0-9.,]/g, "").replace(",", ".");
+        refPrice = parseFloat(txt) || 0;
+      }
+    }
+    var commPct = parseFloat(document.getElementById("botExCommissionPct").value) || 0;
+    var realCost = refPrice > 0 ? refPrice * (1 + commPct / 100) : refPrice;
+    var threshold = realCost > 0 ? realCost * (1 + pct / 100) : 0;
+    hint.textContent = refPrice > 0
+      ? "→ ignora bajo $" + threshold.toFixed(2)
+      : "→ " + pct + "% sobre tu costo real";
+    hint.style.color = "#34d399";
+  };
+
+  window.botAdUpdateSafeMarginHint = function(realId){
+    var pct = parseFloat(document.getElementById("adCfg_" + realId + "_SafeMarginPct").value) || 0;
+    var hint = document.getElementById("adCfg_" + realId + "_SafeMarginHint");
+    if(!hint) return;
+    if(pct <= 0){ hint.textContent = ""; return; }
+    var refPrice = getActiveCapacityBuyPrice();
+    if(!refPrice){
+      var priceEl = document.getElementById("botAdPrice_" + realId);
+      if(priceEl){
+        var txt = priceEl.textContent.replace(/[^0-9.,]/g, "").replace(",", ".");
+        refPrice = parseFloat(txt) || 0;
+      }
+    }
+    // Get commission (per-ad or exchange)
+    var commPct = parseFloat(document.getElementById("adCfg_" + realId + "_CommissionPct").value);
+    if(!commPct || isNaN(commPct)) commPct = parseFloat(document.getElementById("botExCommissionPct").value) || 0;
+    var realCost = refPrice > 0 ? refPrice * (1 + commPct / 100) : refPrice;
+    var threshold = realCost > 0 ? realCost * (1 + pct / 100) : 0;
+    hint.textContent = refPrice > 0
+      ? "→ ignora bajo $" + threshold.toFixed(2)
+      : "→ " + pct + "% sobre tu costo real";
+    hint.style.color = "#34d399";
+  };
+
   function updateExchangeConfig(cfg){
     if(!cfg) return;
-    document.getElementById("botStrategy").value = cfg.strategy || "top1";
-    document.getElementById("botTop1Diff").value = cfg.top1Diff ?? 0.1;
-    document.getElementById("botSpreadPct").value = cfg.spreadPct || 0.5;
-    const isAuto = cfg.priceSource === "auto";
-    document.getElementById("botPriceSource").value = isAuto ? "auto" : "manual";
-    document.getElementById("botPriceFloorPct").value = isAuto ? 0 : cfg.priceFloorPct;
-    togglePriceSource();
-    document.getElementById("botCircuitBreakPct").value = cfg.circuitBreakPct || 3;
-    document.getElementById("botDailyVolumeCap").value = cfg.dailyVolumeCapUsdt || "";
-    document.getElementById("botCycleInterval").value = cfg.cycleInterval ?? 10;
-    document.getElementById("botMinCompetitorCapital").value = cfg.minCompetitorCapital ?? "";
+    setField("botExStrategy", cfg.strategy || "top1");
+    setField("botExTop1Diff", cfg.top1Diff ?? 0.1);
+    setField("botExSpreadPct", cfg.spreadPct || 0.5);
+    setField("botExPriceSource", cfg.priceSource || "manual");
+    setField("botExPriceFloorPct", cfg.priceFloorPct ?? 0);
+    setField("botExCommissionPct", cfg.commissionPct ?? 0.14);
+    setField("botExSafeMarginPct", cfg.safeMarginPct ?? 0);
+    if(window.botExUpdateSafeMarginHint) window.botExUpdateSafeMarginHint();
+    setField("botExMinCompetitorCapital", cfg.minCompetitorCapital ?? "");
     const payTypes = cfg.competePayTypes;
-    document.getElementById("botCompetePayType").value = (payTypes && payTypes.length > 0 && payTypes[0] === "__match_ad__") ? "match" : "all";
-    document.getElementById("botCommissionPct").value = cfg.commissionPct ?? 0.14;
-    document.getElementById("botSafeMarginPct").value = cfg.safeMarginPct ?? 0;
-    toggleBotStrategyFields();
+    setField("botExCompetePayType", (payTypes && payTypes.length > 0 && payTypes[0] === "__match_ad__") ? "match" : "all");
+    setField("botCircuitBreakPct", cfg.circuitBreakPct || 3);
+    setField("botDailyVolumeCap", cfg.dailyVolumeCapUsdt || "");
+    setField("botCycleInterval", cfg.cycleInterval ?? 10);
+    // Show/hide strategy-specific fields
+    var g = document.getElementById("botExchangeConfigGrid");
+    if(g){
+      var t = g.querySelector("#botExTop1DiffLabel");
+      var s = g.querySelector("#botExSpreadPctLabel");
+      if(t) t.style.display = (cfg.strategy || "top1") === "spread" ? "none" : "";
+      if(s) s.style.display = (cfg.strategy || "top1") === "top1" ? "none" : "";
+    }
   }
 
   function updateBotConfig(config){
@@ -9823,42 +10258,6 @@ function addP2PBotStyles(){
       if(active?.buyPrice) return Number(active.buyPrice);
     }
     return null;
-  }
-
-  function togglePriceSource(){
-    const el = document.getElementById("botPriceSource");
-    const inp = document.getElementById("botPriceFloorPct");
-    const help = document.getElementById("botPriceHelpText");
-    if(!el || !inp || !help) return;
-    const buyPrice = getActiveCapacityBuyPrice();
-    if(el.value === "auto"){
-      inp.value = buyPrice ? buyPrice.toFixed(2) : "0";
-      help.textContent = buyPrice ? `$${buyPrice.toLocaleString("es-CL")}` : "Sin capacity activo";
-      inp.style.opacity = "0.6";
-    }else{
-      inp.style.opacity = "1";
-      help.textContent = "Precio manual (CLP)";
-    }
-    botUpdateBuyPrice();
-  }
-  window.togglePriceSource = togglePriceSource;
-
-  function updateMinPriceDisplay(){
-    const el = document.getElementById("botMinPriceDisplay");
-    if(!el) return;
-    const price = getEffectiveMinPrice();
-    el.textContent = price ? `$${price.toLocaleString("es-CL")}` : "—";
-  }
-
-  function toggleBotStrategyFields(){
-    const strategy = document.getElementById("botStrategy").value;
-    document.getElementById("botTop1DiffLabel").style.display = strategy === "top1" ? "" : "none";
-    const labels = document.querySelectorAll(".bot-config-grid label");
-    for(let label of labels){
-      if(label.querySelector("#botSpreadPct")){
-        label.style.display = strategy === "spread" ? "" : "none";
-      }
-    }
   }
 
   function renderBotLogs(logs){
@@ -9896,29 +10295,29 @@ function addP2PBotStyles(){
   }
 
   window.botSaveExchangeConfig = async function(){
-    toggleBotStrategyFields();
     const ex = botSelectedExchange;
-    const strategy = document.getElementById("botStrategy").value;
-    const top1Diff = parseFloat(document.getElementById("botTop1Diff").value) || 0.1;
-    const spreadPct = parseFloat(document.getElementById("botSpreadPct").value) || 0.5;
-    const priceSource = document.getElementById("botPriceSource").value;
-    const priceFloorPct = parseFloat(document.getElementById("botPriceFloorPct").value) || 0;
+    const strategy = document.getElementById("botExStrategy").value;
+    const top1Diff = parseFloat(document.getElementById("botExTop1Diff").value) || 0.1;
+    const spreadPct = parseFloat(document.getElementById("botExSpreadPct").value) || 0.5;
+    const priceSource = document.getElementById("botExPriceSource").value;
+    const priceFloorPct = parseFloat(document.getElementById("botExPriceFloorPct").value) || 0;
+    const commissionPct = parseFloat(document.getElementById("botExCommissionPct").value) || 0;
+    const safeMarginPct = parseFloat(document.getElementById("botExSafeMarginPct").value) || 0;
+    const minV = document.getElementById("botExMinCompetitorCapital").value;
+    const minCompetitorCapital = minV ? parseFloat(minV) : null;
+    const competePayType = document.getElementById("botExCompetePayType").value;
+    const competePayTypes = competePayType === "all" ? null : ["__match_ad__"];
     const circuitBreakPct = parseFloat(document.getElementById("botCircuitBreakPct").value) || 3;
     const cycleInterval = Math.round(parseFloat(document.getElementById("botCycleInterval").value)) || 10;
     const dailyV = document.getElementById("botDailyVolumeCap").value;
     const dailyVolumeCapUsdt = dailyV ? parseFloat(dailyV) : null;
-    const minV = document.getElementById("botMinCompetitorCapital").value;
-    const minCompetitorCapital = minV ? parseFloat(minV) : null;
-    const competePayType = document.getElementById("botCompetePayType").value;
-    const competePayTypes = competePayType === "all" ? null : ["__match_ad__"];
-    const commissionPct = parseFloat(document.getElementById("botCommissionPct").value) || 0;
-    const safeMarginPct = parseFloat(document.getElementById("botSafeMarginPct").value) || 0;
 
-    await fetch("/api/p2p/bot/exchange-config", {
-      method:"POST",
+    var _r = Math.random().toString(36).slice(2);
+    await fetch("/api/p2p/bot/exchange-config?_=" + _r, {
+      method:"PUT",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceSource, priceFloorPct, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, minCompetitorCapital, competePayTypes, commissionPct, safeMarginPct })
+      body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceSource, priceFloorPct, commissionPct, safeMarginPct, minCompetitorCapital, competePayTypes, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval })
     });
     botUpdateBuyPrice();
     window.botRefreshExchange();
@@ -9931,8 +10330,8 @@ function addP2PBotStyles(){
 
     if(exchange === "binance"){
       fields.innerHTML = `
-        <label>API Key <input id="botCredApiKey" type="password" placeholder="Binance API Key"></label>
-        <label>Secret Key <input id="botCredSecret" type="password" placeholder="Binance Secret Key"></label>
+        <label>API Key <input id="botCredApiKey" type="password" autocomplete="new-password" placeholder="Binance API Key"></label>
+        <label>Secret Key <input id="botCredSecret" type="password" autocomplete="new-password" placeholder="Binance Secret Key"></label>
         <button class="btn" type="button" style="margin-bottom:4px;" onclick="window.botSaveCredentials()">Guardar</button>
       `;
       try{
@@ -9950,8 +10349,8 @@ function addP2PBotStyles(){
       }catch(e){ status.innerHTML = '<span style="color:#94a3b8;">Sin configurar</span>'; }
     }else if(exchange === "bybit"){
       fields.innerHTML = `
-        <label>API Key <input id="botCredApiKey" type="password" placeholder="Bybit API Key"></label>
-        <label>Secret Key <input id="botCredSecret" type="password" placeholder="Bybit Secret Key"></label>
+        <label>API Key <input id="botCredApiKey" type="password" autocomplete="new-password" placeholder="Bybit API Key"></label>
+        <label>Secret Key <input id="botCredSecret" type="password" autocomplete="new-password" placeholder="Bybit Secret Key"></label>
         <button class="btn" type="button" style="margin-bottom:4px;" onclick="window.botSaveCredentials()">Guardar</button>
       `;
       try{
@@ -9969,9 +10368,9 @@ function addP2PBotStyles(){
       }catch(e){ status.innerHTML = '<span style="color:#94a3b8;">Sin configurar</span>'; }
     }else if(exchange === "okx"){
       fields.innerHTML = `
-        <label>API Key <input id="botCredApiKey" type="password" placeholder="OKX API Key"></label>
-        <label>Secret Key <input id="botCredSecret" type="password" placeholder="OKX Secret Key"></label>
-        <label>Passphrase <input id="botCredPassphrase" type="password" placeholder="OKX Passphrase"></label>
+        <label>API Key <input id="botCredApiKey" type="password" autocomplete="new-password" placeholder="OKX API Key"></label>
+        <label>Secret Key <input id="botCredSecret" type="password" autocomplete="new-password" placeholder="OKX Secret Key"></label>
+        <label>Passphrase <input id="botCredPassphrase" type="password" autocomplete="new-password" placeholder="OKX Passphrase"></label>
         <button class="btn" type="button" style="margin-bottom:4px;" onclick="window.botSaveCredentials()">Guardar</button>
       `;
       try{
@@ -10031,17 +10430,19 @@ function addP2PBotStyles(){
     const provider = document.getElementById("botBuyPriceProvider");
     if(!card || !label || !value || !provider) return;
 
-    const source = document.getElementById("botPriceSource");
-    if(!source){
+    // Read from exchange-level fields (defaults)
+    const sourceEl = document.getElementById("botExPriceSource");
+    if(!sourceEl){
       card.style.display = "none";
       return;
     }
 
     let basePrice = null;
     let priceSource = "";
+    const sourceVal = sourceEl.value;
 
-    if(source.value === "manual"){
-      const inp = document.getElementById("botPriceFloorPct");
+    if(sourceVal === "manual"){
+      const inp = document.getElementById("botExPriceFloorPct");
       const manualPrice = inp ? parseFloat(inp.value) : null;
       if(manualPrice !== null && !isNaN(manualPrice)){
         basePrice = manualPrice;
@@ -10067,6 +10468,9 @@ function addP2PBotStyles(){
         if(active?.buyPrice){
           basePrice = Number(active.buyPrice);
           priceSource = active.provider || active.country || "Capacity";
+          // Show capacity price in the input field for reference
+          const floorInput = document.getElementById("botExPriceFloorPct");
+          if(floorInput) floorInput.value = basePrice.toFixed(2);
         }
       }
     }
@@ -10074,13 +10478,12 @@ function addP2PBotStyles(){
     if(basePrice !== null && !isNaN(basePrice)){
       card.style.display = "inline-flex";
       const exchange = botSelectedExchange || "binance";
-      const source = document.getElementById("botPriceSource")?.value || "manual";
       if(exchange === "binance"){
-        const commissionPct = parseFloat(document.getElementById("botCommissionPct")?.value || "0.14");
+        const commissionPct = parseFloat(document.getElementById("botExCommissionPct")?.value || "0.14");
         const realCost = basePrice * (1 + commissionPct / 100);
         label.textContent = "COSTO REAL (con comisi\u00F3n)";
         value.textContent = realCost.toFixed(2);
-        provider.textContent = `${priceSource} + ${commissionPct}% comisi\u00F3n`;
+        provider.textContent = priceSource ? `${priceSource} + ${commissionPct}% comisi\u00F3n` : '';
       }else{
         label.textContent = "PRECIO MINIMO VENTA";
         value.textContent = basePrice.toFixed(2);
@@ -10089,6 +10492,12 @@ function addP2PBotStyles(){
     }else{
       card.style.display = "none";
     }
+
+    // Refresh all per-ad cost badges
+    document.querySelectorAll('[id^="botCostBadge_"]').forEach(function(el){
+      var rid = el.id.replace('botCostBadge_', '');
+      if(rid) window.botUpdateAdCostBadge(rid);
+    });
   }
   window.botUpdateBuyPrice = botUpdateBuyPrice;
 
@@ -10217,6 +10626,17 @@ function addP2PBotStyles(){
       container.innerHTML = d.ads.map(a => {
         const isLive = a.fromBybit || a.fromBinance;
         const exchangeLabel = a.fromBybit ? 'Bybit' : a.fromBinance ? 'Binance' : null;
+        const botEnabled = a.botEnabled === true;
+        const botTop1Diff = a.botTop1Diff != null ? a.botTop1Diff : '';
+        const botSpreadPct = a.botSpreadPct != null ? a.botSpreadPct : '';
+        const botSafeMarginPct = a.botSafeMarginPct != null ? a.botSafeMarginPct : '';
+        const botPriceFloorPct = a.botPriceFloorPct != null ? a.botPriceFloorPct : '';
+        const botCommissionPct = a.botCommissionPct != null ? a.botCommissionPct : '';
+        const botMinCapital = a.botMinCompetitorCapital != null ? a.botMinCompetitorCapital : '';
+        const botPriceSource = a.botPriceSource || 'manual';
+        const botStrategy = a.botStrategy || 'top1';
+        const botCompetePayTypes = a.botCompetePayTypes;
+        const payFilterVal = botCompetePayTypes && botCompetePayTypes.length && botCompetePayTypes[0] === '__match_ad__' ? 'match' : 'all';
         return `
         <div class="bot-ad-card">
           <div class="ad-header">
@@ -10224,6 +10644,7 @@ function addP2PBotStyles(){
               <span class="ad-type ${a.tradeType === 'BUY' ? 'buy' : 'sell'}">${a.tradeType === 'BUY' ? 'Compra' : 'Venta'}</span>
               <span style="font-weight:700;color:#fff;font-size:14px;margin-left:8px;">${escHtml(a.asset)} / ${escHtml(a.fiat)}</span>
               ${isLive ? '<span style="font-size:10px;background:rgba(37,99,235,.2);color:#93c5fd;padding:1px 6px;border-radius:4px;margin-left:4px;">' + exchangeLabel + '</span>' : ''}
+              ${botEnabled ? '<span style="font-size:10px;background:rgba(5,150,105,.2);color:#6ee7b7;padding:1px 6px;border-radius:4px;margin-left:4px;">Bot activo</span>' : ''}
             </div>
             <div class="ad-actions">
               <button class="btn small ghost" type="button" onclick="window.botPanelEditAd(${isLive ? "'" + a.adId + "'" : a.id})">Editar</button>
@@ -10242,10 +10663,50 @@ function addP2PBotStyles(){
           <div class="ad-footer">
             <span class="ad-status ${a.status}">${a.status === 'online' ? 'Online' : a.status === 'private' ? 'Privado' : 'Desconectado'}</span>
             <div style="display:flex;gap:6px;align-items:center;">
-              <button class="btn small ${a.botManaged ? 'active' : 'ghost'}" type="button" style="font-size:10px;padding:2px 8px;" onclick="toggleBotManaged(${a.id})">${a.botManaged ? 'Bot ON' : 'Bot OFF'}</button>
+              <button class="btn small ${botEnabled ? 'active' : 'ghost'}" type="button" style="font-size:10px;padding:2px 8px;" onclick="toggleBotAdEnabled(${a.id},${!botEnabled})">${botEnabled ? 'Bot ON' : 'Bot OFF'}</button>
               <span style="font-size:11px;color:#64748b;">${new Date(a.createdAt).toLocaleDateString('es-CL')} ${isLive ? '· Sincronizado' : ''}</span>
             </div>
           </div>
+          ${botEnabled ? `<div class="ad-bot-config" id="adBotConfig_${a.id}">
+            <div class="ad-bot-config-inner">
+              <label>Estrategia
+                <select onchange="saveBotAdConfig(${a.id},'botStrategy',this.value);var p=document.getElementById('adBotConfig_${a.id}');p.querySelector('#adBotTop1DiffLabel_${a.id}').style.display=this.value==='spread'?'none':'';p.querySelector('#adBotSpreadPctLabel_${a.id}').style.display=this.value==='top1'?'none':''">
+                  <option value="top1" ${botStrategy === 'top1' ? 'selected' : ''}>Top 1</option>
+                  <option value="spread" ${botStrategy === 'spread' ? 'selected' : ''}>Spread</option>
+                </select>
+              </label>
+              <label id="adBotTop1DiffLabel_${a.id}" style="${botStrategy === 'spread' ? 'display:none' : ''}">Dif. top 1 (CLP)
+                <input type="number" step="0.01" value="${botTop1Diff}" placeholder="0.1" onchange="saveBotAdConfig(${a.id},'botTop1Diff',this.value)">
+              </label>
+              <label id="adBotSpreadPctLabel_${a.id}" style="${botStrategy === 'top1' ? 'display:none' : ''}">Spread (%)
+                <input type="number" step="0.1" value="${botSpreadPct}" placeholder="0.5" onchange="saveBotAdConfig(${a.id},'botSpreadPct',this.value)">
+              </label>
+              <label>Precio fuente
+                <select onchange="saveBotAdConfig(${a.id},'botPriceSource',this.value)">
+                  <option value="manual" ${botPriceSource === 'manual' ? 'selected' : ''}>Manual</option>
+                  <option value="capacity" ${botPriceSource === 'capacity' ? 'selected' : ''}>Capacity</option>
+                </select>
+              </label>
+              <label>Precio min (CLP)
+                <input type="number" step="0.01" value="${botPriceFloorPct}" placeholder="Capacidad activa" onchange="saveBotAdConfig(${a.id},'botPriceFloorPct',this.value)">
+              </label>
+              <label>Comisión (%)
+                <input type="number" step="0.01" value="${botCommissionPct}" placeholder="0.14" onchange="saveBotAdConfig(${a.id},'botCommissionPct',this.value)">
+              </label>
+              <label>Margen seguridad (%)
+                <input type="number" step="0.01" value="${botSafeMarginPct}" placeholder="0" onchange="saveBotAdConfig(${a.id},'botSafeMarginPct',this.value)">
+              </label>
+              <label>Capital min competidor (USDT)
+                <input type="number" step="1" value="${botMinCapital}" placeholder="Sin filtro" onchange="saveBotAdConfig(${a.id},'botMinCompetitorCapital',this.value)">
+              </label>
+              <label>Filtrar pago
+                <select onchange="saveBotAdConfig(${a.id},'botCompetePayTypes',this.value)">
+                  <option value="all" ${payFilterVal === 'all' ? 'selected' : ''}>Todos</option>
+                  <option value="match" ${payFilterVal === 'match' ? 'selected' : ''}>Mismos del anuncio</option>
+                </select>
+              </label>
+            </div>
+          </div>` : ''}
         </div>`;
       }).join("");
     }catch(e){}
@@ -10253,7 +10714,14 @@ function addP2PBotStyles(){
 
   window.botPanelNewAd = function(){
     botPanelAdEditingId = null;
-    renderAdForm();
+    var modal = document.getElementById("botPanelModal");
+    if(modal && modal.style.display !== "block"){
+      window.botOpenPanel();
+      setTimeout(function(){ window.botSwitchPanelTab('ads'); }, 50);
+      setTimeout(function(){ renderAdForm(); }, 100);
+    }else{
+      renderAdForm();
+    }
   };
 
   window.botPanelEditAd = async function(id){
@@ -10284,6 +10752,34 @@ function addP2PBotStyles(){
     n = Number(n);
     if(isNaN(n)) return "";
     return n.toLocaleString("es-CL", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
+  function fmtFlex(n){
+    if(n === "" || n === null || n === undefined) return "";
+    n = Number(n);
+    if(isNaN(n)) return "";
+    return n.toLocaleString("es-CL", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+
+   function fmtPayName(name){
+    if(!name) return "";
+    var s = String(name)
+      .replace(/_/g, " ")
+      .replace(/([a-záéíóú])([A-ZÁÉÍÓÚ])/g, "$1 $2")
+      .replace(/([A-ZÁÉÍÓÚ])([A-ZÁÉÍÓÚ][a-záéíóú])/g, "$1 $2")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+    // Split before common Spanish embedded particles (bancode → banco de)
+    s = s.replace(/^(banco)(de|del|la|los|las)/i, "$1 $2");
+    // Remove trailing "chile" unless word before is "de" (keep "Banco de Chile", strip "Santander Chile")
+    var words = s.split(/\s+/);
+    if(words.length > 1 && words[words.length-1] === 'chile' && words[words.length-2] !== 'de') {
+      words.pop();
+      s = words.join(' ');
+    }
+    // Title case
+    return s.replace(/\b\w/g, function(c){ return c.toUpperCase(); });
   }
 
   function parseFmt(v){
@@ -10590,6 +11086,35 @@ function addP2PBotStyles(){
       loadPanelAds();
     }catch(e){}
   };
+
+  /* Per-ad bot config */
+  window.toggleBotAdEnabled = async function(id, enabled){
+    try{
+      await fetch("/api/p2p/bot/ads", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ id, exchange: botSelectedExchange, botEnabled: enabled, botManaged: enabled })
+      });
+      loadPanelAds();
+    }catch(e){}
+  };
+
+  window.saveBotAdConfig = async function(id, field, value){
+    const body = { id, exchange: botSelectedExchange };
+    if(field === 'botCompetePayTypes'){
+      body[field] = value === 'match' ? ['__match_ad__'] : null;
+    } else {
+      body[field] = value === '' ? null : (field === 'botStrategy' || field === 'botPriceSource' ? value : Number(value));
+    }
+    try{
+      await fetch("/api/p2p/bot/ads", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify(body)
+      });
+    }catch(e){}
+  };
+  /* end per-ad bot config */
 
   window.botPanelAddPaymentMethod = function(){
     const input = document.getElementById("p2pAdCustomPm");
@@ -11109,8 +11634,8 @@ function addP2PBotStyles(){
     addP2PBotStyles();
     buildP2PBotView();
     addP2PBotNavButton();
-    toggleBotStrategyFields();
-    setTimeout(window.botRefreshExchange, 400);
+    setTimeout(function(){ window.botSelectExchange('binance'); }, 100);
+    setTimeout(window.botRefreshExchange, 500);
   }
 
   if(document.readyState === "loading"){
@@ -15075,19 +15600,14 @@ function addP2PBotStyles(){
       renderP2PCapacityPanel();
       updateP2PDashboardWithCapacity();
 
-      // Auto-switch bot to capacity mode and read the new buy price
-      const ps = document.getElementById("botPriceSource");
-      if(ps){
-        ps.value = "auto";
-        togglePriceSource();
-      }
+      // Auto-switch bot to capacity mode (set exchange-level fallback)
       window.__p2pCapacityCache = null;
       botUpdateBuyPrice();
       const ex = window.botSelectedExchange || "binance";
       fetch("/api/p2p/bot/exchange-config", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ exchange: ex, priceSource: "auto", priceFloorPct: 0 })
+        body: JSON.stringify({ exchange: ex, priceSource: "capacity", priceFloorPct: 0 })
       }).catch(()=>{});
 
       if(typeof showToast === "function"){
@@ -16283,18 +16803,16 @@ function addP2PBotStyles(){
     const subEl = document.getElementById("p2pDashVolumeSub");
 
     const safeStats = stats || (typeof calculateP2PCapacityStats === "function" ? calculateP2PCapacityStats() : {});
-    const initial = getP2PInitialCapital();
-    const cumulativeProfit = calculateP2PProfitUsdtFromStats(safeStats);
-    const total = initial + cumulativeProfit;
-    const todayProfit = typeof getP2PTodayProfit === "function" ? getP2PTodayProfit(cumulativeProfit) : cumulativeProfit;
+    const monthlyProfit = Number(getP2PRangeStatsFromCapacity(safeStats, "month").profitUsdt || 0);
+    const total = getP2PInitialCapital() + monthlyProfit;
 
     if(capitalEl){
       capitalEl.textContent = `${p2pCapMoney(total, 2)} USDT`;
     }
 
     if(subEl){
-      const sign = todayProfit >= 0 ? "+" : "-";
-      subEl.textContent = `Inicial: ${p2pCapMoney(initial, 2)} USDT · Resultado: ${sign}${p2pCapMoney(Math.abs(todayProfit), 2)} USDT`;
+      const sign = monthlyProfit >= 0 ? "+" : "-";
+      subEl.innerHTML = `Inicial: <strong>${p2pCapMoney(getP2PInitialCapital(), 2)} USDT</strong><br>Este mes: ${sign}${p2pCapMoney(Math.abs(monthlyProfit), 2)} USDT`;
     }
   }
 
@@ -17105,21 +17623,21 @@ function addP2PBotStyles(){
 
     // Capital = inicial (fijo) + ganancia acumulada total (todos los días)
     if(capitalEl){
-      const allTime = getP2PRangeStatsFromCapacity(stats, "total");
-      const initial = getP2PInitialCapital();
-      const total = initial + Number(allTime.profitUsdt || 0);
+      const monthlyStats = getP2PRangeStatsFromCapacity(stats, "month");
+      const profit = Number(monthlyStats.profitUsdt || 0);
+      const total = getP2PInitialCapital() + profit;
+      const sign = profit >= 0 ? "+" : "-";
       capitalEl.textContent = `${p2pCapMoney(total, 2)} USDT`;
     }
 
     if(capitalSubEl){
-      const allTime = getP2PRangeStatsFromCapacity(stats, "total");
-      const totalProfit = Number(allTime.profitUsdt || 0);
+      const monthlyStats = getP2PRangeStatsFromCapacity(stats, "month");
+      const totalProfit = Number(monthlyStats.profitUsdt || 0);
       const sign = totalProfit >= 0 ? "+" : "-";
       capitalSubEl.innerHTML = `
-        <div style="text-align:center;color:#8aa0ba;">
-          Inicial: <strong style="color:#cbd5e1;">${p2pCapMoney(getP2PInitialCapital(), 2)} USDT</strong>
-          <span style="margin:0 6px;">·</span>
-          Total: ${sign}${p2pCapMoney(Math.abs(totalProfit), 2)} USDT
+        <div style="text-align:center;color:#8aa0ba;line-height:1.6;">
+          Inicial: <strong style="color:#cbd5e1;">${p2pCapMoney(getP2PInitialCapital(), 2)} USDT</strong><br>
+          Este mes: ${sign}${p2pCapMoney(Math.abs(totalProfit), 2)} USDT
         </div>
       `;
     }

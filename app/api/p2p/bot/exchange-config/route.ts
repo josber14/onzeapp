@@ -53,6 +53,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  return PUT(req);
+}
+
+export async function PUT(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session?.tenantId) {

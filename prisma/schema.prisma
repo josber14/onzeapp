@@ -769,27 +769,40 @@ model P2PBotExchangeConfig {
 }
 
 model P2PBotAd {
-  id             Int      @id @default(autoincrement())
-  tenantId       Int
-  exchange       String
-  adId           String?
-  tradeType      String   @default("SELL")
-  asset          String   @default("USDT")
-  fiat           String   @default("CLP")
-  priceType      String   @default("fixed")
-  price          Decimal  @db.Decimal(18, 8)
-  amount         Decimal  @db.Decimal(18, 8)
-  amountType     String   @default("fixed")
-  minAmount      Decimal  @db.Decimal(18, 8)
-  maxAmount      Decimal  @db.Decimal(18, 8)
-  paymentMethods Json     @default("[]")
-  payTime        Int      @default(15)
-  status         String   @default("online")
-  isActive       Boolean  @default(true)
-  botManaged     Boolean  @default(false)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @default(now())
-  Tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                     Int       @id @default(autoincrement())
+  tenantId               Int
+  exchange               String
+  adId                   String?
+  tradeType              String    @default("SELL")
+  asset                  String    @default("USDT")
+  fiat                   String    @default("CLP")
+  priceType              String    @default("fixed")
+  price                  Decimal   @db.Decimal(18, 8)
+  amount                 Decimal   @db.Decimal(18, 8)
+  amountType             String    @default("fixed")
+  minAmount              Decimal   @db.Decimal(18, 8)
+  maxAmount              Decimal   @db.Decimal(18, 8)
+  paymentMethods         Json      @default("[]")
+  payTime                Int       @default(15)
+  status                 String    @default("online")
+  isActive               Boolean   @default(true)
+  botManaged             Boolean   @default(false)
+  botEnabled             Boolean   @default(false)
+  botStrategy            String?   @default("top1")
+  botTop1Diff            Decimal?  @db.Decimal(18, 8)
+  botSpreadPct           Decimal?  @db.Decimal(8, 4)
+  botPriceFloorPct       Decimal?  @db.Decimal(8, 4)
+  botPriceSource         String?   @default("manual")
+  botCommissionPct       Decimal?  @db.Decimal(8, 4)
+  botSafeMarginPct       Decimal?  @db.Decimal(8, 4)
+  botMinCompetitorCapital Decimal? @db.Decimal(18, 2)
+  botCompetePayTypes     Json?
+  botCycleInterval       Int?
+  botCircuitBreakPct     Decimal? @db.Decimal(8, 4)
+  botDailyVolumeCapUsdt  Decimal? @db.Decimal(18, 8)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @default(now())
+  Tenant                 Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([exchange])
