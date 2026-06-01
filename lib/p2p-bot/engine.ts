@@ -596,13 +596,18 @@ async function runBinanceCycle(
 
       // Payment filter per ad (by internal IDs)
       let ourPayMethods: string[] | undefined;
-      if (adCompetePayTypes && adCompetePayTypes.length > 0 && adCompetePayTypes[0] !== "*") {
-        if (adCompetePayTypes[0] === "__match_ad__") {
+      let rawPayTypes = adCompetePayTypes;
+      // Normalize: if a string "all" or "*" was stored per-ad, treat as no filter
+      if (typeof rawPayTypes === "string") {
+        if (rawPayTypes === "all" || rawPayTypes === "*") rawPayTypes = null;
+      }
+      if (rawPayTypes && rawPayTypes.length > 0 && rawPayTypes[0] !== "*") {
+        if (rawPayTypes[0] === "__match_ad__") {
           if (ourSellAd?.payments?.length) {
             ourPayMethods = ourSellAd.payments.map((p: any) => String(p));
           }
-        } else {
-          ourPayMethods = adCompetePayTypes;
+        } else if (Array.isArray(rawPayTypes)) {
+          ourPayMethods = rawPayTypes;
         }
         if (ourPayMethods && ourPayMethods.length > 0) {
           const before = competitors.length;
