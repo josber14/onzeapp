@@ -9485,8 +9485,10 @@ function addP2PBotStyles(){
           <div class="bot-kpi"><div class="kpi-label">Ciclos</div><div class="kpi-value" id="botKpiCycles">0</div><div class="kpi-sub">ejecutados</div></div>
           <div class="bot-kpi"><div class="kpi-label">Ordenes</div><div class="kpi-value" id="botKpiOrders">0</div><div class="kpi-sub">totales</div></div>
           <div class="bot-kpi"><div class="kpi-label">Spread #1-#2</div><div class="kpi-value" id="botKpiSpread">—</div><div class="kpi-sub">CLP</div></div>
-          <div class="bot-kpi"><div class="kpi-label">Competidores</div><div class="kpi-value" id="botKpiCompetitors">0</div><div class="kpi-sub">en mercado</div></div>
+          <div class="bot-kpi"><div class="kpi-label">Competidores</div><div class="kpi-value" id="botKpiCompetitors">0</div><div class="kpi-sub" id="botKpiCompetitorsSub">en mercado</div></div>
           <div class="bot-kpi"><div class="kpi-label">Anuncio propio</div><div class="kpi-value" id="botKpiOurAd" style="font-size:14px;">—</div><div class="kpi-sub" id="botKpiOurAdStatus"></div></div>
+          <div class="bot-kpi"><div class="kpi-label">Cambios/hora</div><div class="kpi-value" id="botKpiCambios">0/30</div><div class="kpi-sub" id="botKpiUltimoCambio">—</div></div>
+          <div class="bot-kpi"><div class="kpi-label">Weight API</div><div class="kpi-value" id="botKpiWeight">0</div><div class="kpi-sub">/ 4000</div></div>
         </div>
 
         <!-- Four cards: Config exchange → Anuncios → Credenciales → Config anuncio -->
@@ -9566,6 +9568,7 @@ function addP2PBotStyles(){
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
               <span style="font-size:13px;font-weight:700;color:#e2e8f0;">Anuncios</span>
               <span style="font-size:11px;color:#64748b;" id="botAdsExchangeLabel">Binance</span>
+              <span style="font-size:11px;font-weight:600;color:#fbbf24;" id="botCambiosCounter"></span>
               <span style="flex:1;"></span>
               <button class="btn small ghost" type="button" onclick="window.botLoadAds()" style="font-size:10px;">↻</button>
               <button class="btn small ghost" type="button" onclick="window.botPanelNewAd()" style="font-size:10px;">+ Nuevo</button>
@@ -9573,6 +9576,14 @@ function addP2PBotStyles(){
             <div id="botAdsList" class="bot-ads-row">
               <div style="color:#64748b;font-size:12px;text-align:center;padding:12px 0;">Cargando anuncios...</div>
             </div>
+          </div>
+          <div id="botBybitAdSection" class="bot-card" style="grid-column:1/-1;display:none;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+              <span style="font-size:13px;font-weight:700;color:#e2e8f0;">Anuncio Bybit</span>
+              <span style="flex:1;"></span>
+              <button class="btn small ghost" type="button" onclick="window.botLoadAds()" style="font-size:10px;">↻</button>
+            </div>
+            <div id="botBybitAdContent"></div>
           </div>
 
           <!-- Credenciales (third) -->
@@ -9737,7 +9748,14 @@ function addP2PBotStyles(){
 
     // Show sections
     const adsSection = document.getElementById("botAdsSection");
-    if(adsSection) adsSection.style.display = "";
+    const bybitSection = document.getElementById("botBybitAdSection");
+    if(exchange === "bybit"){
+      if(adsSection) adsSection.style.display = "none";
+      if(bybitSection) bybitSection.style.display = "";
+    }else{
+      if(adsSection) adsSection.style.display = "";
+      if(bybitSection) bybitSection.style.display = "none";
+    }
 
     // Show exchange config grid (circuit breaker, volume, interval)
     const exchangeConfigGrid = document.getElementById("botExchangeConfigGrid");
@@ -9755,6 +9773,10 @@ function addP2PBotStyles(){
 
   window.botLoadAds = async function(){
     const container = document.getElementById("botAdsList");
+    if(botSelectedExchange === "bybit"){
+      await botLoadBybitSimpleAd();
+      return;
+    }
     if(!container) return;
     try{
       const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange, { credentials:"include" });
@@ -9774,6 +9796,57 @@ function addP2PBotStyles(){
       botUpdateBuyPrice();
     }catch(e){ console.warn("[P2P Bot] botLoadAds error:", e); }
   };
+
+  async function botLoadBybitSimpleAd(){
+    const content = document.getElementById("botBybitAdContent");
+    if(!content) return;
+    try{
+      const r = await fetch("/api/p2p/bot/ads?exchange=bybit", { credentials:"include" });
+      const d = await r.json();
+      if(!d?.ok || !d?.ads?.length){
+        content.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:8px 0;">Sin anuncio</div>';
+        return;
+      }
+      const a = d.ads.find(ad => (ad.tradeType||'').toUpperCase() === 'SELL' && (ad.asset||'').toUpperCase() === 'USDT' && (ad.fiat||'').toUpperCase() === 'CLP');
+      if(!a){
+        content.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:8px 0;">Sin anuncio de venta</div>';
+        return;
+      }
+      const botEnabled = a.botEnabled === true;
+      const isOnline = botEnabled && (a.status === 'online' || a.isActive === true);
+      var pms = a.paymentMethods;
+      if(pms && typeof pms === 'string') pms = [pms];
+      var pmBadges = (pms && Array.isArray(pms)) ? pms.slice(0,3) : [];
+      var pmExtra = (pms && Array.isArray(pms) && pms.length > 3) ? '+' + (pms.length - 3) : '';
+      function pmName(pm){ return typeof pm === 'object' && pm !== null ? String(pm.name || pm.id || '') : String(pm); }
+      content.innerHTML = `
+        <div class="bot-ad-pill">
+          <div class="bot-ad-card-header">
+            <span class="sell-label">Vender</span><span style="flex:1;">${a.asset||'USDT'} con ${a.fiat||'CLP'}</span>
+            <span class="status-badge" style="background:${isOnline?'rgba(52,211,153,.12)':'rgba(100,116,139,.12)'};color:${isOnline?'#34d399':'#94a3b8'};"><span class="dot" style="background:${isOnline?'#34d399':'#64748b'};"></span>${isOnline ? 'En línea' : 'Desconectado'}</span>
+            <label class="toggle-switch">
+              <input type="checkbox" ${botEnabled?'checked':''} onchange="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',this.checked)">
+              <span class="slider"></span>
+            </label>
+            <button class="menu-btn" onclick="event.stopPropagation();window.botOpenPanel();setTimeout(function(){window.botSwitchPanelTab('ads');setTimeout(function(){window.botPanelEditAd(${a.id});},100);},100);" title="Editar anuncio">⋯</button>
+          </div>
+          <div class="bot-ad-card-body">
+            <div class="bot-ad-card-price"><span id="botAdPrice_${a.id}" style="color:#34d399;">${fmt(a.price)}</span> CLP</div>
+            <div class="bot-ad-card-rows">
+              <div class="row"><span class="label">Balance</span><span class="value" id="botAdAmount_${a.id}">${fmtFlex(a.amount)} ${a.asset||'USDT'}</span></div>
+              <div class="row"><span class="label">Límite</span><span class="value" id="botAdLimits_${a.id}">$${fmtInt(a.minAmount||0)} - $${fmtInt(a.maxAmount||0)} CLP</span></div>
+            </div>
+          </div>
+          <div class="bot-ad-card-methods">
+            ${pmBadges.map(function(pm){ return '<span class="pm-badge">'+fmtPayName(pmName(pm))+'</span>'; }).join('')}
+            ${pmExtra ? '<span class="pm-badge" style="background:rgba(148,163,184,.1);color:#94a3b8;">'+escHtml(pmExtra)+'</span>' : ''}
+          </div>
+        </div>
+      `;
+    }catch(e){
+      content.innerHTML = '<div style="color:#fb7185;font-size:12px;text-align:center;padding:8px 0;">Error cargando anuncio</div>';
+    }
+  }
 
   function botRenderAdPill(a, idx){
     const isFirst = idx === 0;
@@ -10062,14 +10135,45 @@ function addP2PBotStyles(){
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ exchange: ex, action: "start" })
     });
+    // Save interval to backend (used for rate-limit cooldown)
     const interval = Math.round(parseFloat(document.getElementById("botCycleInterval").value)) || 10;
+    // Timer runs every 1 second — backend handles rate limits internally
+    const botStopExchange = window.botStopExchange;
     if(botCycleTimer) clearTimeout(botCycleTimer);
     async function scheduleBotCycle(){
       try{
-        await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include" });
+        const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include" });
+        const data = await res.json();
+        if(data?.state?.binance){
+          const st = data.state.binance;
+          const el = id=>document.getElementById(id);
+          el('botKpiCambios').textContent = st.cambiosEstaHora + '/' + (st.cambiosMax||30);
+          const ultimo = st.ultimoCambioHace >= 0 ? 'hace ' + st.ultimoCambioHace + 's' : '—';
+          el('botKpiUltimoCambio').textContent = ultimo;
+          el('botKpiWeight').textContent = st.weightActual;
+          el('botKpiCompetitors').textContent = st.competidores || '—';
+          const fetchEn = st.proximoFetchEn || 0;
+          el('botKpiCompetitorsSub').textContent = fetchEn > 0 ? 'próximo fetch en ' + fetchEn + 's' : 'actualizando...';
+          const puede = st.puedeActualizar;
+          const statusEl = el('botKpiExchangeStatus');
+          if(statusEl){
+            statusEl.textContent = puede ? '● Listo' : '● Esperando';
+            statusEl.style.color = puede ? '#34d399' : '#fbbf24';
+          }
+          // Counter next to "Anuncios" header
+          const counterEl = el('botCambiosCounter');
+          if(counterEl){
+            const used = st.cambiosEstaHora || 0;
+            const max = st.cambiosMax || 30;
+            counterEl.textContent = used + '/' + max + ' cambios';
+            if(used >= max) counterEl.style.color = '#ef4444';
+            else if(used >= max * 0.8) counterEl.style.color = '#fbbf24';
+            else counterEl.style.color = '#34d399';
+          }
+        }
         window.botRefreshExchange();
       }catch(e){}
-      botCycleTimer = setTimeout(scheduleBotCycle, interval * 1000);
+      botCycleTimer = setTimeout(scheduleBotCycle, 1000);
     }
     scheduleBotCycle();
     await window.botRefreshExchange();

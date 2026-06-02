@@ -14,6 +14,69 @@ function getBaseUrl(): string {
   return process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 }
 
+// ─── In-memory per-tenant bot state ───────────────────────────────
+interface BinanceState {
+  lastCompetitorFetch: number;
+  cachedCompetitors: any[];
+  cachedMyAds: any[];
+  isFetching: boolean;
+  updateTimestamps: number[];
+  lastUpdateAt: number;
+  currentWeight: number;
+  lastRateLimitError: number;
+  lastCompetitorCount: number;
+  lastPrice: number;
+  lastTarget: number;
+}
+const binanceStates = new Map<number, BinanceState>();
+
+function getBinanceState(tenantId: number): BinanceState {
+  let s = binanceStates.get(tenantId);
+  if (!s) {
+    s = {
+      lastCompetitorFetch: 0,
+      cachedCompetitors: [],
+      cachedMyAds: [],
+      isFetching: false,
+      updateTimestamps: [],
+      lastUpdateAt: 0,
+      currentWeight: 0,
+      lastRateLimitError: 0,
+      lastCompetitorCount: 0,
+      lastPrice: 0,
+      lastTarget: 0,
+    };
+    binanceStates.set(tenantId, s);
+  }
+  return s;
+}
+
+function buildBinanceState(bs: BinanceState): any {
+  const now = Date.now();
+  const oneHourAgo = now - 3600000;
+  const active = bs.updateTimestamps.filter(t => t > oneHourAgo);
+  const oldestActive = active.length > 0 ? Math.min(...active) : now;
+  const ultimoCambioHace = bs.lastUpdateAt > 0 ? Math.round((now - bs.lastUpdateAt) / 1000) : -1;
+  const proximoFetchEn = Math.max(0, 12 - Math.round((now - bs.lastCompetitorFetch) / 1000));
+  const cooldownUntil = bs.lastRateLimitError > 0 ? bs.lastRateLimitError + 60000 : 0;
+  const puedeActualizar = active.length < 30
+    && (now - bs.lastUpdateAt >= 5000 || bs.lastUpdateAt === 0)
+    && bs.currentWeight < 4000
+    && now >= cooldownUntil;
+  return {
+    cambiosEstaHora: active.length,
+    cambiosMax: 30,
+    ultimoCambioHace,
+    precioActual: bs.lastPrice || 0,
+    precioTarget: bs.lastTarget || 0,
+    weightActual: bs.currentWeight || 0,
+    weightMax: 4000,
+    proximoFetchEn,
+    competidores: bs.lastCompetitorCount || 0,
+    puedeActualizar,
+  };
+}
+
 export async function getBotConfig(
   tenantId: number
 ): Promise<P2PBotConfigData | null> {
@@ -313,6 +376,8 @@ export async function executeBotCycle(tenantId: number) {
 
   const actions: BotAction[] = [];
 
+  const cycleState: any = {};
+
   for (const exchange of config.exchanges) {
     try {
       const exchangeConfig = await getExchangeConfig(tenantId, exchange);
@@ -322,6 +387,8 @@ export async function executeBotCycle(tenantId: number) {
         activeConfig.pauseUntil !== null && new Date(activeConfig.pauseUntil) > new Date();
       if (!activeConfig.enabled || exPaused) {
         await logBot(tenantId, "info", exchange, `Bot ${exchange} deshabilitado en su sesión`);
+        // Still include state for the exchange
+        if (exchange === "binance") cycleState.binance = buildBinanceState(getBinanceState(tenantId));
         continue;
       }
 
@@ -331,15 +398,18 @@ export async function executeBotCycle(tenantId: number) {
         });
         if (!creds) {
           await logBot(tenantId, "warn", "binance", "Sin credenciales Binance configuradas");
+          cycleState.binance = buildBinanceState(getBinanceState(tenantId));
           continue;
         }
         try {
           const result = await runBinanceCycle(tenantId, exchangeConfig || config, creds.apiKey, creds.secretKey);
+          cycleState.binance = buildBinanceState(getBinanceState(tenantId));
           actions.push(...result.actions);
           if (result.actions.length > 0) {
             await logBot(tenantId, "info", "binance", `${result.actions.length} acción(es) ejecutada(s)`, { actions: result.actions });
           }
         } catch (e: any) {
+          cycleState.binance = buildBinanceState(getBinanceState(tenantId));
           await logBot(tenantId, "error", "binance", `Error en ciclo Binance: ${e.message}`);
         }
       } else if (exchange === "bybit") {
@@ -384,7 +454,7 @@ export async function executeBotCycle(tenantId: number) {
     }
   }
 
-  return { ok: true, actions };
+  return { ok: true, actions, state: cycleState };
 }
 
 function normalizeBinanceAd(ad: any): any {
@@ -438,112 +508,85 @@ async function runBinanceCycle(
 ): Promise<{ actions: BotAction[] }> {
   const actions: BotAction[] = [];
   const client = new BinanceP2PClient(apiKey, secretKey);
+  const bs = getBinanceState(tenantId);
 
   try {
-    // 1. Get our current balance (non-critical)
-    let balance = 0;
-    try {
-      const balanceRes = await client.getBalance("USDT");
-      balance = Number(balanceRes?.balance ?? 0);
-      await logBot(tenantId, "info", "binance", `Saldo USDT: ${balance}`);
-    } catch (e: any) {
-      console.error("[P2P Bot Debug] balance error:", e.message);
-      await logBot(tenantId, "warn", "binance", `Balance no disponible: ${e.message}`);
-    }
-
-    // 2. Get our current ads from Binance
+    // 1. Get our current ads from Binance
     let myAds: any[] = [];
     try {
       const myAdsRes = await client.getMyAds(1, 50);
-      // Try multiple response formats
       let raw: any[] = [];
-      if (Array.isArray(myAdsRes?.data)) {
-        raw = myAdsRes.data;
-      } else if (myAdsRes?.data?.items && Array.isArray(myAdsRes.data.items)) {
-        raw = myAdsRes.data.items;
-      } else if (myAdsRes?.data?.list && Array.isArray(myAdsRes.data.list)) {
-        raw = myAdsRes.data.list;
-      } else if (myAdsRes?.data?.records && Array.isArray(myAdsRes.data.records)) {
-        raw = myAdsRes.data.records;
-      } else if (myAdsRes?.data?.result && Array.isArray(myAdsRes.data.result)) {
-        raw = myAdsRes.data.result;
-      } else if (myAdsRes?.result && Array.isArray(myAdsRes.result)) {
-        raw = myAdsRes.result;
-      } else if (myAdsRes?.list && Array.isArray(myAdsRes.list)) {
-        raw = myAdsRes.list;
-      }
+      if (Array.isArray(myAdsRes?.data)) raw = myAdsRes.data;
+      else if (myAdsRes?.data?.items && Array.isArray(myAdsRes.data.items)) raw = myAdsRes.data.items;
+      else if (myAdsRes?.data?.list && Array.isArray(myAdsRes.data.list)) raw = myAdsRes.data.list;
+      else if (myAdsRes?.data?.records && Array.isArray(myAdsRes.data.records)) raw = myAdsRes.data.records;
+      else if (myAdsRes?.data?.result && Array.isArray(myAdsRes.data.result)) raw = myAdsRes.data.result;
+      else if (myAdsRes?.result && Array.isArray(myAdsRes.result)) raw = myAdsRes.result;
+      else if (myAdsRes?.list && Array.isArray(myAdsRes.list)) raw = myAdsRes.list;
       myAds = raw.map(normalizeBinanceAd);
-      await logBot(tenantId, "info", "binance", `Mis anuncios: ${myAds.length}`);
+      bs.cachedMyAds = myAds;
       if (myAds.length === 0) {
         await logBot(tenantId, "debug", "binance", `Respuesta getMyAds: ${JSON.stringify(myAdsRes).slice(0, 500)}`);
       }
     } catch (e: any) {
       await logBot(tenantId, "error", "binance", `Error getMyAds: ${e.message}`);
-      throw e;
+      return { actions };
     }
 
-    // 3. Get all bot-enabled ads from DB
+    // 2. Get managed ads from DB
     let managedAds: any[] = [];
     try {
       managedAds = await prisma.p2PBotAd.findMany({
         where: { tenantId, exchange: "binance", botEnabled: true },
       });
-      await logBot(tenantId, "info", "binance", `Raw DB results: ${managedAds.length}, con adId: ${managedAds.filter(ma => ma.adId).length}`);
       managedAds = managedAds.filter(ma => ma.adId);
-      await logBot(tenantId, "info", "binance", `Ads en DB con bot activado: ${managedAds.length}`);
       if (managedAds.length === 0) {
-        await logBot(tenantId, "info", "binance", "Sin anuncios con bot activado. Actívalo en cada anuncio desde el panel.");
+        await logBot(tenantId, "info", "binance", "Sin anuncios con bot activado");
         return { actions };
       }
     } catch (e: any) {
-      await logBot(tenantId, "warn", "binance", `Error al leer anuncios gestionados: ${e.message}`);
+      await logBot(tenantId, "warn", "binance", `Error al leer anuncios: ${e.message}`);
       return { actions };
     }
 
-    // Fetch common exchange config fallback values
+    // Exchange config fallback values
     const exchangeTop1Diff = Number(config.top1Diff) || 0.1;
     const exchangeCommissionPct = Number((config as any).commissionPct) || 0.14;
     const exchangeSafeMarginPct = Number((config as any).safeMarginPct) || 0;
     const exchangeMinCapital = Number((config as any).minCompetitorCapital) || 0;
     const exchangeCompetePayTypes = (config as any).competePayTypes as string[] | null | undefined;
     const exchangeCircuitBreakPct = Number((config as any).circuitBreakPct) || 3;
-    const exchangeCycleInterval = Number((config as any).cycleInterval) || 10;
     const exchangeDailyVolumeCapUsdt = (config as any).dailyVolumeCapUsdt ? Number((config as any).dailyVolumeCapUsdt) : null;
 
-    // Our sell ads (USDT/CLP, side=1)
-    const ourSellAds = myAds.filter(
-      (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
-    );
-
-    // 4. Get online competitor ads (once, shared across all ads)
-    let rawCompetitors: any[] = [];
-    try {
-      const rowsPerPage = 20;
-      const maxPages = 3;
-      let allRaw: any[] = [];
-      const pagePromises = [];
-      for (let page = 1; page <= maxPages; page++) {
-        pagePromises.push(client.getOnlineAds({
-          asset: "USDT",
-          fiat: "CLP",
-          tradeType: "BUY",
-          rows: rowsPerPage,
-          page,
-          payTypes: [],
-        }).then(res => res?.data ?? []).catch(() => []));
+    // 3. Refresh competitors cache if stale
+    const now = Date.now();
+    if (now - bs.lastCompetitorFetch > 12000 && !bs.isFetching) {
+      bs.isFetching = true;
+      try {
+        let allRaw: any[] = [];
+        for (let page = 1; page <= 3; page++) {
+          const pageRes = await client.getOnlineAds({
+            asset: "USDT", fiat: "CLP", tradeType: "BUY", rows: 20, page, payTypes: [],
+          });
+          const pageData = pageRes?.data ?? [];
+          if (pageData.length > 0) allRaw = allRaw.concat(pageData);
+          if (page < 3) await new Promise(r => setTimeout(r, 100));
+        }
+        bs.cachedCompetitors = allRaw.map(normalizeBinanceAd);
+        bs.lastCompetitorFetch = Date.now();
+        bs.lastCompetitorCount = bs.cachedCompetitors.length;
+        await logBot(tenantId, "info", "binance", `Competidores: ${bs.lastCompetitorCount} items`);
+      } catch (e: any) {
+        await logBot(tenantId, "warn", "binance", `Fetch competidores: ${e.message}`);
+      } finally {
+        bs.isFetching = false;
       }
-      const pageResults = await Promise.all(pagePromises);
-      for (const pageData of pageResults) {
-        if (pageData.length > 0) allRaw = allRaw.concat(pageData);
-      }
-      rawCompetitors = allRaw.map(normalizeBinanceAd);
-      await logBot(tenantId, "info", "binance", `OnlineAds: ${rawCompetitors.length} items`);
-    } catch (e: any) {
-      await logBot(tenantId, "error", "binance", `Error getOnlineAds: ${e.message}`);
-      throw e;
     }
 
-    // Get active capacity (shared across all ads)
+    // Use cached competitors
+    const rawCompetitors = bs.cachedCompetitors;
+
+    // Get active capacity
     let activeCapacityBuyPrice: number | null = null;
     try {
       const activeCap = await prisma.p2PCapacity.findFirst({
@@ -553,17 +596,25 @@ async function runBinanceCycle(
       if (activeCap?.buyPrice) activeCapacityBuyPrice = Number(activeCap.buyPrice);
     } catch (e) {}
 
-    // 5. Process each managed ad independently
+    // Our sell ads
+    const ourSellAds = myAds.filter(
+      (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
+    );
+
+    // 4. Process each managed ad
+    let firstAdPrice = 0;
+    let firstAdTarget = 0;
     for (const managedAd of managedAds) {
       const adId = managedAd.adId;
       const ourSellAd = ourSellAds.find((a: any) => String(a.id) === String(adId));
       if (!ourSellAd) {
-        await logBot(tenantId, "warn", "binance", `Ad ${adId}: no encontrado en mis anuncios (se saltó)`);
+        await logBot(tenantId, "warn", "binance", `Ad ${adId}: no encontrado (se saltó)`);
         continue;
       }
       const currentPrice = Number(ourSellAd.price);
+      if (firstAdPrice === 0) firstAdPrice = currentPrice;
 
-      // Per-ad config with fallback to exchange config
+      // Per-ad config with exchange fallback
       const adTop1Diff = managedAd.botTop1Diff ? Number(managedAd.botTop1Diff) : exchangeTop1Diff;
       const adCommissionPct = managedAd.botCommissionPct ? Number(managedAd.botCommissionPct) : exchangeCommissionPct;
       const adSafeMarginPct = managedAd.botSafeMarginPct ? Number(managedAd.botSafeMarginPct) : exchangeSafeMarginPct;
@@ -572,54 +623,40 @@ async function runBinanceCycle(
       const adPriceSource = managedAd.botPriceSource || "manual";
       const adPriceFloorPct = managedAd.botPriceFloorPct ? Number(managedAd.botPriceFloorPct) : 0;
       const adCircuitBreakPct = managedAd.botCircuitBreakPct ? Number(managedAd.botCircuitBreakPct) : exchangeCircuitBreakPct;
-      const adCycleInterval = managedAd.botCycleInterval ? Number(managedAd.botCycleInterval) : exchangeCycleInterval;
       const adDailyVolumeCapUsdt = managedAd.botDailyVolumeCapUsdt ? Number(managedAd.botDailyVolumeCapUsdt) : exchangeDailyVolumeCapUsdt;
 
-      // Min sell price for this ad
       let minSellPrice = adPriceSource === "manual" ? adPriceFloorPct : 0;
+      if (minSellPrice <= 0 && activeCapacityBuyPrice) minSellPrice = activeCapacityBuyPrice;
       if (minSellPrice <= 0) {
-        if (activeCapacityBuyPrice) {
-          minSellPrice = activeCapacityBuyPrice;
-        }
-      }
-      if (minSellPrice <= 0) {
-        await logBot(tenantId, "warn", "binance", `Ad ${adId}: sin precio mínimo (${adPriceSource})`);
+        await logBot(tenantId, "warn", "binance", `Ad ${adId}: sin precio mínimo`);
         continue;
       }
-      await logBot(tenantId, "info", "binance", `Ad ${adId}: minSellPrice=${minSellPrice}, top1Diff=${adTop1Diff}, safeMargin=${adSafeMarginPct}%, comisión=${adCommissionPct}%`);
-
-      // Price floor = real cost for Binance (always includes commission)
       const priceFloor = minSellPrice * (1 + adCommissionPct / 100);
 
       // Filter competitors for this ad
       let competitors = [...rawCompetitors];
 
-      // Payment filter per ad (by internal IDs)
+      // Payment filter
       let ourPayMethods: string[] | undefined;
       let rawPayTypes = adCompetePayTypes;
-      // Normalize: if a string "all" or "*" was stored per-ad, treat as no filter
       if (typeof rawPayTypes === "string") {
         if (rawPayTypes === "all" || rawPayTypes === "*") rawPayTypes = null;
       }
       if (rawPayTypes && rawPayTypes.length > 0 && rawPayTypes[0] !== "*") {
         if (rawPayTypes[0] === "__match_ad__") {
-          if (ourSellAd?.payments?.length) {
-            ourPayMethods = ourSellAd.payments.map((p: any) => String(p));
-          }
+          if (ourSellAd?.payments?.length) ourPayMethods = ourSellAd.payments.map((p: any) => String(p));
         } else if (Array.isArray(rawPayTypes)) {
           ourPayMethods = rawPayTypes;
         }
         if (ourPayMethods && ourPayMethods.length > 0) {
-          const before = competitors.length;
           competitors = competitors.filter((c: any) => {
             const cmpIds = (c.payments || []).map((p: any) => String(p));
             return cmpIds.some((p: string) => ourPayMethods!.includes(p));
           });
-          await logBot(tenantId, "info", "binance", `Ad ${adId}: filtro pago ${before} → ${competitors.length}`);
         }
       }
       if (competitors.length === 0) {
-        await logBot(tenantId, "warn", "binance", `Ad ${adId}: sin competidores tras filtro pago`);
+        await logBot(tenantId, "warn", "binance", `Ad ${adId}: sin competidores tras filtro`);
         continue;
       }
 
@@ -633,168 +670,124 @@ async function runBinanceCycle(
         }
         return true;
       });
-      if (viable.length === 0) {
-        await logBot(tenantId, "info", "binance", `Ad ${adId}: sin competidores viables`);
-        continue;
-      }
+      if (viable.length === 0) { continue; }
 
-      // Sort & remove our ads
       viable.sort((a: any, b: any) => Number(a.price) - Number(b.price));
       const myAdIds = new Set(myAds.map((a: any) => a.id));
       const sortedCompetitors = viable.filter((c: any) => !myAdIds.has(c.id));
-      if (sortedCompetitors.length === 0) {
-        await logBot(tenantId, "info", "binance", `Ad ${adId}: solo nuestros anuncios en el mercado`);
-        continue;
-      }
+      if (sortedCompetitors.length === 0) { continue; }
 
       // Safe margin filter
       const viableCompetitors: any[] = [];
       for (let i = 0; i < sortedCompetitors.length; i++) {
         const comp = sortedCompetitors[i];
         const marginPct = priceFloor > 0 ? ((Number(comp.price) - priceFloor) / priceFloor) * 100 : 999;
-        if (marginPct >= adSafeMarginPct) {
-          viableCompetitors.push(comp);
-        }
+        if (marginPct >= adSafeMarginPct) viableCompetitors.push(comp);
       }
-      await logBot(tenantId, "debug", "binance", `Ad ${adId}: sorted=${sortedCompetitors.length}, viable=${viableCompetitors.length}`);
 
       // Target calculation
       let targetCompetitor: any = null;
       let targetIndex = -1;
 
       if (viableCompetitors.length === 0 && sortedCompetitors.length > 0) {
-        // Safe margin fallback: closest above current price
         let closestAbove: any = null;
-        let closestAboveIdx = -1;
         for (let i = 0; i < sortedCompetitors.length; i++) {
           const comp = sortedCompetitors[i];
-          if (Number(comp.price) > currentPrice) {
-            closestAbove = comp;
-            closestAboveIdx = i;
-            break;
-          }
+          if (Number(comp.price) > currentPrice) { closestAbove = comp; targetIndex = i; break; }
         }
         if (closestAbove) {
           const testPrice = Number(closestAbove.price) - adTop1Diff;
-          if (testPrice > priceFloor) {
-            targetCompetitor = closestAbove;
-            targetIndex = closestAboveIdx;
-            await logBot(tenantId, "warn", "binance", `Ad ${adId}: sin margen seguro (${adSafeMarginPct}%), usando el más cercano sobre precio: ${Number(targetCompetitor.price).toFixed(2)}`);
-          }
+          if (testPrice > priceFloor) { targetCompetitor = closestAbove; }
         }
       } else if (viableCompetitors.length > 0) {
         const firstComp = viableCompetitors[0];
         const firstTargetRaw = Number(firstComp.price) - adTop1Diff;
-
         if (firstTargetRaw > priceFloor) {
-          targetCompetitor = firstComp;
-          targetIndex = 0;
+          targetCompetitor = firstComp; targetIndex = 0;
         } else {
           for (let i = 1; i < viableCompetitors.length; i++) {
             const comp = viableCompetitors[i];
             const testPrice = Number(comp.price) - adTop1Diff;
-            if (testPrice > priceFloor) {
-              targetCompetitor = comp;
-              targetIndex = i;
-              break;
-            }
+            if (testPrice > priceFloor) { targetCompetitor = comp; targetIndex = i; break; }
           }
         }
-
         if (!targetCompetitor) {
           const highest = viableCompetitors[viableCompetitors.length - 1];
           const testPrice = Number(highest.price) - adTop1Diff;
-          if (testPrice > priceFloor) {
-            targetCompetitor = highest;
-            targetIndex = viableCompetitors.length - 1;
-            await logBot(tenantId, "warn", "binance", `Ad ${adId}: todos bajo piso, usando más caro: ${Number(targetCompetitor.price).toFixed(2)}`);
-          }
+          if (testPrice > priceFloor) { targetCompetitor = highest; targetIndex = viableCompetitors.length - 1; }
         }
       }
 
       let targetPrice = currentPrice;
       if (targetCompetitor) {
         targetPrice = Number(targetCompetitor.price) - adTop1Diff;
-        if (targetPrice <= priceFloor) {
-          targetPrice = Math.max(currentPrice, priceFloor);
-          await logBot(tenantId, "warn", "binance", `Ad ${adId}: target bajo piso, manteniendo precio actual`);
-        } else {
-          await logBot(tenantId, "info", "binance", `Ad ${adId}: target #${targetIndex + 1}: ${Number(targetCompetitor.price).toFixed(2)} → ${targetPrice.toFixed(2)} (piso: ${priceFloor.toFixed(2)})`);
-        }
-      } else {
-        await logBot(tenantId, "warn", "binance", `Ad ${adId}: sin target sobre piso, manteniendo ${currentPrice.toFixed(2)}`);
+        if (targetPrice <= priceFloor) { targetPrice = Math.max(currentPrice, priceFloor); }
       }
+      if (firstAdTarget === 0) firstAdTarget = targetPrice;
 
-      // Update ad
       const diff = Math.abs(currentPrice - targetPrice);
-      if (diff >= 0.005) {
-        try {
-          const fullAd = ourSellAd;
-          const payIds = (fullAd.payments ?? []).map((p: any) => String(p.paymentMethodId ?? p.id ?? p));
+      if (diff < 0.005) continue;
 
-          const updateFields: Record<string, any> = {
-            adId,
-            price: targetPrice.toFixed(2),
-            quantity: balance > 0 ? String(balance) : String(fullAd.lastQuantity ?? fullAd.quantity ?? "0"),
-            minAmount: String(fullAd.minAmount ?? "0"),
-            maxAmount: balance > 0 ? String(balance) : String(fullAd.maxAmount ?? "0"),
-            paymentPeriod: fullAd.paymentPeriod ?? 15,
-            remark: fullAd.remark ?? "",
-          };
-          if (payIds.length) updateFields.payIds = payIds;
-          await client.updateAd(updateFields);
-          actions.push({ action: "update_price", exchange: "binance", adId, currentPrice, suggestedPrice: targetPrice, reason: `Ad ${adId} actualizado a ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
-          await logBot(tenantId, "info", "binance", `Ad ${adId} precio: ${currentPrice} → ${targetPrice.toFixed(2)}, cantidad: ${updateFields.quantity} USDT`);
-        } catch (e: any) {
-          await logBot(tenantId, "warn", "binance", `Ad ${adId}: no se pudo actualizar precio: ${e.message}`);
+      // ── Rate Limit Checks ──
+      bs.currentWeight = Math.max(bs.currentWeight, client.latestWeight);
+
+      // Clean old timestamps (>1h)
+      const oneHourAgo = Date.now() - 3600000;
+      bs.updateTimestamps = bs.updateTimestamps.filter(t => t > oneHourAgo);
+
+      // 30/hr check
+      if (bs.updateTimestamps.length >= 30) {
+        await logBot(tenantId, "warn", "binance", `Ad ${adId}: límite 30/hr alcanzado (${bs.updateTimestamps.length}), saltando`);
+        continue;
+      }
+      // 5s gap check
+      if (bs.lastUpdateAt > 0 && (Date.now() - bs.lastUpdateAt < 5000)) {
+        await logBot(tenantId, "debug", "binance", `Ad ${adId}: gap <5s desde último update, esperando`);
+        continue;
+      }
+      // Weight check
+      if (bs.currentWeight >= 4000) {
+        await logBot(tenantId, "warn", "binance", `Ad ${adId}: weight ${bs.currentWeight} ≥ 4000, pausando`);
+        continue;
+      }
+      // Rate-limit cooldown check (60s silence after -9000/-1000)
+      if (bs.lastRateLimitError > 0 && Date.now() - bs.lastRateLimitError < 60000) {
+        await logBot(tenantId, "warn", "binance", `Ad ${adId}: cooldown rate-limit (${Math.round((Date.now() - bs.lastRateLimitError) / 1000)}s), saltando`);
+        continue;
+      }
+
+      // ── Execute update ──
+      try {
+        const fullAd = ourSellAd;
+        await client.updateAd({
+          adId,
+          price: targetPrice.toFixed(2),
+        });
+        bs.updateTimestamps.push(Date.now());
+        bs.lastUpdateAt = Date.now();
+        actions.push({ action: "update_price", exchange: "binance", adId, currentPrice, suggestedPrice: targetPrice, reason: `Precio: ${currentPrice} → ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
+        await logBot(tenantId, "info", "binance", `Ad ${adId}: ${currentPrice} → ${targetPrice.toFixed(2)} (${bs.updateTimestamps.length}/30 esta hora)`);
+      } catch (e: any) {
+        if (e.message?.includes("code: -9000") || e.message?.includes("code: -1000") || e.message?.includes("429")) {
+          bs.lastRateLimitError = Date.now();
+          await logBot(tenantId, "warn", "binance", `Ad ${adId}: ${e.message.split('(')[0].trim()} — backoff 60s`);
+        } else if (e.message?.includes("83229") || e.message?.includes("83230")) {
+          await logBot(tenantId, "warn", "binance", `Ad ${adId}: ad offline (${e.message}), saltando`);
+        } else {
+          await logBot(tenantId, "warn", "binance", `Ad ${adId}: error update: ${e.message}`);
         }
       }
 
-      // Snapshot per ad
-      try {
-        const snapshotCompetitors = sortedCompetitors.slice(0, 50).map((c: any) => ({
-          id: c.id,
-          nickName: c.nickName,
-          price: Number(c.price),
-          minAmount: Number(c.minAmount ?? 0),
-          maxAmount: Number(c.maxAmount ?? 0),
-          lastQuantity: Number(c.lastQuantity ?? c.quantity ?? 0),
-          orderCount: Number(c.orderCount ?? 0),
-          completionRate: Number(c.completionRate ?? 0),
-          recentOrderCount: Number(c.recentOrderCount ?? 0),
-          recentExecuteRate: Number(c.recentExecuteRate ?? 0),
-          monthOrderCount: Number(c.monthOrderCount ?? 0),
-          monthExecuteRate: Number(c.monthExecuteRate ?? 0),
-          paymentMethods: (c.paymentMethods ?? []).map((pm: any) => ({
-            id: pm.id ?? pm.paymentMethodId ?? pm,
-            name: pm.name ?? pm.paymentMethodName ?? "",
-            identifier: pm.identifier ?? "",
-          })),
-        }));
-        await prisma.p2PBotMarketSnapshot.create({
-          data: {
-            tenantId,
-            exchange: "binance",
-            side: "1",
-            competitors: JSON.parse(JSON.stringify(snapshotCompetitors)),
-            ourAd: JSON.parse(JSON.stringify({ id: ourSellAd.id, price: Number(ourSellAd.price), lastQuantity: Number(ourSellAd.lastQuantity ?? ourSellAd.quantity ?? 0), minAmount: Number(ourSellAd.minAmount ?? 0), maxAmount: Number(ourSellAd.maxAmount ?? 0) })),
-            targetPrice: targetPrice ?? undefined,
-          },
-        });
-      } catch (e: any) {
-        await logBot(tenantId, "warn", "binance", `Ad ${adId}: snapshot no almacenado: ${e.message}`);
-      }
-      // Delay between ads to avoid Binance rate-limit
+      // 5s gap between ads
       if (managedAds.length > 1 && managedAds.indexOf(managedAd) < managedAds.length - 1) {
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 5000));
       }
     }
 
-    // 6. Sync orders from Binance to local DB (once)
-    let binanceOrders: any[] = [];
+    // 5. Sync orders
     try {
       const ordersRes = await client.getOrders({ page: 1, rows: 30 });
-      binanceOrders = ordersRes?.data ?? [];
+      const binanceOrders = ordersRes?.data ?? [];
       for (const o of binanceOrders) {
         const orderId = o.orderNo ?? o.id;
         const existing = await prisma.p2PBotOrder.findFirst({
@@ -803,28 +796,30 @@ async function runBinanceCycle(
         if (!existing) {
           await prisma.p2PBotOrder.create({
             data: {
-              tenantId,
-              exchange: "binance",
-              orderNumber: orderId,
+              tenantId, exchange: "binance", orderNumber: orderId,
               tradeType: o.tradeType === "SELL" ? "SELL" : "BUY",
-              asset: o.asset || "USDT",
-              fiat: o.fiat || "CLP",
-              amount: Number(o.amount) || 0,
-              totalPrice: Number(o.totalPrice) || 0,
-              unitPrice: Number(o.unitPrice) || 0,
-              status: o.orderStatus || "pending",
-              counterparty: o.counterpartyNickName || "",
-              executedAt: o.createTime ? new Date(Number(o.createTime)) : new Date(),
+              asset: o.asset || "USDT", fiat: o.fiat || "CLP",
+              amount: Number(o.amount ?? o.totalQuantity ?? 0),
+              totalPrice: Number(o.totalPrice ?? o.totalAmount ?? 0),
+              unitPrice: Number(o.unitPrice ?? o.price ?? 0),
+              status: o.orderStatus ?? o.status ?? "unknown",
+              counterparty: o.counterpartyNickName ?? o.publisherName ?? "",
+              executedAt: o.createTime ? new Date(o.createTime) : new Date(),
             },
           });
-          await logBot(tenantId, "info", "binance", `Orden #${orderId} sincronizada (${o.orderStatus})`);
         }
       }
     } catch (e: any) {
-      await logBot(tenantId, "warn", "binance", `Órdenes no disponibles: ${e.message}`);
+      if (!e.message?.includes("-9000") && !e.message?.includes("-1000")) {
+        await logBot(tenantId, "warn", "binance", `Error órdenes: ${e.message}`);
+      }
     }
 
-    await logBot(tenantId, "info", "binance", `Ciclo completado: ${binanceOrders.length} órdenes, managedAds: ${managedAds.length}`);
+    // Update stored price/target for UI
+    bs.lastPrice = firstAdPrice;
+    bs.lastTarget = firstAdTarget;
+
+    await logBot(tenantId, "info", "binance", `Ciclo completado: managedAds: ${managedAds.length}`);
   } catch (e: any) {
     await logBot(tenantId, "error", "binance", `Error en ciclo: ${e.message}`);
   }
@@ -1049,7 +1044,7 @@ async function runBybitCycle(
           if (e.message?.includes("912120050")) {
             await logBot(tenantId, "info", "bybit", `Rate limit, recreando anuncio ${adId}...`);
             await client.removeAd(adId);
-            const recreatePrice = targetPrice + 0.5;
+            const recreatePrice = targetPrice + Math.max(2.0, currentPrice * 0.01);
             const postFields: any = {
               tokenId: "USDT", currencyId: "CLP", side: "1",
               price: recreatePrice.toFixed(2),
@@ -1063,16 +1058,37 @@ async function runBybitCycle(
               remark: String(fullAd.remark ?? ""),
               tradingPreferenceSet: strTps,
               itemType: String(fullAd.itemType ?? "ORIGIN"),
+              status: 10,
             };
-            const newAdRes = await client.postAd(postFields);
-            const newAdId = newAdRes?.result?.item?.id ?? newAdRes?.result?.id;
-            if (newAdId) {
-              actions.push({ action: "recreate_ad", exchange: "bybit", adId: newAdId, suggestedPrice: targetPrice, reason: `Nuevo anuncio creado`, timestamp: Date.now() });
-              // Update the DB record with the new adId so next cycle can find it
-              await prisma.p2PBotAd.update({
-                where: { id: managedAd.id },
-                data: { adId: String(newAdId) },
-              });
+            try {
+              const newAdRes = await client.postAd(postFields);
+              const newAdId = newAdRes?.result?.item?.id ?? newAdRes?.result?.id;
+              if (newAdId) {
+                // Activate online (same format as 912120031 handler)
+                await new Promise(r => setTimeout(r, 2000));
+                try {
+                  await client.updateAd({ id: String(newAdId), status: 10 });
+                  await logBot(tenantId, "info", "bybit", `Anuncio ${newAdId} creado y activado online`);
+                } catch (e3: any) {
+                  await logBot(tenantId, "warn", "bybit", `Anuncio ${newAdId}: no se pudo activar online (${e3.message}), reintentando próximo ciclo`);
+                }
+                actions.push({ action: "recreate_ad", exchange: "bybit", adId: newAdId, suggestedPrice: targetPrice, reason: `Nuevo anuncio creado tras rate-limit`, timestamp: Date.now() });
+                await prisma.p2PBotAd.update({
+                  where: { id: managedAd.id },
+                  data: { adId: String(newAdId) },
+                });
+                await logBot(tenantId, "info", "bybit", `Anuncio recreado como ${newAdId}`);
+              }
+            } catch (e2: any) {
+              await logBot(tenantId, "warn", "bybit", `Ad ${adId}: error al recrear: ${e2.message}`);
+            }
+          } else if (e.message?.includes("912120031")) {
+            await logBot(tenantId, "info", "bybit", `Ad ${adId} offline, reactivando para próximo ciclo...`);
+            try {
+              await client.updateAd({ id: adId, status: 10 } as any);
+              await logBot(tenantId, "info", "bybit", `Ad ${adId} reactivado`);
+            } catch(e2: any) {
+              await logBot(tenantId, "warn", "bybit", `Ad ${adId}: no se pudo reactivar: ${e2.message}`);
             }
           } else {
             await logBot(tenantId, "warn", "bybit", `Ad ${adId}: error actualización: ${e.message}`);

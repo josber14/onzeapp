@@ -87,6 +87,9 @@ export async function GET(req: NextRequest) {
               botSafeMarginPct: localAd?.botSafeMarginPct ? Number(localAd.botSafeMarginPct) : null,
               botMinCompetitorCapital: localAd?.botMinCompetitorCapital ? Number(localAd.botMinCompetitorCapital) : null,
               botCompetePayTypes: localAd?.botCompetePayTypes as string[] | null || null,
+              botCycleInterval: localAd?.botCycleInterval ? Number(localAd.botCycleInterval) : null,
+              botCircuitBreakPct: localAd?.botCircuitBreakPct ? Number(localAd.botCircuitBreakPct) : null,
+              botDailyVolumeCapUsdt: localAd?.botDailyVolumeCapUsdt ? Number(localAd.botDailyVolumeCapUsdt) : null,
               createdAt: a.createDate || a.createdAt || new Date().toISOString(),
               fromBinance: true,
             };
@@ -103,10 +106,28 @@ export async function GET(req: NextRequest) {
       try {
         const client = await getBybitClient(session.tenantId);
         if (client) {
+          // Fetch payment method list to map type IDs to names
+          const payNameMap: Record<string, string> = {};
+          try {
+            const payRes = await client.getPaymentMethods();
+            const payList: any[] = payRes?.result || [];
+            if (Array.isArray(payList)) {
+              for (const pm of payList) {
+                const typeId = String(pm.paymentConfigVo?.paymentType ?? pm.paymentType ?? '');
+                const name = pm.paymentConfigVo?.paymentName || '';
+                if (typeId && name) payNameMap[typeId] = name;
+              }
+            }
+          } catch (_) {}
           const res = await client.getMyAds(1, 50);
           const items = res?.result?.items || [];
           bybitAds = items.map((a: any) => {
             const localAd = ads.find(la => la.adId === a.id);
+            const rawPays: any[] = a.payments || [];
+            const paymentMethods = rawPays.map((p: any) => {
+              const typeId = String(p.paymentType ?? p);
+              return { id: typeId, name: payNameMap[typeId] || typeId };
+            });
             return {
             id: localAd?.id || a.id,
             adId: a.id,
@@ -119,7 +140,7 @@ export async function GET(req: NextRequest) {
             amount: Number(a.surplusAmount ?? a.tradableQuantity ?? a.lastQuantity ?? a.quantity ?? 0) || 0,
             minAmount: Number(a.minSingleTransAmount ?? a.minAmount) || 0,
             maxAmount: Number(a.maxSingleTransAmount ?? a.maxAmount) || 0,
-            paymentMethods: a.payments || [],
+            paymentMethods,
             payTime: a.paymentPeriod || 15,
             status: a.status === 10 ? "online" : "offline",
             isActive: a.isOnline,
@@ -134,6 +155,9 @@ export async function GET(req: NextRequest) {
             botSafeMarginPct: localAd?.botSafeMarginPct ? Number(localAd.botSafeMarginPct) : null,
             botMinCompetitorCapital: localAd?.botMinCompetitorCapital ? Number(localAd.botMinCompetitorCapital) : null,
             botCompetePayTypes: localAd?.botCompetePayTypes as string[] | null || null,
+            botCycleInterval: localAd?.botCycleInterval ? Number(localAd.botCycleInterval) : null,
+            botCircuitBreakPct: localAd?.botCircuitBreakPct ? Number(localAd.botCircuitBreakPct) : null,
+            botDailyVolumeCapUsdt: localAd?.botDailyVolumeCapUsdt ? Number(localAd.botDailyVolumeCapUsdt) : null,
             createdAt: a.createDate ? new Date(Number(a.createDate)).toISOString() : new Date().toISOString(),
             fromBybit: true,
             };
@@ -172,6 +196,9 @@ export async function GET(req: NextRequest) {
       botSafeMarginPct: a.botSafeMarginPct ? Number(a.botSafeMarginPct) : null,
       botMinCompetitorCapital: a.botMinCompetitorCapital ? Number(a.botMinCompetitorCapital) : null,
       botCompetePayTypes: a.botCompetePayTypes as string[] | null || null,
+      botCycleInterval: a.botCycleInterval ? Number(a.botCycleInterval) : null,
+      botCircuitBreakPct: a.botCircuitBreakPct ? Number(a.botCircuitBreakPct) : null,
+      botDailyVolumeCapUsdt: a.botDailyVolumeCapUsdt ? Number(a.botDailyVolumeCapUsdt) : null,
       createdAt: a.createdAt.toISOString(),
       fromBybit: false,
     }))];

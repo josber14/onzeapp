@@ -36,6 +36,7 @@ export class BinanceP2PClient {
   private secretKey: string;
   private apiBase = "https://api.binance.com";
   private p2pBase = "https://p2p.binance.com";
+  public latestWeight: number = 0;
 
   constructor(apiKey: string, secretKey: string) {
     this.apiKey = apiKey;
@@ -75,11 +76,14 @@ export class BinanceP2PClient {
       headers: {
         "X-MBX-APIKEY": this.apiKey,
         "Content-Type": "application/json",
+        "clientType": "web",
       },
     };
     if (bodyPayload) opts.body = JSON.stringify(bodyPayload);
 
     const res = await fetch(url, opts);
+    const weightStr = res.headers.get("x-mbx-used-weight") || res.headers.get("X-MBX-USED-WEIGHT-1M") || "0";
+    this.latestWeight = parseInt(weightStr, 10) || 0;
     const text = await res.text();
     if (!text) throw new Error(`Binance empty response (HTTP ${res.status}) for ${endpoint}`);
     let data: any;
@@ -193,6 +197,58 @@ export class BinanceP2PClient {
 
   async removeAd(adId: string) {
     return this.privateRequest("/sapi/v1/c2c/ads/batchUpdateStatus", {}, { adsNos: [adId], advStatus: "close" });
+  }
+
+  async recreateAd(adId: string, targetPrice: string): Promise<string | null> {
+    // Fetch current ad detail for payment methods
+    let identifiers: string[] = [];
+    try {
+      const detailRes = await this.getAdDetail(adId);
+      const adv = detailRes?.data?.adv || {};
+      identifiers = (adv.tradeMethods || []).map((tm: any) => tm.identifier ?? tm.payType ?? "");
+    } catch (_) {}
+    // Build tradeMethods from identifiers only (payId is optional)
+    const tradeMethods = identifiers.filter(Boolean).map(id => ({ identifier: id }));
+    if (tradeMethods.length === 0) {
+      tradeMethods.push({ identifier: "BANK" });
+    }
+    // Post a new ad FIRST, then close the old one (avoid losing ad if postAd fails)
+    const postParams: Record<string, any> = {
+      tradeType: "1",
+      asset: "USDT",
+      fiatUnit: "CLP",
+      priceType: "1",
+      price: targetPrice,
+      initAmount: "5000",
+      maxSingleTransAmount: "5000000",
+      minSingleTransAmount: "1000",
+      buyerKycLimit: 1,
+      tradeMethods,
+      payTimeLimit: 15,
+    };
+    let newAdNo: string | null = null;
+    try {
+      const res = await this.postAd(postParams);
+      newAdNo = res?.data?.advNo ?? res?.data?.adNo ?? null;
+    } catch (e: any) {
+      // Try with classify=profession which is more permissive
+      try {
+        postParams.classify = "profession";
+        const res = await this.postAd(postParams);
+        newAdNo = res?.data?.advNo ?? res?.data?.adNo ?? null;
+      } catch (e2: any) {
+        // Both attempts failed — old ad still live, don't remove
+        throw new Error(`recreateAd: postAd failed twice (${e.message}, ${e2.message}) — old ad preserved`);
+      }
+    }
+    if (newAdNo) {
+      // Now close the old ad
+      await new Promise(r => setTimeout(r, 1000));
+      try {
+        await this.removeAd(adId);
+      } catch (_) {}
+    }
+    return newAdNo;
   }
 
   // ─── Orders ──────────────────────────────────────────────────
