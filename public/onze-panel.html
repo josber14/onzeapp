@@ -14105,7 +14105,8 @@ function addP2PBotStyles(){
             <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;">
               <h3 class="section-title" style="margin:0;">Ventas Binance</h3>
               <button id="btn-sync-binance-sales" class="btn secondary" type="button">Sincronizar Binance P2P</button>
-            </div>
+              <button id="btn-manual-sale" class="btn secondary" type="button" style="background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25);color:#fbbf24;">+ Registrar venta manual</button>
+                </div>
             <div id="binance-sales-container" class="p2p-dashboard-empty" style="margin-top:14px;">Sin operaciones P2P registradas todavía.</div>
           </div>
         </div>
@@ -14422,6 +14423,40 @@ function addP2PBotStyles(){
     localStorage.setItem("onze_p2p_binance_orders", JSON.stringify(Array.isArray(orders) ? orders : []));
   }
 
+  window.deleteManualSale = function deleteManualSale(orderId){
+    if(!confirm("¿Borrar esta venta manual? Se recalcularán las capacidades.")) return;
+    const orders = loadP2PBinanceOrders();
+    const filtered = orders.filter(o => o.orderNumber !== orderId);
+    saveP2PBinanceOrders(filtered);
+    // Recalcular todo desde cero para limpiar valores fantasma
+    window.recalculateP2PCapacities();
+  };
+
+  window.recalculateP2PCapacities = function recalculateP2PCapacities(){
+    if(!confirm("¿Recalcular capacities desde cero? Se limpiarán todos los clpReceived, saleParts y estados finished para reasignar solo con ventas reales.")) return;
+    const caps = loadP2PCapacity();
+    for(const cap of caps){
+      cap.clpReceived = "0";
+      cap.usedUsdt = "0";
+      cap.commissionUsdt = "0";
+      cap.commissionClp = "0";
+      cap.saleParts = [];
+      if(cap.status === "finished"){
+        cap.status = "active";
+        delete cap.finishedAt;
+        delete cap.finalSoldUsdt;
+        delete cap.finalClpReceived;
+        delete cap.finalCommissionUsdt;
+        delete cap.finalCommissionClp;
+        delete cap.finalSaleParts;
+      }
+    }
+    saveP2PCapacity(caps, true);
+    window.__p2pCapacityCache = null;
+    renderP2PCapacityPanel();
+    renderP2PDashboardFromBinance();
+  };
+
   window.__p2pBinancePage = 1;
   const __p2pBinancePageSize = 10;
 
@@ -14494,6 +14529,7 @@ function addP2PBotStyles(){
                 <strong style="color:#34d399;">${p2pMoney(o.unitPrice, 2)} ${o.fiat || "CLP"}</strong>
                 <div style="color:#f8fafc;font-size:12px;margin-top:3px;">${p2pMoney(o.totalPrice, 0)} ${o.fiat || "CLP"}</div>
                 <div style="color:#8aa0ba;font-size:12px;margin-top:3px;">${o.orderStatus || ""}</div>
+                ${o._manual || String(o.orderNumber || '').startsWith('manual_') ? `<div style="margin-top:6px;"><button class="btn danger" style="padding:2px 8px;font-size:11px;line-height:1.4;" onclick="window.deleteManualSale('${o.orderNumber}')">✕ Borrar manual</button></div>` : ""}
               </div>
             </div>
           `;
@@ -15905,6 +15941,7 @@ function addP2PBotStyles(){
                         <strong style="color:#34d399;font-size:13px;">${p2pCapMoney(part.unitPrice, 2)} CLP/USDT</strong>
                         <div class="p2p-capacity-meta" style="margin-top:3px;">${p2pCapMoney(part.assignedClp, 0)} CLP</div>
                         <div class="p2p-capacity-meta" style="margin-top:3px;">Comisión: ${p2pCapMoney(part.commissionUsdt, 4)} USDT</div>
+                        ${String(part.orderNumber || '').startsWith('manual_') ? `<button class="btn danger" style="margin-top:6px;padding:2px 8px;font-size:10px;line-height:1.4;" onclick="if(confirm('¿Borrar esta venta manual? Se recalcularán las capacidades.')){document.getElementById('p2pCapacityDetailModalBackdrop')?.classList.remove('open');setTimeout(()=>window.deleteManualSale('${part.orderNumber}'),100);}">✕ Borrar</button>` : ""}
                       </div>
                     </div>
                   `;
@@ -17869,12 +17906,10 @@ function addP2PBotStyles(){
       .then(data => {
         if(data.ok && data.orders){
           saveBinanceSales(data.orders);
-          window.__p2pBinancePage = 1;
           autoFinishP2PCapacities();
           if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
           if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
           if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
-
         }else{
           throw new Error(data.error || 'Error sincronizando');
         }
@@ -17893,6 +17928,7 @@ function addP2PBotStyles(){
     if(btn){
       btn.addEventListener('click', syncBinanceSales);
     }
+    initManualSaleButton();
     if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
     setInterval(() => syncBinanceSales(true), 15000);
 
@@ -17901,6 +17937,269 @@ function addP2PBotStyles(){
         syncBinanceSales(true);
       }
     });
+  }
+
+  window.showManualSaleModal = function showManualSaleModal(){
+    const stats = calculateP2PCapacityStats();
+    const active = (stats.capacities || []).find(c => c.status === "active" && Number(c.capacityClp || 0) > Number(c.clpReceived || 0));
+    const buyPrice = active ? Number(active.buyPrice || 0) : 0;
+    const remainingClp = active ? Math.max(Number(active.capacityClp || 0) - Number(active.clpReceived || 0), 0) : 0;
+    const remainingUsdt = buyPrice > 0 ? remainingClp / buyPrice : 0;
+
+    if(document.getElementById("p2pManualSaleModal")){
+      document.getElementById("p2pManualSaleModal").remove();
+    }
+
+    const backdrop = document.createElement("div");
+    backdrop.id = "p2pManualSaleModal";
+    backdrop.className = "p2p-capacity-modal-backdrop";
+    backdrop.style.display = "flex";
+
+    backdrop.innerHTML = `
+      <div class="p2p-capacity-modal" style="max-width:520px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px;">
+          <div>
+            <h3 class="section-title" style="margin-bottom:4px;">Registrar venta manual</h3>
+            <p class="section-text" style="font-size:13px;">Completa una venta P2P manual — afecta balance diario, capital y ganancia real.</p>
+          </div>
+          <button class="btn secondary" type="button" id="closeManualSaleModal" style="padding:6px 14px;">Cerrar</button>
+        </div>
+
+        <div style="border:1px solid rgba(52,211,153,.2);border-radius:14px;padding:14px;background:rgba(52,211,153,.05);margin-bottom:18px;">
+          <div style="font-weight:900;font-size:13px;color:#34d399;margin-bottom:10px;">Capacity activo (referencia)</div>
+          <div class="p2p-detail-summary-grid" style="grid-template-columns:1fr 1fr;gap:8px;">
+            <div class="p2p-capacity-mini">
+              <span>Proveedor</span>
+              <strong>${active ? (active.provider || "—") : "Sin capacity activo"}</strong>
+            </div>
+            <div class="p2p-capacity-mini">
+              <span>Precio compra</span>
+              <strong>${buyPrice > 0 ? p2pCapMoney(buyPrice, 2) + " CLP" : "—"}</strong>
+            </div>
+            <div class="p2p-capacity-mini">
+              <span>Capacity restante</span>
+              <strong>${p2pCapMoney(remainingClp, 0)} CLP</strong>
+            </div>
+            <div class="p2p-capacity-mini">
+              <span>Equivale a</span>
+              <strong>${p2pCapMoney(remainingUsdt, 2)} USDT</strong>
+            </div>
+          </div>
+        </div>
+
+        <form id="manualSaleForm" novalidate>
+          <div class="p2p-capacity-form">
+            <label class="full">
+              CLP recibido por la venta
+              <input id="manualSaleClp" inputmode="decimal" placeholder="Ej: 50000" required
+                oninput="this.value=this.value.replace(/[^0-9]/g,'').replace(/\\B(?=(\\d{3})+(?!\\d))/g,'.');">
+            </label>
+
+            <label>
+              Precio de venta (CLP/USDT)
+              <input id="manualSaleSellPrice" inputmode="decimal" placeholder="Ej: 950">
+            </label>
+
+            <label>
+              USDT vendidos
+              <input id="manualSaleUsdt" inputmode="decimal" placeholder="Se calcula automático" readonly
+                style="color:#8aa0ba;">
+            </label>
+
+            <label>
+              Comisión (%)
+              <input id="manualSaleCommissionPct" type="number" step="0.01" value="${getDefaultCommissionPct()}" placeholder="0.14">
+              <div style="font-size:11px;color:#8aa0ba;margin-top:3px;">0 USDT para esta venta</div>
+            </label>
+
+            <label class="full" style="display:flex;flex-direction:column;gap:6px;">
+              <span style="color:#a8b3c7;font-weight:900;font-size:13px;">Resumen</span>
+              <div id="manualSaleSummary" style="border:1px solid rgba(148,163,184,.13);border-radius:12px;padding:12px;background:rgba(15,23,42,.5);font-size:13px;color:#c4cdd8;line-height:1.6;">
+                Ingresa CLP recibido y precio de venta para ver el resumen.
+              </div>
+            </label>
+
+            <div class="full" style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:4px;">
+              <button class="btn secondary" type="button" id="cancelManualSale">Cancelar</button>
+              <button class="btn" type="submit">Registrar venta</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    `;
+
+    document.body.appendChild(backdrop);
+
+    document.getElementById("closeManualSaleModal").addEventListener("click", () => backdrop.remove());
+    document.getElementById("cancelManualSale").addEventListener("click", () => backdrop.remove());
+    backdrop.addEventListener("click", (e) => { if(e.target === backdrop) backdrop.remove(); });
+
+    document.getElementById("manualSaleClp").addEventListener("input", updateManualSalePreview);
+    document.getElementById("manualSaleClp").addEventListener("change", updateManualSalePreview);
+    document.getElementById("manualSaleSellPrice").addEventListener("input", updateManualSalePreview);
+    document.getElementById("manualSaleSellPrice").addEventListener("change", updateManualSalePreview);
+    document.getElementById("manualSaleCommissionPct").addEventListener("input", updateManualSalePreview);
+    document.getElementById("manualSaleCommissionPct").addEventListener("change", updateManualSalePreview);
+
+    document.getElementById("manualSaleForm").addEventListener("submit", function(e){
+      e.preventDefault();
+
+      try {
+        const clpRaw = document.getElementById("manualSaleClp")?.value || "";
+        const clp = p2pCapNumber(clpRaw);
+        if(clp <= 0){ alert("Ingresa el CLP recibido."); return; }
+
+        const sellPriceRaw = document.getElementById("manualSaleSellPrice")?.value || "";
+        const sellPrice = p2pCapNumber(sellPriceRaw);
+        if(sellPrice <= 0){ alert("Ingresa el precio de venta."); return; }
+
+        const usdt = clp / sellPrice;
+        const commissionPctRaw = document.getElementById("manualSaleCommissionPct")?.value || "0.14";
+        const commissionPct = parseFloat(commissionPctRaw);
+        if(isNaN(commissionPct) || commissionPct < 0){ alert("Comisión inválida."); return; }
+        const commission = usdt * commissionPct / 100;
+
+        const now = new Date();
+        const order = {
+          orderNumber: "manual_" + Date.now() + "_" + Math.random().toString(36).slice(2,6),
+          tradeType: "SELL",
+          asset: "USDT",
+          fiat: "CLP",
+          amount: usdt,
+          totalPrice: clp,
+          unitPrice: sellPrice,
+          commission: commission,
+          orderStatus: "COMPLETED",
+          payMethodName: "Manual",
+          counterPartNickName: "Manual",
+          createTime: now.getTime(),
+          createdAt: now.toISOString(),
+          _manual: true,
+        };
+
+        const orders = loadP2PBinanceOrders();
+        orders.unshift(order);
+        localStorage.setItem("onze_p2p_binance_orders", JSON.stringify(orders));
+
+        try { localStorage.setItem("onze_binance_sales", JSON.stringify(orders)); } catch(e){}
+
+        backdrop.remove();
+
+        // Forzar recalculo y persistir asignaciones a capacities activos
+        try {
+          const s = calculateP2PCapacityStats();
+          const caps = loadP2PCapacity().slice();
+          let changed = false;
+          for (const capStats of s.capacities) {
+            if (capStats.status === "finished" || capStats.status === "_capital") continue;
+            const idx = caps.findIndex(c => c.id === capStats.id);
+            if (idx < 0) continue;
+            const cap = caps[idx];
+            const was = Number(cap.clpReceived || 0);
+            const now = Number(capStats.clpReceived || 0);
+            if (now !== was) {
+              cap.clpReceived = now;
+              cap.usedUsdt = capStats.usedUsdt;
+              cap.commissionUsdt = capStats.commissionUsdt;
+              cap.commissionClp = capStats.commissionClp;
+              cap.saleParts = capStats.saleParts || [];
+              changed = true;
+            }
+          }
+          if (changed) saveP2PCapacity(caps, true);
+        } catch(e) { console.warn("Error persisting manual sale:", e); }
+
+        if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
+        if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
+        if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
+        if(typeof renderBinanceSalesTable === 'function') renderBinanceSalesTable();
+      } catch(err){
+        console.error("Error al registrar venta manual:", err);
+        alert("Error: " + err.message);
+      }
+    });
+
+    function updateManualSalePreview(){
+      const clpRaw = document.getElementById("manualSaleClp")?.value || "";
+      const clp = p2pCapNumber(clpRaw);
+      const sellPriceRaw = document.getElementById("manualSaleSellPrice")?.value || "";
+      const sellPrice = p2pCapNumber(sellPriceRaw);
+      const summary = document.getElementById("manualSaleSummary");
+      const commHint = document.querySelector("#manualSaleCommissionPct + div");
+
+      const usdtInput = document.getElementById("manualSaleUsdt");
+
+      if(clp <= 0 || sellPrice <= 0){
+        if(usdtInput) usdtInput.value = "";
+        if(commHint) commHint.textContent = "0 USDT para esta venta";
+        summary.innerHTML = "Ingresa CLP recibido y precio de venta para ver el resumen.";
+        return;
+      }
+
+      const usdt = clp / sellPrice;
+      if(usdtInput) usdtInput.value = p2pCapMoney(usdt, 2);
+
+      const commPctRaw = document.getElementById("manualSaleCommissionPct")?.value || "0";
+      const commPct = parseFloat(commPctRaw);
+      const commUsdt = usdt * commPct / 100;
+      const netoUsdt = Math.max(usdt - commUsdt, 0);
+      const netoClp = netoUsdt * sellPrice;
+
+      if(commHint) commHint.textContent = p2pCapMoney(commUsdt, 2) + " USDT para esta venta";
+
+      let costInfo = "";
+      if(buyPrice > 0){
+        const costClp = usdt * buyPrice;
+        const profitClp = clp - costClp - commUsdt * sellPrice;
+        const profitPct = costClp > 0 ? (profitClp / costClp) * 100 : 0;
+        const sign = profitClp >= 0 ? "+" : "";
+        const color = profitClp >= 0 ? "#34d399" : "#fb7185";
+        costInfo = `
+          <div style="display:flex;justify-content:space-between;">
+            <span>Costo (${p2pCapMoney(buyPrice, 2)} CLP/USDT)</span>
+            <strong style="color:#f8fafc;">${p2pCapMoney(costClp, 0)} CLP</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="font-weight:900;">Ganancia / Pérdida</span>
+            <strong style="color:${color};">${sign}${p2pCapMoney(Math.abs(profitClp), 0)} CLP (${sign}${p2pCapMoney(Math.abs(profitPct), 2)}%)</strong>
+          </div>`;
+      }
+
+      summary.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;justify-content:space-between;">
+            <span>USDT vendidos</span>
+            <strong style="color:#f8fafc;">${p2pCapMoney(usdt, 2)} USDT</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span>Precio venta</span>
+            <strong style="color:#f8fafc;">${p2pCapMoney(sellPrice, 2)} CLP</strong>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span>Comisión (${p2pCapMoney(commPct, 2)}%)</span>
+            <strong style="color:#fb7185;">-${p2pCapMoney(commUsdt, 2)} USDT</strong>
+          </div>
+          ${costInfo}
+          <div style="border-top:1px solid rgba(148,163,184,.13);padding-top:4px;display:flex;justify-content:space-between;">
+            <span style="color:#34d399;font-weight:900;">Neto recibido</span>
+            <strong style="color:#34d399;">${p2pCapMoney(netoUsdt, 2)} USDT (${p2pCapMoney(netoClp, 0)} CLP)</strong>
+          </div>
+        </div>
+      `;
+    }
+  };
+
+  function getDefaultCommissionPct(){
+    try{
+      const el = document.getElementById("botExCommissionPct");
+      if(el && el.value) return parseFloat(el.value) || 0.14;
+    }catch(e){}
+    return 0.14;
+  }
+
+  function initManualSaleButton(){
+    const btn = document.getElementById("btn-manual-sale");
+    if(btn) btn.addEventListener("click", window.showManualSaleModal);
   }
 
   window.repairP2PCapacity = function(capacityId, carryoverUsdt, carryoverClp, carryoverCommissionUsdt){

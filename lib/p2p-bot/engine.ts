@@ -685,6 +685,9 @@ async function runBinanceCycle(
         if (marginPct >= adSafeMarginPct) viableCompetitors.push(comp);
       }
 
+      // Safe margin floor (incluye comisión + margen de seguridad)
+      const safeFloor = priceFloor * (1 + adSafeMarginPct / 100);
+
       // Target calculation
       let targetCompetitor: any = null;
       let targetIndex = -1;
@@ -697,31 +700,31 @@ async function runBinanceCycle(
         }
         if (closestAbove) {
           const testPrice = Number(closestAbove.price) - adTop1Diff;
-          if (testPrice > priceFloor) { targetCompetitor = closestAbove; }
+          if (testPrice > safeFloor) { targetCompetitor = closestAbove; }
         }
       } else if (viableCompetitors.length > 0) {
         const firstComp = viableCompetitors[0];
         const firstTargetRaw = Number(firstComp.price) - adTop1Diff;
-        if (firstTargetRaw > priceFloor) {
+        if (firstTargetRaw > safeFloor) {
           targetCompetitor = firstComp; targetIndex = 0;
         } else {
           for (let i = 1; i < viableCompetitors.length; i++) {
             const comp = viableCompetitors[i];
             const testPrice = Number(comp.price) - adTop1Diff;
-            if (testPrice > priceFloor) { targetCompetitor = comp; targetIndex = i; break; }
+            if (testPrice > safeFloor) { targetCompetitor = comp; targetIndex = i; break; }
           }
         }
         if (!targetCompetitor) {
           const highest = viableCompetitors[viableCompetitors.length - 1];
           const testPrice = Number(highest.price) - adTop1Diff;
-          if (testPrice > priceFloor) { targetCompetitor = highest; targetIndex = viableCompetitors.length - 1; }
+          if (testPrice > safeFloor) { targetCompetitor = highest; targetIndex = viableCompetitors.length - 1; }
         }
       }
 
       let targetPrice = currentPrice;
       if (targetCompetitor) {
         targetPrice = Number(targetCompetitor.price) - adTop1Diff;
-        if (targetPrice <= priceFloor) { targetPrice = Math.max(currentPrice, priceFloor); }
+        if (targetPrice <= safeFloor) { targetPrice = Math.max(currentPrice, safeFloor); }
       }
       if (firstAdTarget === 0) firstAdTarget = targetPrice;
 
@@ -961,6 +964,9 @@ async function runBybitCycle(
         continue;
       }
 
+      // Safe margin floor (incluye margen de seguridad)
+      const safeFloor = minSellPrice * (1 + adSafeMarginPct / 100);
+
       // Safe margin filter
       let targetCompetitor: any = null;
       let targetIndex = 0;
@@ -969,7 +975,7 @@ async function runBybitCycle(
         const marginPct = minSellPrice > 0 ? ((Number(comp.price) - minSellPrice) / minSellPrice) * 100 : 999;
         if (marginPct >= adSafeMarginPct) {
           const testPrice = Number(comp.price) - adTop1Diff;
-          if (testPrice > minSellPrice) {
+          if (testPrice > safeFloor) {
             targetCompetitor = comp;
             targetIndex = i;
             break;
@@ -977,15 +983,18 @@ async function runBybitCycle(
         }
       }
 
-      // Fallback: closest above current price
+      // Fallback: closest above current price (respetando safeFloor)
       if (!targetCompetitor && sortedCompetitors.length > 0) {
         for (let i = 0; i < sortedCompetitors.length; i++) {
           const comp = sortedCompetitors[i];
           if (currentPrice > 0 && Number(comp.price) > currentPrice) {
-            targetCompetitor = comp;
-            targetIndex = i;
-            await logBot(tenantId, "warn", "bybit", `Ad ${adId}: sin margen/piso, usando más cercano sobre precio: ${Number(targetCompetitor.price).toFixed(2)}`);
-            break;
+            const testPrice = Number(comp.price) - adTop1Diff;
+            if (testPrice > safeFloor) {
+              targetCompetitor = comp;
+              targetIndex = i;
+              await logBot(tenantId, "warn", "bybit", `Ad ${adId}: sin margen/piso, usando más cercano sobre precio: ${Number(targetCompetitor.price).toFixed(2)}`);
+              break;
+            }
           }
         }
       }
@@ -994,16 +1003,16 @@ async function runBybitCycle(
       if (targetCompetitor) {
         await logBot(tenantId, "info", "bybit", `Ad ${adId}: target #${targetIndex + 1}: ${Number(targetCompetitor.price).toFixed(2)}`);
         const targetRaw = Number(targetCompetitor.price) - adTop1Diff;
-        if (targetRaw > minSellPrice) {
+        if (targetRaw > safeFloor) {
           targetPrice = targetRaw;
         } else {
-          await logBot(tenantId, "warn", "bybit", `Ad ${adId}: target bajo piso, manteniendo ${currentPrice.toFixed(2)}`);
+          await logBot(tenantId, "warn", "bybit", `Ad ${adId}: target bajo piso seguro, manteniendo ${currentPrice.toFixed(2)}`);
         }
       } else {
-        await logBot(tenantId, "warn", "bybit", `Ad ${adId}: sin target sobre piso, manteniendo ${currentPrice.toFixed(2)}`);
+        await logBot(tenantId, "warn", "bybit", `Ad ${adId}: sin target sobre piso seguro, manteniendo ${currentPrice.toFixed(2)}`);
       }
-      if (targetPrice <= minSellPrice) {
-        targetPrice = Math.max(currentPrice, minSellPrice);
+      if (targetPrice <= safeFloor) {
+        targetPrice = Math.max(currentPrice, safeFloor);
       }
 
       // Update ad
