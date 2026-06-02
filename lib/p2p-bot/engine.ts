@@ -724,8 +724,9 @@ async function runBinanceCycle(
       let targetPrice = currentPrice;
       if (targetCompetitor) {
         targetPrice = Number(targetCompetitor.price) - adTop1Diff;
-        if (targetPrice <= safeFloor) { targetPrice = Math.max(currentPrice, safeFloor); }
       }
+      // Nunca quedarse debajo del safeFloor (reglas 1 y 2)
+      if (targetPrice < safeFloor) { targetPrice = Math.max(currentPrice, safeFloor); }
       if (firstAdTarget === 0) firstAdTarget = targetPrice;
 
       const diff = Math.abs(currentPrice - targetPrice);
@@ -1011,9 +1012,8 @@ async function runBybitCycle(
       } else {
         await logBot(tenantId, "warn", "bybit", `Ad ${adId}: sin target sobre piso seguro, manteniendo ${currentPrice.toFixed(2)}`);
       }
-      if (targetPrice <= safeFloor) {
-        targetPrice = Math.max(currentPrice, safeFloor);
-      }
+      // Nunca quedarse debajo del safeFloor (reglas 1 y 2)
+      if (targetPrice < safeFloor) { targetPrice = Math.max(currentPrice, safeFloor); }
 
       // Update ad
       const diff = Math.abs(currentPrice - targetPrice);
