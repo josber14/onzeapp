@@ -82,7 +82,7 @@ export class BinanceP2PClient {
     if (bodyPayload) opts.body = JSON.stringify(bodyPayload);
 
     const res = await fetch(url, opts);
-    const weightStr = res.headers.get("x-mbx-used-weight") || res.headers.get("X-MBX-USED-WEIGHT-1M") || "0";
+    const weightStr = res.headers.get("X-SAPI-USED-IP-WEIGHT-1M") || res.headers.get("x-sapi-used-ip-weight-1m") || res.headers.get("x-mbx-used-weight") || "0";
     this.latestWeight = parseInt(weightStr, 10) || 0;
     const text = await res.text();
     if (!text) throw new Error(`Binance empty response (HTTP ${res.status}) for ${endpoint}`);
