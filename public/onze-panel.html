@@ -2156,7 +2156,7 @@
         <button class="nav-btn" data-view-target="calculadora">Calculadora</button>
         <button class="nav-btn" data-view-target="tasa-del-dia">Crea tu tasa del día</button>
         <button class="nav-btn" data-view-target="dashboard">Dashboard</button>
-        <button class="nav-btn" data-view-target="p2p-bot" onclick="switchView('p2p-bot')">P2P Bot</button>
+        <button class="nav-btn admin-only-control" data-view-target="p2p-bot" onclick="switchView('p2p-bot')">P2P Bot</button>
         <button class="nav-btn" data-view-target="historial">Historial</button>
         <button class="nav-btn" data-view-target="noticias">Noticias</button>
         <button class="nav-btn admin-only-control" data-view-target="ajustes" onclick="(window.switchView||function(v){document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));var el=document.getElementById('view-'+v);if(el)el.classList.add('active');})( 'ajustes')">Ajustes</button>
@@ -9431,7 +9431,7 @@ function addP2PBotStyles(){
     if(document.getElementById("view-p2p-bot")) return;
 
     const section = document.createElement("section");
-    section.className = "view";
+    section.className = "view admin-only-view";
     section.id = "view-p2p-bot";
     section.innerHTML = `
     <section class="section-card">
@@ -9715,7 +9715,7 @@ function addP2PBotStyles(){
           || document.querySelector('[data-view-target="tasa-del-dia"]');
         if(!target || !target.parentNode) return null;
         const b = document.createElement("button");
-        b.className = "nav-btn";
+        b.className = "nav-btn admin-only-control";
         b.type = "button";
         b.dataset.viewTarget = "p2p-bot";
         b.textContent = "P2P Bot";
@@ -9977,7 +9977,7 @@ function addP2PBotStyles(){
   window.botSaveAdCfgField = function(realId, field, value){
     var body = { exchange: botSelectedExchange, id: realId };
     if(field === 'botCompetePayTypes'){
-      body[field] = value === 'match' ? ['__match_ad__'] : null;
+      body[field] = value === 'match' ? ['__match_ad__'] : ['all'];
     } else {
       body[field] = value === '' ? null : (field === 'botStrategy' || field === 'botPriceSource' ? value : Number(value));
     }
@@ -11205,7 +11205,7 @@ function addP2PBotStyles(){
   window.saveBotAdConfig = async function(id, field, value){
     const body = { id, exchange: botSelectedExchange };
     if(field === 'botCompetePayTypes'){
-      body[field] = value === 'match' ? ['__match_ad__'] : null;
+      body[field] = value === 'match' ? ['__match_ad__'] : ['all'];
     } else {
       body[field] = value === '' ? null : (field === 'botStrategy' || field === 'botPriceSource' ? value : Number(value));
     }
@@ -15740,7 +15740,6 @@ function addP2PBotStyles(){
       updateP2PDashboardWithCapacity();
 
       // Auto-switch bot to capacity mode (set exchange-level fallback)
-      window.__p2pCapacityCache = null;
       botUpdateBuyPrice();
       const ex = window.botSelectedExchange || "binance";
       fetch("/api/p2p/bot/exchange-config", {
@@ -17810,7 +17809,19 @@ function addP2PBotStyles(){
   }, 500);
 
   function saveBinanceSales(orders){
-    localStorage.setItem('onze_p2p_binance_orders', JSON.stringify(orders));
+    const existing = loadP2PBinanceOrders();
+    const manualOrders = existing.filter(o => o._manual || String(o.orderNumber || '').startsWith('manual_'));
+    const merged = [...manualOrders, ...orders];
+    // Deduplicar por orderNumber (API tiene prioridad)
+    const seen = new Set();
+    const deduped = [];
+    for (const o of merged) {
+      const key = o.orderNumber || o.id || Math.random();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(o);
+    }
+    localStorage.setItem('onze_p2p_binance_orders', JSON.stringify(deduped));
   }
   function getBinanceSales(){
     try{
@@ -22013,12 +22024,12 @@ function addP2PBotStyles(){
     const allowed = isAdminLike();
     document.body.classList.toggle("onze-admin-visible", allowed);
 
-    document.querySelectorAll('[data-view-target="ajustes"], #openProviderControlBtn').forEach(el=>{
+    document.querySelectorAll('[data-view-target="ajustes"], [data-view-target="p2p-bot"], #openProviderControlBtn').forEach(el=>{
       el.style.display = allowed ? "" : "none";
       el.setAttribute("aria-hidden", allowed ? "false" : "true");
     });
 
-    document.querySelectorAll("#view-ajustes, #view-provider-control").forEach(view=>{
+    document.querySelectorAll("#view-ajustes, #view-p2p-bot, #view-provider-control").forEach(view=>{
       if(!allowed){
         view.classList.remove("active");
         view.style.display = "none";
@@ -22028,7 +22039,7 @@ function addP2PBotStyles(){
     });
 
     if(!allowed){
-      const activeBlocked = document.querySelector("#view-ajustes.active, #view-provider-control.active");
+      const activeBlocked = document.querySelector("#view-ajustes.active, #view-p2p-bot.active, #view-provider-control.active");
       if(activeBlocked){
         activeBlocked.classList.remove("active");
       }
