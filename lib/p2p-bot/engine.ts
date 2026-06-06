@@ -644,6 +644,7 @@ async function runBinanceCycle(
         await logBot(tenantId, "warn", "binance", `Ad ${adId}: no encontrado (se saltó)`);
         continue;
       }
+      await logBot(tenantId, "debug", "binance", `Ad ${adId}: DETALLE ANUNCIO=${JSON.stringify(ourSellAd)}`);
       const currentPrice = Number(ourSellAd.price);
       const as = getAdState(bs, adId);
       if (firstAdPrice === 0) firstAdPrice = currentPrice;
