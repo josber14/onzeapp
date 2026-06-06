@@ -23,6 +23,8 @@ interface AdState {
   rateLimitBackoffMs: number;
   lastPrice: number;
   lastTarget: number;
+  lastPriceUpAt: number;
+  priceUpTimestamps: number[];
 }
 interface BinanceState {
   lastCompetitorFetch: number;
@@ -61,6 +63,8 @@ function getAdState(bs: BinanceState, adId: string): AdState {
       rateLimitBackoffMs: 0,
       lastPrice: 0,
       lastTarget: 0,
+      lastPriceUpAt: 0,
+      priceUpTimestamps: [],
     };
     bs.adStates.set(adId, as);
   }
@@ -71,17 +75,20 @@ function buildBinanceState(bs: BinanceState): any {
   const now = Date.now();
   const oneHourAgo = now - 3600000;
   const allTimestamps: number[] = [];
+  const allPriceUpTimestamps: number[] = [];
   let minLastUpdate = 0;
   let anyCooldown = 0;
   let maxWeight = 0;
   for (const as of bs.adStates.values()) {
     allTimestamps.push(...as.updateTimestamps.filter(t => t > oneHourAgo));
+    allPriceUpTimestamps.push(...as.priceUpTimestamps.filter(t => t > oneHourAgo));
     if (as.lastUpdateAt > minLastUpdate) minLastUpdate = as.lastUpdateAt;
     const backoff = as.rateLimitBackoffMs || 60000;
     if (as.lastRateLimitError > 0 && as.lastRateLimitError + backoff > anyCooldown) anyCooldown = as.lastRateLimitError + backoff;
     if (as.currentWeight > maxWeight) maxWeight = as.currentWeight;
   }
   const active = allTimestamps;
+  const activeUp = allPriceUpTimestamps;
   const ultimoCambioHace = minLastUpdate > 0 ? Math.round((now - minLastUpdate) / 1000) : -1;
   const proximoFetchEn = Math.max(0, 6 - Math.round((now - bs.lastCompetitorFetch) / 1000));
   const puedeActualizar = active.length < 30
@@ -91,6 +98,8 @@ function buildBinanceState(bs: BinanceState): any {
   return {
     cambiosEstaHora: active.length,
     cambiosMax: 30,
+    subidasEstaHora: activeUp.length,
+    subidasMax: 10,
     ultimoCambioHace,
     weightActual: maxWeight,
     weightMax: 4000,
@@ -764,31 +773,43 @@ async function runBinanceCycle(
       const diff = Math.abs(currentPrice - targetPrice);
       if (diff < 0.005) continue;
 
-      // ── Rate Limit Checks ──
-      as.currentWeight = Math.max(as.currentWeight, client.latestWeight);
-      const oneHourAgo = Date.now() - 3600000;
-      as.updateTimestamps = as.updateTimestamps.filter(t => t > oneHourAgo);
+      // ── Price recovery check (targetPrice > currentPrice) ──
+      const isPriceUp = targetPrice > currentPrice;
+      if (isPriceUp) {
+        const oneHourAgo = Date.now() - 3600000;
+        as.priceUpTimestamps = as.priceUpTimestamps.filter(t => t > oneHourAgo);
+        as.currentWeight = Math.max(as.currentWeight, client.latestWeight);
 
-      // 30/hr check
-      if (as.updateTimestamps.length >= 30) {
-        await logBot(tenantId, "warn", "binance", `Ad ${adId}: límite 30/hr alcanzado (${as.updateTimestamps.length}), saltando`);
-        continue;
-      }
-      // 30s gap check
-      if (as.lastUpdateAt > 0 && (Date.now() - as.lastUpdateAt < 30000)) {
-        await logBot(tenantId, "debug", "binance", `Ad ${adId}: gap <30s desde último update, esperando`);
-        continue;
-      }
-      // Weight check
-      if (as.currentWeight >= 4000) {
-        await logBot(tenantId, "warn", "binance", `Ad ${adId}: weight ${as.currentWeight} ≥ 4000, pausando`);
-        continue;
-      }
-        // Rate-limit cooldown check (60s fixed after 429/187049)
+        if (as.priceUpTimestamps.length >= 10) {
+          await logBot(tenantId, "warn", "binance", `Ad ${adId}: límite 10 subidas/hora alcanzado, saltando`);
+          continue;
+        }
+        if (as.lastPriceUpAt > 0 && (Date.now() - as.lastPriceUpAt < 15000)) {
+          await logBot(tenantId, "debug", "binance", `Ad ${adId}: gap subida <15s, esperando`);
+          continue;
+        }
+      } else {
+        as.currentWeight = Math.max(as.currentWeight, client.latestWeight);
+        const oneHourAgo = Date.now() - 3600000;
+        as.updateTimestamps = as.updateTimestamps.filter(t => t > oneHourAgo);
+
+        if (as.updateTimestamps.length >= 30) {
+          await logBot(tenantId, "warn", "binance", `Ad ${adId}: límite 30/hr alcanzado (${as.updateTimestamps.length}), saltando`);
+          continue;
+        }
+        if (as.lastUpdateAt > 0 && (Date.now() - as.lastUpdateAt < 30000)) {
+          await logBot(tenantId, "debug", "binance", `Ad ${adId}: gap <30s desde último update, esperando`);
+          continue;
+        }
+        if (as.currentWeight >= 4000) {
+          await logBot(tenantId, "warn", "binance", `Ad ${adId}: weight ${as.currentWeight} ≥ 4000, pausando`);
+          continue;
+        }
         if (as.lastRateLimitError > 0 && Date.now() - as.lastRateLimitError < as.rateLimitBackoffMs) {
           await logBot(tenantId, "warn", "binance", `Ad ${adId}: cooldown rate-limit (${Math.round((Date.now() - as.lastRateLimitError) / 1000)}s), saltando`);
           continue;
         }
+      }
 
       // ── Execute update ──
       try {
@@ -797,11 +818,20 @@ async function runBinanceCycle(
           adId,
           price: targetPrice.toFixed(2),
         });
-        as.updateTimestamps.push(Date.now());
         as.lastUpdateAt = Date.now();
         as.rateLimitBackoffMs = 0;
+        if (isPriceUp) {
+          as.priceUpTimestamps.push(Date.now());
+          as.lastPriceUpAt = Date.now();
+        } else {
+          as.updateTimestamps.push(Date.now());
+        }
         actions.push({ action: "update_price", exchange: "binance", adId, currentPrice, suggestedPrice: targetPrice, reason: `Precio: ${currentPrice} → ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
-        await logBot(tenantId, "info", "binance", `Ad ${adId}: ${currentPrice} → ${targetPrice.toFixed(2)} (${as.updateTimestamps.length}/30 esta hora)`);
+        if (isPriceUp) {
+          await logBot(tenantId, "info", "binance", `Ad ${adId}: ${currentPrice} → ${targetPrice.toFixed(2)} (${as.priceUpTimestamps.length}/10 subidas esta hora)`);
+        } else {
+          await logBot(tenantId, "info", "binance", `Ad ${adId}: ${currentPrice} → ${targetPrice.toFixed(2)} (${as.updateTimestamps.length}/30 esta hora)`);
+        }
       } catch (e: any) {
         if (e.message?.includes("code: -9000") || e.message?.includes("code: -1000") || e.message?.includes("429")) {
           as.lastRateLimitError = Date.now();
