@@ -633,6 +633,9 @@ async function runBinanceCycle(
     const ourSellAds = myAds.filter(
       (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
     );
+    for (const ad of ourSellAds) {
+      await logBot(tenantId, "debug", "binance", `MyAd REAL: id=${ad.id} payments=${JSON.stringify(ad.payments)} price=${ad.price}`);
+    }
 
     // 4. Process each managed ad
     let firstAdPrice = 0;
