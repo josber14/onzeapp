@@ -714,12 +714,18 @@ async function runBinanceCycle(
         }
         return true;
       });
-      if (viable.length === 0) { continue; }
+      if (viable.length === 0) {
+        await logBot(tenantId, "debug", "binance", `Ad ${adId}: viable vacío — ${competitors.length} competidores tras filtro pago, minSellPrice=${minSellPrice}, adMinCapital=${adMinCapital}`);
+        continue;
+      }
 
       viable.sort((a: any, b: any) => Number(a.price) - Number(b.price));
       const myAdIds = new Set(myAds.map((a: any) => a.id));
       const sortedCompetitors = viable.filter((c: any) => !myAdIds.has(c.id));
-      if (sortedCompetitors.length === 0) { continue; }
+      if (sortedCompetitors.length === 0) {
+        await logBot(tenantId, "debug", "binance", `Ad ${adId}: sortedCompetitors vacío — ${viable.length} viables, todos eran propios`);
+        continue;
+      }
 
       // Safe margin filter
       const viableCompetitors: any[] = [];
@@ -773,7 +779,11 @@ async function runBinanceCycle(
       if (firstAdTarget === 0) firstAdTarget = targetPrice;
 
       const diff = Math.abs(currentPrice - targetPrice);
-      if (diff < 0.005) continue;
+      await logBot(tenantId, "debug", "binance", `Ad ${adId}: currentPrice=${currentPrice} targetPrice=${targetPrice} diff=${diff} isPriceUp=${targetPrice > currentPrice} safeFloor=${safeFloor}`);
+      if (diff < 0.005) {
+        await logBot(tenantId, "debug", "binance", `Ad ${adId}: diff ${diff} < 0.005, saltando`);
+        continue;
+      }
 
       // ── Price recovery check (targetPrice > currentPrice) ──
       const isPriceUp = targetPrice > currentPrice;
