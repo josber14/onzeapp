@@ -686,6 +686,7 @@ async function runBinanceCycle(
       }
       if (rawPayTypes && rawPayTypes.length > 0 && rawPayTypes[0] !== "*") {
         if (rawPayTypes[0] === "__match_ad__") {
+          await logBot(tenantId, "debug", "binance", `Ad ${adId}: __match_ad__ ourSellAd.payments = ${JSON.stringify(ourSellAd?.payments)} (length=${ourSellAd?.payments?.length})`);
           if (ourSellAd?.payments?.length) {
             ourPayMethods = ourSellAd.payments.map((p: any) => String(p));
             await logBot(tenantId, "debug", "binance", `Ad ${adId}: __match_ad__ ourPayMethods = ${JSON.stringify(ourPayMethods)}`);
