@@ -592,7 +592,7 @@ async function runBinanceCycle(
 
     // 3. Refresh competitors cache if stale
     const now = Date.now();
-    if (now - bs.lastCompetitorFetch > 30000 && !bs.isFetching) {
+    if (now - bs.lastCompetitorFetch > 3000 && !bs.isFetching) {
       bs.isFetching = true;
       try {
         let allRaw: any[] = [];
@@ -792,7 +792,7 @@ async function runBinanceCycle(
           await logBot(tenantId, "warn", "binance", `Ad ${adId}: límite 10 subidas/hora alcanzado, saltando`);
           continue;
         }
-        if (as.lastPriceUpAt > 0 && (Date.now() - as.lastPriceUpAt < 15000)) {
+        if (as.lastPriceUpAt > 0 && (Date.now() - as.lastPriceUpAt < 1000)) {
           await logBot(tenantId, "debug", "binance", `Ad ${adId}: gap subida <15s, esperando`);
           continue;
         }
