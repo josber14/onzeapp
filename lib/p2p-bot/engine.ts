@@ -793,7 +793,7 @@ async function runBinanceCycle(
           continue;
         }
         if (as.lastPriceUpAt > 0 && (Date.now() - as.lastPriceUpAt < 1000)) {
-          await logBot(tenantId, "debug", "binance", `Ad ${adId}: gap subida <15s, esperando`);
+          await logBot(tenantId, "debug", "binance", `Ad ${adId}: gap subida <1s, esperando`);
           continue;
         }
       } else {
