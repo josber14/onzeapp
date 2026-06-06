@@ -780,6 +780,14 @@ async function runBinanceCycle(
         as.priceUpTimestamps = as.priceUpTimestamps.filter(t => t > oneHourAgo);
         as.currentWeight = Math.max(as.currentWeight, client.latestWeight);
 
+        if (as.currentWeight >= 4000) {
+          await logBot(tenantId, "warn", "binance", `Ad ${adId}: weight ${as.currentWeight} ≥ 4000, pausando subida`);
+          continue;
+        }
+        if (as.lastRateLimitError > 0 && Date.now() - as.lastRateLimitError < as.rateLimitBackoffMs) {
+          await logBot(tenantId, "warn", "binance", `Ad ${adId}: cooldown activo, saltando subida`);
+          continue;
+        }
         if (as.priceUpTimestamps.length >= 10) {
           await logBot(tenantId, "warn", "binance", `Ad ${adId}: límite 10 subidas/hora alcanzado, saltando`);
           continue;
