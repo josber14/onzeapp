@@ -20,6 +20,7 @@ interface AdState {
   lastUpdateAt: number;
   currentWeight: number;
   lastRateLimitError: number;
+  rateLimitBackoffMs: number;
   lastPrice: number;
   lastTarget: number;
 }
@@ -57,6 +58,7 @@ function getAdState(bs: BinanceState, adId: string): AdState {
       lastUpdateAt: 0,
       currentWeight: 0,
       lastRateLimitError: 0,
+      rateLimitBackoffMs: 0,
       lastPrice: 0,
       lastTarget: 0,
     };
@@ -75,7 +77,8 @@ function buildBinanceState(bs: BinanceState): any {
   for (const as of bs.adStates.values()) {
     allTimestamps.push(...as.updateTimestamps.filter(t => t > oneHourAgo));
     if (as.lastUpdateAt > minLastUpdate) minLastUpdate = as.lastUpdateAt;
-    if (as.lastRateLimitError > 0 && as.lastRateLimitError + 60000 > anyCooldown) anyCooldown = as.lastRateLimitError + 60000;
+    const backoff = as.rateLimitBackoffMs || 60000;
+    if (as.lastRateLimitError > 0 && as.lastRateLimitError + backoff > anyCooldown) anyCooldown = as.lastRateLimitError + backoff;
     if (as.currentWeight > maxWeight) maxWeight = as.currentWeight;
   }
   const active = allTimestamps;
@@ -580,17 +583,17 @@ async function runBinanceCycle(
 
     // 3. Refresh competitors cache if stale
     const now = Date.now();
-    if (now - bs.lastCompetitorFetch > 6000 && !bs.isFetching) {
+    if (now - bs.lastCompetitorFetch > 30000 && !bs.isFetching) {
       bs.isFetching = true;
       try {
         let allRaw: any[] = [];
-        for (let page = 1; page <= 5; page++) {
+        for (let page = 1; page <= 2; page++) {
           const pageRes = await client.getOnlineAds({
             asset: "USDT", fiat: "CLP", tradeType: "BUY", rows: 20, page, payTypes: [],
           });
           const pageData = pageRes?.data ?? [];
           if (pageData.length > 0) allRaw = allRaw.concat(pageData);
-          if (page < 5) await new Promise(r => setTimeout(r, 50));
+          if (page < 2) await new Promise(r => setTimeout(r, 100));
         }
         bs.cachedCompetitors = allRaw.map(normalizeBinanceAd);
         bs.lastCompetitorFetch = Date.now();
@@ -636,11 +639,11 @@ async function runBinanceCycle(
       const as = getAdState(bs, adId);
       if (firstAdPrice === 0) firstAdPrice = currentPrice;
 
-      // Per-ad config with exchange fallback
-      const adTop1Diff = managedAd.botTop1Diff ? Number(managedAd.botTop1Diff) : exchangeTop1Diff;
-      const adCommissionPct = managedAd.botCommissionPct ? Number(managedAd.botCommissionPct) : exchangeCommissionPct;
-      const adSafeMarginPct = managedAd.botSafeMarginPct ? Number(managedAd.botSafeMarginPct) : exchangeSafeMarginPct;
-      const adMinCapital = managedAd.botMinCompetitorCapital ? Number(managedAd.botMinCompetitorCapital) : exchangeMinCapital;
+      // Per-ad config with exchange fallback (?? null check para permitir 0)
+      const adTop1Diff = managedAd.botTop1Diff != null ? Number(managedAd.botTop1Diff) : exchangeTop1Diff;
+      const adCommissionPct = managedAd.botCommissionPct != null ? Number(managedAd.botCommissionPct) : exchangeCommissionPct;
+      const adSafeMarginPct = managedAd.botSafeMarginPct != null ? Number(managedAd.botSafeMarginPct) : exchangeSafeMarginPct;
+      const adMinCapital = managedAd.botMinCompetitorCapital != null ? Number(managedAd.botMinCompetitorCapital) : exchangeMinCapital;
       let adCompetePayTypes = (managedAd.botCompetePayTypes as string[] | null | undefined);
       if (adCompetePayTypes && adCompetePayTypes[0] === 'all') {
         adCompetePayTypes = null;
@@ -648,11 +651,14 @@ async function runBinanceCycle(
         adCompetePayTypes = exchangeCompetePayTypes;
       }
       const adPriceSource = managedAd.botPriceSource || "manual";
-      const adPriceFloorPct = managedAd.botPriceFloorPct ? Number(managedAd.botPriceFloorPct) : 0;
-      const adCircuitBreakPct = managedAd.botCircuitBreakPct ? Number(managedAd.botCircuitBreakPct) : exchangeCircuitBreakPct;
-      const adDailyVolumeCapUsdt = managedAd.botDailyVolumeCapUsdt ? Number(managedAd.botDailyVolumeCapUsdt) : exchangeDailyVolumeCapUsdt;
+      const adPriceFloorPct = managedAd.botPriceFloorPct != null ? Number(managedAd.botPriceFloorPct) : null;
+      const adCircuitBreakPct = managedAd.botCircuitBreakPct != null ? Number(managedAd.botCircuitBreakPct) : exchangeCircuitBreakPct;
+      const adDailyVolumeCapUsdt = managedAd.botDailyVolumeCapUsdt != null ? Number(managedAd.botDailyVolumeCapUsdt) : exchangeDailyVolumeCapUsdt;
 
-      let minSellPrice = adPriceSource === "manual" ? adPriceFloorPct : 0;
+      let minSellPrice = 0;
+      // 1) Per-ad price floor override (si el usuario lo configuró explícitamente)
+      if (adPriceFloorPct != null && adPriceFloorPct > 0) minSellPrice = adPriceFloorPct;
+      // 2) Si no hay manual, usar capacity activa
       if (minSellPrice <= 0 && activeCapacityBuyPrice) minSellPrice = activeCapacityBuyPrice;
       if (minSellPrice <= 0) {
         await logBot(tenantId, "warn", "binance", `Ad ${adId}: sin precio mínimo`);
@@ -768,9 +774,9 @@ async function runBinanceCycle(
         await logBot(tenantId, "warn", "binance", `Ad ${adId}: límite 30/hr alcanzado (${as.updateTimestamps.length}), saltando`);
         continue;
       }
-      // 5s gap check
-      if (as.lastUpdateAt > 0 && (Date.now() - as.lastUpdateAt < 5000)) {
-        await logBot(tenantId, "debug", "binance", `Ad ${adId}: gap <5s desde último update, esperando`);
+      // 30s gap check
+      if (as.lastUpdateAt > 0 && (Date.now() - as.lastUpdateAt < 30000)) {
+        await logBot(tenantId, "debug", "binance", `Ad ${adId}: gap <30s desde último update, esperando`);
         continue;
       }
       // Weight check
@@ -778,11 +784,11 @@ async function runBinanceCycle(
         await logBot(tenantId, "warn", "binance", `Ad ${adId}: weight ${as.currentWeight} ≥ 4000, pausando`);
         continue;
       }
-      // Rate-limit cooldown check (60s silence after -9000/-1000)
-      if (as.lastRateLimitError > 0 && Date.now() - as.lastRateLimitError < 60000) {
-        await logBot(tenantId, "warn", "binance", `Ad ${adId}: cooldown rate-limit (${Math.round((Date.now() - as.lastRateLimitError) / 1000)}s), saltando`);
-        continue;
-      }
+        // Rate-limit cooldown check (60s fixed after 429/187049)
+        if (as.lastRateLimitError > 0 && Date.now() - as.lastRateLimitError < as.rateLimitBackoffMs) {
+          await logBot(tenantId, "warn", "binance", `Ad ${adId}: cooldown rate-limit (${Math.round((Date.now() - as.lastRateLimitError) / 1000)}s), saltando`);
+          continue;
+        }
 
       // ── Execute update ──
       try {
@@ -793,12 +799,14 @@ async function runBinanceCycle(
         });
         as.updateTimestamps.push(Date.now());
         as.lastUpdateAt = Date.now();
+        as.rateLimitBackoffMs = 0;
         actions.push({ action: "update_price", exchange: "binance", adId, currentPrice, suggestedPrice: targetPrice, reason: `Precio: ${currentPrice} → ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
         await logBot(tenantId, "info", "binance", `Ad ${adId}: ${currentPrice} → ${targetPrice.toFixed(2)} (${as.updateTimestamps.length}/30 esta hora)`);
       } catch (e: any) {
         if (e.message?.includes("code: -9000") || e.message?.includes("code: -1000") || e.message?.includes("429")) {
           as.lastRateLimitError = Date.now();
-          await logBot(tenantId, "warn", "binance", `Ad ${adId}: ${e.message.split('(')[0].trim()} — backoff 60s`);
+          as.rateLimitBackoffMs = 60000;
+          await logBot(tenantId, "warn", "binance", `Ad ${adId}: ${e.message.split('(')[0].trim()} — backoff ${Math.round(as.rateLimitBackoffMs / 1000)}s`);
         } else if (e.message?.includes("83229") || e.message?.includes("83230")) {
           await logBot(tenantId, "warn", "binance", `Ad ${adId}: ad offline (${e.message}), saltando`);
         } else {
@@ -948,17 +956,16 @@ async function runBybitCycle(
       const currentPrice = Number(ourSellAd.price);
 
       // Per-ad config with fallback
-      const adTop1Diff = managedAd.botTop1Diff ? Number(managedAd.botTop1Diff) : exchangeTop1Diff;
-      const adSafeMarginPct = managedAd.botSafeMarginPct ? Number(managedAd.botSafeMarginPct) : exchangeSafeMarginPct;
-      const adMinCapital = managedAd.botMinCompetitorCapital ? Number(managedAd.botMinCompetitorCapital) : exchangeMinCapital;
+      const adTop1Diff = managedAd.botTop1Diff != null ? Number(managedAd.botTop1Diff) : exchangeTop1Diff;
+      const adSafeMarginPct = managedAd.botSafeMarginPct != null ? Number(managedAd.botSafeMarginPct) : exchangeSafeMarginPct;
+      const adMinCapital = managedAd.botMinCompetitorCapital != null ? Number(managedAd.botMinCompetitorCapital) : exchangeMinCapital;
       const adPriceSource = managedAd.botPriceSource || exchangePriceSource;
-      const adPriceFloorPct = managedAd.botPriceFloorPct ? Number(managedAd.botPriceFloorPct) : exchangePriceFloorPct;
+      const adPriceFloorPct = managedAd.botPriceFloorPct != null ? Number(managedAd.botPriceFloorPct) : null;
 
       // Min sell price
-      let minSellPrice = adPriceSource === "manual" ? adPriceFloorPct : 0;
-      if (minSellPrice <= 0 && activeCapacityBuyPrice) {
-        minSellPrice = activeCapacityBuyPrice;
-      }
+      let minSellPrice = 0;
+      if (adPriceFloorPct != null && adPriceFloorPct > 0) minSellPrice = adPriceFloorPct;
+      if (minSellPrice <= 0 && activeCapacityBuyPrice) minSellPrice = activeCapacityBuyPrice;
       if (minSellPrice <= 0) {
         await logBot(tenantId, "warn", "bybit", `Ad ${adId}: sin precio mínimo`);
         continue;

@@ -9992,13 +9992,19 @@ function addP2PBotStyles(){
     if(!realId) return;
     var body = { exchange: botSelectedExchange, id: realId };
     body.botStrategy       = document.getElementById("adCfg_" + realId + "_Strategy").value;
-    body.botTop1Diff       = parseFloat(document.getElementById("adCfg_" + realId + "_Top1Diff").value) || null;
-    body.botSpreadPct      = parseFloat(document.getElementById("adCfg_" + realId + "_SpreadPct").value) || null;
+    body.botTop1Diff       = parseFloat(document.getElementById("adCfg_" + realId + "_Top1Diff").value);
+    if(isNaN(body.botTop1Diff)) body.botTop1Diff = null;
+    body.botSpreadPct      = parseFloat(document.getElementById("adCfg_" + realId + "_SpreadPct").value);
+    if(isNaN(body.botSpreadPct)) body.botSpreadPct = null;
     body.botPriceSource    = document.getElementById("adCfg_" + realId + "_PriceSource").value;
-    body.botPriceFloorPct  = parseFloat(document.getElementById("adCfg_" + realId + "_PriceFloorPct").value) || null;
-    body.botCommissionPct  = parseFloat(document.getElementById("adCfg_" + realId + "_CommissionPct").value) || null;
-    body.botSafeMarginPct  = parseFloat(document.getElementById("adCfg_" + realId + "_SafeMarginPct").value) || null;
-    body.botMinCompetitorCapital = parseFloat(document.getElementById("adCfg_" + realId + "_MinCompetitorCapital").value) || null;
+    body.botPriceFloorPct  = parseFloat(document.getElementById("adCfg_" + realId + "_PriceFloorPct").value);
+    if(isNaN(body.botPriceFloorPct)) body.botPriceFloorPct = null;
+    body.botCommissionPct  = parseFloat(document.getElementById("adCfg_" + realId + "_CommissionPct").value);
+    if(isNaN(body.botCommissionPct)) body.botCommissionPct = null;
+    body.botSafeMarginPct  = parseFloat(document.getElementById("adCfg_" + realId + "_SafeMarginPct").value);
+    if(isNaN(body.botSafeMarginPct)) body.botSafeMarginPct = null;
+    body.botMinCompetitorCapital = parseFloat(document.getElementById("adCfg_" + realId + "_MinCompetitorCapital").value);
+    if(isNaN(body.botMinCompetitorCapital)) body.botMinCompetitorCapital = null;
     var payType = document.getElementById("adCfg_" + realId + "_CompetePayType").value;
     body.botCompetePayTypes = payType === "match" ? ["__match_ad__"] : null;
     var cycleInp = document.getElementById("adCfg_" + realId + "_CycleInterval");
@@ -14106,6 +14112,7 @@ function addP2PBotStyles(){
               <h3 class="section-title" style="margin:0;">Ventas Binance</h3>
               <button id="btn-sync-binance-sales" class="btn secondary" type="button">Sincronizar Binance P2P</button>
               <button id="btn-manual-sale" class="btn secondary" type="button" style="background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25);color:#fbbf24;">+ Registrar venta manual</button>
+              <span id="manual-sales-badge" style="display:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:4px 8px;border:1px solid rgba(148,163,184,.15);border-radius:8px;background:rgba(148,163,184,.06);white-space:nowrap;">📋 <span id="manual-sales-count">0</span></span>
                 </div>
             <div id="binance-sales-container" class="p2p-dashboard-empty" style="margin-top:14px;">Sin operaciones P2P registradas todavía.</div>
           </div>
@@ -14469,7 +14476,8 @@ function addP2PBotStyles(){
       const status = String(o.orderStatus || "").toUpperCase();
       const type = String(o.tradeType || "").toUpperCase();
       const fiat = String(o.fiat || "").toUpperCase();
-      return status === "COMPLETED" && type === "SELL" && fiat === "CLP";
+      const isManual = o._manual || String(o.orderNumber || '').startsWith('manual_');
+      return status === "COMPLETED" && type === "SELL" && fiat === "CLP" && !isManual;
     });
 
     const totalUsdtSold = completedSales.reduce((sum, o) => sum + Number(o.amount || 0), 0);
@@ -14529,7 +14537,7 @@ function addP2PBotStyles(){
                 <strong style="color:#34d399;">${p2pMoney(o.unitPrice, 2)} ${o.fiat || "CLP"}</strong>
                 <div style="color:#f8fafc;font-size:12px;margin-top:3px;">${p2pMoney(o.totalPrice, 0)} ${o.fiat || "CLP"}</div>
                 <div style="color:#8aa0ba;font-size:12px;margin-top:3px;">${o.orderStatus || ""}</div>
-                ${o._manual || String(o.orderNumber || '').startsWith('manual_') ? `<div style="margin-top:6px;"><button class="btn danger" style="padding:2px 8px;font-size:11px;line-height:1.4;" onclick="window.deleteManualSale('${o.orderNumber}')">✕ Borrar manual</button></div>` : ""}
+                ${o._manual || String(o.orderNumber || '').startsWith('manual_') ? `<div style="margin-top:4px;"><button class="btn small danger" type="button" onclick="window.deleteManualSale('${o.orderNumber}')" title="Borrar venta manual" style="padding:2px 6px;font-size:12px;line-height:1;">🗑️</button></div>` : ""}
               </div>
             </div>
           `;
@@ -14557,7 +14565,84 @@ function addP2PBotStyles(){
         </div>
       `;
     }
+
+    // Actualizar badge de ventas manuales
+    const allOrders = loadP2PBinanceOrders();
+    const manualCount = allOrders.filter(o => {
+      const status = String(o.orderStatus || "").toUpperCase();
+      const type = String(o.tradeType || "").toUpperCase();
+      const fiat = String(o.fiat || "").toUpperCase();
+      const isManual = o._manual || String(o.orderNumber || '').startsWith('manual_');
+      return status === "COMPLETED" && type === "SELL" && fiat === "CLP" && isManual;
+    }).length;
+    const badge = document.getElementById("manual-sales-badge");
+    const countEl = document.getElementById("manual-sales-count");
+    if(badge && countEl){
+      if(manualCount > 0){
+        countEl.textContent = manualCount + " venta" + (manualCount !== 1 ? "s" : "") + " manuales";
+        badge.style.display = "inline-block";
+      }else{
+        badge.style.display = "none";
+      }
+      if(!badge.dataset.listenerAttached){
+        badge.addEventListener("click", function(){ window.showManualSalesModal(); });
+        badge.dataset.listenerAttached = "1";
+      }
+    }
   }
+
+  window.showManualSalesModal = function showManualSalesModal(){
+    const existing = document.getElementById("manualSalesModalBackdrop");
+    if(existing) existing.remove();
+
+    const allOrders = loadP2PBinanceOrders();
+    const manualOrders = allOrders.filter(o => {
+      const status = String(o.orderStatus || "").toUpperCase();
+      const type = String(o.tradeType || "").toUpperCase();
+      const fiat = String(o.fiat || "").toUpperCase();
+      const isManual = o._manual || String(o.orderNumber || '').startsWith('manual_');
+      return status === "COMPLETED" && type === "SELL" && fiat === "CLP" && isManual;
+    });
+
+    const backdrop = document.createElement("div");
+    backdrop.id = "manualSalesModalBackdrop";
+    backdrop.style.cssText = "position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);";
+
+    backdrop.innerHTML = `
+      <div style="background:linear-gradient(145deg,rgba(15,23,42,.97),rgba(15,23,42,.99));border:1px solid rgba(148,163,184,.1);border-radius:16px;padding:24px;max-width:520px;width:90%;max-height:80vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 style="color:#f8fafc;margin:0;font-size:16px;">📋 Ventas Manuales</h3>
+          <button class="btn secondary" type="button" onclick="this.closest('#manualSalesModalBackdrop').remove()" style="padding:4px 10px;font-size:13px;">✕</button>
+        </div>
+        ${manualOrders.length === 0
+          ? `<div class="p2p-dashboard-empty" style="padding:20px;text-align:center;color:#8aa0ba;">Sin ventas manuales registradas.</div>`
+          : manualOrders.map((o, i) => {
+              const usdt = Number(o.amount || 0);
+              const clp = Number(o.totalPrice || 0);
+              const price = Number(o.unitPrice || 0);
+              const comm = Number(o.commission || 0);
+              const date = o.createdAt ? new Date(o.createdAt).toLocaleString("es-CL", {timeZone:"America/Santiago",day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "";
+              return `
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(148,163,184,.08);">
+                  <div style="flex:1;min-width:0;">
+                    <div style="color:#f8fafc;font-size:13px;font-weight:600;">${p2pCapMoney(usdt, 2)} USDT · ${p2pCapMoney(price, 2)} CLP</div>
+                    <div style="color:#8aa0ba;font-size:11px;margin-top:2px;">${p2pCapMoney(clp, 0)} CLP · Comisión ${p2pCapMoney(comm, 4)} USDT</div>
+                    <div style="color:#5a738e;font-size:10px;margin-top:2px;">${date}</div>
+                  </div>
+                  <button class="btn small danger" type="button" onclick="window.deleteManualSale('${o.orderNumber}')" title="Borrar venta manual" style="padding:2px 6px;font-size:12px;line-height:1;flex-shrink:0;">🗑️</button>
+                </div>
+              `;
+            }).join("")
+        }
+      </div>
+    `;
+
+    backdrop.addEventListener("click", function(e){
+      if(e.target === backdrop) backdrop.remove();
+    });
+
+    document.body.appendChild(backdrop);
+  };
 
   window.syncBinanceP2P = async function syncBinanceP2P(){
     const btn = document.getElementById("syncBinanceP2PBtn");
@@ -15078,7 +15163,8 @@ function addP2PBotStyles(){
           unitPrice: saleUnitPrice,
           commissionUsdt: assignedCommissionUsdt,
           createdAt: sale.createdAt,
-          originalSaleUsdt: saleTotalUsdt
+          originalSaleUsdt: saleTotalUsdt,
+          buyPrice: Number(cap.buyPrice || 0)
         });
 
         saleRemainingClp -= assignedClp;
@@ -15940,7 +16026,7 @@ function addP2PBotStyles(){
                         <strong style="color:#34d399;font-size:13px;">${p2pCapMoney(part.unitPrice, 2)} CLP/USDT</strong>
                         <div class="p2p-capacity-meta" style="margin-top:3px;">${p2pCapMoney(part.assignedClp, 0)} CLP</div>
                         <div class="p2p-capacity-meta" style="margin-top:3px;">Comisión: ${p2pCapMoney(part.commissionUsdt, 4)} USDT</div>
-                        ${String(part.orderNumber || '').startsWith('manual_') ? `<button class="btn danger" style="margin-top:6px;padding:2px 8px;font-size:10px;line-height:1.4;" onclick="if(confirm('¿Borrar esta venta manual? Se recalcularán las capacidades.')){document.getElementById('p2pCapacityDetailModalBackdrop')?.classList.remove('open');setTimeout(()=>window.deleteManualSale('${part.orderNumber}'),100);}">✕ Borrar</button>` : ""}
+                        ${String(part.orderNumber || '').startsWith('manual_') ? `<button class="btn small danger" type="button" title="Borrar venta manual" style="padding:2px 6px;font-size:12px;line-height:1;" onclick="if(confirm('¿Borrar esta venta manual? Se recalcularán las capacidades.')){document.getElementById('p2pCapacityDetailModalBackdrop')?.classList.remove('open');setTimeout(()=>window.deleteManualSale('${part.orderNumber}'),100);}">🗑️</button>` : ""}
                       </div>
                     </div>
                   `;
@@ -17320,6 +17406,7 @@ function addP2PBotStyles(){
       const buyPrice = Number(cap.buyPrice || 0);
 
       (cap.saleParts || []).forEach(part => {
+        if(!part.createdAt) return;
         if(!isP2PInRange(part.createdAt, range)) return;
 
         const assignedUsdt = Number(part.assignedUsdt || 0);
@@ -17327,7 +17414,8 @@ function addP2PBotStyles(){
         const unitPrice = Number(part.unitPrice || 0);
         const commissionUsdt = Number(part.commissionUsdt || 0);
         const commissionClp = commissionUsdt * (unitPrice || 0);
-        const costClp = assignedUsdt * buyPrice;
+        const partBuyPrice = Number(part.buyPrice || buyPrice);
+        const costClp = assignedUsdt * partBuyPrice;
         const profitClp = assignedClp - costClp - commissionClp;
 
         result.soldUsdt += assignedUsdt;
@@ -17368,7 +17456,7 @@ function addP2PBotStyles(){
           unitPrice,
           commissionUsdt,
           commissionClp,
-          buyPrice,
+          buyPrice: partBuyPrice,
           costClp,
           profitClp,
           createdAt: part.createdAt
