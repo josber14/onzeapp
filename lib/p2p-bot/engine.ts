@@ -855,7 +855,8 @@ async function runBinanceCycle(
       } catch (e: any) {
         if (e.message?.includes("code: -9000") || e.message?.includes("code: -1000") || e.message?.includes("429")) {
           as.lastRateLimitError = Date.now();
-          as.rateLimitBackoffMs = 120000;
+          as.rateLimitBackoffMs = 60000;
+          await logBot(tenantId, "error", "binance", `Ad ${adId}: ERROR COMPLETO: ${e.message}`);
           await logBot(tenantId, "warn", "binance", `Ad ${adId}: ${e.message.split('(')[0].trim()} — backoff ${Math.round(as.rateLimitBackoffMs / 1000)}s`);
         } else if (e.message?.includes("83229") || e.message?.includes("83230")) {
           await logBot(tenantId, "warn", "binance", `Ad ${adId}: ad offline (${e.message}), saltando`);
