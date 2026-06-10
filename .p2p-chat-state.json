@@ -1,0 +1,470 @@
+{
+  "cookies": [
+    {
+      "name": "theme",
+      "value": "dark",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "bnc-uuid",
+      "value": "735c67d7-d303-46e1-8a21-898da86c521b",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "sajssdk_2015_cross_new_user",
+      "value": "1",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_gid",
+      "value": "GA1.2.1318804992.1781039205",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": 1781136804,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "BNC_FV_KEY",
+      "value": "33e5558b4075a06484888376a75cdc395118d442",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "BNC_FV_KEY_T",
+      "value": "101-Nw0wy3hd83x5Y9%2Bm2w1ZEk%2BKSUCI6PNm%2Fd%2F1HrWD5%2BpQIeQ3m5CEMvkUsa3es9xyqh%2FcMBjMJZsirN31NgYPbg%3D%3D-5SzkjXGRri1rKaIMUrNQNQ%3D%3D-7b",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "BNC_FV_KEY_EXPIRE",
+      "value": "1781060806821",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "fiat-prefer-currency",
+      "value": "CLP",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "common_fiat",
+      "value": "%7B%22fiat%22%3A%22CLP%22%7D",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "se_sd",
+      "value": "wVaAhRR4ITYABIWgLA1YgZZCgXQIIEVUVFU5aUERlBUUAUlNWWMd1",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "se_gd",
+      "value": "gwXEABFEITVVA8QENFwsgZZFgCgkHBVUVAK5aUERlBUUAF1NWWBU1",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "se_gsd",
+      "value": "dywlLEpmMDQ3JycqJyUhBRQ9DFxXDgsUU1lAUF1QW1BSElNT1",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "g_state",
+      "value": "{\"i_l\":0,\"i_ll\":1781039239621,\"i_b\":\"eB+LZsvHJJLEJj+ZXq1LROMyZxeRDd8hx3vZLwNB8CQ\",\"i_e\":{\"enable_itp_optimization\":0},\"i_et\":1781039222678}",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "NID",
+      "value": "532=vPYElztTRe6MKPMbm7cnQzql1OwHaA0Lte7RbCqA8WAlxbv4DO3mJ6BLfCXzhDsbDixJC6vliC_pXO4NpXzPqvzubHriGJixUrhPU-ujKE3eNBozet72d2s3DykPhhloc65t8NwftWr6JI24CMDnlEfqurCdOJPuDD3-kTFtsD72EXWOJn2OHVA1PQsL7xRN27rOgA",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "s9r1",
+      "value": "51CBD25E9C06327407B8F107662535A0",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "r20t",
+      "value": "web.DE7AA3ACF7D8765E89BA15270D26A211",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "r30t",
+      "value": "1",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "cr00",
+      "value": "DAF7FF04AD4BB76A227A36E7B8A69F34",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "d1og",
+      "value": "web.141953460.4826E87A1183B9347FE9FEEBC6175DB6",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "r2o1",
+      "value": "web.141953460.2C3E09A747FBC410536ECCA1AFA6A6D5",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "f30l",
+      "value": "web.141953460.11F51ECC2491A9B230B115592C7A95EB",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "p20t",
+      "value": "web.141953460.B337C8515525A95679A705890A89BB84",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "currentAccount",
+      "value": "",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "lang",
+      "value": "es",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "logined",
+      "value": "y",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "BNC-Location",
+      "value": "CL",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_gcl_au",
+      "value": "1.1.1716923713.1781039557",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_gat_UA-162512367-1",
+      "value": "1",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "test_cookie",
+      "value": "CheckForPermission",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "MR",
+      "value": "0",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "sensorsdata2015jssdkcross",
+      "value": "%7B%22distinct_id%22%3A%22141953460%22%2C%22first_id%22%3A%2219eae3588553375-0ff75c7f433692-1e525636-1229400-19eae3588563837%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%2C%22%24latest_referrer%22%3A%22%22%7D%2C%22identities%22%3A%22eyIkaWRlbnRpdHlfY29va2llX2lkIjoiMTllYWUzNTg4NTUzMzc1LTBmZjc1YzdmNDMzNjkyLTFlNTI1NjM2LTEyMjk0MDAtMTllYWUzNTg4NTYzODM3IiwiJGlkZW50aXR5X2xvZ2luX2lkIjoiMTQxOTUzNDYwIn0%3D%22%2C%22history_login_id%22%3A%7B%22name%22%3A%22%24identity_login_id%22%2C%22value%22%3A%22141953460%22%7D%7D",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": 1812154404,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_uetsid",
+      "value": "f105e980644711f1a64f9f857d053506",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_uetvid",
+      "value": "f105d2a0644711f19ccd09d0c9892256",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "MUID",
+      "value": "1CEF891EDC19685B10A79E6DDD65699D",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "OptanonConsent",
+      "value": "isGpcEnabled=0&datestamp=Tue+Jun+09+2026+20%3A13%3A24+GMT-0400+(hora+est%C3%A1ndar+de+Chile)&version=202604.2.0&browserGpcFlag=0&isDntEnabled=0&isIABGlobal=false&hosts=&consentId=0f805740-f7ff-4fa7-b319-3b2281302044&interactionCount=1&isAnonUser=1&prevHadToken=0&landingPath=NotLandingPage&groups=C0001%3A1%2CC0003%3A1%2CC0004%3A1%2CC0002%3A1&crTime=1781039221577&AwaitingReconsent=false",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": 1812586404,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga_3WP50LGEEC",
+      "value": "GS2.1.s1781049237$o2$g1$t1781050404$j60$l0$h0",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": 1815610404.538512,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga",
+      "value": "GA1.2.1901214000.1781039205",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": 1815610404.547353,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_h_desk_key",
+      "value": "c72061bf6f9e4f5c9b78ff91e1cf0463",
+      "domain": ".binance.com",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "aws-waf-token",
+      "value": "3404a451-e643-4b9b-b033-c0154d788ba2:EAoAsTgBUZoYAAAA:4uA2nXakKepT82Uu8x7e0KIfvZaU/VKol3EI9+KaEA+XyrKQYy/lrHzEpHmRhjsbKbD9XHRTGUGPyq4NxABr3HHSTCJVJSElXAD8DHAi4533Qprel7UPAt4eduGZ8DwcPKfZW/yr/ZAhhSIIHQCawL6NRhKtOpDAezXbwCkMOoabthXKsRU8MGFbfrQ8h2KYvO0=",
+      "domain": ".accounts.binance.com",
+      "path": "/",
+      "expires": 1781396007,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "https://c2c.binance.com",
+      "localStorage": [
+        {
+          "name": "c2c-convenience-fee-tooltip-storage",
+          "value": "{\"state\":{\"visitCount\":0},\"version\":0}"
+        },
+        {
+          "name": "NC_NO_CHAT_GROUP",
+          "value": "{\"value\":true,\"expire\":1781054006653}"
+        },
+        {
+          "name": "__bnc_uuid",
+          "value": "dac03a35-1ea5-4429-af47-e97e19bcb45f"
+        },
+        {
+          "name": "binance_cookie_manager_unknown_cookies",
+          "value": "[\"fiat-prefer-currency\",\"g_state\",\"s9r1\",\"r20t\",\"r30t\",\"cr00\",\"d1og\",\"r2o1\",\"f30l\",\"p20t\",\"currentAccount\",\"logined\",\"BNC-Location\",\"_h_desk_key\",\"aws-waf-token\"]"
+        },
+        {
+          "name": "_fc_0cimk",
+          "value": "0"
+        },
+        {
+          "name": "__BNC_FP_INFO__",
+          "value": "{\"value\":\"{\\\"screen_resolution\\\":\\\"900,1366\\\",\\\"available_screen_resolution\\\":\\\"900,1366\\\",\\\"system_version\\\":\\\"macOS 10.15.7\\\",\\\"brand_model\\\":\\\"desktop Apple Macintosh \\\",\\\"system_lang\\\":\\\"es-CL\\\",\\\"timezone\\\":\\\"GMT-04:00\\\",\\\"timezoneOffset\\\":240,\\\"user_agent\\\":\\\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\\\",\\\"list_plugin\\\":\\\"PDF Viewer,Chrome PDF Viewer,Chromium PDF Viewer,Microsoft Edge PDF Viewer,WebKit built-in PDF\\\",\\\"canvas_code\\\":\\\"762b6c75\\\",\\\"webgl_vendor\\\":\\\"Google Inc. (Apple)\\\",\\\"webgl_renderer\\\":\\\"ANGLE (Apple, ANGLE Metal Renderer: Apple M4, Unspecified Version)\\\",\\\"audio\\\":\\\"124.04347624466754\\\",\\\"platform\\\":\\\"MacIntel\\\",\\\"web_timezone\\\":\\\"America/Santiago\\\",\\\"device_name\\\":\\\"Chrome V131.0.0.0 (macOS)\\\",\\\"fingerprint\\\":\\\"e87e4cd488071f41fdef47b5a23c34a0\\\"}\",\"expire\":1781136804103}"
+        },
+        {
+          "name": "fcg0613",
+          "value": "HUMKEBgCEApJEVdBbkEFUE5ZXkIQVkFsUl1fRFdDVlZDTFRDbVdYEAsDSkMKEDANXV5EARMIAB5EBx88CgcQCgMfE1RCbQUOAhVcTAgAHhFXQW5RCQ8aV01UAhwQVUJtVEoLQ1ZSQ0xUQ21QXlxHB0RbXE9NCEFvU1oTCAAeRAcfPBwHRAEQCQMHBB5EBx88Ah0QCgMfE1RCbQgDBUFVXx4SVEBuRVJEV0NWUVxCEFZBbFVUQRBcUEBBCR1tVkJFABALB1dQQEEJHW1DUUUAEAsBSkMKEDAeWxIIAh0QV0E5AgMNGVgQCgIfE1RCbQMTHkFVX08cEEZCUFkQXBpOAV9MCAEABB0QUwNEW11TXxMeElRQblFWbRBQTlldVh4SVFFSEAtJRABdUk1UAQAeEVdAXRBcUkBBDl8CEggAAR4TU1dSTllNXwIAAgITHhNTV1NOWTRMAh0dR0NTVVdJHV1OGxdCVW5GAQICVhURAxdNQhAAH19eVVhcRE1OU0IcV1dbQEVXQxBKQ1xOQAdcRltHVBAdEFZMQwgWDRAcEAMcRVhGDgUeAhhMHhICHlxLHlYHEgQBAA9AVBAfEwIcHRUVDRpCHVtXXFZVH1hcWUNAQV9DVVFfVh5GVh0LDgMNQgxbSBAfEwIcHQMOHBcGAVxDHU8AH0JLCwMDD01CEAAfHFRdQUYPDgIQTUIQAB8cUF5BWgdODhAMTB4SAh4eRl5ZAw9DARwNEBwQAxwdXFcLBEERGh1aEm8fE1MAB0RbW09NDwMEEAkAAwYeRABdVU1UBwAeEVdfQhBcUEBBCQ1fEggRQkZQRg8CQxECHR1WUR1BWlVYAgwEBUEEQRIeEVAFEwhTTU4FDBdGEggDHRBQCkRbWU9NDwsSCAABHhNUBRROWU0GRkRCQAsdHlAPD0IBAQxBRFNHWFEfUQkMQxAbD0ZZURxDX0IdAAJCEwcKWFRfW1ccW0FETU4FGxtEEggCAU9M"
+        },
+        {
+          "name": "pl-id",
+          "value": "141953460"
+        },
+        {
+          "name": "BNC-Level",
+          "value": "0"
+        },
+        {
+          "name": "giftcard-tooltip-storage",
+          "value": "{\"state\":{\"visitCount\":0},\"version\":0}"
+        },
+        {
+          "name": "fcrcg0613",
+          "value": "HUMNUk1UAAgeEVAAEwhEUU5PTQ8BEggRB1NTB1RZXgUOWVEIBgtQVwRUVFdUVl9bVAkFUQMACAQDVQ4HXwsEBQAFCVcECwdZD1sNDFACBwpXUFIKXwNdW01CEFEGEQsDBgpXUVlTW14HAQoLHRBQB0RbTlcJWwMGVgNTHwQLXwdBVw1cUx0KCgQLHABTV1lXWAsAAgUABxAdEAdXTlleQhBRBRELAx0QB1lOWV9CEFELEQsDBgpXUVlTW14HAQoKHRBQA1ZDVlNDTFMBAxELEAMCVFdBU1lDAwAQHxNTAABEW04LGxpCQwgcHlBYXEgDAgEcGlNEW1AfUV5fRE1OAl5dEAoQAgUDCAdVVVpTTUIQUQMHEwgBHkQAXVZNVAIcEFIABBMIVk1OAl5ZEAoDHxNTAApEW1xPTQ8DCRAJAB4TU1RRTllfQhBRAAITCAACSkMNUV1MCAAeEVAAAhBcUUBBDlwGEggDHRBQAFNDVlNDTFMCBBELAh0QB1NbQVVeHhJTAQkQCwJKQw1RVkwIEhAfE1MCAkRbTkFDTFMDAxELEBMeRABfUU1UEBJP"
+        },
+        {
+          "name": "c2c_common_fiat",
+          "value": "{\"fiat\":\"CLP\"}"
+        },
+        {
+          "name": "sawebjssdkpageleave-648544386",
+          "value": "{\"identities\":{\"$identity_cookie_id\":\"19eae3588553375-0ff75c7f433692-1e525636-1229400-19eae3588563837\",\"$identity_login_id\":\"141953460\",\"$identity_anonymous_id\":\"19eae3588553375-0ff75c7f433692-1e525636-1229400-19eae3588563837\"},\"distinct_id\":\"141953460\",\"lib\":{\"$lib\":\"js\",\"$lib_method\":\"code\",\"$lib_version\":\"1.26.12\"},\"properties\":{\"$timezone_offset\":240,\"$screen_height\":900,\"$screen_width\":1366,\"$viewport_height\":900,\"$viewport_width\":1366,\"$lib\":\"js\",\"$lib_version\":\"1.26.12\",\"$latest_traffic_source_type\":\"直接流量\",\"$latest_search_keyword\":\"未取到值_直接打开\",\"$latest_referrer\":\"\",\"$url\":\"https://c2c.binance.com/es/fiatOrderDetail?orderNo=22897817486229389312&createdAt=1781050373663\",\"$bot_name\":\"735c67d7-d303-46e1-8a21-898da86c521b\",\"df_1\":\"Web\",\"df_fvideoid\":\"33e5558b4075a06484888376a75cdc395118d442\",\"df_projectName\":\"c2c-user-ui\",\"df_etag\":\"0c17943662939f0d90f0a2f645debbb263417443\",\"df_2\":\"es\",\"theme\":\"dark\",\"$title\":\"Bitcoin Exchange | Exchange de Criptomonedas | Binance\",\"$url_path\":\"/es/fiatOrderDetail\",\"$referrer_host\":\"\",\"$referrer\":\"\",\"$viewport_position\":0,\"event_duration\":5.025,\"$is_first_day\":true},\"login_id\":\"141953460\",\"anonymous_id\":\"19eae3588553375-0ff75c7f433692-1e525636-1229400-19eae3588563837\",\"type\":\"track\",\"event\":\"$WebPageLeave\",\"time\":1781050409386,\"_track_id\":334479387,\"_flush_time\":1781050409387,\"heartbeat_interval_time\":5000}"
+        }
+      ]
+    },
+    {
+      "origin": "https://accounts.binance.com",
+      "localStorage": [
+        {
+          "name": "aws_waf_referrer",
+          "value": "{\"referrer\":\"https://accounts.binance.com/es/login/switch/callback\"}"
+        },
+        {
+          "name": "awswaf_token_refresh_timestamp",
+          "value": "1781050407542"
+        },
+        {
+          "name": "aws_waf_token_challenge_attempts",
+          "value": "{\"attempts\":0,\"lastAttemptTimestamp\":1781050407647}"
+        }
+      ]
+    }
+  ]
+}

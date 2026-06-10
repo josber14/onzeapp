@@ -37,6 +37,8 @@ export interface P2PBotExchangeConfigData {
   cycleInterval: number;
   minCompetitorCapital: number | null;
   competePayTypes: string[] | null;
+  chatBotEnabled: boolean;
+  chatCookies?: string | null;
   pauseUntil: string | null;
   lastStartedAt: string | null;
   lastStoppedAt: string | null;
@@ -95,6 +97,59 @@ export interface BotAction {
   suggestedPrice?: number;
   reason: string;
   timestamp: number;
+}
+
+export type ChatState =
+  | "new"
+  | "awaiting_verification"
+  | "awaiting_account_type"
+  | "awaiting_previous_account"
+  | "awaiting_single_confirm"
+  | "awaiting_bank_choice"
+  | "awaiting_company_type"
+  | "awaiting_problem"
+  | "awaiting_problem_type"
+  | "awaiting_limit_amount"
+  | "account_sent"
+  | "payment_made"
+  | "awaiting_comprobant"
+  | "completed"
+  | "appealed"
+  | "closed";
+
+export interface ChatMessage {
+  id: string;
+  type: string;
+  content: string;
+  self: boolean;
+  createTime: number;
+  imageUrl: string | null;
+}
+
+export interface ChatStateData {
+  id?: number;
+  tenantId: number;
+  exchange: string;
+  orderNumber: string;
+  state: ChatState;
+  counterparty: string | null;
+  isCompany: boolean;
+  isReturning: boolean;
+  previousBank: string | null;
+  chosenBank: string | null;
+  chosenAccountIds: any;
+  erutRequested: boolean;
+  erutReceived: boolean;
+  retryCount: number;
+  partialAmount: number | null;
+  totalAmount: number | null;
+  lastClientMsgAt: string | null;
+  lastBotMsgAt: string | null;
+  lastBotMsg: string | null;
+  appealAt: string | null;
+  paidAt: string | null;
+  completedAt: string | null;
+  verifiedAt: string | null;
 }
 
 export interface BotState {

@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { BybitP2PClient, bybitOrderGroup, bybitOrderStatusLabel } from "./bybit-adapter";
 import { BinanceP2PClient } from "./binance-adapter";
+import { processChats } from "./chat-agent";
+import { initBrowser } from "./chat-playwright";
 import type {
   P2PBotConfigData,
   P2PBotExchangeConfigData,
@@ -257,6 +259,8 @@ export async function getExchangeConfig(
     competePayTypes: config.competePayTypes as string[] | null,
     commissionPct: Number(config.commissionPct) || 0.14,
     safeMarginPct: Number(config.safeMarginPct) || 0,
+    chatBotEnabled: config.chatBotEnabled ?? false,
+    chatCookies: config.chatCookies as string | null,
   };
 }
 
@@ -280,6 +284,8 @@ export async function saveExchangeConfig(
   if (data.commissionPct !== undefined) update.commissionPct = data.commissionPct;
   if (data.safeMarginPct !== undefined) update.safeMarginPct = data.safeMarginPct;
   if (data.adUpdateCount !== undefined) update.adUpdateCount = data.adUpdateCount;
+  if (data.chatBotEnabled !== undefined) update.chatBotEnabled = data.chatBotEnabled;
+  if (data.chatCookies !== undefined) update.chatCookies = data.chatCookies;
 
   await prisma.p2PBotExchangeConfig.upsert({
     where: { tenantId_exchange: { tenantId, exchange } },
@@ -396,30 +402,32 @@ export async function logBot(
 
 export async function executeBotCycle(tenantId: number) {
   const config = await getBotConfig(tenantId);
-  if (!config || !config.enabled) {
-    return { ok: false, reason: "Bot not enabled" };
-  }
-
+  const isGloballyDisabled = !config || !config.enabled;
   const isPaused =
-    config.pauseUntil !== null && new Date(config.pauseUntil) > new Date();
-  if (isPaused) {
-    return { ok: false, reason: "Bot paused until " + config.pauseUntil };
-  }
+    !isGloballyDisabled && config.pauseUntil !== null && new Date(config.pauseUntil) > new Date();
 
   const actions: BotAction[] = [];
-
   const cycleState: any = {};
+  const exchanges = config?.exchanges ?? ["binance", "bybit"];
+  let anyEnabled = false;
 
-  for (const exchange of config.exchanges) {
+  for (const exchange of exchanges) {
     try {
       const exchangeConfig = await getExchangeConfig(tenantId, exchange);
-      const activeConfig = exchangeConfig || config;
+      const activeConfig = (exchangeConfig || config) as P2PBotExchangeConfigData | P2PBotConfigData;
+
+      // Check if chat should run independently of bot enabled state
+      const chatEnabled = exchangeConfig?.chatBotEnabled === true;
 
       const exPaused =
-        activeConfig.pauseUntil !== null && new Date(activeConfig.pauseUntil) > new Date();
-      if (!activeConfig.enabled || exPaused) {
+        !isGloballyDisabled && activeConfig?.pauseUntil !== null &&
+        activeConfig?.pauseUntil && new Date(activeConfig.pauseUntil) > new Date();
+
+      const isDisabled = !activeConfig?.enabled || exPaused;
+      if (!isDisabled) anyEnabled = true;
+
+      if (isDisabled && !chatEnabled) {
         await logBot(tenantId, "info", exchange, `Bot ${exchange} deshabilitado en su sesión`);
-        // Still include state for the exchange
         if (exchange === "binance") cycleState.binance = buildBinanceState(getBinanceState(tenantId));
         continue;
       }
@@ -433,17 +441,42 @@ export async function executeBotCycle(tenantId: number) {
           cycleState.binance = buildBinanceState(getBinanceState(tenantId));
           continue;
         }
-        try {
-          const result = await runBinanceCycle(tenantId, exchangeConfig || config, creds.apiKey, creds.secretKey);
-          cycleState.binance = buildBinanceState(getBinanceState(tenantId));
-          actions.push(...result.actions);
-          if (result.actions.length > 0) {
-            await logBot(tenantId, "info", "binance", `${result.actions.length} acción(es) ejecutada(s)`, { actions: result.actions });
-          }
-        } catch (e: any) {
-          cycleState.binance = buildBinanceState(getBinanceState(tenantId));
-          await logBot(tenantId, "error", "binance", `Error en ciclo Binance: ${e.message}`);
+
+        const binancePromises: Promise<void>[] = [];
+
+        // Run main cycle if bot is enabled
+        if (!isDisabled) {
+          binancePromises.push((async () => {
+            try {
+              const result = await runBinanceCycle(tenantId, activeConfig, creds.apiKey, creds.secretKey);
+              cycleState.binance = buildBinanceState(getBinanceState(tenantId));
+              if (result.actions.length > 0) {
+                actions.push(...result.actions);
+                await logBot(tenantId, "info", "binance", `${result.actions.length} acción(es) ejecutada(s)`, { actions: result.actions });
+              }
+            } catch (e: any) {
+              cycleState.binance = buildBinanceState(getBinanceState(tenantId));
+              await logBot(tenantId, "error", "binance", `Error en ciclo Binance: ${e.message}`);
+            }
+          })());
         }
+
+        // Run chat processing if enabled (even when main bot is disabled)
+        if (chatEnabled) {
+          binancePromises.push((async () => {
+            await logBot(tenantId, "info", "binance", "Iniciando processChats...");
+            try {
+              await initBrowser(tenantId);
+              const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
+              await processChats(tenantId, "binance", async () => ({ client }), []);
+            } catch (e: any) {
+              await logBot(tenantId, "warn", "binance", `Chat process: ${e.message}`);
+            }
+          })());
+        }
+
+        if (binancePromises.length > 0) await Promise.all(binancePromises);
+        if (cycleState.binance === undefined) cycleState.binance = buildBinanceState(getBinanceState(tenantId));
       } else if (exchange === "bybit") {
         const creds = await prisma.bybitCredentials.findUnique({
           where: { tenantId, isActive: true },
@@ -452,41 +485,50 @@ export async function executeBotCycle(tenantId: number) {
           await logBot(tenantId, "warn", "bybit", "Sin credenciales Bybit configuradas");
           continue;
         }
-        try {
-          const result = await runBybitCycle(tenantId, exchangeConfig || config, creds.apiKey, creds.secretKey);
-          actions.push(...result.actions);
-          if (result.actions.length > 0) {
-            await logBot(tenantId, "info", "bybit", `${result.actions.length} acción(es) ejecutada(s)`, { actions: result.actions });
-          }
-        } catch (e: any) {
-          await logBot(tenantId, "error", "bybit", e.message || "Error en ciclo Bybit");
+
+        const bybitPromises: Promise<void>[] = [];
+
+        // Run main cycle if bot is enabled
+        if (!isDisabled) {
+          bybitPromises.push((async () => {
+            try {
+              const result = await runBybitCycle(tenantId, activeConfig, creds.apiKey, creds.secretKey);
+              if (result.actions.length > 0) {
+                actions.push(...result.actions);
+                await logBot(tenantId, "info", "bybit", `${result.actions.length} acción(es) ejecutada(s)`, { actions: result.actions });
+              }
+            } catch (e: any) {
+              await logBot(tenantId, "error", "bybit", e.message || "Error en ciclo Bybit");
+            }
+          })());
         }
+
+        // Run chat processing if enabled (even when main bot is disabled)
+        if (chatEnabled) {
+          bybitPromises.push((async () => {
+            try {
+              const client = new BybitP2PClient(creds.apiKey, creds.secretKey);
+              await processChats(tenantId, "bybit", async () => ({ client }), []);
+            } catch (e: any) {
+              await logBot(tenantId, "warn", "bybit", `Chat process: ${e.message}`);
+            }
+          })());
+        }
+
+        if (bybitPromises.length > 0) await Promise.all(bybitPromises);
       } else if (exchange === "okx") {
-        const creds = await prisma.okxCredentials.findUnique({
-          where: { tenantId, isActive: true },
-        });
-        if (!creds) {
-          await logBot(
-            tenantId,
-            "warn",
-            "okx",
-            "Sin credenciales OKX configuradas"
-          );
-          continue;
+        if (chatEnabled) {
+          await logBot(tenantId, "info", "okx", "Chat OKX pendiente de API");
+        } else if (!isDisabled) {
+          await logBot(tenantId, "info", "okx", "OKX integración pendiente de API");
         }
-        await logBot(
-          tenantId,
-          "info",
-          "okx",
-          "OKX integración pendiente de API"
-        );
       }
     } catch (e: any) {
       await logBot(tenantId, "error", exchange, e.message || "Error en ciclo");
     }
   }
 
-  return { ok: true, actions, state: cycleState };
+  return { ok: true, actions, state: cycleState, running: anyEnabled };
 }
 
 function normalizeBinanceAd(ad: any): any {
@@ -604,16 +646,45 @@ async function runBinanceCycle(
           if (pageData.length > 0) allRaw = allRaw.concat(pageData);
           if (page < 2) await new Promise(r => setTimeout(r, 100));
         }
-        bs.cachedCompetitors = allRaw.map(normalizeBinanceAd);
+        if (allRaw.length > 0 || bs.cachedCompetitors.length === 0) {
+          bs.cachedCompetitors = allRaw.map(normalizeBinanceAd);
+        } else {
+          await logBot(tenantId, "warn", "binance", `API devolvió 0 competidores, preservando cache anterior (${bs.cachedCompetitors.length} items)`);
+        }
         bs.lastCompetitorFetch = Date.now();
         bs.lastCompetitorCount = bs.cachedCompetitors.length;
-        await logBot(tenantId, "info", "binance", `Competidores: ${bs.lastCompetitorCount} items`);
       } catch (e: any) {
         await logBot(tenantId, "warn", "binance", `Fetch competidores: ${e.message}`);
       } finally {
         bs.isFetching = false;
       }
     }
+
+    // Our sell ads
+    const ourSellAds = myAds.filter(
+      (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
+    );
+
+    // Snapshot all competitors for market data (unfiltered)
+    const firstSellAd = ourSellAds[0] || null;
+    try {
+      const allComps = (bs.cachedCompetitors || []).slice(0, 50).map((c: any) => ({
+        id: c.id, nickName: c.nickName, price: Number(c.price),
+        minAmount: Number(c.minAmount ?? 0), maxAmount: Number(c.maxAmount ?? 0),
+        lastQuantity: Number(c.lastQuantity ?? c.quantity ?? 0),
+        orderCount: Number(c.orderCount ?? 0), completionRate: Number(c.completionRate ?? 0),
+      }));
+      await prisma.p2PBotMarketSnapshot.create({
+        data: {
+          tenantId,
+          exchange: "binance",
+          side: "1",
+          competitors: JSON.parse(JSON.stringify(allComps)),
+          ourAd: firstSellAd ? JSON.parse(JSON.stringify({ id: firstSellAd.id, price: Number(firstSellAd.price), lastQuantity: Number(firstSellAd.lastQuantity ?? firstSellAd.quantity ?? 0) })) : null,
+          targetPrice: undefined,
+        },
+      });
+    } catch (e: any) {}
 
     // Use cached competitors
     const rawCompetitors = bs.cachedCompetitors;
@@ -628,11 +699,6 @@ async function runBinanceCycle(
       });
       if (activeCaps.length > 0 && activeCaps[0].buyPrice) activeCapacityBuyPrice = Number(activeCaps[0].buyPrice);
     } catch (e) {}
-
-    // Our sell ads
-    const ourSellAds = myAds.filter(
-      (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
-    );
 
     // 4. Process each managed ad
     let firstAdPrice = 0;
@@ -661,7 +727,7 @@ async function runBinanceCycle(
         adCompetePayTypes = exchangeCompetePayTypes;
       }
       const adPriceSource = managedAd.botPriceSource || "manual";
-      const adPriceFloorPct = managedAd.botPriceFloorPct != null ? Number(managedAd.botPriceFloorPct) : null;
+      const adPriceFloorPct = managedAd.botPriceFloorPct != null ? Number(managedAd.botPriceFloorPct) : (config.priceFloorPct != null ? Number(config.priceFloorPct) : null);
       const adCircuitBreakPct = managedAd.botCircuitBreakPct != null ? Number(managedAd.botCircuitBreakPct) : exchangeCircuitBreakPct;
       const adDailyVolumeCapUsdt = managedAd.botDailyVolumeCapUsdt != null ? Number(managedAd.botDailyVolumeCapUsdt) : exchangeDailyVolumeCapUsdt;
 
@@ -687,16 +753,19 @@ async function runBinanceCycle(
       }
       if (rawPayTypes && rawPayTypes.length > 0 && rawPayTypes[0] !== "*") {
         if (rawPayTypes[0] === "__match_ad__") {
-          if (ourSellAd?.payments?.length) {
-            ourPayMethods = ourSellAd.payments.map((p: any) => String(p));
-          }
+          const ids = (ourSellAd?.payments || []).map((p: any) => String(p));
+          const names = (ourSellAd?.paymentMethods || []).map((p: any) => String(p));
+          ourPayMethods = [...new Set([...ids, ...names])];
         } else if (Array.isArray(rawPayTypes)) {
           ourPayMethods = rawPayTypes;
         }
         if (ourPayMethods && ourPayMethods.length > 0) {
           competitors = competitors.filter((c: any) => {
-            const cmpIds = (c.payments || []).map((p: any) => String(p));
-            return cmpIds.some((p: string) => ourPayMethods!.includes(p));
+            const cmpAll = [
+              ...(c.payments || []).map((p: any) => String(p)),
+              ...(c.paymentMethods || []).map((p: any) => String(p)),
+            ];
+            return cmpAll.some((p: string) => ourPayMethods!.includes(p));
           });
         }
       }
@@ -708,7 +777,7 @@ async function runBinanceCycle(
       // Viability filters
       const viable = competitors.filter((c: any) => {
         if (Number(c.price) < minSellPrice) return false;
-        if (!c.userType || c.userType !== "merchant") return false;
+        if (c.userType && c.userType !== "merchant") return false;
         if (adMinCapital > 0) {
           const cap = Number(c.lastQuantity ?? c.surplusAmount ?? c.tradableQuantity ?? c.quantity ?? 0);
           if (cap < adMinCapital) return false;
@@ -750,24 +819,24 @@ async function runBinanceCycle(
         }
         if (closestAbove) {
           const testPrice = Number(closestAbove.price) - adTop1Diff;
-          if (testPrice > safeFloor) { targetCompetitor = closestAbove; }
+          if (testPrice > priceFloor) { targetCompetitor = closestAbove; }
         }
       } else if (viableCompetitors.length > 0) {
         const firstComp = viableCompetitors[0];
         const firstTargetRaw = Number(firstComp.price) - adTop1Diff;
-        if (firstTargetRaw > safeFloor) {
+        if (firstTargetRaw > priceFloor) {
           targetCompetitor = firstComp; targetIndex = 0;
         } else {
           for (let i = 1; i < viableCompetitors.length; i++) {
             const comp = viableCompetitors[i];
             const testPrice = Number(comp.price) - adTop1Diff;
-            if (testPrice > safeFloor) { targetCompetitor = comp; targetIndex = i; break; }
+            if (testPrice > priceFloor) { targetCompetitor = comp; targetIndex = i; break; }
           }
         }
         if (!targetCompetitor) {
           const highest = viableCompetitors[viableCompetitors.length - 1];
           const testPrice = Number(highest.price) - adTop1Diff;
-          if (testPrice > safeFloor) { targetCompetitor = highest; targetIndex = viableCompetitors.length - 1; }
+          if (testPrice > priceFloor) { targetCompetitor = highest; targetIndex = viableCompetitors.length - 1; }
         }
       }
 
@@ -775,8 +844,8 @@ async function runBinanceCycle(
       if (targetCompetitor) {
         targetPrice = Number(targetCompetitor.price) - adTop1Diff;
       }
-      // Nunca quedarse debajo del safeFloor (reglas 1 y 2)
-      if (targetPrice < safeFloor) { targetPrice = Math.max(currentPrice, safeFloor); }
+      // Nunca quedarse debajo del precio mínimo (costo + comisión)
+      if (targetPrice < priceFloor) { targetPrice = Math.max(currentPrice, priceFloor); }
       if (firstAdTarget === 0) firstAdTarget = targetPrice;
 
       const diff = Math.abs(currentPrice - targetPrice);
@@ -854,11 +923,73 @@ async function runBinanceCycle(
           await logBot(tenantId, "info", "binance", `Ad ${adId}: ${currentPrice} → ${targetPrice.toFixed(2)} (${as.updateTimestamps.length}/30 esta hora)`);
         }
       } catch (e: any) {
-        if (e.message?.includes("code: -9000") || e.message?.includes("code: -1000") || e.message?.includes("429")) {
+        if (e.message?.includes("187049") || e.message?.includes("187040")) {
+          await logBot(tenantId, "warn", "binance", `Ad ${adId}: error 187049 en updateAd, sincronizando volumen...`);
+          try {
+            // RETRY_WITH_VOLUME_SYNC: get fresh surplus, sync, retry price
+            const detailRes = await client.getAdDetail(adId);
+            const adv = detailRes?.data?.adv || detailRes?.data || {};
+            const freshQty = Number(adv.surplusAmount ?? adv.tradableQuantity ?? 0);
+            if (freshQty > 0) {
+              await client.updateAdQuantity(adId, freshQty);
+            } else {
+              const fallbackQty = Number(ourSellAd.lastQuantity ?? ourSellAd.quantity ?? 0);
+              if (fallbackQty > 0) await client.updateAdQuantity(adId, fallbackQty);
+            }
+            // Retry price update
+            await client.updateAd({ adId, price: targetPrice.toFixed(2) });
+            as.lastUpdateAt = Date.now();
+            as.rateLimitBackoffMs = 0;
+            if (isPriceUp) {
+              as.priceUpTimestamps.push(Date.now());
+              as.lastPriceUpAt = Date.now();
+            } else {
+              as.updateTimestamps.push(Date.now());
+            }
+            actions.push({ action: "update_price", exchange: "binance", adId, currentPrice, suggestedPrice: targetPrice, reason: `187049 → sync volumen: ${currentPrice} → ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
+            await logBot(tenantId, "info", "binance", `Ad ${adId}: precio actualizado tras sync volumen: ${currentPrice} → ${targetPrice.toFixed(2)}`);
+          } catch (e2: any) {
+            as.lastRateLimitError = Date.now();
+            as.rateLimitBackoffMs = 60000;
+            await logBot(tenantId, "error", "binance", `Ad ${adId}: falló incluso tras sync volumen: ${e2.message}`);
+            await logBot(tenantId, "warn", "binance", `Ad ${adId}: backoff ${Math.round(as.rateLimitBackoffMs / 1000)}s`);
+          }
+        } else if (e.message?.includes("code: -9000") || e.message?.includes("code: -1000") || e.message?.includes("429")) {
           as.lastRateLimitError = Date.now();
           as.rateLimitBackoffMs = 60000;
           await logBot(tenantId, "error", "binance", `Ad ${adId}: ERROR COMPLETO: ${e.message}`);
           await logBot(tenantId, "warn", "binance", `Ad ${adId}: ${e.message.split('(')[0].trim()} — backoff ${Math.round(as.rateLimitBackoffMs / 1000)}s`);
+        } else if (e.message?.includes("187055")) {
+          const rangeMatch = e.message.match(/\[([\d.]+)\s*-\s*([\d.]+)\]/);
+          if (rangeMatch) {
+            const rangeMin = parseFloat(rangeMatch[1]);
+            const rangeMax = parseFloat(rangeMatch[2]);
+            const belowRange = rangeMin - 0.01;
+            const aboveRange = rangeMax + 0.01;
+            let candidates = [];
+            if (belowRange >= safeFloor) candidates.push(belowRange);
+            if (aboveRange > currentPrice) candidates.push(aboveRange);
+            candidates.sort((a, b) => Math.abs(a - targetPrice) - Math.abs(b - targetPrice));
+            let fallbackPrice: number | null = null;
+            for (const c of candidates) {
+              if (Math.abs(c - currentPrice) >= 0.005) { fallbackPrice = c; break; }
+            }
+            if (fallbackPrice !== null) {
+              await logBot(tenantId, "warn", "binance", `Ad ${adId}: rango ocupado [${rangeMin}-${rangeMax}], intentando ${fallbackPrice.toFixed(2)}`);
+              try {
+                await client.updateAd({ adId, price: fallbackPrice.toFixed(2) });
+                as.lastUpdateAt = Date.now();
+                actions.push({ action: "update_price", exchange: "binance", adId, currentPrice, suggestedPrice: fallbackPrice, reason: `Rango避开 [${rangeMin}-${rangeMax}] → ${fallbackPrice.toFixed(2)}`, timestamp: Date.now() });
+                await logBot(tenantId, "info", "binance", `Ad ${adId}: ${currentPrice} → ${fallbackPrice.toFixed(2)} (rango evitado)`);
+              } catch (e2: any) {
+                await logBot(tenantId, "warn", "binance", `Ad ${adId}: fallback también falló: ${e2.message}`);
+              }
+            } else {
+              await logBot(tenantId, "warn", "binance", `Ad ${adId}: rango ocupado [${rangeMin}-${rangeMax}], sin precio alternativo viable, saltando`);
+            }
+          } else {
+            await logBot(tenantId, "warn", "binance", `Ad ${adId}: error 187055 (rango ocupado), no se pudo parsear rango, saltando`);
+          }
         } else if (e.message?.includes("83229") || e.message?.includes("83230")) {
           await logBot(tenantId, "warn", "binance", `Ad ${adId}: ad offline (${e.message}), saltando`);
         } else {
@@ -877,7 +1008,7 @@ async function runBinanceCycle(
       const ordersRes = await client.getOrders({ page: 1, rows: 30 });
       const binanceOrders = ordersRes?.data ?? [];
       for (const o of binanceOrders) {
-        const orderId = o.orderNo ?? o.id;
+        const orderId = o.orderNumber ?? o.orderNo ?? o.id;
         const existing = await prisma.p2PBotOrder.findFirst({
           where: { tenantId, orderNumber: orderId, exchange: "binance" },
         });
@@ -891,7 +1022,7 @@ async function runBinanceCycle(
               totalPrice: Number(o.totalPrice ?? o.totalAmount ?? 0),
               unitPrice: Number(o.unitPrice ?? o.price ?? 0),
               status: o.orderStatus ?? o.status ?? "unknown",
-              counterparty: o.counterpartyNickName ?? o.publisherName ?? "",
+              counterparty: o.counterPartNickName ?? o.counterpartyNickName ?? o.publisherName ?? "",
               executedAt: o.createTime ? new Date(o.createTime) : new Date(),
             },
           });
@@ -920,6 +1051,7 @@ async function runBybitCycle(
 ): Promise<{ actions: BotAction[] }> {
   const actions: BotAction[] = [];
   const client = new BybitP2PClient(apiKey, secretKey);
+  const lastAdUpdateAt = new Map<string, number>();
 
   try {
     // 1. Get our current balance (non-critical, continue if fails)
@@ -985,6 +1117,27 @@ async function runBybitCycle(
       throw e;
     }
     await logBot(tenantId, "info", "bybit", `OnlineAds: ${rawCompetitors.length} items`);
+
+    // Snapshot all competitors for market data (unfiltered)
+    const firstSellAd = ourSellAds[0] || null;
+    try {
+      const allComps = (rawCompetitors || []).slice(0, 50).map((c: any) => ({
+        id: c.id, nickName: c.nickName, price: Number(c.price),
+        minAmount: Number(c.minAmount ?? 0), maxAmount: Number(c.maxAmount ?? 0),
+        lastQuantity: Number(c.lastQuantity ?? c.quantity ?? 0),
+        orderCount: Number(c.orderCount ?? 0), completionRate: Number(c.completionRate ?? 0),
+      }));
+      await prisma.p2PBotMarketSnapshot.create({
+        data: {
+          tenantId,
+          exchange: "bybit",
+          side: "1",
+          competitors: JSON.parse(JSON.stringify(allComps)),
+          ourAd: firstSellAd ? JSON.parse(JSON.stringify({ id: firstSellAd.id, price: Number(firstSellAd.price), lastQuantity: Number(firstSellAd.lastQuantity ?? firstSellAd.quantity ?? 0) })) : null,
+          targetPrice: undefined,
+        },
+      });
+    } catch (e: any) {}
 
     // Get active capacity (lowest buyPrice among active)
     let activeCapacityBuyPrice: number | null = null;
@@ -1057,7 +1210,7 @@ async function runBybitCycle(
         const marginPct = minSellPrice > 0 ? ((Number(comp.price) - minSellPrice) / minSellPrice) * 100 : 999;
         if (marginPct >= adSafeMarginPct) {
           const testPrice = Number(comp.price) - adTop1Diff;
-          if (testPrice > safeFloor) {
+          if (testPrice > minSellPrice) {
             targetCompetitor = comp;
             targetIndex = i;
             break;
@@ -1065,13 +1218,13 @@ async function runBybitCycle(
         }
       }
 
-      // Fallback: closest above current price (respetando safeFloor)
+      // Fallback: closest above current price (respetando precio mínimo)
       if (!targetCompetitor && sortedCompetitors.length > 0) {
         for (let i = 0; i < sortedCompetitors.length; i++) {
           const comp = sortedCompetitors[i];
           if (currentPrice > 0 && Number(comp.price) > currentPrice) {
             const testPrice = Number(comp.price) - adTop1Diff;
-            if (testPrice > safeFloor) {
+            if (testPrice > minSellPrice) {
               targetCompetitor = comp;
               targetIndex = i;
               await logBot(tenantId, "warn", "bybit", `Ad ${adId}: sin margen/piso, usando más cercano sobre precio: ${Number(targetCompetitor.price).toFixed(2)}`);
@@ -1085,34 +1238,44 @@ async function runBybitCycle(
       if (targetCompetitor) {
         await logBot(tenantId, "info", "bybit", `Ad ${adId}: target #${targetIndex + 1}: ${Number(targetCompetitor.price).toFixed(2)}`);
         const targetRaw = Number(targetCompetitor.price) - adTop1Diff;
-        if (targetRaw > safeFloor) {
+        if (targetRaw > minSellPrice) {
           targetPrice = targetRaw;
         } else {
-          await logBot(tenantId, "warn", "bybit", `Ad ${adId}: target bajo piso seguro, manteniendo ${currentPrice.toFixed(2)}`);
+          await logBot(tenantId, "warn", "bybit", `Ad ${adId}: target bajo piso mínimo, manteniendo ${currentPrice.toFixed(2)}`);
         }
       } else {
-        await logBot(tenantId, "warn", "bybit", `Ad ${adId}: sin target sobre piso seguro, manteniendo ${currentPrice.toFixed(2)}`);
+        await logBot(tenantId, "warn", "bybit", `Ad ${adId}: sin target sobre piso mínimo, manteniendo ${currentPrice.toFixed(2)}`);
       }
-      // Nunca quedarse debajo del safeFloor (reglas 1 y 2)
-      if (targetPrice < safeFloor) { targetPrice = Math.max(currentPrice, safeFloor); }
+      // Nunca quedarse debajo del precio mínimo
+      if (targetPrice < minSellPrice) { targetPrice = Math.max(currentPrice, minSellPrice); }
+
+      // Avoid updating the same ad too frequently (rate limit protection)
+
+      // Avoid updating the same ad too frequently (rate limit protection)
+      const lastUpdateKey = `bybit:${adId}`;
+      const lastUpdate = lastAdUpdateAt.get(lastUpdateKey);
+      const minInterval = 60 * 1000; // 1 minute minimum between updates
+      if (lastUpdate && Date.now() - lastUpdate < minInterval) {
+        await logBot(tenantId, "debug", "bybit", `Ad ${adId}: cooldown activo, saltando (pasaron ${((Date.now() - lastUpdate) / 1000).toFixed(0)}s)`);
+        continue;
+      }
 
       // Update ad
-      const diff = Math.abs(currentPrice - targetPrice);
-      if (diff >= 0.005) {
-        let fullAd: any = ourSellAd;
-        let paymentIds: string[] = [];
-        let strTps: any = {};
-        try {
+      let fullAd: any = ourSellAd;
+      let paymentIds: string[] = [];
+      let strTps: any = {};
+      try {
           // Use data from getMyAds; getAdDetail is redundant slow API call
           const payObjs = fullAd.paymentTerms ?? fullAd.payments ?? [];
           paymentIds = Array.isArray(payObjs) ? payObjs.map((p: any) => String(p.id ?? p.paymentId ?? p)) : [];
           const tps = fullAd.tradingPreferenceSet ?? {};
           for (const k of Object.keys(tps)) strTps[k] = String(tps[k] ?? "");
 
-          const updateQuantity = bybitBalance > 0 ? String(bybitBalance) : String(fullAd.lastQuantity ?? fullAd.quantity ?? "0");
-          const fiatMaxAmount = bybitBalance > 0 ? String(Number(updateQuantity) * targetPrice) : String(fullAd.maxAmount ?? "0");
+          const adQuantity = String(fullAd.lastQuantity ?? fullAd.quantity ?? "0");
+          const adMaxAmount = String(fullAd.maxAmount ?? "0");
           const rawMin = String(fullAd.minAmount ?? "0");
-          const cappedMin = Number(rawMin) > Number(fiatMaxAmount) ? fiatMaxAmount : rawMin;
+          const cappedMin = Number(rawMin) > Number(adMaxAmount) ? adMaxAmount : rawMin;
+          const updateQuantity = adQuantity;
           const updateFields: any = {
             id: adId,
             price: targetPrice.toFixed(2),
@@ -1121,20 +1284,36 @@ async function runBybitCycle(
             premium: String(fullAd.premium ?? "0"),
             quantity: updateQuantity,
             minAmount: cappedMin,
-            maxAmount: fiatMaxAmount,
+            maxAmount: adMaxAmount,
             paymentPeriod: String(fullAd.paymentPeriod ?? "15"),
             paymentIds,
             remark: String(fullAd.remark ?? ""),
             tradingPreferenceSet: strTps,
           };
           await client.updateAd(updateFields);
+          lastAdUpdateAt.set(lastUpdateKey, Date.now());
           actions.push({ action: "update_price", exchange: "bybit", adId, currentPrice, suggestedPrice: targetPrice, reason: `Ad ${adId} actualizado a ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
           await logBot(tenantId, "info", "bybit", `Ad ${adId} precio actualizado: ${currentPrice} → ${targetPrice.toFixed(2)}`);
         } catch (e: any) {
           if (e.message?.includes("912120050")) {
-            await logBot(tenantId, "info", "bybit", `Rate limit, recreando anuncio ${adId}...`);
-            await client.removeAd(adId);
-            const recreatePrice = targetPrice + Math.max(2.0, currentPrice * 0.01);
+            await logBot(tenantId, "info", "bybit", `Rate limit, recreando anuncio ${adId} en 5s...`);
+            await new Promise(r => setTimeout(r, 5000));
+            let removed = false;
+            for (let retry = 0; retry < 3; retry++) {
+              try {
+                await client.removeAd(adId);
+                removed = true;
+                break;
+              } catch (removeErr: any) {
+                await logBot(tenantId, "warn", "bybit", `Ad ${adId}: remove intento ${retry + 1} falló: ${removeErr.message}`);
+                if (retry < 2) await new Promise(r => setTimeout(r, 2000));
+              }
+            }
+            if (!removed) {
+              await logBot(tenantId, "error", "bybit", `Ad ${adId}: no se pudo eliminar tras rate limit, abortando recreación`);
+            } else {
+            await new Promise(r => setTimeout(r, 3000));
+            const recreatePrice = targetPrice;
             const postFields: any = {
               tokenId: "USDT", currencyId: "CLP", side: "1",
               price: recreatePrice.toFixed(2),
@@ -1169,9 +1348,29 @@ async function runBybitCycle(
                 });
                 await logBot(tenantId, "info", "bybit", `Anuncio recreado como ${newAdId}`);
               }
-            } catch (e2: any) {
-              await logBot(tenantId, "warn", "bybit", `Ad ${adId}: error al recrear: ${e2.message}`);
+              } catch (e2: any) {
+              if (e2.message?.includes("90043")) {
+                // Price too close — retry with 0.5% higher difference
+                const retryPrice = currentPrice * 1.005;
+                postFields.price = retryPrice.toFixed(2);
+                try {
+                  const retryRes = await client.postAd(postFields);
+                  const retryId = retryRes?.result?.item?.id ?? retryRes?.result?.id;
+                  if (retryId) {
+                    await new Promise(r => setTimeout(r, 2000));
+                    try { await client.updateAd({ id: String(retryId), status: 10 }); } catch {}
+                    await prisma.p2PBotAd.update({
+                      where: { id: managedAd.id },
+                      data: { adId: String(retryId) },
+                    });
+                    await logBot(tenantId, "info", "bybit", `Anuncio recreado como ${retryId} (precio ajustado: ${retryPrice.toFixed(2)})`);
+                  }
+                } catch {}
+              } else {
+                await logBot(tenantId, "warn", "bybit", `Ad ${adId}: error al recrear: ${e2.message}`);
+              }
             }
+            } // cierra else del if(!removed)
           } else if (e.message?.includes("912120031")) {
             await logBot(tenantId, "info", "bybit", `Ad ${adId} offline, reactivando para próximo ciclo...`);
             try {
@@ -1180,30 +1379,20 @@ async function runBybitCycle(
             } catch(e2: any) {
               await logBot(tenantId, "warn", "bybit", `Ad ${adId}: no se pudo reactivar: ${e2.message}`);
             }
+          } else if (e.message?.includes("90043")) {
+            const adjustPrice = targetPrice > currentPrice ? currentPrice * 1.005 : currentPrice * 0.995;
+            await logBot(tenantId, "info", "bybit", `Ad ${adId}: 90043, reintentando con ajuste >0.5% (${adjustPrice.toFixed(2)})`);
+            try {
+              await client.updateAd({ id: adId, actionType: "MODIFY", price: adjustPrice.toFixed(2) });
+              lastAdUpdateAt.set(lastUpdateKey, Date.now());
+              actions.push({ action: "update_price", exchange: "bybit", adId, currentPrice, suggestedPrice: adjustPrice, reason: `Ad ${adId} forzado a ${adjustPrice.toFixed(2)}`, timestamp: Date.now() });
+            } catch(e2: any) {
+              await logBot(tenantId, "warn", "bybit", `Ad ${adId}: error post-90043: ${e2.message}`);
+            }
           } else {
             await logBot(tenantId, "warn", "bybit", `Ad ${adId}: error actualización: ${e.message}`);
           }
         }
-      }
-
-      // Snapshot per ad
-      try {
-        await prisma.p2PBotMarketSnapshot.create({
-          data: {
-            tenantId,
-            exchange: "bybit",
-            side: "1",
-            competitors: JSON.parse(JSON.stringify(sortedCompetitors.slice(0, 50).map((c: any) => ({
-              id: c.id, nickName: c.nickName, price: Number(c.price),
-              minAmount: Number(c.minAmount ?? 0), maxAmount: Number(c.maxAmount ?? 0),
-              lastQuantity: Number(c.lastQuantity ?? c.quantity ?? 0),
-              orderCount: Number(c.orderCount ?? 0), completionRate: Number(c.completionRate ?? 0),
-            })))),
-            ourAd: JSON.parse(JSON.stringify({ id: ourSellAd.id, price: Number(ourSellAd.price), lastQuantity: Number(ourSellAd.lastQuantity ?? ourSellAd.quantity ?? 0) })),
-            targetPrice: targetPrice ?? undefined,
-          },
-        });
-      } catch (e: any) {}
       if (managedAds.length > 1 && managedAds.indexOf(managedAd) < managedAds.length - 1) {
         await new Promise(r => setTimeout(r, 500));
       }

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { fetchLiveMarket } from "@/lib/p2p-bot/live";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,17 +22,40 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const type = searchParams.get("type") || "latest";
+    const exchange = (searchParams.get("exchange") || "bybit") as "binance" | "bybit" | "okx";
     const limit = Math.min(Number(searchParams.get("limit")) || 50, 200);
+    const live = searchParams.get("live") === "true";
+
+    if (live && type === "latest") {
+      try {
+        const market = await fetchLiveMarket(exchange, session.tenantId);
+        return Response.json({
+          ok: true,
+          data: {
+            cycleAt: market.cycleAt,
+            targetPrice: market.targetPrice,
+            ourAd: market.ourAd,
+            totalCompetitors: market.totalCompetitors,
+            ranked: market.competitors.slice(0, limit),
+          },
+        });
+      } catch (e: any) {
+        return Response.json({ ok: false, error: e.message }, { status: 400 });
+      }
+    }
 
     if (type === "history") {
       const snapshots = await prisma.p2PBotMarketSnapshot.findMany({
-        where: { tenantId: session.tenantId, exchange: "bybit", side: "1" },
+        where: { tenantId: session.tenantId, exchange, side: "1" },
         orderBy: { cycleAt: "asc" },
         take: limit,
       });
       const chartData = snapshots.map((s) => {
         const comps = (s.competitors as any[]) || [];
-        const top3 = comps.slice(0, 3).map((c) => Number(c.price));
+        const prices = comps.map((c: any) => Number(c.price)).filter((p: number) => p > 0).sort((a: number, b: number) => a - b);
+        const top3 = prices.slice(0, 3);
+        const avgPrice = prices.length > 0 ? prices.reduce((a: number, b: number) => a + b, 0) / prices.length : null;
+        const totalVolume = comps.reduce((sum: number, c: any) => sum + Number(c.lastQuantity ?? c.quantity ?? 0), 0);
         return {
           cycleAt: s.cycleAt.toISOString(),
           targetPrice: s.targetPrice ? Number(s.targetPrice) : null,
@@ -40,6 +64,10 @@ export async function GET(req: NextRequest) {
           top2Price: top3[1] ?? null,
           top3Price: top3[2] ?? null,
           competitorCount: comps.length,
+          avgPrice,
+          minPrice: prices[0] ?? null,
+          maxPrice: prices[prices.length - 1] ?? null,
+          totalVolume,
         };
       });
       return Response.json({ ok: true, data: chartData });
@@ -47,24 +75,24 @@ export async function GET(req: NextRequest) {
 
     if (type === "stats") {
       const totalOrders = await prisma.p2PBotOrder.count({
-        where: { tenantId: session.tenantId, exchange: "bybit" },
+        where: { tenantId: session.tenantId, exchange },
       });
       const completedOrders = await prisma.p2PBotOrder.count({
-        where: { tenantId: session.tenantId, exchange: "bybit", status: "completed" },
+        where: { tenantId: session.tenantId, exchange, status: "completed" },
       });
       const pendingOrders = await prisma.p2PBotOrder.count({
-        where: { tenantId: session.tenantId, exchange: "bybit", status: { notIn: ["completed", "cancelled"] } },
+        where: { tenantId: session.tenantId, exchange, status: { notIn: ["completed", "cancelled"] } },
       });
       const totalVolume = await prisma.p2PBotOrder.aggregate({
-        where: { tenantId: session.tenantId, exchange: "bybit", status: "completed" },
+        where: { tenantId: session.tenantId, exchange, status: "completed" },
         _sum: { totalPrice: true },
       });
       const avgPrice = await prisma.p2PBotOrder.aggregate({
-        where: { tenantId: session.tenantId, exchange: "bybit", status: "completed" },
+        where: { tenantId: session.tenantId, exchange, status: "completed" },
         _avg: { unitPrice: true },
       });
       const totalSnapshots = await prisma.p2PBotMarketSnapshot.count({
-        where: { tenantId: session.tenantId, exchange: "bybit" },
+        where: { tenantId: session.tenantId, exchange },
       });
       return Response.json({
         ok: true,
@@ -82,7 +110,7 @@ export async function GET(req: NextRequest) {
 
     if (type === "merchants") {
       const recentSnapshots = await prisma.p2PBotMarketSnapshot.findMany({
-        where: { tenantId: session.tenantId, exchange: "bybit", side: "1" },
+        where: { tenantId: session.tenantId, exchange, side: "1" },
         orderBy: { cycleAt: "desc" },
         take: 20,
       });
@@ -167,7 +195,7 @@ export async function GET(req: NextRequest) {
 
     if (type === "banks") {
       const latest = await prisma.p2PBotMarketSnapshot.findFirst({
-        where: { tenantId: session.tenantId, exchange: "bybit", side: "1" },
+        where: { tenantId: session.tenantId, exchange, side: "1" },
         orderBy: { cycleAt: "desc" },
       });
       if (!latest) {
@@ -212,7 +240,7 @@ export async function GET(req: NextRequest) {
 
     if (type === "insights") {
       const snapshots = await prisma.p2PBotMarketSnapshot.findMany({
-        where: { tenantId: session.tenantId, exchange: "bybit", side: "1" },
+        where: { tenantId: session.tenantId, exchange, side: "1" },
         orderBy: { cycleAt: "asc" },
         take: 60,
       });
@@ -294,7 +322,7 @@ export async function GET(req: NextRequest) {
 
     // Default: latest snapshot with competitor ranking
     const latest = await prisma.p2PBotMarketSnapshot.findFirst({
-      where: { tenantId: session.tenantId, exchange: "bybit", side: "1" },
+      where: { tenantId: session.tenantId, exchange, side: "1" },
       orderBy: { cycleAt: "desc" },
     });
 

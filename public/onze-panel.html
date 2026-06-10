@@ -8,6 +8,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script>if(!sessionStorage.getItem('op_v4')){sessionStorage.setItem('op_v4','1');location.reload(true);}</script>
   <style>
     :root{
       --brand:#2563eb;
@@ -2182,6 +2183,19 @@
             </div>
             <button id="btn-save-binance-creds" style="padding:10px 20px; background:#007bff; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:14px;">Guardar credenciales</button>
           </div>
+          <div style="background:#0d2137; border:1px solid #1a3a5a; border-radius:12px; padding:24px; margin-bottom:24px;">
+            <h3 style="color:#fff; margin-bottom:4px;">🤖 Chat Bot P2P</h3>
+            <p style="color:#aaa; font-size:13px; margin-bottom:16px;">Cookies de Binance para que el bot responda mensajes automáticamente en tus órdenes.</p>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <span style="color:#aaa;font-size:12px;">Cookies (JSON)</span>
+              <span id="botChatCookiesStatus" style="font-size:11px;"></span>
+            </div>
+            <textarea id="botChatCookies" rows="5" style="width:100%;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#e2e8f0;font-size:11px;font-family:monospace;padding:8px;resize:vertical;box-sizing:border-box;" placeholder='[{"name":"cookie_name","value":"cookie_value",...}]'></textarea>
+            <button class="btn" type="button" onclick="window.botSaveChatCookies()" style="margin-top:6px;font-size:12px;">Guardar cookies</button>
+          </div>
+        </div>
+        <div style="margin-top:18px;text-align:right;border-top:1px solid rgba(148,163,184,.06);padding-top:12px;">
+          <span style="color:#5a738e;font-size:11px;cursor:pointer;" onclick="resetP2PFullFreshStart()">🔄 Reset P2P</span>
         </div>
       </section>
       <section class="view" id="view-noticias">
@@ -4008,7 +4022,7 @@
         padding:22px;
         background:rgba(2,6,23,.88);
         backdrop-filter:blur(14px);
-      `;
+    `;
 
       const shell = document.createElement("div");
       shell.id = "providerControlShell";
@@ -9171,6 +9185,9 @@ if(addProviderBtn){
 (function(){
   let botSelectedExchange = "binance";
   let botCycleTimer = null;
+  let chatCycleTimer = null;
+  let botCycleActive = false;
+  let chatCycleActive = false;
 
 function addP2PBotStyles(){
   if(document.getElementById("onze-bot-styles")) return;
@@ -9241,11 +9258,28 @@ function addP2PBotStyles(){
     .bot-log-entry.warn{border-left:2px solid #fbbf24;}
     .bot-log-entry.error{border-left:2px solid #fb7185;background:rgba(251,113,133,.04);}
     .bot-log-time{color:#475569;font-size:10px;white-space:nowrap;flex:0 0 auto;font-variant-numeric:tabular-nums;}
-    .bot-log-msg{color:#cbd5e1;flex:1;}
+    .bot-log-msg{color:#cbd5e1;flex:1;overflow-wrap:break-word;word-break:break-word;min-width:0;}
     .bot-log-exchange{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;background:rgba(148,163,184,.08);color:#94a3b8;text-transform:uppercase;flex:0 0 auto;}
 
     /* Orders Container */
     .bot-orders-container{max-height:300px;overflow-y:auto;}
+    .bot-order-card{transition:border-color .15s, box-shadow .15s;}
+    .bot-order-card:hover{border-color:rgba(148,163,184,.15) !important;box-shadow:0 2px 12px rgba(0,0,0,.2);}
+    /* Chat overlay */
+    #botOrderChatOverlay{transition:opacity .15s ease;}
+    #botOrderChatOverlay[style*="display: block"]{opacity:1;}
+    #botOrderChatMessages::-webkit-scrollbar{width:4px;}
+    /* Orders tabs */
+    .bot-orders-main-tab{background:transparent;border:none;color:#64748b;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;}
+    .bot-orders-main-tab:hover{color:#94a3b8;}
+    .bot-orders-main-tab.active{color:#e2e8f0;border-bottom-color:var(--brand);}
+    .bot-orders-filter{background:transparent;border:1px solid rgba(148,163,184,.1);color:#94a3b8;padding:3px 10px;font-size:11px;border-radius:14px;cursor:pointer;transition:all .12s;}
+    .bot-orders-filter:hover{border-color:rgba(148,163,184,.25);color:#cbd5e1;}
+    .bot-orders-filter.active{background:rgba(37,99,235,.12);border-color:var(--brand);color:var(--brand);}
+    .bot-orders-icon-btn{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.4);color:#94a3b8;cursor:pointer;transition:all .12s;}
+    .bot-orders-icon-btn:hover{border-color:rgba(148,163,184,.25);color:#cbd5e1;background:rgba(15,23,42,.6);}
+    .bot-orders-icon-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+    .bot-orders-filter-dropdown select:focus,.bot-orders-filter-dropdown input:focus{outline:none;border-color:var(--brand);}
 
     /* Accounts Grid */
     .bot-accounts-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
@@ -9358,6 +9392,54 @@ function addP2PBotStyles(){
     .bot-panel-form .tag-list .tag{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:10px;font-size:10px;background:rgba(37,99,235,.12);color:#93c5fd;}
     .bot-panel-form .tag-list .tag .remove{color:#fb7185;cursor:pointer;font-size:12px;line-height:1;}
 
+    /* Pro Ad Form */
+    .bot-panel-form.af-pro{padding:0;background:transparent;border:none;margin:0;display:block;}
+    .bot-panel-form.af-pro .af-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid rgba(148,163,184,.08);}
+    .bot-panel-form.af-pro .af-header h3{margin:0;font-size:16px;font-weight:700;color:#f1f5f9;display:flex;align-items:center;gap:8px;}
+    .bot-panel-form.af-pro .af-header h3 .af-badge{font-size:10px;font-weight:500;color:#94a3b8;background:rgba(148,163,184,.08);padding:2px 7px;border-radius:4px;letter-spacing:.3px;}
+    .bot-panel-form.af-pro .af-header .af-close{background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:all .12s;line-height:1;}
+    .bot-panel-form.af-pro .af-header .af-close:hover{background:rgba(248,113,113,.08);color:#fb7185;}
+    .bot-panel-form.af-pro .af-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+    .bot-panel-form.af-pro .af-grid .af-full{grid-column:1/-1;}
+    .bot-panel-form.af-pro .af-field{display:flex;flex-direction:column;gap:4px;}
+    .bot-panel-form.af-pro .af-field label{font-size:10px;font-weight:600;color:#94a3b8;letter-spacing:.3px;text-transform:uppercase;}
+    .bot-panel-form.af-pro .af-field input,.bot-panel-form.af-pro .af-field select{width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.5);color:#f8fafc;font-size:13px;font-family:inherit;box-sizing:border-box;transition:border-color .15s,box-shadow .15s;}
+    .bot-panel-form.af-pro .af-field input:focus,.bot-panel-form.af-pro .af-field select:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.12);}
+    .bot-panel-form.af-pro .af-field input::placeholder{color:#475569;}
+    .bot-panel-form.af-pro .af-field .af-input-wrap{position:relative;display:flex;align-items:center;}
+    .bot-panel-form.af-pro .af-field .af-input-wrap input{flex:1;padding-right:50px;}
+    .bot-panel-form.af-pro .af-field .af-input-wrap .af-suffix{position:absolute;right:10px;font-size:11px;color:#64748b;pointer-events:none;font-weight:500;}
+    .bot-panel-form.af-pro .af-field .af-hint{font-size:11px;color:#64748b;margin-top:1px;}
+    .bot-panel-form.af-pro .af-max-btn{position:absolute;right:4px;top:4px;bottom:4px;padding:0 10px;border:none;border-radius:5px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:.5px;transition:opacity .12s;text-transform:uppercase;}
+    .bot-panel-form.af-pro .af-max-btn:hover{opacity:.85;}
+    .bot-panel-form.af-pro .af-toggle{display:flex;gap:4px;padding:2px;background:rgba(15,23,42,.4);border-radius:8px;border:1px solid rgba(148,163,184,.08);}
+    .bot-panel-form.af-pro .af-toggle .af-toggle-btn{flex:1;padding:6px 0;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;transition:all .15s;text-align:center;background:transparent;color:#64748b;}
+    .bot-panel-form.af-pro .af-toggle .af-toggle-btn.active-buy{background:rgba(52,211,153,.15);color:#34d399;}
+    .bot-panel-form.af-pro .af-toggle .af-toggle-btn.active-sell{background:rgba(251,113,133,.15);color:#fb7185;}
+    .bot-panel-form.af-pro .af-toggle .af-toggle-btn input{display:none;}
+
+    .bot-panel-form.af-pro .af-limits{display:flex;gap:8px;}
+    .bot-panel-form.af-pro .af-limits .af-limit{flex:1;display:flex;flex-direction:column;gap:4px;}
+    .bot-panel-form.af-pro .af-limits .af-limit input{padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.5);color:#f8fafc;font-size:13px;font-family:inherit;transition:border-color .15s,box-shadow .15s;}
+    .bot-panel-form.af-pro .af-limits .af-limit input:focus{outline:none;border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.12);}
+    .bot-panel-form.af-pro .af-limits .af-limit .af-hint{font-size:10px;color:#64748b;}
+
+    .bot-panel-form.af-pro .af-pm-wrap{display:flex;flex-wrap:wrap;gap:5px;}
+    .bot-panel-form.af-pro .af-pm-wrap .af-pm-chip{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:20px;font-size:11px;font-weight:500;background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.1);color:#cbd5e1;cursor:pointer;transition:all .12s;}
+    .bot-panel-form.af-pro .af-pm-wrap .af-pm-chip:hover{border-color:rgba(148,163,184,.25);}
+    .bot-panel-form.af-pro .af-pm-wrap .af-pm-chip.selected{background:rgba(59,130,246,.15);border-color:#3b82f6;color:#93c5fd;}
+    .bot-panel-form.af-pro .af-pm-input{display:flex;gap:6px;margin-top:6px;}
+    .bot-panel-form.af-pro .af-pm-input input{flex:1;padding:7px 10px;border-radius:8px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;font-family:inherit;transition:border-color .15s;}
+    .bot-panel-form.af-pro .af-pm-input input:focus{outline:none;border-color:#3b82f6;}
+    .bot-panel-form.af-pro .af-pm-input .af-pm-add{padding:7px 14px;border:none;border-radius:8px;background:rgba(59,130,246,.15);color:#93c5fd;font-size:11px;font-weight:600;cursor:pointer;transition:all .12s;white-space:nowrap;}
+    .bot-panel-form.af-pro .af-pm-input .af-pm-add:hover{background:rgba(59,130,246,.25);}
+    .bot-panel-form.af-pro .af-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:4px;padding-top:14px;border-top:1px solid rgba(148,163,184,.08);}
+    .bot-panel-form.af-pro .af-actions .af-btn-save{padding:9px 24px;border:none;border-radius:8px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .12s,transform .12s;}
+    .bot-panel-form.af-pro .af-actions .af-btn-save:hover{opacity:.9;transform:translateY(-1px);}
+    .bot-panel-form.af-pro .af-actions .af-btn-save:active{transform:translateY(0);}
+    .bot-panel-form.af-pro .af-actions .af-btn-cancel{padding:9px 18px;border:none;border-radius:8px;background:rgba(148,163,184,.08);color:#94a3b8;font-size:13px;font-weight:500;cursor:pointer;transition:all .12s;}
+    .bot-panel-form.af-pro .af-actions .af-btn-cancel:hover{background:rgba(148,163,184,.14);color:#cbd5e1;}
+
     /* Chart container */
     .bot-chart-wrap{background:rgba(15,23,42,.3);border:1px solid rgba(148,163,184,.06);border-radius:12px;padding:14px;position:relative;}
 
@@ -9415,6 +9497,13 @@ function addP2PBotStyles(){
     .bot-ad-card-header .menu-btn{background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;padding:2px 4px;line-height:1;letter-spacing:1px;transition:color .12s;}
 
     .bot-ad-card-header .menu-btn:hover{color:#e2e8f0;}
+
+    .bot-ad-menu-dropdown{position:fixed;background:#1e293b;border:1px solid rgba(148,163,184,.15);border-radius:8px;padding:4px;z-index:9999;min-width:150px;box-shadow:0 8px 24px rgba(0,0,0,.3);opacity:0;visibility:hidden;transition:opacity .12s,visibility .12s;}
+    .bot-ad-menu-dropdown.open{opacity:1;visibility:visible;}
+    .bot-ad-menu-dropdown .menu-item{display:block;width:100%;text-align:left;padding:8px 12px;background:none;border:none;color:#e2e8f0;font-size:13px;cursor:pointer;border-radius:6px;transition:background .1s;white-space:nowrap;}
+    .bot-ad-menu-dropdown .menu-item:hover{background:rgba(148,163,184,.1);}
+    .bot-ad-menu-dropdown .menu-item.danger{color:#ef4444;}
+    .bot-ad-menu-dropdown .menu-item.danger:hover{background:rgba(239,68,68,.1);}
 
     /* iOS toggle switch */
     .toggle-switch{position:relative;display:inline-block;width:40px;height:22px;flex-shrink:0;}
@@ -9622,7 +9711,12 @@ function addP2PBotStyles(){
         <div class="modal-card" style="max-width:800px;">
           <div class="modal-head">
             <h3 class="modal-title"><span style="color:var(--brand);">●</span> Panel P2P &mdash; <span id="botPanelExchangeLabel">Binance</span></h3>
-            <button class="close-btn" type="button" onclick="window.botClosePanel()">&times;</button>
+            <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
+              <button id="botSoundToggle" class="btn small ghost" type="button" onclick="window.botToggleSound()" style="padding:4px 6px;display:inline-flex;align-items:center;" title="Activar/desactivar sonido de notificaciones">
+                <svg id="botSoundIcon" viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+              </button>
+              <button class="close-btn" type="button" onclick="window.botClosePanel()">&times;</button>
+            </div>
           </div>
           <div class="bot-panel-sub">
             <button class="bot-panel-tab active" data-paneltab="orders" onclick="window.botSwitchPanelTab('orders')">📋 Ordenes</button>
@@ -9632,9 +9726,112 @@ function addP2PBotStyles(){
           </div>
           <div class="modal-content">
             <!-- Tab: Ordenes activas -->
-            <div id="botPanelOrders" class="bot-panel-tab-content" style="">
-              <p class="section-text" style="margin-bottom:10px;">Ordenes activas del exchange. Acepta, libera o chatea con la contraparte.</p>
-              <div id="botPanelOrdersList" class="bot-orders-container" style="max-height:400px;"></div>
+            <div id="botPanelOrders" class="bot-panel-tab-content" style="position:relative;">
+              <!-- Main tabs: En curso / Procesadas -->
+              <div style="display:flex;align-items:center;border-bottom:1px solid rgba(148,163,184,.08);margin-bottom:10px;">
+                <div style="display:flex;flex:1;">
+                  <button class="bot-orders-main-tab active" data-orders-tab="active" onclick="window.botSwitchOrdersTab('active')">🔴 En curso</button>
+                  <button class="bot-orders-main-tab" data-orders-tab="history" onclick="window.botSwitchOrdersTab('history')">✅ Procesadas</button>
+                </div>
+                <div id="botOrdersHistoryIcons" style="display:none;gap:4px;padding-bottom:4px;">
+                  <button class="bot-orders-icon-btn" onclick="window.botToggleOrdersSearch()" title="Buscar">
+                    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.35-4.35"/></svg>
+                  </button>
+                  <button class="bot-orders-icon-btn" onclick="window.botToggleOrdersFilters()" title="Filtros">
+                    <svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M7 12h10"/><path d="M10 17h4"/></svg>
+                  </button>
+                </div>
+                <div id="botChatToggleInline" style="display:flex;align-items:center;gap:5px;padding-bottom:4px;padding-left:8px;border-left:1px solid rgba(148,163,184,.15);margin-left:4px;">
+                  <input id="botChatBotEnabled" type="checkbox" onchange="window.botSaveExchangeConfig()" style="width:14px;height:14px;accent-color:#22c55e;">
+                  <span style="font-size:10px;color:#94a3b8;white-space:nowrap;">Chat 🤖</span>
+                </div>
+              </div>
+              <!-- Sub-filters for "En curso" -->
+               <div id="botOrdersActiveFilters" style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;align-items:center;">
+                <button class="bot-orders-filter active" data-filter="unpaid" onclick="window.botSetOrdersFilter('unpaid')">No pagado <span class="bot-filter-count" data-filter="unpaid" style="font-size:9px;background:rgba(251,191,36,.2);color:#fbbf24;padding:0px 4px;border-radius:3px;margin-left:3px;">0</span></button>
+                <button class="bot-orders-filter" data-filter="paid" onclick="window.botSetOrdersFilter('paid')">Pagado <span class="bot-filter-count" data-filter="paid" style="font-size:9px;background:rgba(96,165,250,.2);color:#60a5fa;padding:0px 4px;border-radius:3px;margin-left:3px;">0</span></button>
+                <button class="bot-orders-filter" data-filter="appealed" onclick="window.botSetOrdersFilter('appealed')">Apelación <span class="bot-filter-count" data-filter="appealed" style="font-size:9px;background:rgba(239,68,68,.2);color:#fb7185;padding:0px 4px;border-radius:3px;margin-left:3px;">0</span></button>
+              </div>
+              <!-- Sub-filters + search for "Procesadas" -->
+              <div id="botOrdersHistoryFilters" style="display:none;margin-bottom:8px;">
+                <div id="botOrdersSearchBox" style="display:none;margin-bottom:6px;">
+                  <div style="position:relative;">
+                    <svg viewBox="0 0 24 24" style="position:absolute;left:8px;top:50%;transform:translateY(-50%);width:14px;height:14px;stroke:#64748b;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.35-4.35"/></svg>
+                    <input id="botOrdersSearchInput" type="text" placeholder="Buscar orden o contraparte..." oninput="window.botApplyOrdersFilters()" onkeydown="if(event.key==='Escape')window.botToggleOrdersSearch()" style="width:100%;padding:6px 10px 6px 28px;border-radius:8px;border:1px solid rgba(148,163,184,.1);background:rgba(15,23,42,.4);color:#e2e8f0;font-size:12px;font-family:inherit;outline:none;">
+                  </div>
+                </div>
+                <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;" id="botOrdersFilterPills">
+                  <button class="bot-orders-filter active" data-filter="all" onclick="window.botSetOrdersFilter('all')">Todo</button>
+                  <button class="bot-orders-filter" data-filter="completed" onclick="window.botSetOrdersFilter('completed')">Completadas</button>
+                  <button class="bot-orders-filter" data-filter="cancelled" onclick="window.botSetOrdersFilter('cancelled')">Canceladas</button>
+                  <button class="bot-orders-filter" data-filter="appealed" onclick="window.botSetOrdersFilter('appealed')">Apelación</button>
+                </div>
+                <!-- Filter dropdown -->
+                <div id="botOrdersFilterDropdown" style="display:none;margin-bottom:8px;background:rgba(15,23,42,.95);border:1px solid rgba(148,163,184,.1);border-radius:12px;padding:14px;">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <div>
+                      <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Tipo</div>
+                      <select id="botFilterType" onchange="window.botApplyOrdersFilters()" style="width:100%;padding:5px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.1);background:rgba(15,23,42,.5);color:#e2e8f0;font-size:11px;font-family:inherit;">
+                        <option value="all">Todo</option>
+                        <option value="BUY">Compra</option>
+                        <option value="SELL">Venta</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Divisa</div>
+                      <select id="botFilterFiat" onchange="window.botApplyOrdersFilters()" style="width:100%;padding:5px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.1);background:rgba(15,23,42,.5);color:#e2e8f0;font-size:11px;font-family:inherit;"></select>
+                    </div>
+                    <div>
+                      <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Moneda</div>
+                      <select id="botFilterCoin" onchange="window.botApplyOrdersFilters()" style="width:100%;padding:5px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.1);background:rgba(15,23,42,.5);color:#e2e8f0;font-size:11px;font-family:inherit;"></select>
+                    </div>
+                    <div>
+                      <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Rango de fecha</div>
+                      <select id="botFilterDateRange" onchange="window.botToggleDateRange()" style="width:100%;padding:5px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.1);background:rgba(15,23,42,.5);color:#e2e8f0;font-size:11px;font-family:inherit;">
+                        <option value="all">Todo</option>
+                        <option value="month">Mes</option>
+                        <option value="quarter">Trimestre</option>
+                        <option value="custom">Personalizado</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div id="botFilterDateCustom" style="display:none;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+                    <div>
+                      <div style="font-size:10px;color:#64748b;margin-bottom:2px;">Desde</div>
+                      <input id="botFilterDateFrom" type="date" onchange="window.botApplyOrdersFilters()" style="width:100%;padding:4px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.1);background:rgba(15,23,42,.5);color:#e2e8f0;font-size:11px;font-family:inherit;">
+                    </div>
+                    <div>
+                      <div style="font-size:10px;color:#64748b;margin-bottom:2px;">Hasta</div>
+                      <input id="botFilterDateTo" type="date" onchange="window.botApplyOrdersFilters()" style="width:100%;padding:4px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.1);background:rgba(15,23,42,.5);color:#e2e8f0;font-size:11px;font-family:inherit;">
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:10px;">
+                    <button class="btn small ghost" type="button" onclick="window.botToggleOrdersFilters()">Listo</button>
+                    <button class="btn small ghost" type="button" onclick="window.botResetOrdersFilters()">Restablecer</button>
+                  </div>
+                </div>
+              </div>
+              <!-- Order list -->
+              <div id="botPanelOrdersList" class="bot-orders-container" style="max-height:350px;"></div>
+               <!-- Chat overlay -->
+               <div id="botOrderChatOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(2,6,23,.85);backdrop-filter:blur(8px);z-index:100;border-radius:0;overflow:hidden;">
+                 <div style="display:flex;flex-direction:column;height:100%;max-width:900px;margin:0 auto;">
+                   <div style="display:flex;align-items:center;gap:8px;padding:12px 20px;background:rgba(15,23,42,.95);border-bottom:1px solid rgba(148,163,184,.08);">
+                     <div style="flex:1;min-width:0;">
+                       <div style="font-size:15px;font-weight:700;color:#f1f5f9;" id="botOrderChatCounterparty">—</div>
+                       <div style="font-size:11px;color:#64748b;" id="botOrderChatOrderInfo">#0000000000</div>
+                     </div>
+                     <button class="close-btn" type="button" onclick="window.botPanelCloseChat()" style="font-size:22px;width:36px;height:36px;">&times;</button>
+                   </div>
+                   <div id="botOrderChatMessages" style="flex:1;overflow-y:auto;padding:16px 20px;background:rgba(6,10,26,.6);">
+                     <div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">No hay mensajes previos. El chat se habilitará al conectarse con el exchange.</div>
+                   </div>
+                   <div style="display:flex;gap:10px;padding:12px 20px;background:rgba(15,23,42,.95);border-top:1px solid rgba(148,163,184,.08);">
+                     <input id="botOrderChatInput" type="text" placeholder="Escribe un mensaje..." onkeydown="if(event.key==='Enter')window.botPanelSendChatMessage()" style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:14px;font-family:inherit;outline:none;">
+                     <button class="btn" type="button" onclick="window.botPanelSendChatMessage()" style="border-radius:8px;padding:10px 18px;">Enviar</button>
+                   </div>
+                 </div>
+               </div>
             </div>
             <!-- Tab: Anuncios -->
             <div id="botPanelAds" class="bot-panel-tab-content" style="display:none;">
@@ -9666,6 +9863,7 @@ function addP2PBotStyles(){
                   <option value="otro">Otro</option>
                 </select></label>
                 <label>Numero de cuenta <input id="botPanelAcctNumber" type="text" placeholder="123456789"></label>
+                <label>Correo <input id="botPanelAcctEmail" type="email" placeholder="correo@ejemplo.com"></label>
                 <div style="grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
                   <button class="btn small" type="button" onclick="window.botPanelSaveAccount()">Guardar</button>
                 </div>
@@ -9674,10 +9872,14 @@ function addP2PBotStyles(){
             </div>
             <!-- Tab: Mercado -->
             <div id="botPanelMercado" class="bot-panel-tab-content" style="display:none;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-size:12px;font-weight:600;color:#e2e8f0;">📈 Mercado <span id="botMercadoExchange" style="font-size:10px;color:#64748b;font-weight:400;"></span></span>
+              </div>
               <div style="margin-bottom:12px;">
                 <div id="botMercadoStats"></div>
               </div>
-              <div id="botMercadoChartContainer" style="background:rgba(15,23,42,.4);border-radius:8px;padding:12px;margin-bottom:12px;height:260px;">
+              <div id="botMercadoChartHeader"></div>
+              <div id="botMercadoChartContainer" style="background:linear-gradient(135deg,rgba(15,23,42,0.6),rgba(30,41,59,0.4));border-radius:12px;padding:4px 16px 16px 16px;margin-bottom:12px;height:300px;border:1px solid rgba(148,163,184,0.08);box-shadow:0 4px 24px rgba(0,0,0,0.3);">
                 <canvas id="botMercadoChart"></canvas>
               </div>
               <!-- Top 5 merchants -->
@@ -9828,7 +10030,13 @@ function addP2PBotStyles(){
               <input type="checkbox" ${botEnabled?'checked':''} onchange="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',this.checked)">
               <span class="slider"></span>
             </label>
-            <button class="menu-btn" onclick="event.stopPropagation();window.botOpenPanel();setTimeout(function(){window.botSwitchPanelTab('ads');setTimeout(function(){window.botPanelEditAd(${a.id});},100);},100);" title="Editar anuncio">⋯</button>
+            <div class="bot-ad-menu-wrapper" style="position:relative;">
+            <button class="menu-btn" onclick="event.stopPropagation();window.botToggleAdMenu(${a.id},event);">⋯</button>
+            <div class="bot-ad-menu-dropdown" id="botAdMenu_${a.id}">
+              <button class="menu-item" onclick="event.stopPropagation();window.botSimpleEditAd(${a.id})">Editar anuncio</button>
+              <button class="menu-item danger" onclick="event.stopPropagation();window.botPanelDeleteAd(${a.id},'${escHtml(a.adId||'')}')">Borrar anuncio</button>
+            </div>
+            </div>
           </div>
           <div class="bot-ad-card-body">
             <div class="bot-ad-card-price"><span id="botAdPrice_${a.id}" style="color:#34d399;">${fmt(a.price)}</span> CLP</div>
@@ -9879,7 +10087,13 @@ function addP2PBotStyles(){
           <input type="checkbox" ${botEnabled?'checked':''} onchange="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',this.checked)">
           <span class="slider"></span>
         </label>
-        <button class="menu-btn" onclick="event.stopPropagation();window.botOpenPanel();setTimeout(function(){window.botSwitchPanelTab('ads');setTimeout(function(){window.botPanelEditAd(${realId});},100);},100);" title="Editar anuncio">⋯</button>
+        <div class="bot-ad-menu-wrapper" style="position:relative;">
+        <button class="menu-btn" onclick="event.stopPropagation();window.botToggleAdMenu(${realId},event);">⋯</button>
+        <div class="bot-ad-menu-dropdown" id="botAdMenu_${realId}">
+          <button class="menu-item" onclick="event.stopPropagation();window.botSimpleEditAd(${realId})">Editar anuncio</button>
+          <button class="menu-item danger" onclick="event.stopPropagation();window.botPanelDeleteAd(${realId},'${escHtml(a.adId||'')}')">Borrar anuncio</button>
+        </div>
+        </div>
       </div>
       <div class="bot-ad-card-body" style="cursor:${isFirst?'default':'pointer'};" onclick="${isFirst?'':'botToggleAdCfg('+realId+')'}">
         <div class="bot-ad-card-price"><span id="botAdPrice_${realId}" style="color:#34d399;">${fmt(a.price)}</span> CLP</div>
@@ -10094,6 +10308,22 @@ function addP2PBotStyles(){
     }catch(e){}
   };
 
+  window.botToggleAdMenu = function(id, e){
+    var menu = document.getElementById("botAdMenu_" + id);
+    if(!menu) return;
+    var open = menu.classList.contains("open");
+    document.querySelectorAll(".bot-ad-menu-dropdown.open").forEach(function(m){ m.classList.remove("open"); });
+    if(!open){
+      var rect = e.currentTarget.getBoundingClientRect();
+      menu.style.left = Math.max(5, Math.min(rect.right - 160, window.innerWidth - 165)) + "px";
+      menu.style.top = (rect.bottom + 4) + "px";
+      menu.classList.add("open");
+    }
+  };
+  document.addEventListener("click", function(e){
+    document.querySelectorAll(".bot-ad-menu-dropdown.open").forEach(function(m){ m.classList.remove("open"); });
+  });
+
   window.botToggleAdMain = function(id, adId, enabled){
     var body = { exchange: botSelectedExchange, botEnabled: enabled, botManaged: enabled };
     if(adId) body.adId = String(adId);
@@ -10134,6 +10364,7 @@ function addP2PBotStyles(){
   /* end per-ad functions */
 
   window.botStartExchange = async function(){
+    if(botCycleActive) return;
     const ex = botSelectedExchange;
     await fetch("/api/p2p/bot/exchange-config", {
       method:"POST",
@@ -10145,7 +10376,8 @@ function addP2PBotStyles(){
     const interval = Math.round(parseFloat(document.getElementById("botCycleInterval").value)) || 10;
     // Timer runs every 1 second — backend handles rate limits internally
     const botStopExchange = window.botStopExchange;
-    if(botCycleTimer) clearTimeout(botCycleTimer);
+    botStopCycle();
+    botCycleActive = true;
     async function scheduleBotCycle(){
       try{
         const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include" });
@@ -10177,45 +10409,78 @@ function addP2PBotStyles(){
             else counterEl.style.color = '#34d399';
           }
         }
-        window.botRefreshExchange();
+        window.botRefreshExchange(true);
+        // If backend says nothing is running, stop the cycle
+        if(data?.ok && data?.running === false){
+          botStopCycle();
+          return;
+        }
       }catch(e){}
-      botCycleTimer = setTimeout(scheduleBotCycle, 1000);
+      if(botCycleActive) botCycleTimer = setTimeout(scheduleBotCycle, 1000);
     }
     scheduleBotCycle();
     await window.botRefreshExchange();
   };
 
-  window.botStopExchange = async function(){
-    const ex = botSelectedExchange;
+  function botStartChatCycle(){
+    if(chatCycleTimer) return;
+    chatCycleActive = true;
+    async function scheduleBotCycle(){
+      try{
+        const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include" });
+        window.botRefreshExchange(true);
+      }catch(e){}
+      if(chatCycleActive) chatCycleTimer = setTimeout(scheduleBotCycle, 2000);
+    }
+    scheduleBotCycle();
+  }
+
+  function botStopCycle(){
+    botCycleActive = false;
+    chatCycleActive = false;
     if(botCycleTimer) clearTimeout(botCycleTimer);
     botCycleTimer = null;
+    if(chatCycleTimer) clearTimeout(chatCycleTimer);
+    chatCycleTimer = null;
+  }
+
+  window.botStopExchange = async function(){
+    const ex = botSelectedExchange;
     // Update UI immediately
-    const btn = document.getElementById("botStopBtn");
-    if(btn) btn.textContent = "Deteniendo...";
-    // Fire-and-forget API calls (don't block the UI)
+    const stopBtn = document.getElementById("botStopBtn");
+    if(stopBtn) stopBtn.textContent = "■ Detener";
+    updateBotUI({ running: false });
+    // Fire-and-forget API call to save state
     fetch("/api/p2p/bot/exchange-config", {
       method:"POST",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ exchange: ex, action: "stop" })
+    }).then(async r => {
+      if(!r.ok){
+        const errData = await r.json().catch(()=>({}));
+        console.error("[Stop] Error del servidor:", r.status, errData);
+      }
     }).finally(() => window.botRefreshExchange());
+    // Stop all cycles (main + chat)
+    botStopCycle();
   };
 
-  async function botRefreshExchange(){
+  async function botRefreshExchange(skipConfig){
     const ex = botSelectedExchange;
     // Each fetch is independent so one failure doesn't block the rest
     try{
       fetch("/api/p2p/bot/config", { credentials:"include" }).then(r=>r.json()).then(d=>{ if(d?.ok && d?.config) updateBotConfig(d.config); }).catch(()=>{});
     }catch(e){}
     try{
-      fetch("/api/p2p/bot/logs?limit=30&exchange=" + encodeURIComponent(ex), { credentials:"include" }).then(r=>r.json()).then(d=>{ if(d?.ok) renderBotLogs(d.logs); }).catch(()=>{});
+      fetch("/api/p2p/bot/logs?limit=200&exchange=" + encodeURIComponent(ex), { credentials:"include" }).then(r=>r.json()).then(d=>{ if(d?.ok) renderBotLogs(d.logs); }).catch(()=>{});
     }catch(e){}
     try{
-      fetch("/api/p2p/bot/orders?limit=20&exchange=" + ex, { credentials:"include" }).then(r=>r.json()).then(d=>{ if(d?.ok) renderBotOrders(d.orders); }).catch(()=>{});
+      fetch("/api/p2p/bot/orders?limit=20&live=true&exchange=" + ex, { credentials:"include" }).then(r=>r.json()).then(d=>{ if(d?.ok) renderBotOrders(d.orders); }).catch(()=>{});
     }catch(e){}
 
     try{
-      const exRes = await fetch("/api/p2p/bot/exchange-config", { credentials:"include" });
+      const exRes = await fetch("/api/p2p/bot/exchange-config?_=" + Math.random().toString(36).slice(2), { credentials:"include" });
       const exData = await exRes.json();
       var allExchanges = {};
       var anyRunning = false;
@@ -10233,7 +10498,7 @@ function addP2PBotStyles(){
       var exStatus = exData?.ok && exData?.configs?.[ex];
       if(exStatus){
         updateBotUI({ running: exStatus.enabled, config: exStatus, _allExchanges: allExchanges, _runningLabel: runningLabel });
-        updateExchangeConfig(exStatus);
+        if(!skipConfig) updateExchangeConfig(exStatus);
       }else{
         updateBotUI({ running: false, _allExchanges: allExchanges, _runningLabel: runningLabel });
       }
@@ -10346,6 +10611,19 @@ function addP2PBotStyles(){
     setField("botCircuitBreakPct", cfg.circuitBreakPct || 3);
     setField("botDailyVolumeCap", cfg.dailyVolumeCapUsdt || "");
     setField("botCycleInterval", cfg.cycleInterval ?? 10);
+    var chatCb = document.getElementById("botChatBotEnabled");
+    if(chatCb) chatCb.checked = !!cfg.chatBotEnabled;
+    // Load cookies into textarea
+    var cookiesEl = document.getElementById("botChatCookies");
+    if(cookiesEl){
+      if(cfg.chatCookies && typeof cfg.chatCookies === 'string'){
+        cookiesEl.value = cfg.chatCookies;
+      } else if(cfg.chatCookies && Array.isArray(cfg.chatCookies)){
+        cookiesEl.value = JSON.stringify(cfg.chatCookies, null, 2);
+      } else {
+        cookiesEl.value = '';
+      }
+    }
     // Show/hide strategy-specific fields
     var g = document.getElementById("botExchangeConfigGrid");
     if(g){
@@ -10392,15 +10670,25 @@ function addP2PBotStyles(){
       container.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Sin ordenes registradas</div>';
       return;
     }
-    container.innerHTML = orders.map(o => `
-      <div style="display:flex;justify-content:space-between;padding:6px 8px;border-bottom:1px solid rgba(148,163,184,.05);font-size:12px;">
-        <span style="color:#cbd5e1;">${o.exchange}</span>
-        <span style="color:#cbd5e1;">${Number(o.unitPrice).toFixed(2)}</span>
-        <span style="color:#34d399;">${Number(o.amount).toFixed(2)} USDT</span>
-        <span style="color:#f8fafc;">${Math.round(Number(o.totalPrice)).toLocaleString("es-CL")} CLP</span>
-        <span style="color:${o.status === "completed" ? "#34d399" : "#94a3b8"};">${o.status}</span>
-      </div>
-    `).join("");
+    const recent = orders.slice(0, 8);
+    container.innerHTML = recent.map(o => {
+      const color = o.status === "completed" ? "#34d399" : o.status === "pending" ? "#fbbf24" : "#ef4444";
+      const label = o.status === "completed" ? "Completada" : o.status === "pending" ? "En curso" : "Cancelada";
+      const isSell = o.tradeType === "SELL";
+      return `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 8px;border-bottom:1px solid rgba(148,163,184,.04);font-size:11px;">
+        <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
+          <span style="color:${isSell ? "#ef4444" : "#34d399"};font-weight:700;">${isSell ? "S" : "B"}</span>
+          <span style="color:#e2e8f0;font-weight:600;">${fmt(o.amount)}</span>
+          <span style="color:#64748b;">@</span>
+          <span style="color:#cbd5e1;">${fmt(o.unitPrice)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          <span style="color:${color};font-size:10px;background:${color}1a;padding:1px 6px;border-radius:4px;">${label}</span>
+          <span style="color:#64748b;font-size:10px;">${o.counterparty ? escHtml(o.counterparty) : ""}</span>
+        </div>
+      </div>`;
+    }).join("");
   }
 
   window.botSaveExchangeConfig = async function(){
@@ -10420,16 +10708,57 @@ function addP2PBotStyles(){
     const cycleInterval = Math.round(parseFloat(document.getElementById("botCycleInterval").value)) || 10;
     const dailyV = document.getElementById("botDailyVolumeCap").value;
     const dailyVolumeCapUsdt = dailyV ? parseFloat(dailyV) : null;
+    const chatBotEnabled = document.getElementById("botChatBotEnabled").checked;
 
     var _r = Math.random().toString(36).slice(2);
     await fetch("/api/p2p/bot/exchange-config?_=" + _r, {
       method:"PUT",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceSource, priceFloorPct, commissionPct, safeMarginPct, minCompetitorCapital, competePayTypes, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval })
+      body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceSource, priceFloorPct, commissionPct, safeMarginPct, minCompetitorCapital, competePayTypes, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, chatBotEnabled })
     });
+    var cb = document.getElementById("botChatBotEnabled");
+    if(cb) cb.checked = chatBotEnabled;
     botUpdateBuyPrice();
-    window.botRefreshExchange();
+    window.botRefreshExchange(true);
+    // Start/stop chat-only cycle based on toggle
+    if(chatBotEnabled && !botCycleTimer && !chatCycleTimer){
+      botStartChatCycle();
+    }else if(!chatBotEnabled && chatCycleTimer){
+      if(chatCycleTimer) clearTimeout(chatCycleTimer);
+      chatCycleTimer = null;
+      chatCycleActive = false;
+    }
+  };
+
+  window.botSaveChatCookies = async function(){
+    const ex = botSelectedExchange;
+    const el = document.getElementById("botChatCookies");
+    const statusEl = document.getElementById("botChatCookiesStatus");
+    if(!el || !statusEl) return;
+    const raw = el.value.trim();
+    // Validate JSON
+    if(raw){
+      try{
+        JSON.parse(raw);
+      }catch{
+        statusEl.innerHTML = '<span style="color:#fb7185;">JSON inválido</span>';
+        return;
+      }
+    }
+    var _r = Math.random().toString(36).slice(2);
+    const r = await fetch("/api/p2p/bot/exchange-config?_=" + _r, {
+      method:"PUT", credentials:"include",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ exchange: ex, chatCookies: raw || null })
+    });
+    const d = await r.json();
+    if(d?.ok){
+      statusEl.innerHTML = '<span style="color:#34d399;">Cookies guardadas</span>';
+      setTimeout(() => { statusEl.innerHTML = ''; }, 3000);
+    } else {
+      statusEl.innerHTML = '<span style="color:#fb7185;">Error: ' + (d.error || 'desconocido') + '</span>';
+    }
   };
 
   async function loadCredentials(exchange){
@@ -10615,13 +10944,25 @@ function addP2PBotStyles(){
     if(!modal) return;
     modal.style.display = "block";
     document.getElementById("botPanelExchangeLabel").textContent = botSelectedExchange.charAt(0).toUpperCase() + botSelectedExchange.slice(1);
-    loadPanelOrders();
+    botSwitchPanelTab('orders');
     loadPanelAds();
     loadPanelAccounts();
   };
 
   window.botClosePanel = function(){
     window.botStopMercadoRefresh();
+    if(botPanelSimpleEditMode){
+      var sub = document.querySelector(".bot-panel-sub");
+      if(sub) sub.style.display = "";
+      var modalHead = document.querySelector("#botPanelModal .modal-head");
+      if(modalHead) modalHead.style.display = "";
+      document.getElementById("botPanelExchangeLabel").textContent = botSelectedExchange.charAt(0).toUpperCase() + botSelectedExchange.slice(1);
+      var adsList = document.getElementById("botPanelAdsList");
+      if(adsList) adsList.style.display = "";
+      window.botSwitchPanelTab('orders');
+      document.getElementById("botPanelAdForm").style.display = "none";
+      botPanelSimpleEditMode = false;
+    }
     const modal = document.getElementById("botPanelModal");
     if(modal) modal.style.display = "none";
   };
@@ -10638,89 +10979,396 @@ function addP2PBotStyles(){
     else if(tab === "mercado"){ loadPanelMercado(); window.botStartMercadoRefresh(); }
   };
 
+  let botOrdersMainTab = "active";
+  let botOrdersFilter = "unpaid";
+  let botOrdersSearchQuery = "";
+
+  window.botSwitchOrdersTab = function(tab){
+    botOrdersMainTab = tab;
+    botOrdersFilter = tab === "active" ? "unpaid" : "all";
+    // Reset search visibility
+    document.getElementById("botOrdersSearchBox").style.display = "none";
+    document.getElementById("botOrdersSearchInput").value = "";
+    document.getElementById("botOrdersFilterDropdown").style.display = "none";
+    botOrdersSearchQuery = "";
+    document.querySelectorAll(".bot-orders-main-tab").forEach(t => t.classList.toggle("active", t.dataset.ordersTab === tab));
+    document.getElementById("botOrdersActiveFilters").style.display = tab === "active" ? "" : "none";
+    document.getElementById("botOrdersHistoryFilters").style.display = tab === "history" ? "" : "none";
+    document.getElementById("botOrdersHistoryIcons").style.display = tab === "history" ? "flex" : "none";
+    // Show filter pills by default for history
+    if(tab === "history"){
+      document.getElementById("botOrdersFilterPills").style.display = "";
+    }
+    document.querySelectorAll("#botOrdersActiveFilters .bot-orders-filter, #botOrdersHistoryFilters .bot-orders-filter").forEach(b => b.classList.remove("active"));
+    const defaultFilter = tab === "active" ? "unpaid" : "all";
+    document.querySelector(`.bot-orders-filter[data-filter="${defaultFilter}"]`)?.classList.add("active");
+    botApplyOrdersFilters();
+  };
+
+  window.botToggleOrdersSearch = function(){
+    const box = document.getElementById("botOrdersSearchBox");
+    const input = document.getElementById("botOrdersSearchInput");
+    const isVisible = box.style.display !== "none";
+    box.style.display = isVisible ? "none" : "";
+    if(isVisible){
+      input.value = "";
+      botOrdersSearchQuery = "";
+      botApplyOrdersFilters();
+    } else {
+      setTimeout(() => input.focus(), 50);
+    }
+  };
+
+  window.botToggleOrdersFilters = function(){
+    const dropdown = document.getElementById("botOrdersFilterDropdown");
+    dropdown.style.display = dropdown.style.display === "none" ? "" : "none";
+  };
+
+  window.botToggleDateRange = function(){
+    const val = document.getElementById("botFilterDateRange").value;
+    document.getElementById("botFilterDateCustom").style.display = val === "custom" ? "grid" : "none";
+    botApplyOrdersFilters();
+  };
+
+  window.botResetOrdersFilters = function(){
+    document.getElementById("botFilterType").value = "all";
+    document.getElementById("botFilterFiat").value = "all";
+    document.getElementById("botFilterCoin").value = "all";
+    document.getElementById("botFilterDateRange").value = "all";
+    document.getElementById("botFilterDateCustom").style.display = "none";
+    document.getElementById("botFilterDateFrom").value = "";
+    document.getElementById("botFilterDateTo").value = "";
+    botApplyOrdersFilters();
+  };
+
+  window.botPopulateFilterDropdowns = function(){
+    const orders = window.botPanelOrdersData || [];
+    const fiats = [...new Set(orders.map(o => o.fiat).filter(Boolean))].sort();
+    const coins = [...new Set(orders.map(o => o.asset).filter(Boolean))].sort();
+    const fiatSel = document.getElementById("botFilterFiat");
+    const coinSel = document.getElementById("botFilterCoin");
+    const currentFiat = fiatSel.value;
+    const currentCoin = coinSel.value;
+    fiatSel.innerHTML = '<option value="all">Todas</option>' + fiats.map(f => '<option value="' + f + '" ' + (f === currentFiat ? 'selected' : '') + '>' + f + '</option>').join("");
+    coinSel.innerHTML = '<option value="all">Todas</option>' + coins.map(c => '<option value="' + c + '" ' + (c === currentCoin ? 'selected' : '') + '>' + c + '</option>').join("");
+  };
+
+  window.botSetOrdersFilter = function(filter){
+    botOrdersFilter = filter;
+    const parentId = botOrdersMainTab === "active" ? "botOrdersActiveFilters" : "botOrdersHistoryFilters";
+    document.querySelectorAll(`#${parentId} .bot-orders-filter`).forEach(b => b.classList.remove("active"));
+    document.querySelector(`#${parentId} .bot-orders-filter[data-filter="${filter}"]`)?.classList.add("active");
+    botApplyOrdersFilters();
+  };
+
+  window.botApplyOrdersFilters = function(){
+    botOrdersSearchQuery = (document.getElementById("botOrdersSearchInput")?.value || "").toLowerCase();
+    applyOrdersDisplay();
+  };
+
+  function applyOrdersDisplay(){
+    const container = document.getElementById("botPanelOrdersList");
+    if(!container) return;
+    const allOrders = window.botPanelOrdersData || [];
+    let filtered;
+
+    if(botOrdersMainTab === "active"){
+      const activeStatuses = botOrdersFilter === "unpaid" ? ["pending"]
+        : botOrdersFilter === "paid" ? ["paid"]
+        : ["appealed"];
+      filtered = allOrders.filter(o => activeStatuses.includes(o.status));
+    } else {
+      if(botOrdersFilter === "all"){
+        filtered = allOrders.filter(o => o.status === "completed" || o.status === "cancelled" || o.status === "appealed");
+      } else {
+        filtered = allOrders.filter(o => o.status === botOrdersFilter);
+      }
+
+      // Advanced filters (only for Procesadas)
+      const filterType = document.getElementById("botFilterType")?.value || "all";
+      const filterFiat = document.getElementById("botFilterFiat")?.value || "all";
+      const filterCoin = document.getElementById("botFilterCoin")?.value || "all";
+      const filterDateRange = document.getElementById("botFilterDateRange")?.value || "all";
+      const filterDateFrom = document.getElementById("botFilterDateFrom")?.value || "";
+      const filterDateTo = document.getElementById("botFilterDateTo")?.value || "";
+
+      if(filterType !== "all") filtered = filtered.filter(o => o.tradeType === filterType);
+      if(filterFiat !== "all") filtered = filtered.filter(o => o.fiat === filterFiat);
+      if(filterCoin !== "all") filtered = filtered.filter(o => o.asset === filterCoin);
+
+      if(filterDateRange === "month" || filterDateRange === "quarter"){
+        const cutoff = Date.now() - (filterDateRange === "month" ? 30 : 90) * 24 * 60 * 60 * 1000;
+        filtered = filtered.filter(o => Number(o.createdAt || 0) >= cutoff);
+      } else if(filterDateRange === "custom"){
+        if(filterDateFrom){
+          const from = new Date(filterDateFrom).getTime();
+          filtered = filtered.filter(o => Number(o.createdAt || 0) >= from);
+        }
+        if(filterDateTo){
+          const to = new Date(filterDateTo).getTime() + 86400000; // end of day
+          filtered = filtered.filter(o => Number(o.createdAt || 0) <= to);
+        }
+      }
+    }
+
+    // Apply search
+    if(botOrdersSearchQuery){
+      filtered = filtered.filter(o =>
+        o.orderNumber.toLowerCase().includes(botOrdersSearchQuery) ||
+        (o.counterparty || "").toLowerCase().includes(botOrdersSearchQuery)
+      );
+    }
+
+    // Sort by createdAt descending
+    filtered.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+
+    if(!filtered.length){
+      const emptyMsg = botOrdersMainTab === "active"
+        ? (botOrdersFilter === "unpaid" ? "No hay ordenes sin pagar" : botOrdersFilter === "paid" ? "No hay ordenes pagadas" : "No hay apelaciones")
+        : "No se encontraron ordenes";
+      container.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">' + emptyMsg + '</div>';
+      return;
+    }
+
+    container.innerHTML = filtered.map(orderCard).join("");
+    updateOrderTimers();
+
+    // Update filter counts
+    const all = window.botPanelOrdersData || [];
+    const pendingCount = all.filter(o => o.status === "pending").length;
+    const paidCount = all.filter(o => o.status === "paid").length;
+    const appealedCount = all.filter(o => o.status === "appealed").length;
+    document.querySelectorAll('.bot-filter-count[data-filter="unpaid"]').forEach(el => el.textContent = pendingCount);
+    document.querySelectorAll('.bot-filter-count[data-filter="paid"]').forEach(el => el.textContent = paidCount);
+    document.querySelectorAll('.bot-filter-count[data-filter="appealed"]').forEach(el => el.textContent = appealedCount);
+  }
+
+  function orderCard(o){
+    const isSell = o.tradeType === "SELL";
+    const isActive = o.status === "pending" || o.status === "paid";
+    const statusColor = o.status === "completed" ? "#34d399" : o.status === "cancelled" ? "#ef4444" : o.status === "paid" ? "#60a5fa" : "#fbbf24";
+    const statusBg = o.status === "completed" ? "rgba(52,211,153,.12)" : o.status === "cancelled" ? "rgba(239,68,68,.12)" : o.status === "paid" ? "rgba(96,165,250,.12)" : "rgba(251,191,36,.12)";
+    const statusLabel = o.status === "completed" ? "Completada" : o.status === "cancelled" ? "Cancelada" : o.status === "paid" ? "Pagado" : "En curso";
+    const dateStr = o.createdAt ? new Date(Number(o.createdAt)).toLocaleDateString("es-CL", { day:"2-digit", month:"short", year:"numeric" }) : "";
+    const timeStr = o.createdAt ? new Date(Number(o.createdAt)).toLocaleTimeString("es-CL", { hour:"2-digit", minute:"2-digit" }) : "";
+    return `
+    <div class="bot-order-card" style="background:rgba(15,23,42,.5);border-radius:10px;padding:0;margin-bottom:8px;border:1px solid rgba(148,163,184,.06);overflow:hidden;">
+      <!-- Row 1: Trade type + Status -->
+      <div style="display:flex;align-items:center;padding:10px 12px 6px;">
+        <span style="font-size:13px;font-weight:700;color:${isSell ? "#ef4444" : "#34d399"};">${isSell ? "↗ Venta" : "↙ Compra"}</span>
+        <span style="margin-left:auto;font-size:10px;font-weight:700;color:${statusColor};background:${statusBg};padding:2px 8px;border-radius:4px;letter-spacing:.3px;">${statusLabel}</span>
+      </div>
+      <div style="padding:0 12px 8px;">
+        <!-- Cantidad -->
+        <div style="display:flex;align-items:center;padding:2px 0;font-size:12px;">
+          <span style="color:#64748b;">Cantidad</span>
+          <span style="margin-left:auto;color:#e2e8f0;font-weight:600;">$${window.fmtInt(o.totalPrice)} CLP</span>
+        </div>
+        <!-- Precio -->
+        <div style="display:flex;align-items:center;padding:2px 0;font-size:12px;">
+          <span style="color:#64748b;">Precio</span>
+          <span style="margin-left:auto;color:#e2e8f0;font-weight:600;">$${window.fmt(o.unitPrice)}</span>
+        </div>
+        <!-- Cantidad total -->
+        <div style="display:flex;align-items:center;padding:2px 0;font-size:12px;">
+          <span style="color:#64748b;">Cantidad total</span>
+          <span style="margin-left:auto;color:#e2e8f0;font-weight:600;">${window.fmt(o.amount)} ${o.asset || "USDT"}</span>
+        </div>
+        <!-- Orden -->
+        <div style="display:flex;align-items:center;padding:2px 0;font-size:12px;">
+          <span style="color:#64748b;">Orden</span>
+          <span style="margin-left:auto;color:#94a3b8;font-family:monospace;font-size:11px;">${o.orderNumber.slice(-12)}</span>
+        </div>
+        <!-- Timer (debajo del número de orden) -->
+        ${o.status === "pending" ? `<div style="display:flex;justify-content:flex-end;padding:2px 0 4px;">
+          <span class="bot-order-timer" data-created="${Number(o.createdAt || 0)}" data-paytime="${Number(o.payTime || 15)}" style="font-size:11px;color:#fbbf24;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:0.5px;">⏳ --:--</span>
+        </div>` : ""}
+      </div>
+      <!-- Footer: Chat + Date -->
+      <div style="display:flex;align-items:center;padding:6px 12px;border-top:1px solid rgba(148,163,184,.04);background:rgba(0,0,0,.1);">
+        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+          ${o.status !== "cancelled" ? `
+          <button class="btn small ghost" type="button" style="font-size:10px;padding:3px 8px;display:inline-flex;align-items:center;gap:4px;" onclick="window.botPanelOpenChat('${escHtml(o.orderNumber)}')">
+            <svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            ${escHtml(o.counterparty || "Chat")}
+          </button>` : ""}
+          ${o.status === "pending" ? `
+          <button id="btn-verify-${escHtml(o.orderNumber)}" class="btn small" type="button" style="font-size:10px;padding:3px 8px;" onclick="window.botPanelVerifyOrder('${escHtml(o.orderNumber)}')">${botIsOrderVerified(o.orderNumber, o.verified) ? '✓ Verificado' : '✓ Verificar'}</button>` : ""}
+          ${o.status === "paid" ? `
+          <button class="btn small danger" type="button" style="font-size:10px;padding:3px 8px;" onclick="window.botPanelReleaseOrder('${escHtml(o.orderNumber)}')">Liberar</button>` : ""}
+        </div>
+        <span style="margin-left:auto;font-size:10px;color:#64748b;">${dateStr} ${timeStr}</span>
+      </div>
+    </div>`;
+  }
+
   async function loadPanelOrders(){
     const container = document.getElementById("botPanelOrdersList");
     if(!container) return;
     try{
-      const r = await fetch("/api/p2p/bot/orders?limit=50&exchange=" + botSelectedExchange, { credentials:"include" });
+      const r = await fetch("/api/p2p/bot/orders?limit=50&live=true&exchange=" + botSelectedExchange, { credentials:"include" });
       const d = await r.json();
-      const orders = d?.ok && d?.orders ? d.orders : [];
-      const pending = orders.filter(o => (o.group || o.status) === "pending");
-      const completed = orders.filter(o => (o.group || o.status) === "completed");
-      const cancelled = orders.filter(o => (o.group || o.status) === "cancelled");
-
-      function orderCard(o){
-        const statusColor = o.status === "completed" ? "#34d399" : o.status === "pending" ? "#fbbf24" : "#ef4444";
-        const statusLabel = o.status === "completed" ? "Completada" : o.status === "pending" ? "En curso" : "Cancelada";
-        return `
-        <div style="background:rgba(15,23,42,.4);border-radius:8px;padding:12px;margin-bottom:6px;border-left:3px solid ${statusColor};">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
-            <div style="flex:1;min-width:0;">
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                <span style="font-weight:700;color:#fff;font-size:14px;">#${escHtml(o.orderNumber)}</span>
-                <span class="pill ${o.status === 'completed' ? 'green' : o.status === 'pending' ? 'amber' : 'red'}" style="font-size:10px;">${statusLabel}</span>
-              </div>
-              <div style="font-size:12px;color:#94a3b8;margin-top:3px;">
-                ${o.tradeType === "BUY" ? "Compra" : "Venta"} · ${fmt(o.amount)} USDT x ${fmt(o.unitPrice)} CLP
-              </div>
-              <div style="font-size:11px;color:#64748b;margin-top:2px;">
-                ${o.counterparty ? "Contraparte: " + escHtml(o.counterparty) : ""}
-                ${o.createdAt ? " · " + new Date(o.createdAt).toLocaleString("es-CL") : ""}
-              </div>
-            </div>
-            ${o.status === "pending" ? `
-            <div class="bot-order-actions">
-              <button class="btn small ghost" type="button" onclick="window.botPanelChatOrder('${escHtml(o.orderNumber)}')">Chat</button>
-              <button class="btn small" type="button" onclick="window.botPanelAcceptOrder('${escHtml(o.orderNumber)}')">Aceptar</button>
-              <button class="btn small danger" type="button" onclick="window.botPanelReleaseOrder('${escHtml(o.orderNumber)}')">Liberar</button>
-            </div>` : o.status === "completed" ? `
-            <div class="bot-order-actions">
-              <button class="btn small ghost" type="button" onclick="window.botPanelChatOrder('${escHtml(o.orderNumber)}')">Chat</button>
-            </div>` : ''}
-          </div>
-          ${o.status === "pending" ? `
-          <div id="botPanelChat_${escHtml(o.orderNumber)}" style="display:none;margin-top:8px;">
-            <div style="display:flex;gap:6px;margin-bottom:6px;">
-              <input id="botPanelChatInput_${escHtml(o.orderNumber)}" type="text" placeholder="Escribe un mensaje..." style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.6);color:#f8fafc;font-size:13px;font-family:inherit;">
-              <button class="btn small" type="button" onclick="window.botPanelSendMessage('${escHtml(o.orderNumber)}')">Enviar</button>
-            </div>
-            <div class="bot-chat-box" id="botPanelChatMessages_${escHtml(o.orderNumber)}">
-              <div style="color:#64748b;font-size:12px;text-align:center;padding:12px 0;">Chat no disponible sin API del exchange</div>
-            </div>
-          </div>` : ''}
-        </div>`;
-      }
-
-      function section(title, orders, color, emptyText){
-        if(!orders.length){
-          return `
-            <div style="margin-bottom:6px;">
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;padding:0 4px;">
-                <span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;opacity:.4;"></span>
-                <span style="font-weight:600;color:#94a3b8;font-size:12px;">${title}</span>
-                <span style="background:rgba(148,163,184,.08);color:#64748b;font-size:10px;padding:1px 7px;border-radius:10px;">0</span>
-              </div>
-              <div style="font-size:11px;color:#475569;padding:6px 12px;text-align:center;border:1px dashed rgba(148,163,184,.08);border-radius:8px;">${emptyText || "Sin ordenes"}</div>
-            </div>`;
-        }
-        return `
-          <div style="margin-bottom:12px;">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:0 4px;">
-              <span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;"></span>
-              <span style="font-weight:700;color:#f8fafc;font-size:13px;">${title}</span>
-              <span style="background:rgba(148,163,184,.12);color:#94a3b8;font-size:11px;padding:1px 7px;border-radius:10px;">${orders.length}</span>
-            </div>
-            ${orders.map(orderCard).join("")}
-          </div>`;
-      }
-
-      container.innerHTML = section("En curso", pending, "#fbbf24", "No hay ordenes en curso pendientes de accion") + section("Completadas", completed, "#34d399", "No hay ordenes completadas") + section("Canceladas", cancelled, "#ef4444", "No hay ordenes canceladas");
+      window.botPanelOrdersData = d?.ok && d?.orders ? d.orders : [];
+      window.botPopulateFilterDropdowns();
+      applyOrdersDisplay();
+      updateOrderTimers();
     }catch(e){ console.warn("Orders load error:", e); }
   }
+
+  // ─── Real-time polling & timers ───────────────────────────────
+
+  let botOrdersPollInterval = null;
+  let botOrdersTimerInterval = null;
+  let botSoundEnabled = localStorage.getItem("botSoundEnabled") !== "false"; // Default ON
+
+  function botIsOrderVerified(orderNumber, apiVerified){
+    if(apiVerified) return true;
+    try{
+      const verified = JSON.parse(localStorage.getItem("botVerifiedOrders") || "[]");
+      return verified.includes(orderNumber);
+    }catch(e){ return false; }
+  }
+
+  function botVerifyOrderSave(orderNumber){
+    try{
+      const verified = JSON.parse(localStorage.getItem("botVerifiedOrders") || "[]");
+      if(!verified.includes(orderNumber)){
+        verified.push(orderNumber);
+        localStorage.setItem("botVerifiedOrders", JSON.stringify(verified));
+      }
+    }catch(e){}
+  }
+  let botLastOrderIds = new Set();
+  let botAudioContext = null;
+
+  function botInitSound(){
+    const btn = document.getElementById("botSoundToggle");
+    const icon = document.getElementById("botSoundIcon");
+    if(!btn) return;
+    if(botSoundEnabled){
+      btn.style.color = "#34d399";
+      icon.innerHTML = '<path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>';
+    } else {
+      btn.style.color = "#ef4444";
+      icon.innerHTML = '<path d="M11 5L6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>';
+    }
+  }
+
+  window.botToggleSound = function(){
+    botSoundEnabled = !botSoundEnabled;
+    localStorage.setItem("botSoundEnabled", botSoundEnabled);
+    botInitSound();
+    if(botSoundEnabled && botAudioContext){
+      botAudioContext.resume();
+    }
+  };
+
+  function botPlayOrderSound(){
+    if(!botSoundEnabled) return;
+    try{
+      if(!botAudioContext){
+        botAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const ctx = botAudioContext;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.1);
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.2);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.4);
+    }catch(e){ console.warn("Sound error:", e); }
+  }
+
+  function botCheckNewOrders(newOrders){
+    const currentIds = new Set(newOrders.map(o => o.orderNumber));
+    const newOnes = newOrders.filter(o => !botLastOrderIds.has(o.orderNumber));
+    if(newOnes.length > 0 && botLastOrderIds.size > 0){
+      botPlayOrderSound();
+    }
+    botLastOrderIds = currentIds;
+  }
+
+  function botStartOrdersPolling(){
+    botStopOrdersPolling();
+    // Poll for new orders every 8s
+    botOrdersPollInterval = setInterval(async () => {
+      const container = document.getElementById("botPanelOrdersList");
+      if(!container) return;
+      try{
+        const r = await fetch("/api/p2p/bot/orders?limit=50&live=true&exchange=" + botSelectedExchange, { credentials:"include" });
+        const d = await r.json();
+        const newOrders = d?.ok && d?.orders ? d.orders : [];
+        const oldData = window.botPanelOrdersData || [];
+        // Check if data changed
+        const newKey = JSON.stringify(newOrders.map(o => o.orderNumber + o.status));
+        const oldKey = JSON.stringify(oldData.map(o => o.orderNumber + o.status));
+        if(newKey !== oldKey){
+          window.botPanelOrdersData = newOrders;
+          window.botPopulateFilterDropdowns();
+          applyOrdersDisplay();
+          botCheckNewOrders(newOrders);
+        }
+      }catch(e){}
+    }, 8000);
+    // Start timer loop - update every second
+    updateOrderTimers(); // Update immediately
+    botOrdersTimerInterval = setInterval(updateOrderTimers, 1000);
+  }
+
+  function botStopOrdersPolling(){
+    if(botOrdersPollInterval){ clearInterval(botOrdersPollInterval); botOrdersPollInterval = null; }
+    if(botOrdersTimerInterval){ clearInterval(botOrdersTimerInterval); botOrdersTimerInterval = null; }
+  }
+
+  function updateOrderTimers(){
+    const timers = document.querySelectorAll(".bot-order-timer");
+    if(!timers.length) return;
+    const now = Date.now();
+    timers.forEach(el => {
+      const created = parseInt(el.dataset.created, 10);
+      const payTimeMinutes = parseInt(el.dataset.paytime, 10) || 15;
+      if(!created) return;
+      const elapsed = now - created;
+      const payWindowMs = payTimeMinutes * 60 * 1000;
+      const remaining = Math.max(0, payWindowMs - elapsed);
+      const min = Math.floor(remaining / 60000);
+      const sec = Math.floor((remaining % 60000) / 1000);
+      if(remaining <= 0){
+        el.textContent = "⏰ Expirado";
+        el.style.color = "#ef4444";
+        return;
+      }
+      const timeStr = String(min).padStart(2,"0") + ":" + String(sec).padStart(2,"0");
+      el.textContent = "⏳ " + timeStr;
+      // Warn when less than 3 min
+      if(remaining < 180000){
+        el.style.color = "#fb7185";
+      } else if(remaining < 300000){
+        el.style.color = "#fbbf24";
+      } else {
+        el.style.color = "#fbbf24";
+      }
+    });
+  }
+
+  // Start/stop polling when switching tabs
+  const origSwitchPanelTab = window.botSwitchPanelTab;
+  window.botSwitchPanelTab = function(tab){
+    origSwitchPanelTab(tab);
+    if(tab === "orders"){ botStartOrdersPolling(); }
+    else { botStopOrdersPolling(); }
+  };
 
   /* ————— Anuncios (Ads) ————— */
 
   let botPanelAdEditingId = null;
+  var botPanelSimpleEditMode = false;
 
   async function loadPanelAds(){
     const container = document.getElementById("botPanelAdsList");
@@ -10844,7 +11492,42 @@ function addP2PBotStyles(){
     }catch(e){ renderAdForm(); }
   };
 
+  window.botSimpleEditAd = async function(id){
+    botPanelAdEditingId = id;
+    var modal = document.getElementById("botPanelModal");
+    if(!modal) return;
+    modal.style.display = "block";
+    botPanelSimpleEditMode = true;
+    var sub = document.querySelector(".bot-panel-sub");
+    if(sub) sub.style.display = "none";
+    document.querySelectorAll(".bot-panel-tab-content").forEach(function(c){
+      c.style.display = c.id === "botPanelAds" ? "" : "none";
+    });
+    var adsContent = document.getElementById("botPanelAdsList");
+    if(adsContent) adsContent.style.display = "none";
+    var modalHead = document.querySelector("#botPanelModal .modal-head");
+    if(modalHead) modalHead.style.display = "none";
+    try{
+      const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange, { credentials:"include" });
+      const d = await r.json();
+      const ad = d?.ads?.find(a => a.id === id);
+      if(ad) renderAdForm(ad);
+      else renderAdForm();
+    }catch(e){ renderAdForm(); }
+  };
+
   window.botPanelCancelAdForm = function(){
+    if(botPanelSimpleEditMode){
+      var sub = document.querySelector(".bot-panel-sub");
+      if(sub) sub.style.display = "";
+      var modalHead = document.querySelector("#botPanelModal .modal-head");
+      if(modalHead) modalHead.style.display = "";
+      document.getElementById("botPanelExchangeLabel").textContent = botSelectedExchange.charAt(0).toUpperCase() + botSelectedExchange.slice(1);
+      var adsList = document.getElementById("botPanelAdsList");
+      if(adsList) adsList.style.display = "";
+      window.botSwitchPanelTab('ads');
+      botPanelSimpleEditMode = false;
+    }
     document.getElementById("botPanelAdForm").style.display = "none";
     botPanelAdEditingId = null;
   };
@@ -10954,6 +11637,14 @@ function addP2PBotStyles(){
     try{ el.setSelectionRange(Math.min(start + diff, el.value.length), Math.min(start + diff, el.value.length)); }catch(e){}
   }
 
+  window.botToggleRadio = function(btn){
+    var parent = btn.parentNode;
+    parent.querySelectorAll('.af-toggle-btn').forEach(function(b){ b.className = 'af-toggle-btn'; });
+    btn.classList.add(btn.dataset.activeClass || 'active-buy');
+    var radio = btn.querySelector('input[type="radio"]');
+    if(radio) radio.checked = true;
+  };
+
   // Expose to window for inline event handlers
   window.fmt = fmt;
   window.fmtInt = fmtInt;
@@ -10979,95 +11670,129 @@ function addP2PBotStyles(){
     const status = editAd ? editAd.status : "online";
 
     container.style.display = "block";
+    var buyActive = tradeType === 'BUY' ? 'active-buy' : '';
+    var sellActive = tradeType === 'SELL' ? 'active-sell' : '';
+    var fixedActive = priceType === 'fixed' ? 'active-buy' : '';
+    var floatActive = priceType === 'float' ? 'active-buy' : '';
+    var pmChipsHtml = ['Banco Estado','Santander','BCI','Banco Chile','Itau','Mercado Pago','Mach','Tenpo','ScotiaBank','Banco Falabella'].map(function(pm){
+      return '<span class="af-pm-chip ' + (paymentMethods.includes(pm) ? 'selected' : '') + '" data-pm="' + escHtml(pm) + '">' + escHtml(pm) + '</span>';
+    }).join('');
     container.innerHTML = `
-      <div class="bot-panel-form">
-        <div class="full" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <span style="font-weight:700;color:#f8fafc;font-size:14px;">${isEdit ? 'Editar Anuncio' : 'Nuevo Anuncio'}</span>
-          <button class="btn small ghost" type="button" onclick="window.botPanelCancelAdForm()" style="font-size:18px;line-height:1;padding:2px 8px;">&times;</button>
+      <div class="bot-panel-form af-pro">
+        <div class="af-header">
+          <h3>
+            ${isEdit ? 'Editar Anuncio' : 'Nuevo Anuncio'}
+            <span class="af-badge">${escHtml(asset)}/${escHtml(fiat)}</span>
+          </h3>
+          <button class="af-close" type="button" onclick="window.botPanelCancelAdForm()">&times;</button>
         </div>
 
-        <label>Tipo
-          <div class="radio-group">
-            <label><input type="radio" name="p2pAdTradeType" value="BUY" ${tradeType === 'BUY' ? 'checked' : ''}> Comprar</label>
-            <label><input type="radio" name="p2pAdTradeType" value="SELL" ${tradeType === 'SELL' ? 'checked' : ''}> Vender</label>
-          </div>
-        </label>
+        <div class="af-grid">
 
-        <label>Estado
-          <select id="p2pAdStatus">
-            <option value="online" ${status === 'online' ? 'selected' : ''}>Online (Publico)</option>
-            <option value="private" ${status === 'private' ? 'selected' : ''}>Privado</option>
-            <option value="offline" ${status === 'offline' ? 'selected' : ''}>Desconectado</option>
-          </select>
-        </label>
-
-        <label>Moneda
-          <input id="p2pAdAsset" type="text" value="${escHtml(asset)}" placeholder="USDT">
-        </label>
-
-        <label>Fiat
-          <input id="p2pAdFiat" type="text" value="${escHtml(fiat)}" placeholder="CLP">
-        </label>
-
-        <label>Tipo Precio
-          <div class="radio-group">
-            <label><input type="radio" name="p2pAdPriceType" value="fixed" ${priceType === 'fixed' ? 'checked' : ''}> Fijo</label>
-            <label><input type="radio" name="p2pAdPriceType" value="float" ${priceType === 'float' ? 'checked' : ''}> Flotante</label>
-          </div>
-        </label>
-
-        <label>Precio (${escHtml(fiat)})
-          <input id="p2pAdPrice" type="text" inputmode="decimal" value="${price}" placeholder="Ej: 950">
-        </label>
-
-        <label>Cantidad (${escHtml(asset)})
-          <div style="display:flex;flex-direction:column;gap:3px;">
-            <div class="form-row">
-              <input id="p2pAdAmount" type="text" inputmode="decimal" value="${amount}" placeholder="Ej: 100" style="flex:1;">
-              <button class="btn small ghost" type="button" onclick="window.botPanelCheckBalance()" title="Usar saldo disponible">Todo el saldo</button>
+          <div class="af-field">
+            <label>Tipo</label>
+            <div class="af-toggle" id="afToggleTradeType">
+              <button class="af-toggle-btn ${buyActive}" data-active-class="active-buy" onclick="window.botToggleRadio(this)">
+                <input type="radio" name="p2pAdTradeType" value="BUY" ${tradeType === 'BUY' ? 'checked' : ''}> Comprar
+              </button>
+              <button class="af-toggle-btn ${sellActive}" data-active-class="active-sell" onclick="window.botToggleRadio(this)">
+                <input type="radio" name="p2pAdTradeType" value="SELL" ${tradeType === 'SELL' ? 'checked' : ''}> Vender
+              </button>
             </div>
-            <span id="p2pAdAmountEq" style="font-size:11px;color:#64748b;"></span>
           </div>
-        </label>
 
-        <div class="full">
-          <label style="margin-bottom:4px;">Limites por operacion (${escHtml(fiat)})</label>
-          <div style="display:flex;gap:8px;">
-            <div style="flex:1;display:flex;flex-direction:column;gap:2px;">
-              <input id="p2pAdMinAmount" type="text" inputmode="numeric" value="${minAmount}" placeholder="Minimo">
-              <span id="p2pAdMinEq" style="font-size:11px;color:#64748b;"></span>
+          <div class="af-field">
+            <label>Estado</label>
+            <div class="af-input-wrap">
+              <select id="p2pAdStatus" style="padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.5);color:#f8fafc;font-size:13px;font-family:inherit;width:100%;">
+                <option value="online" ${status === 'online' ? 'selected' : ''}>Online (Publico)</option>
+                <option value="private" ${status === 'private' ? 'selected' : ''}>Privado</option>
+                <option value="offline" ${status === 'offline' ? 'selected' : ''}>Desconectado</option>
+              </select>
             </div>
-            <div style="flex:1;display:flex;flex-direction:column;gap:2px;">
-              <input id="p2pAdMaxAmount" type="text" inputmode="numeric" value="${maxAmount}" placeholder="Maximo">
-              <span id="p2pAdMaxEq" style="font-size:11px;color:#64748b;"></span>
+          </div>
+
+          <div class="af-field">
+            <label>Moneda</label>
+            <input id="p2pAdAsset" type="text" value="${escHtml(asset)}" placeholder="USDT">
+          </div>
+
+          <div class="af-field">
+            <label>Fiat</label>
+            <input id="p2pAdFiat" type="text" value="${escHtml(fiat)}" placeholder="CLP">
+          </div>
+
+          <div class="af-field">
+            <label>Tipo Precio</label>
+            <div class="af-toggle" id="afTogglePriceType">
+              <button class="af-toggle-btn ${fixedActive}" data-active-class="active-buy" onclick="window.botToggleRadio(this)">
+                <input type="radio" name="p2pAdPriceType" value="fixed" ${priceType === 'fixed' ? 'checked' : ''}> Fijo
+              </button>
+              <button class="af-toggle-btn ${floatActive}" data-active-class="active-buy" onclick="window.botToggleRadio(this)">
+                <input type="radio" name="p2pAdPriceType" value="float" ${priceType === 'float' ? 'checked' : ''}> Flotante
+              </button>
             </div>
+          </div>
+
+          <div class="af-field">
+            <label>Precio (${escHtml(fiat)})</label>
+            <div class="af-input-wrap">
+              <input id="p2pAdPrice" type="text" inputmode="decimal" value="${price}" placeholder="0.00">
+              <span class="af-suffix">CLP</span>
+            </div>
+          </div>
+
+          <div class="af-field">
+            <label>Cantidad (${escHtml(asset)})</label>
+            <div class="af-input-wrap">
+              <input id="p2pAdAmount" type="text" inputmode="decimal" value="${amount}" placeholder="0.00">
+              <button class="af-max-btn" type="button" onclick="window.botPanelCheckBalance()" title="Usar saldo disponible">MAX</button>
+            </div>
+            <span class="af-hint" id="p2pAdAmountEq"></span>
+          </div>
+
+          <div class="af-full af-field">
+            <label>L\u00EDmites por operaci\u00F3n (${escHtml(fiat)})</label>
+            <div class="af-limits">
+              <div class="af-limit">
+                <input id="p2pAdMinAmount" type="text" inputmode="numeric" value="${minAmount}" placeholder="M\u00EDnimo">
+                <span class="af-hint" id="p2pAdMinEq"></span>
+              </div>
+              <div class="af-limit">
+                <input id="p2pAdMaxAmount" type="text" inputmode="numeric" value="${maxAmount}" placeholder="M\u00E1ximo">
+                <span class="af-hint" id="p2pAdMaxEq"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="af-field">
+            <label>Duraci\u00F3n de pago</label>
+            <div class="af-input-wrap">
+              <select id="p2pAdPayTime" style="padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.5);color:#f8fafc;font-size:13px;font-family:inherit;width:100%;">
+                <option value="15" ${payTime == 15 ? 'selected' : ''}>15 minutos</option>
+                <option value="30" ${payTime == 30 ? 'selected' : ''}>30 minutos</option>
+                <option value="45" ${payTime == 45 ? 'selected' : ''}>45 minutos</option>
+                <option value="60" ${payTime == 60 ? 'selected' : ''}>60 minutos</option>
+              </select>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="af-full" style="margin-top:6px;">
+          <label style="font-size:10px;font-weight:600;color:#94a3b8;letter-spacing:.3px;text-transform:uppercase;display:block;margin-bottom:6px;">M\u00E9todos de pago</label>
+          <div class="af-pm-wrap" id="p2pAdPaymentMethods">
+            ${pmChipsHtml}
+          </div>
+          <div class="af-pm-input" style="margin-top:6px;">
+            <input id="p2pAdCustomPm" type="text" placeholder="Agregar metodo...">
+            <button class="af-pm-add" type="button" onclick="window.botPanelAddPaymentMethod()">+ Agregar</button>
           </div>
         </div>
 
-        <label>Duracion de pago
-          <select id="p2pAdPayTime">
-            <option value="15" ${payTime == 15 ? 'selected' : ''}>15 minutos</option>
-            <option value="30" ${payTime == 30 ? 'selected' : ''}>30 minutos</option>
-            <option value="45" ${payTime == 45 ? 'selected' : ''}>45 minutos</option>
-            <option value="60" ${payTime == 60 ? 'selected' : ''}>60 minutos</option>
-          </select>
-        </label>
-
-        <label class="full">Metodos de pago
-          <div class="bot-payment-methods" id="p2pAdPaymentMethods">
-            ${['Banco Estado','Santander','BCI','Banco Chile','Itau','Mercado Pago','Mach','Tenpo','ScotiaBank','Banco Falabella'].map(pm => `
-              <span class="pm-chip ${paymentMethods.includes(pm) ? 'selected' : ''}" data-pm="${escHtml(pm)}">${escHtml(pm)}</span>
-            `).join('')}
-          </div>
-          <div class="bot-payment-input" style="margin-top:6px;">
-            <input id="p2pAdCustomPm" type="text" placeholder="Otro metodo..." style="flex:1;">
-            <button class="btn small ghost" type="button" onclick="window.botPanelAddPaymentMethod()">Agregar</button>
-          </div>
-        </label>
-
-        <div class="full" style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px;">
-          <button class="btn" type="button" onclick="window.botPanelSaveAd()" style="font-weight:600;">${isEdit ? 'Actualizar' : 'Crear Anuncio'}</button>
-          <button class="btn small ghost" type="button" onclick="window.botPanelCancelAdForm()">Cancelar</button>
+        <div class="af-actions">
+          <button class="af-btn-cancel" type="button" onclick="window.botPanelCancelAdForm()">Cancelar</button>
+          <button class="af-btn-save" type="button" onclick="window.botPanelSaveAd()">${isEdit ? 'Actualizar' : 'Crear Anuncio'}</button>
         </div>
       </div>
     `;
@@ -11093,7 +11818,7 @@ function addP2PBotStyles(){
       });
     });
 
-    document.querySelectorAll("#p2pAdPaymentMethods .pm-chip").forEach(el => {
+    document.querySelectorAll("#p2pAdPaymentMethods .af-pm-chip").forEach(el => {
       el.onclick = function(){ this.classList.toggle("selected"); };
     });
 
@@ -11113,7 +11838,7 @@ function addP2PBotStyles(){
     const status = document.getElementById("p2pAdStatus")?.value || "online";
 
     const paymentMethods = [];
-    document.querySelectorAll("#p2pAdPaymentMethods .pm-chip.selected").forEach(el => {
+    document.querySelectorAll("#p2pAdPaymentMethods .af-pm-chip.selected").forEach(el => {
       paymentMethods.push(el.dataset.pm);
     });
     const customPm = document.getElementById("p2pAdCustomPm")?.value?.trim();
@@ -11151,7 +11876,21 @@ function addP2PBotStyles(){
       if(d?.ok){
         botPanelAdEditingId = null;
         document.getElementById("botPanelAdForm").style.display = "none";
-        loadPanelAds();
+        if(botPanelSimpleEditMode){
+          var sub = document.querySelector(".bot-panel-sub");
+          if(sub) sub.style.display = "";
+          var modalHead = document.querySelector("#botPanelModal .modal-head");
+          if(modalHead) modalHead.style.display = "";
+          document.getElementById("botPanelExchangeLabel").textContent = botSelectedExchange.charAt(0).toUpperCase() + botSelectedExchange.slice(1);
+          var adsList = document.getElementById("botPanelAdsList");
+          if(adsList) adsList.style.display = "";
+          window.botSwitchPanelTab('ads');
+          botPanelSimpleEditMode = false;
+          loadPanelAds();
+        }else{
+          loadPanelAds();
+        }
+        window.botLoadAds();
       }else{
         alert("Error: " + (d?.error || "Desconocido"));
       }
@@ -11167,6 +11906,7 @@ function addP2PBotStyles(){
       if(adId) url += "&adId=" + encodeURIComponent(adId) + "&exchange=" + botSelectedExchange;
       await fetch(url, { method:"DELETE", credentials:"include" });
       loadPanelAds();
+      window.botLoadAds();
     }catch(e){}
   };
 
@@ -11232,7 +11972,7 @@ function addP2PBotStyles(){
     const container = document.getElementById("p2pAdPaymentMethods");
     if(!container) return;
     const chip = document.createElement("span");
-    chip.className = "pm-chip selected";
+    chip.className = "af-pm-chip selected";
     chip.dataset.pm = val;
     chip.textContent = val;
     chip.onclick = function(){ this.classList.toggle('selected'); };
@@ -11248,7 +11988,7 @@ function addP2PBotStyles(){
         document.getElementById("p2pAdAmount").value = fmt(d.available);
         updateAdEquivalents();
       }else{
-        alert("No se pudo leer el saldo. " + (d?.message || "API del exchange no disponible"));
+        alert("No se pudo leer el saldo. " + (d?.error || d?.message || "API del exchange no disponible"));
       }
     }catch(e){
       alert("Error al consultar saldo");
@@ -11282,6 +12022,7 @@ function addP2PBotStyles(){
           if(info.rut) parts.push("RUT: " + info.rut);
           if(info.accountType) parts.push("Tipo: " + info.accountType);
           if(info.accountNumber) parts.push("Nro: " + info.accountNumber);
+          if(info.email) parts.push("Email: " + info.email);
           infoStr = parts.join("<br>");
         }catch(e){}
         return `
@@ -11308,46 +12049,54 @@ function addP2PBotStyles(){
     if(!container) return;
 
     var isFull = mercadoFullRefreshCount === 0 || mercadoFullRefreshCount % 4 === 0;
+    var exLabel = botSelectedExchange.charAt(0).toUpperCase() + botSelectedExchange.slice(1);
+    var exEl = document.getElementById("botMercadoExchange");
+    if(exEl) exEl.textContent = "— " + exLabel;
+    var loadingMsg = '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px;">Sin datos de mercado para ' + exLabel + '</div>';
 
     try{
-      var r = await fetch("/api/p2p/bot/market?type=latest&limit=50", { credentials:"include" });
+      var r = await fetch("/api/p2p/bot/market?type=latest&limit=50&live=true&exchange=" + botSelectedExchange, { credentials:"include" });
       var d = await r.json();
       if(d?.ok && d?.data) renderMercadoRanking(d.data);
+      else if(d?.ok) document.getElementById("botMercadoRanking").innerHTML = loadingMsg;
     }catch(e){}
 
     if(isFull){
       try{
-        var r = await fetch("/api/p2p/bot/market?type=history&limit=60", { credentials:"include" });
+        var r = await fetch("/api/p2p/bot/market?type=history&limit=60&exchange=" + botSelectedExchange, { credentials:"include" });
         var d = await r.json();
         if(d?.ok && d?.data) renderMercadoChart(d.data);
+        else if(d?.ok) document.getElementById("botMercadoUpdatedAt").textContent = "";
       }catch(e){}
     }
 
     try{
-      var r = await fetch("/api/p2p/bot/market?type=stats", { credentials:"include" });
+      var r = await fetch("/api/p2p/bot/market?type=stats&exchange=" + botSelectedExchange, { credentials:"include" });
       var d = await r.json();
       if(d?.ok && d?.data) renderMercadoStats(d.data);
+      else if(d?.ok) document.getElementById("botMercadoStats").innerHTML = loadingMsg;
     }catch(e){}
-
-    if(isFull){
-      try{
-        var r = await fetch("/api/p2p/bot/market?type=merchants", { credentials:"include" });
-        var d = await r.json();
-        if(d?.ok && d?.data) renderMercadoTopMerchants(d.data);
-      }catch(e){}
-    }
 
     try{
-      var r = await fetch("/api/p2p/bot/market?type=banks", { credentials:"include" });
+      var r = await fetch("/api/p2p/bot/market?type=merchants&exchange=" + botSelectedExchange, { credentials:"include" });
+      var d = await r.json();
+      if(d?.ok && d?.data) renderMercadoTopMerchants(d.data);
+      else if(d?.ok) document.getElementById("botMercadoTopMerchants").innerHTML = loadingMsg;
+    }catch(e){}
+
+    try{
+      var r = await fetch("/api/p2p/bot/market?type=banks&exchange=" + botSelectedExchange, { credentials:"include" });
       var d = await r.json();
       if(d?.ok && d?.data) renderMercadoBanks(d.data);
+      else if(d?.ok) document.getElementById("botMercadoBanks").innerHTML = loadingMsg;
     }catch(e){}
 
     if(isFull){
       try{
-        var r = await fetch("/api/p2p/bot/market?type=insights", { credentials:"include" });
+        var r = await fetch("/api/p2p/bot/market?type=insights&exchange=" + botSelectedExchange, { credentials:"include" });
         var d = await r.json();
         if(d?.ok && d?.data) renderMercadoInsights(d.data);
+        else if(d?.ok) document.getElementById("botMercadoInsights").innerHTML = loadingMsg;
       }catch(e){}
     }
 
@@ -11399,27 +12148,186 @@ function addP2PBotStyles(){
       mercadoChartJsLoaded = true;
     }
     if(mercadoChartInstance) mercadoChartInstance.destroy();
+
+    const ctx = canvas.getContext("2d");
     const labels = history.map(h => {
       const d = new Date(h.cycleAt);
       return d.toLocaleTimeString("es-CL", { hour:"2-digit", minute:"2-digit" });
     });
+
+    const ourPrices = history.map(h => h.ourPrice ?? h.targetPrice);
+    const minPrices = history.map(h => h.minPrice);
+    const maxPrices = history.map(h => h.maxPrice);
+
     const datasets = [
-      { label:"#1", data:history.map(h => h.top1Price), borderColor:"#ef4444", backgroundColor:"transparent", tension:0.3, pointRadius:0 },
-      { label:"#2", data:history.map(h => h.top2Price), borderColor:"#f97316", backgroundColor:"transparent", tension:0.3, pointRadius:0 },
-      { label:"#3", data:history.map(h => h.top3Price), borderColor:"#eab308", backgroundColor:"transparent", tension:0.3, pointRadius:0 },
-      { label:"Tu precio", data:history.map(h => h.ourPrice ?? h.targetPrice), borderColor:"#22d3ee", backgroundColor:"transparent", borderDash:[4,3], tension:0.3, pointRadius:0 },
+      {
+        label:"Rango mercado",
+        data:maxPrices,
+        borderColor:"rgba(148,163,184,0.1)",
+        backgroundColor:"transparent",
+        pointRadius:0,
+        fill:false,
+        tension:0.3,
+        borderWidth:0,
+      },
+      {
+        label:"",
+        data:minPrices,
+        borderColor:"rgba(148,163,184,0.1)",
+        backgroundColor:"rgba(148,163,184,0.06)",
+        pointRadius:0,
+        fill:"-1",
+        tension:0.3,
+        borderWidth:0,
+      },
+      {
+        label:"#1",
+        data:history.map(h => h.top1Price),
+        borderColor:"#ef4444",
+        backgroundColor:"transparent",
+        tension:0.35,
+        pointRadius:0,
+        pointHitRadius:10,
+        pointHoverRadius:5,
+        pointHoverBackgroundColor:"#ef4444",
+        pointHoverBorderColor:"#fff",
+        pointHoverBorderWidth:2,
+        borderWidth:2,
+      },
+      {
+        label:"#2",
+        data:history.map(h => h.top2Price),
+        borderColor:"#f97316",
+        backgroundColor:"transparent",
+        tension:0.35,
+        pointRadius:0,
+        pointHitRadius:10,
+        pointHoverRadius:5,
+        pointHoverBackgroundColor:"#f97316",
+        pointHoverBorderColor:"#fff",
+        pointHoverBorderWidth:2,
+        borderWidth:1.5,
+      },
+      {
+        label:"#3",
+        data:history.map(h => h.top3Price),
+        borderColor:"#eab308",
+        backgroundColor:"transparent",
+        tension:0.35,
+        pointRadius:0,
+        pointHitRadius:10,
+        pointHoverRadius:5,
+        pointHoverBackgroundColor:"#eab308",
+        pointHoverBorderColor:"#fff",
+        pointHoverBorderWidth:2,
+        borderWidth:1.5,
+      },
+      {
+        label:"Promedio mercado",
+        data:history.map(h => h.avgPrice),
+        borderColor:"rgba(148,163,184,0.4)",
+        backgroundColor:"transparent",
+        borderDash:[3,4],
+        tension:0.35,
+        pointRadius:0,
+        borderWidth:1,
+      },
+      {
+        label:"Tu precio",
+        data:ourPrices,
+        borderColor:"#22d3ee",
+        backgroundColor:"transparent",
+        borderDash:[6,4],
+        tension:0.35,
+        pointRadius:0,
+        pointHitRadius:12,
+        pointHoverRadius:6,
+        pointHoverBackgroundColor:"#22d3ee",
+        pointHoverBorderColor:"#fff",
+        pointHoverBorderWidth:2.5,
+        borderWidth:2.5,
+      },
     ];
-    const ctx = canvas.getContext("2d");
+
+    var last = history[history.length - 1];
+    var first = history[0];
+    var currentSpread = last.top1Price && last.top2Price ? Math.abs(last.top2Price - last.top1Price) : null;
+    var priceChange = last.top1Price && first.top1Price ? last.top1Price - first.top1Price : 0;
+    var changePct = first.top1Price && first.top1Price > 0 ? ((priceChange / first.top1Price) * 100) : 0;
+    var headerEl = document.getElementById("botMercadoChartHeader");
+    if(headerEl){
+      headerEl.innerHTML =
+        '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px;padding:8px 4px;">' +
+          '<span style="display:flex;flex-direction:column;">' +
+            '<span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Precio #1</span>' +
+            '<span style="font-size:18px;font-weight:700;color:#f8fafc;">$' + (last.top1Price || 0).toFixed(2) + '</span>' +
+          '</span>' +
+          (currentSpread !== null ?
+            '<span style="display:flex;flex-direction:column;">' +
+              '<span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Spread #1-#2</span>' +
+              '<span style="font-size:18px;font-weight:700;color:' + (currentSpread < 1 ? '#34d399' : currentSpread < 3 ? '#fbbf24' : '#ef4444') + ';">$' + currentSpread.toFixed(2) + '</span>' +
+            '</span>' : '') +
+          '<span style="display:flex;flex-direction:column;">' +
+            '<span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Competidores</span>' +
+            '<span style="font-size:18px;font-weight:700;color:#f8fafc;">' + (last.competitorCount || 0) + '</span>' +
+          '</span>' +
+          '<span style="display:flex;flex-direction:column;">' +
+            '<span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Variación</span>' +
+            '<span style="font-size:18px;font-weight:700;color:' + (changePct >= 0 ? '#34d399' : '#ef4444') + ';">' + (changePct >= 0 ? '+' : '') + changePct.toFixed(2) + '%</span>' +
+          '</span>' +
+          (last.totalVolume ?
+            '<span style="display:flex;flex-direction:column;">' +
+              '<span style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Volumen disp.</span>' +
+              '<span style="font-size:18px;font-weight:700;color:#f8fafc;">' + (last.totalVolume > 1000 ? (last.totalVolume / 1000).toFixed(0) + 'k' : last.totalVolume.toFixed(0)) + ' USDT</span>' +
+            '</span>' : '') +
+        '</div>';
+    }
+
     mercadoChartInstance = new Chart(ctx, {
       type:"line",
       data:{ labels, datasets },
       options:{
         responsive:true,
         maintainAspectRatio:false,
-        plugins:{ legend:{ labels:{ color:"#94a3b8", font:{ size:10 } }, position:"top" } },
+        animation:{ duration:800, easing:"easeOutQuart" },
+        interaction:{ mode:"index", intersect:false },
+        plugins:{
+          legend:{
+            labels:{ color:"#94a3b8", font:{ size:10, family:"'Inter',system-ui,sans-serif" }, usePointStyle:true, pointStyle:"circle", padding:16 },
+            position:"top",
+            align:"center",
+          },
+          tooltip:{
+            backgroundColor:"rgba(15,23,42,0.95)",
+            titleColor:"#f1f5f9",
+            bodyColor:"#cbd5e1",
+            borderColor:"rgba(148,163,184,0.2)",
+            borderWidth:1,
+            padding:12,
+            cornerRadius:8,
+            titleFont:{ size:11, family:"'Inter',system-ui,sans-serif" },
+            bodyFont:{ size:11, family:"'Inter',system-ui,sans-serif" },
+            callbacks:{
+              title:function(items){
+                if(!items.length) return "";
+                var idx = items[0].dataIndex;
+                var d = new Date(history[idx].cycleAt);
+                return d.toLocaleDateString("es-CL") + " " + d.toLocaleTimeString("es-CL", { hour:"2-digit", minute:"2-digit" });
+              }
+            }
+          }
+        },
         scales:{
-          x:{ ticks:{ color:"#64748b", font:{ size:9 }, maxTicksLimit:10 }, grid:{ color:"rgba(148,163,184,0.1)" } },
-          y:{ ticks:{ color:"#64748b", font:{ size:9 } }, grid:{ color:"rgba(148,163,184,0.1)" } }
+          x:{
+            ticks:{ color:"#64748b", font:{ size:9, family:"'Inter',system-ui,sans-serif" }, maxTicksLimit:8, maxRotation:0 },
+            grid:{ color:"rgba(148,163,184,0.06)", drawTicks:false },
+            border:{ display:false },
+          },
+          y:{
+            ticks:{ color:"#64748b", font:{ size:9, family:"'Inter',system-ui,sans-serif" }, callback:function(v){ return "$" + Number(v).toFixed(2); } },
+            grid:{ color:"rgba(148,163,184,0.06)", drawTicks:false },
+            border:{ display:false },
+          }
         }
       }
     });
@@ -11428,7 +12336,10 @@ function addP2PBotStyles(){
   function renderMercadoRanking(data){
     const updatedEl = document.getElementById("botMercadoUpdatedAt");
     if(updatedEl && data.cycleAt){
-      updatedEl.textContent = "Actualizado: " + new Date(data.cycleAt).toLocaleTimeString("es-CL", { hour:"2-digit", minute:"2-digit" });
+      const d = new Date(data.cycleAt);
+      const hours = Math.round((Date.now() - d.getTime()) / 3600000);
+      const stale = hours > 2 ? ' <span style="color:#ef4444;">(hace ' + hours + 'h — datos antiguos)</span>' : '';
+      updatedEl.innerHTML = "Actualizado: " + d.toLocaleDateString("es-CL") + " " + d.toLocaleTimeString("es-CL", { hour:"2-digit", minute:"2-digit" }) + stale;
     // Update main KPIs
     var kpiComp = document.getElementById("botKpiCompetitors");
     if(kpiComp) kpiComp.textContent = data.totalCompetitors || 0;
@@ -11623,13 +12534,14 @@ function addP2PBotStyles(){
     const rut = document.getElementById("botPanelAcctRut").value.trim();
     const accountType = document.getElementById("botPanelAcctType").value.trim() || "otro";
     const accountNumber = document.getElementById("botPanelAcctNumber").value.trim();
+    const email = document.getElementById("botPanelAcctEmail").value.trim();
     if(!bank || !holder || !accountNumber){
       alert("Completa banco, titular y numero de cuenta");
       return;
     }
 
     const label = bank + " - " + holder;
-    const accountInfo = { bank, holder, rut, accountType, accountNumber };
+    const accountInfo = { bank, holder, rut, accountType, accountNumber, email };
 
     const body = {
       id: botPanelAccountEditingId || undefined,
@@ -11650,6 +12562,7 @@ function addP2PBotStyles(){
     document.getElementById("botPanelAcctRut").value = "";
     document.getElementById("botPanelAcctType").value = "";
     document.getElementById("botPanelAcctNumber").value = "";
+    document.getElementById("botPanelAcctEmail").value = "";
     botPanelAccountEditingId = null;
     loadPanelAccounts();
   };
@@ -11666,12 +12579,14 @@ function addP2PBotStyles(){
         document.getElementById("botPanelAcctRut").value = "";
         document.getElementById("botPanelAcctType").value = acct.accountType || "";
         document.getElementById("botPanelAcctNumber").value = "";
+        document.getElementById("botPanelAcctEmail").value = "";
         try{
           const info = typeof acct.accountInfo === "string" ? JSON.parse(acct.accountInfo) : (acct.accountInfo || {});
           if(info.bank) document.getElementById("botPanelAcctBank").value = info.bank;
           if(info.holder) document.getElementById("botPanelAcctHolder").value = info.holder;
           if(info.rut) document.getElementById("botPanelAcctRut").value = info.rut;
           if(info.accountNumber) document.getElementById("botPanelAcctNumber").value = info.accountNumber;
+          if(info.email) document.getElementById("botPanelAcctEmail").value = info.email;
         }catch(e){}
         document.getElementById("botPanelAcctBank").focus();
       }
@@ -11683,24 +12598,99 @@ function addP2PBotStyles(){
     loadPanelAccounts();
   };
 
-  window.botPanelChatOrder = function(orderNumber){
-    const el = document.getElementById("botPanelChat_" + orderNumber);
-    if(el) el.style.display = el.style.display === "none" ? "block" : "none";
+  let botPanelChatActiveOrder = null;
+
+  window.botOpenImagePreview = function(imgUrl){
+    if(!imgUrl) return;
+    const url = decodeURIComponent(imgUrl);
+    const proxyUrl = "/api/p2p/bot/chat/image?url=" + encodeURIComponent(url);
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;";
+    overlay.onclick = () => overlay.remove();
+    const img = document.createElement("img");
+    img.src = proxyUrl;
+    img.style.cssText = "max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.5);";
+    overlay.appendChild(img);
+    document.body.appendChild(overlay);
   };
 
-  window.botPanelSendMessage = async function(orderNumber){
-    const input = document.getElementById("botPanelChatInput_" + orderNumber);
+  window.botPanelOpenChat = async function(orderNumber){
+    botPanelChatActiveOrder = orderNumber;
+    const orders = window.botPanelOrdersData || [];
+    const order = orders.find(o => o.orderNumber === orderNumber);
+    document.getElementById("botOrderChatCounterparty").textContent = order?.counterparty || "—";
+    document.getElementById("botOrderChatOrderInfo").textContent =
+      (order?.tradeType === "SELL" ? "Venta" : "Compra") + " " +
+      (order ? window.fmt(order.amount) + " USDT x " + window.fmt(order.unitPrice) : "") +
+      " · #" + (orderNumber?.slice(-10) || "");
+    document.getElementById("botOrderChatInput").value = "";
+
+    const msgContainer = document.getElementById("botOrderChatMessages");
+    msgContainer.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Cargando mensajes...</div>';
+    document.getElementById("botOrderChatOverlay").style.display = "";
+
+    // Fetch real chat messages from Binance API
+    try{
+      const r = await fetch("/api/p2p/bot/chat?orderNo=" + encodeURIComponent(orderNumber) + "&exchange=" + botSelectedExchange, { credentials:"include" });
+      const d = await r.json();
+      if(d?.ok && d?.messages?.length){
+        msgContainer.innerHTML = d.messages.map(m => {
+          if(m.type === "system" || m.type === "auto_reply" && m.self === false){
+            return '<div style="display:flex;justify-content:center;margin-bottom:8px;"><div style="background:rgba(148,163,184,.06);color:#94a3b8;padding:4px 12px;border-radius:12px;font-size:11px;text-align:center;">' + escHtml(m.content) + '</div></div>';
+          }
+          if(m.type === "image"){
+            const time = m.createTime ? new Date(Number(m.createTime)).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"}) : "";
+            const isSelf = m.self;
+            const sender = isSelf ? "Tú" : (m.fromNickName || "Contraparte");
+            const imgUrl = m.imageUrl || m.thumbnailUrl;
+            const proxyUrl = "/api/p2p/bot/chat/image?url=" + encodeURIComponent(imgUrl);
+            return '<div style="display:flex;flex-direction:column;align-items:' + (isSelf ? 'flex-end' : 'flex-start') + ';margin-bottom:8px;">' +
+              '<div style="font-size:10px;color:#64748b;margin-bottom:3px;padding:0 4px;">' + escHtml(sender) + ' subió un comprobante</div>' +
+              '<div onclick="window.botOpenImagePreview(\'' + encodeURIComponent(imgUrl) + '\')" style="max-width:200px;border-radius:12px;overflow:hidden;border:1px solid rgba(148,163,184,.12);cursor:pointer;">' +
+              '<img src="' + proxyUrl + '" alt="Comprobante de pago" style="width:100%;display:block;" loading="lazy">' +
+              '</div>' +
+              '<div style="font-size:9px;color:#64748b;margin-top:2px;">' + time + '</div></div>';
+          }
+          const time = m.createTime ? new Date(Number(m.createTime)).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"}) : "";
+          const isSelf = m.self;
+          const sender = isSelf ? "Tú" : (m.fromNickName || "Contraparte");
+          return '<div style="display:flex;flex-direction:column;align-items:' + (isSelf ? 'flex-end' : 'flex-start') + ';margin-bottom:8px;">' +
+            '<div style="font-size:10px;color:#64748b;margin-bottom:2px;padding:0 4px;">' + escHtml(sender) + '</div>' +
+            '<div style="background:' + (isSelf ? 'var(--brand)' : 'rgba(30,41,59,.8)') + ';color:' + (isSelf ? '#fff' : '#e2e8f0') + ';padding:8px 14px;border-radius:' + (isSelf ? '12px 12px 4px 12px' : '12px 12px 12px 4px') + ';font-size:13px;max-width:85%;word-wrap:break-word;border:1px solid ' + (isSelf ? 'transparent' : 'rgba(148,163,184,.08)') + ';white-space:pre-wrap;min-width:120px;">' +
+            escHtml(m.content) +
+            '<div style="font-size:9px;color:' + (isSelf ? 'rgba(255,255,255,.5)' : '#64748b') + ';margin-top:3px;text-align:right;">' + time + '</div></div></div>';
+        }).join("");
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+      } else {
+        msgContainer.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">No hay mensajes previos.</div>';
+      }
+    } catch(e){
+      msgContainer.innerHTML = '<div style="color:#fb7185;font-size:12px;text-align:center;padding:20px 0;">Error al cargar mensajes: ' + escHtml(e.message) + '</div>';
+    }
+  };
+
+  window.botPanelCloseChat = function(){
+    document.getElementById("botOrderChatOverlay").style.display = "none";
+    botPanelChatActiveOrder = null;
+  };
+
+  window.botPanelSendChatMessage = async function(){
+    if(!botPanelChatActiveOrder) return;
+    const input = document.getElementById("botOrderChatInput");
     if(!input || !input.value.trim()) return;
-    const msgContainer = document.getElementById("botPanelChatMessages_" + orderNumber);
+    const msgContainer = document.getElementById("botOrderChatMessages");
+    const text = input.value.trim();
     if(msgContainer){
-      msgContainer.innerHTML += '<div class="bot-chat-msg"><span class="sender">Tu:</span> <span class="text">' + escHtml(input.value.trim()) + '</span></div>';
+      const empty = msgContainer.querySelector("div[style*='text-align:center']");
+      if(empty) msgContainer.innerHTML = "";
+      msgContainer.innerHTML += '<div style="display:flex;justify-content:flex-end;margin-bottom:6px;"><div style="background:var(--brand);color:#fff;padding:8px 14px;border-radius:12px 12px 4px 12px;font-size:13px;max-width:85%;word-wrap:break-word;">' + escHtml(text) + '<div style="font-size:9px;color:rgba(255,255,255,.5);margin-top:3px;">' + new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"}) + '</div></div></div>';
       msgContainer.scrollTop = msgContainer.scrollHeight;
     }
     try{
       await fetch("/api/p2p/bot/orders", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ action: "chat", orderNumber, exchange: botSelectedExchange, message: input.value.trim() })
+        body: JSON.stringify({ action: "chat", orderNumber: botPanelChatActiveOrder, exchange: botSelectedExchange, message: text })
       });
     }catch(e){}
     input.value = "";
@@ -11716,6 +12706,47 @@ function addP2PBotStyles(){
       });
       loadPanelOrders();
     }catch(e){}
+  };
+
+  window.botPanelVerifyOrder = async function(orderNumber){
+    const btn = document.getElementById("btn-verify-" + orderNumber);
+    if(btn){
+      btn.textContent = "⏳ Verificando...";
+      btn.disabled = true;
+      btn.style.opacity = "0.7";
+    }
+    try{
+      const r = await fetch("/api/p2p/bot/orders", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ action: "verify", orderNumber, exchange: botSelectedExchange })
+      });
+      const d = await r.json();
+      if(d?.ok){
+        botVerifyOrderSave(orderNumber);
+        if(btn){
+          btn.textContent = "✓ Verificado";
+          btn.style.background = "rgba(52,211,153,.2)";
+          btn.style.color = "#34d399";
+          btn.style.borderColor = "rgba(52,211,153,.3)";
+        }
+        setTimeout(() => applyOrdersDisplay(), 800);
+      } else {
+        if(btn){
+          btn.textContent = "✓ Verificar";
+          btn.disabled = false;
+          btn.style.opacity = "1";
+        }
+        alert("❌ Error: " + (d.error || "Desconocido"));
+      }
+    }catch(e){ 
+      if(btn){
+        btn.textContent = "✓ Verificar";
+        btn.disabled = false;
+        btn.style.opacity = "1";
+      }
+      alert("❌ Error de red"); 
+    }
   };
 
   window.botPanelReleaseOrder = async function(orderNumber){
@@ -11745,6 +12776,11 @@ function addP2PBotStyles(){
     addP2PBotNavButton();
     setTimeout(function(){ window.botSelectExchange('binance'); }, 100);
     setTimeout(window.botRefreshExchange, 500);
+    setTimeout(function(){
+      var chatCb = document.getElementById("botChatBotEnabled");
+      if(chatCb?.checked && !botCycleTimer && !chatCycleTimer) botStartChatCycle();
+    }, 1500);
+    setTimeout(botInitSound, 1000);
   }
 
   if(document.readyState === "loading"){
@@ -14108,12 +15144,14 @@ function addP2PBotStyles(){
           </div>
 
           <div class="p2p-dashboard-panel">
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;">
+            <div style="display:flex;align-items:center;gap:14px;">
               <h3 class="section-title" style="margin:0;">Ventas Binance</h3>
-              <button id="btn-sync-binance-sales" class="btn secondary" type="button">Sincronizar Binance P2P</button>
-              <button id="btn-manual-sale" class="btn secondary" type="button" style="background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25);color:#fbbf24;">+ Registrar venta manual</button>
-              <span id="manual-sales-badge" style="display:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:4px 8px;border:1px solid rgba(148,163,184,.15);border-radius:8px;background:rgba(148,163,184,.06);white-space:nowrap;">📋 <span id="manual-sales-count">0</span></span>
-                </div>
+              <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+                <button id="btn-sync-binance-sales" class="btn secondary" type="button" style="padding:4px 8px;font-size:12px;line-height:1.2;" title="Sincronizar Binance P2P">🔄</button>
+                <button id="btn-manual-sale" class="btn secondary" type="button" style="padding:4px 8px;font-size:12px;line-height:1.2;background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25);color:#fbbf24;">✚ manual</button>
+                <span id="manual-sales-badge" style="display:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:4px 7px;border:1px solid rgba(148,163,184,.15);border-radius:8px;background:rgba(148,163,184,.06);white-space:nowrap;">📋</span>
+              </div>
+            </div>
             <div id="binance-sales-container" class="p2p-dashboard-empty" style="margin-top:14px;">Sin operaciones P2P registradas todavía.</div>
           </div>
         </div>
@@ -14467,8 +15505,14 @@ function addP2PBotStyles(){
   window.__p2pBinancePage = 1;
   const __p2pBinancePageSize = 10;
 
+  window.__p2pSalesView = 'binance'; // 'binance' | 'manual'
+  window.__p2pManualPage = 1;
+  const __p2pManualPageSize = 10;
+
   window.renderP2PDashboardFromBinance = function renderP2PDashboardFromBinance(){
     const orders = loadP2PBinanceOrders();
+
+    const showManual = window.__p2pSalesView === 'manual';
 
     // En la lógica real de ONZE P2P, Binance se usa SOLO para ventas.
     // Las compras/capacity vienen de proveedor externo y se registrarán en otro módulo.
@@ -14477,7 +15521,7 @@ function addP2PBotStyles(){
       const type = String(o.tradeType || "").toUpperCase();
       const fiat = String(o.fiat || "").toUpperCase();
       const isManual = o._manual || String(o.orderNumber || '').startsWith('manual_');
-      return status === "COMPLETED" && type === "SELL" && fiat === "CLP" && !isManual;
+      return status === "COMPLETED" && type === "SELL" && fiat === "CLP" && (showManual ? isManual : !isManual);
     });
 
     const totalUsdtSold = completedSales.reduce((sum, o) => sum + Number(o.amount || 0), 0);
@@ -14494,12 +15538,16 @@ function addP2PBotStyles(){
     const salesCountEl = document.getElementById("p2pDashCycles");
     const avgSellEl = document.getElementById("p2pDashAvgProfit");
 
-    if(capitalEl) capitalEl.textContent = `${p2pMoney(totalUsdtSold, 2)} USDT`;
-    if(clpReceivedEl) clpReceivedEl.textContent = `${p2pMoney(totalClpReceived, 0)} CLP`;
-    if(realProfitEl) realProfitEl.textContent = "Pendiente";
-    if(typeof updateP2PCapitalCard === "function") updateP2PCapitalCard();
-    if(salesCountEl) salesCountEl.textContent = String(completedSales.length);
-    if(avgSellEl) avgSellEl.textContent = `${p2pMoney(avgSellPrice, 2)} CLP`;
+    if(!showManual){
+      if(capitalEl) capitalEl.textContent = `${p2pMoney(totalUsdtSold, 2)} USDT`;
+      if(clpReceivedEl) clpReceivedEl.textContent = `${p2pMoney(totalClpReceived, 0)} CLP`;
+      if(realProfitEl) realProfitEl.textContent = "Pendiente";
+      if(typeof updateP2PCapitalCard === "function") updateP2PCapitalCard();
+      if(salesCountEl) salesCountEl.textContent = String(completedSales.length);
+      if(avgSellEl) avgSellEl.textContent = `${p2pMoney(avgSellPrice, 2)} CLP`;
+    }else{
+      if(salesCountEl) salesCountEl.textContent = String(completedSales.length);
+    }
 
     const historyEmpty = Array.from(document.querySelectorAll(".p2p-dashboard-empty"))
       .find(el => el.textContent.includes("Sin operaciones P2P") || el.textContent.includes("sincronizadas") || el.closest(".p2p-dashboard-panel")?.innerText.includes("Ventas Binance"));
@@ -14508,14 +15556,23 @@ function addP2PBotStyles(){
 
     if(historyEmpty){
       if(!completedSales.length){
-        historyEmpty.textContent = "Sin ventas Binance sincronizadas todavía.";
+        historyEmpty.innerHTML = showManual
+          ? '<div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:#8aa0ba;">Sin ventas manuales registradas.</span><button class="btn secondary" style="padding:6px 14px;font-size:13px;" onclick="window.__p2pSalesView=\'binance\';renderP2PDashboardFromBinance();">← Volver a Ventas Binance</button></div>'
+          : "Sin ventas Binance sincronizadas todavía.";
       }else{
-        const totalPages = Math.ceil(completedSales.length / __p2pBinancePageSize) || 1;
-        if(window.__p2pBinancePage > totalPages) window.__p2pBinancePage = totalPages;
-        const startIdx = (window.__p2pBinancePage - 1) * __p2pBinancePageSize;
-        const pageSales = completedSales.slice(startIdx, startIdx + __p2pBinancePageSize);
+        const pageSize = showManual ? __p2pManualPageSize : __p2pBinancePageSize;
+        const pageKey = showManual ? '__p2pManualPage' : '__p2pBinancePage';
+        const totalPages = Math.ceil(completedSales.length / pageSize) || 1;
+        if(window[pageKey] > totalPages) window[pageKey] = totalPages;
+        const startIdx = (window[pageKey] - 1) * pageSize;
+        const pageSales = completedSales.slice(startIdx, startIdx + pageSize);
 
-        historyEmpty.innerHTML = pageSales.map(o => {
+        historyEmpty.innerHTML = (showManual ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(148,163,184,.1);">
+          <strong style="color:#f8fafc;font-size:14px;">📋 Ventas Manuales</strong>
+          <button class="btn secondary" style="padding:6px 14px;font-size:13px;" onclick="window.__p2pSalesView='binance';renderP2PDashboardFromBinance();">← Volver a Ventas Binance</button>
+        </div>` : "") +
+
+        pageSales.map(o => {
           const date = o.createdAt ? new Date(o.createdAt).toLocaleString("es-CL", {
             timeZone:"America/Santiago",
             day:"2-digit",
@@ -14537,15 +15594,15 @@ function addP2PBotStyles(){
                 <strong style="color:#34d399;">${p2pMoney(o.unitPrice, 2)} ${o.fiat || "CLP"}</strong>
                 <div style="color:#f8fafc;font-size:12px;margin-top:3px;">${p2pMoney(o.totalPrice, 0)} ${o.fiat || "CLP"}</div>
                 <div style="color:#8aa0ba;font-size:12px;margin-top:3px;">${o.orderStatus || ""}</div>
-                ${o._manual || String(o.orderNumber || '').startsWith('manual_') ? `<div style="margin-top:4px;"><button class="btn small danger" type="button" onclick="window.deleteManualSale('${o.orderNumber}')" title="Borrar venta manual" style="padding:2px 6px;font-size:12px;line-height:1;">🗑️</button></div>` : ""}
+                ${showManual ? `<div style="margin-top:4px;"><button class="btn small danger" type="button" onclick="event.stopPropagation();window.deleteManualSale('${o.orderNumber}')" title="Borrar venta manual" style="padding:2px 6px;font-size:12px;line-height:1;">🗑️</button></div>` : ""}
               </div>
             </div>
           `;
         }).join("") + `
           <div style="display:flex;justify-content:center;gap:12px;padding-top:14px;align-items:center;">
-            <button class="btn secondary" style="padding:6px 12px;font-size:16px;line-height:1;" onclick="window.__p2pBinancePage = Math.max(1, window.__p2pBinancePage - 1); renderP2PDashboardFromBinance();" ${window.__p2pBinancePage <= 1 ? 'disabled' : ''}>&larr;</button>
-            <span style="color:#8aa0ba;font-size:13px;">${window.__p2pBinancePage} / ${totalPages}</span>
-            <button class="btn secondary" style="padding:6px 12px;font-size:16px;line-height:1;" onclick="window.__p2pBinancePage = Math.min(${totalPages}, window.__p2pBinancePage + 1); renderP2PDashboardFromBinance();" ${window.__p2pBinancePage >= totalPages ? 'disabled' : ''}>&rarr;</button>
+            <button class="btn secondary" style="padding:6px 12px;font-size:16px;line-height:1;" onclick="${showManual ? `window.__p2pManualPage` : `window.__p2pBinancePage`} = Math.max(1, ${showManual ? `window.__p2pManualPage` : `window.__p2pBinancePage`} - 1); renderP2PDashboardFromBinance();" ${window[pageKey] <= 1 ? 'disabled' : ''}>&larr;</button>
+            <span style="color:#8aa0ba;font-size:13px;">${window[pageKey]} / ${totalPages}</span>
+            <button class="btn secondary" style="padding:6px 12px;font-size:16px;line-height:1;" onclick="${showManual ? `window.__p2pManualPage` : `window.__p2pBinancePage`} = Math.min(${totalPages}, ${showManual ? `window.__p2pManualPage` : `window.__p2pBinancePage`} + 1); renderP2PDashboardFromBinance();" ${window[pageKey] >= totalPages ? 'disabled' : ''}>&rarr;</button>
           </div>
         `;
       }
@@ -14576,16 +15633,14 @@ function addP2PBotStyles(){
       return status === "COMPLETED" && type === "SELL" && fiat === "CLP" && isManual;
     }).length;
     const badge = document.getElementById("manual-sales-badge");
-    const countEl = document.getElementById("manual-sales-count");
-    if(badge && countEl){
-      if(manualCount > 0){
-        countEl.textContent = manualCount + " venta" + (manualCount !== 1 ? "s" : "") + " manuales";
-        badge.style.display = "inline-block";
-      }else{
-        badge.style.display = "none";
-      }
+    if(badge){
+      badge.style.display = manualCount > 0 ? "inline-block" : "none";
       if(!badge.dataset.listenerAttached){
-        badge.addEventListener("click", function(){ window.showManualSalesModal(); });
+        badge.addEventListener("click", function(){
+          window.__p2pSalesView = 'manual';
+          window.__p2pManualPage = 1;
+          renderP2PDashboardFromBinance();
+        });
         badge.dataset.listenerAttached = "1";
       }
     }
@@ -14969,8 +16024,18 @@ function addP2PBotStyles(){
               saleParts: Array.isArray(srv.finalSaleParts) ? srv.finalSaleParts : [],
             };
           }
+          const finishedLocal = local.status === 'finished' && srv.status !== 'finished';
           return {
             ...srv,
+            ...(finishedLocal ? {
+              status: local.status,
+              finishedAt: local.finishedAt,
+              finalSoldUsdt: local.finalSoldUsdt,
+              finalClpReceived: local.finalClpReceived,
+              finalCommissionUsdt: local.finalCommissionUsdt,
+              finalCommissionClp: local.finalCommissionClp,
+              finalSaleParts: local.finalSaleParts,
+            } : {}),
             usedUsdt: Number(local.usedUsdt || 0),
             clpReceived: Number(local.clpReceived || 0),
             commissionUsdt: Number(local.commissionUsdt || 0),
@@ -17976,20 +19041,9 @@ function addP2PBotStyles(){
         finalSaleParts: capStats.saleParts || [],
       };
     }
-    saveP2PCapacity(caps, true);
-
-    // También sincronizar al servidor (sin bloquear) para que el estado "finished"
-    // persista entre recargas de página.
-    for(const capStats of toFinish){
-      const finishedItem = caps.find(c => c.id === capStats.id);
-      if(!finishedItem) continue;
-      fetch('/api/p2p/capacity?confirm=manual', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item: finishedItem })
-      }).catch(e => console.warn('Error syncing auto-finish to server:', e));
-    }
+    saveP2PCapacity(caps);
+    // saveP2PCapacity ya agrega los items a pendingSync y los POSTea al servidor,
+    // protegiendo el estado "finished" contra sobrescritura del servidor.
   }
 
   window.syncBinanceSales = function syncBinanceSales(silent = false){
@@ -18392,9 +19446,56 @@ function addP2PBotStyles(){
   };
 
   // Limpieza completa: capacities + baseline + ventas + capital para empezar de cero
-  window.resetP2PFullFreshStart = function(){
-    if(!confirm("⚠️ ¿Resetear TODOS los datos P2P? Se borrarán capacities, ventas y capital. Esta acción no se puede deshacer.")) return;
+  window.showP2PResetConfirmModal = function(){
+    const existing = document.getElementById("p2pResetConfirmModal");
+    if(existing) existing.remove();
 
+    const backdrop = document.createElement("div");
+    backdrop.id = "p2pResetConfirmModal";
+    backdrop.style.cssText = "position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(2,6,23,.76);backdrop-filter:blur(10px);";
+
+    backdrop.innerHTML = `
+      <div style="width:min(440px,100%);border:1px solid rgba(239,68,68,.35);background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(2,6,23,.98));border-radius:24px;padding:24px;box-shadow:0 24px 80px rgba(0,0,0,.45);color:#f8fafc;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <div style="font-size:28px;">⚠️</div>
+          <div>
+            <div style="font-size:20px;font-weight:800;letter-spacing:-.01em;">Resetear P2P</div>
+            <div style="font-size:13px;color:#94a3b8;margin-top:4px;">Esta acción no se puede deshacer</div>
+          </div>
+        </div>
+        <div style="font-size:14px;color:#cbd5e1;line-height:1.6;margin-bottom:20px;">
+          Se borrarán permanentemente:
+          <ul style="margin:8px 0 0 0;padding-left:20px;color:#94a3b8;font-size:13px;">
+            <li>Capacities y cupos</li>
+            <li>Ventas Binance</li>
+            <li>Capital y profits registrados</li>
+            <li>Baseline y carryovers</li>
+          </ul>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button type="button" onclick="this.closest('#p2pResetConfirmModal').remove()" style="padding:10px 20px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.8);color:#cbd5e1;border-radius:10px;cursor:pointer;font-size:14px;font-weight:600;">Cancelar</button>
+          <button type="button" id="p2pResetConfirmBtn" style="padding:10px 20px;border:none;background:#ef4444;color:#fff;border-radius:10px;cursor:pointer;font-size:14px;font-weight:700;">Sí, resetear todo</button>
+        </div>
+      </div>
+    `;
+
+    backdrop.addEventListener("click", function(e){
+      if(e.target === backdrop) backdrop.remove();
+    });
+
+    document.body.appendChild(backdrop);
+
+    document.getElementById("p2pResetConfirmBtn").addEventListener("click", function(){
+      backdrop.remove();
+      executeP2PFullReset();
+    });
+  };
+
+  window.resetP2PFullFreshStart = function(){
+    showP2PResetConfirmModal();
+  };
+
+  window.executeP2PFullReset = function(){
     // 1. Limpiar del servidor primero
     fetch('/api/p2p/reset', { method: 'POST', credentials: 'include' })
       .then(res => res.json())
@@ -18416,6 +19517,7 @@ function addP2PBotStyles(){
     localStorage.removeItem('onze_p2p_binance_orders');
     localStorage.removeItem('onze_binance_sales');
     window.__p2pBinancePage = 1;
+    if(typeof renderBinanceSalesTable === 'function') renderBinanceSalesTable();
 
     // 5. Limpiar capital inicial
     localStorage.removeItem(P2P_INITIAL_CAPITAL_KEY);
@@ -18434,7 +19536,6 @@ function addP2PBotStyles(){
     localStorage.setItem('__p2pManualMode', 'true');
     localStorage.setItem('__p2pCapacityLastClear', String(Date.now()));
     window.__p2pCapacityLastClear = Date.now();
-    // Auto-limpiar el flag después de 70s para que los nuevos capacities se guarden
     setTimeout(() => {
       localStorage.removeItem('__p2pManualMode');
       console.log("✅ Modo manual P2P desactivado — ahora los capacities se guardarán en el servidor");
@@ -18447,6 +19548,7 @@ function addP2PBotStyles(){
 
     if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
     if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
+    if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
     console.log("🧹 RESET COMPLETO P2P: capacities, baseline, ventas, capital limpiados.");
     if(typeof showToast === 'function') showToast("✅ Reset completo — todo listo para empezar de cero");
   };
@@ -22157,7 +23259,7 @@ function addP2PBotStyles(){
 // Fallback global reset
 try{
   window.resetP2PFullFreshStart = window.resetP2PFullFreshStart || function(){
-    if(!confirm("⚠️ ¿Resetear TODOS los datos P2P?")) return;
+    if(typeof showP2PResetConfirmModal === 'function'){ showP2PResetConfirmModal(); return; }
     fetch('/api/p2p/reset', { method:'POST', credentials:'include' }).then(r=>r.json()).then(d=>{ if(d.ok) console.log("✅ Servidor limpiado"); }).catch(e=>console.warn(e));
     'onze_p2p_capacity_items,onze_p2p_capacity_baseline_at,onze_p2p_binance_orders,onze_binance_sales,onze_p2p_initial_capital_usdt,onze_p2p_profit_day,onze_p2p_profit_start,onze_p2p_capacity_carryover,__p2pCapitalCarryoverDate,__p2pCapitalCarryoverProfit,onze_p2p_own_capital_items,__p2pManualMode,__p2pCapacityLastClear'.split(',').forEach(k => localStorage.removeItem(k));
     console.log("🧹 RESET COMPLETO");

@@ -93,7 +93,6 @@ export class BinanceP2PClient {
       throw new Error(`Binance respuesta inválida (HTTP ${res.status}) para ${endpoint}: ${text.slice(0, 200)}`);
     }
     if (data?.code && data.code !== "000000") {
-      // Log full response for debugging
       console.error(`[Binance API] ${endpoint} returned:`, JSON.stringify(data));
       throw new Error(`Binance error: ${data.message || data.msg || "unknown"} (code: ${data.code})`);
     }
@@ -200,29 +199,36 @@ export class BinanceP2PClient {
   }
 
   async recreateAd(adId: string, targetPrice: string): Promise<string | null> {
-    // Fetch current ad detail for payment methods
+    // Fetch current ad detail for payment methods and limits
     let identifiers: string[] = [];
+    let minAmount = "1000";
+    let maxAmount = "5000000";
+    let initAmt = "5000";
+    let fiatUnit = "CLP";
     try {
       const detailRes = await this.getAdDetail(adId);
-      const adv = detailRes?.data?.adv || {};
+      const adv = detailRes?.data?.adv || detailRes?.data || {};
       identifiers = (adv.tradeMethods || []).map((tm: any) => tm.identifier ?? tm.payType ?? "");
+      if (adv.minSingleTransAmount) minAmount = String(adv.minSingleTransAmount);
+      if (adv.maxSingleTransAmount) maxAmount = String(adv.maxSingleTransAmount);
+      if (adv.initAmount) initAmt = String(adv.initAmount);
+      if (adv.fiatUnit) fiatUnit = adv.fiatUnit;
     } catch (_) {}
-    // Build tradeMethods from identifiers only (payId is optional)
     const tradeMethods = identifiers.filter(Boolean).map(id => ({ identifier: id }));
     if (tradeMethods.length === 0) {
       tradeMethods.push({ identifier: "BANK" });
     }
-    // Post a new ad FIRST, then close the old one (avoid losing ad if postAd fails)
     const postParams: Record<string, any> = {
       tradeType: "1",
       asset: "USDT",
-      fiatUnit: "CLP",
+      fiatUnit,
       priceType: "1",
       price: targetPrice,
-      initAmount: "5000",
-      maxSingleTransAmount: "5000000",
-      minSingleTransAmount: "1000",
+      initAmount: initAmt,
+      maxSingleTransAmount: maxAmount,
+      minSingleTransAmount: minAmount,
       buyerKycLimit: 1,
+      classify: "profession",
       tradeMethods,
       payTimeLimit: 15,
     };
@@ -231,18 +237,14 @@ export class BinanceP2PClient {
       const res = await this.postAd(postParams);
       newAdNo = res?.data?.advNo ?? res?.data?.adNo ?? null;
     } catch (e: any) {
-      // Try with classify=profession which is more permissive
       try {
-        postParams.classify = "profession";
         const res = await this.postAd(postParams);
         newAdNo = res?.data?.advNo ?? res?.data?.adNo ?? null;
       } catch (e2: any) {
-        // Both attempts failed — old ad still live, don't remove
         throw new Error(`recreateAd: postAd failed twice (${e.message}, ${e2.message}) — old ad preserved`);
       }
     }
     if (newAdNo) {
-      // Now close the old ad
       await new Promise(r => setTimeout(r, 1000));
       try {
         await this.removeAd(adId);
@@ -254,7 +256,35 @@ export class BinanceP2PClient {
   // ─── Orders ──────────────────────────────────────────────────
 
   async getOrders(params: { page: number; rows: number; tradeType?: string; status?: string }) {
-    return this.privateRequest("/sapi/v1/p2p/order/list", params);
+    const allParams: Record<string, any> = {
+      page: params.page || 1,
+      rows: params.rows || 50,
+      tradeType: params.tradeType || "SELL",
+      recvWindow: 60000,
+      timestamp: Date.now(),
+    };
+    const queryStr = this.buildQueryString(allParams);
+    const signature = this.sign(queryStr);
+    const url = `${this.apiBase}/sapi/v1/c2c/orderMatch/listUserOrderHistory?${queryStr}&signature=${encodeURIComponent(signature)}`;
+    const res = await fetch(url, {
+      method: "GET",
+      headers: {
+        "X-MBX-APIKEY": this.apiKey,
+        "Content-Type": "application/json",
+      },
+    });
+    const text = await res.text();
+    if (!text) throw new Error(`Binance empty response (HTTP ${res.status}) para órdenes`);
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`Binance respuesta inválida (HTTP ${res.status}) para órdenes: ${text.slice(0, 200)}`);
+    }
+    if (data?.code && data.code !== "000000") {
+      throw new Error(`Binance error: ${data.message || data.msg || "unknown"} (code: ${data.code})`);
+    }
+    return data;
   }
 
   // ─── Balance ─────────────────────────────────────────────────
@@ -266,5 +296,29 @@ export class BinanceP2PClient {
       return asset ? { free: asset.free, locked: asset.locked, balance: asset.free } : { free: "0", locked: "0", balance: "0" };
     }
     return { free: "0", locked: "0", balance: "0" };
+  }
+
+  // ─── KYC / Verification ──────────────────────────────────────
+
+  async verifyOrder(orderNumber: string) {
+    return this.privateRequest("/sapi/v1/c2c/orderMatch/verifiedAdditionalKyc", {}, { orderNumber }, true);
+  }
+
+  // ─── Chat ──────────────────────────────────────────────────────
+
+  async sendChatMessage(orderNumber: string, message: string) {
+    return this.privateRequest("/sapi/v1/c2c/chat/sendMessage", {}, { orderNumber, message }, true);
+  }
+
+  async getChatMessages(orderNumber: string, page = 1, rows = 50) {
+    const params: any = { orderNo: orderNumber, page, rows, recvWindow: 60000, timestamp: Date.now() };
+    const queryStr = this.buildQueryString(params);
+    const sig = this.sign(queryStr);
+    const url = `https://api.binance.com/sapi/v1/c2c/chat/retrieveChatMessagesWithPagination?${queryStr}&signature=${encodeURIComponent(sig)}`;
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { "X-MBX-APIKEY": this.apiKey, "Content-Type": "application/json" },
+    });
+    return res.json();
   }
 }

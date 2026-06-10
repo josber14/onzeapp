@@ -53,12 +53,13 @@ model Tenant {
   OkxCredentials       OkxCredentials?
   operations           Operation[]
   customers            OperatorCustomer[]
-  P2PAccount           P2PAccount[]
+  P2PAccount          P2PAccount[]
   p2pBotConfig         P2PBotConfig?
   P2PBotExchangeConfig P2PBotExchangeConfig[]
   p2pBotLogs           P2PBotLog[]
   p2pBotOrders         P2PBotOrder[]
   p2pBotAds            P2PBotAd[]
+  p2pChatStates        P2PChatState[]
   p2pBotMarketSnapshots P2PBotMarketSnapshot[]
   p2pCapacities        P2PCapacity[]
   rateLists            RateList[]
@@ -515,6 +516,7 @@ model TenantSettings {
   allowUsdtAnalysis               Boolean  @default(false)
   allowKyc                        Boolean  @default(false)
   themeOverrides                  Json?
+  p2pResetCutoff                  BigInt?
   createdAt                       DateTime @default(now())
   updatedAt                       DateTime @updatedAt
   tenant                          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -720,10 +722,42 @@ model OkxCredentials {
     updatedAt    DateTime  @default(now())
     Tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-    @@index([tenantId])
-  }
+  @@index([tenantId])
+}
 
-  model P2PAccount {
+model P2PChatState {
+  id                Int      @id @default(autoincrement())
+  tenantId          Int
+  exchange          String
+  orderNumber       String
+  state             String   @default("new")
+  counterparty      String?
+  isCompany         Boolean  @default(false)
+  isReturning       Boolean  @default(false)
+  previousBank      String?
+  chosenBank        String?
+  chosenAccountIds  Json?
+  erutRequested     Boolean  @default(false)
+  erutReceived      Boolean  @default(false)
+  retryCount        Int      @default(0)
+  partialAmount     Decimal? @db.Decimal(18, 8)
+  totalAmount       Decimal? @db.Decimal(18, 8)
+  lastClientMsgAt   DateTime?
+  lastBotMsgAt      DateTime?
+  lastBotMsg        String?
+  appealAt          DateTime?
+  paidAt            DateTime?
+  completedAt       DateTime?
+  verifiedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  Tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, exchange, orderNumber])
+  @@index([tenantId, exchange, state])
+}
+
+model P2PAccount {
   id          Int      @id @default(autoincrement())
   tenantId    Int
   exchange    String
@@ -760,6 +794,8 @@ model P2PBotExchangeConfig {
   minCompetitorCapital Decimal?  @db.Decimal(18, 2)
   adUpdateCount        Int       @default(0)
   competePayTypes      Json?
+  chatBotEnabled       Boolean   @default(false)
+  chatCookies          Json?
   commissionPct        Decimal   @default(0.14) @db.Decimal(8, 4)
   safeMarginPct        Decimal   @default(0) @db.Decimal(8, 4)
   Tenant               Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)

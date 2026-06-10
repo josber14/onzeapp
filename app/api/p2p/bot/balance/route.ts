@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { BybitP2PClient } from "@/lib/p2p-bot/bybit-adapter";
+import { BinanceP2PClient } from "@/lib/p2p-bot/binance-adapter";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -50,7 +51,28 @@ export async function GET(req: NextRequest) {
     }
 
     if (exchange === "binance") {
-      return Response.json({ ok: false, error: "Lectura de saldo Binance no implementada" });
+      const creds = await prisma.binanceCredentials.findUnique({
+        where: { tenantId: session.tenantId, isActive: true },
+      });
+      if (!creds) {
+        return Response.json({ ok: false, error: "Sin credenciales Binance" });
+      }
+      try {
+        const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
+        const res = await client.getBalance("USDT");
+        const balance = Number(res.balance) || 0;
+        const available = Number(res.free) || 0;
+        return Response.json({
+          ok: true,
+          exchange: "binance",
+          asset: "USDT",
+          balance,
+          available,
+          message: null,
+        });
+      } catch (e: any) {
+        return Response.json({ ok: false, error: e.message });
+      }
     }
 
     if (exchange === "okx") {

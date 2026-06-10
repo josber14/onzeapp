@@ -11,7 +11,7 @@ export async function POST() {
     const cookieStore = await cookies();
     const token = cookieStore.get("onze_session")?.value;
     const session = verifySessionToken(token);
-    if (!session?.tenantId || !session.role.startsWith("super_admin")) {
+    if (!session?.tenantId) {
       return Response.json({ ok: false, error: "No autorizado" }, { status: 401 });
     }
 

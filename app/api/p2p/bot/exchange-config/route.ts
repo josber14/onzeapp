@@ -38,6 +38,8 @@ export async function GET() {
         cycleInterval: c.cycleInterval ?? 10,
         minCompetitorCapital: c.minCompetitorCapital ? Number(c.minCompetitorCapital) : null,
         competePayTypes: c.competePayTypes as string[] | null,
+        chatBotEnabled: c.chatBotEnabled ?? false,
+        chatCookies: c.chatCookies as string | null,
         commissionPct: Number(c.commissionPct) || 0.14,
         safeMarginPct: Number(c.safeMarginPct) || 0,
         pauseUntil: c.pauseUntil?.toISOString() || null,
@@ -82,6 +84,8 @@ export async function PUT(req: NextRequest) {
     if (data.cycleInterval !== undefined) update.cycleInterval = data.cycleInterval;
     if (data.minCompetitorCapital !== undefined) update.minCompetitorCapital = data.minCompetitorCapital;
     if (data.competePayTypes !== undefined) update.competePayTypes = data.competePayTypes;
+    if (data.chatBotEnabled !== undefined) update.chatBotEnabled = data.chatBotEnabled;
+    if (data.chatCookies !== undefined) update.chatCookies = data.chatCookies;
     if (data.commissionPct !== undefined) update.commissionPct = data.commissionPct;
     if (data.safeMarginPct !== undefined) update.safeMarginPct = data.safeMarginPct;
     if (data.action === "start") {
@@ -98,7 +102,7 @@ export async function PUT(req: NextRequest) {
       if (!enabledList.includes(exchange)) enabledList.push(exchange);
       await prisma.p2PBotConfig.upsert({
         where: { tenantId: session.tenantId },
-        update: { enabled: true, exchanges: enabledList },
+        update: { enabled: true, pauseUntil: null, exchanges: enabledList },
         create: { tenantId: session.tenantId, enabled: true, exchanges: [exchange] },
       });
     }
@@ -127,6 +131,7 @@ export async function PUT(req: NextRequest) {
         competePayTypes: (data.competePayTypes ?? null) as any,
         commissionPct: data.commissionPct ?? 0.14,
         safeMarginPct: data.safeMarginPct ?? 0,
+        chatBotEnabled: data.chatBotEnabled ?? false,
       },
     });
 
@@ -144,6 +149,8 @@ export async function PUT(req: NextRequest) {
         cycleInterval: config.cycleInterval ?? 10,
         minCompetitorCapital: config.minCompetitorCapital ? Number(config.minCompetitorCapital) : null,
         competePayTypes: config.competePayTypes as string[] | null,
+        chatBotEnabled: config.chatBotEnabled ?? false,
+        chatCookies: config.chatCookies as string | null,
         commissionPct: Number(config.commissionPct) || 0.14,
         safeMarginPct: Number(config.safeMarginPct) || 0,
         pauseUntil: config.pauseUntil?.toISOString() || null,

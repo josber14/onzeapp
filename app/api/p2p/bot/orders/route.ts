@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { getBotOrders } from "@/lib/p2p-bot/engine";
 import { BybitP2PClient, bybitOrderGroup, bybitOrderStatusLabel } from "@/lib/p2p-bot/bybit-adapter";
+import { fetchLiveOrders } from "@/lib/p2p-bot/live";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -22,7 +23,22 @@ export async function GET(req: NextRequest) {
     }
     const { searchParams } = new URL(req.url);
     const limit = Number(searchParams.get("limit") || 50);
-    const exchange = searchParams.get("exchange") || undefined;
+    const exchange = (searchParams.get("exchange") || "binance") as "binance" | "bybit" | "okx";
+    const live = searchParams.get("live") === "true";
+
+    if (live) {
+      try {
+        const result = await fetchLiveOrders(exchange, session.tenantId, limit);
+        if (result.orders.length > 0) {
+          return Response.json({ ok: true, orders: result.orders, live: true });
+        }
+      } catch (e: any) {
+        // Live API failed, fall through to DB
+      }
+      // Fallback: return DB orders
+      const localOrders = await getBotOrders(session.tenantId, limit, exchange);
+      return Response.json({ ok: true, orders: localOrders, live: false });
+    }
 
     // Fetch from local DB first
     const localOrders = await getBotOrders(session.tenantId, limit, exchange);
@@ -106,11 +122,6 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession();
-    if (!session?.tenantId) {
-      return Response.json({ ok: false, error: "No autorizado" }, { status: 401 });
-    }
-
     const body = await req.json();
     const { action, orderNumber, exchange, message } = body;
 
@@ -118,9 +129,78 @@ export async function POST(req: NextRequest) {
       return Response.json({ ok: false, error: "action y orderNumber requeridos" }, { status: 400 });
     }
 
+    // Get tenantId from session, or from DB for verify action (mobile support)
+    let tenantId: number | null = null;
+    const session = await getSession();
+    if (session?.tenantId) {
+      tenantId = session.tenantId;
+    } else if (action === "verify") {
+      const firstCfg = await prisma.p2PBotExchangeConfig.findFirst({ where: { exchange: "binance" } });
+      tenantId = firstCfg?.tenantId || null;
+    }
+    if (!tenantId) {
+      return Response.json({ ok: false, error: "No autorizado" }, { status: 401 });
+    }
+
+    if (exchange === "binance") {
+
+      const creds = await prisma.binanceCredentials.findFirst({
+        where: { tenantId, isActive: true },
+      });
+      if (!creds) {
+        return Response.json({ ok: false, error: "Sin credenciales Binance" }, { status: 400 });
+      }
+
+      if (action === "verify") {
+        const { BinanceP2PClient } = await import("@/lib/p2p-bot/binance-adapter");
+        const { handleVerified, normalizeOrder } = await import("@/lib/p2p-bot/chat-agent");
+        const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
+        const cs = await prisma.p2PChatState.upsert({
+          where: { tenantId_exchange_orderNumber: { tenantId, exchange: "binance", orderNumber } },
+          update: { verifiedAt: new Date(), state: "awaiting_verification" },
+          create: { tenantId, exchange: "binance", orderNumber, state: "awaiting_verification", verifiedAt: new Date() },
+        });
+        try {
+          await client.verifyOrder(orderNumber);
+        } catch (e: any) {
+          console.warn("[Verify] verifyOrder error (ignored):", e.message);
+        }
+        // Send welcome message via Playwright (only if not already sent)
+        if (!cs.lastBotMsgAt) {
+          try {
+            const [sellRes, buyRes] = await Promise.all([
+              client.getOrders({ page: 1, rows: 50, tradeType: "SELL" }),
+              client.getOrders({ page: 1, rows: 50, tradeType: "BUY" }),
+            ]);
+            const allOrders = [...(sellRes?.data ?? []), ...(buyRes?.data ?? [])];
+            const rawOrder = allOrders.find((o: any) => (o.orderNumber ?? o.orderNo ?? o.id) === orderNumber);
+            if (rawOrder) {
+              const order = normalizeOrder(rawOrder, "binance");
+              await handleVerified(tenantId, "binance", client, cs, order, []);
+            }
+          } catch (e: any) {
+            console.warn("[Verify] sendWelcome error:", e.message);
+          }
+        }
+        return Response.json({ ok: true, action, result: "Comprador verificado — datos bancarios visibles" });
+      }
+
+      if (action === "chat") {
+        if (!message) {
+          return Response.json({ ok: false, error: "Mensaje requerido" }, { status: 400 });
+        }
+        const { BinanceP2PClient } = await import("@/lib/p2p-bot/binance-adapter");
+        const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
+        await client.sendChatMessage(orderNumber, message);
+        return Response.json({ ok: true, action, result: "Mensaje enviado" });
+      }
+
+      return Response.json({ ok: false, error: `Acción no soportada para Binance: ${action}` }, { status: 400 });
+    }
+
     if (exchange === "bybit") {
       const creds = await prisma.bybitCredentials.findUnique({
-        where: { tenantId: session.tenantId, isActive: true },
+        where: { tenantId: tenantId!, isActive: true },
       });
       if (!creds) {
         return Response.json({ ok: false, error: "Sin credenciales Bybit" }, { status: 400 });

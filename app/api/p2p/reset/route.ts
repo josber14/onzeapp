@@ -31,7 +31,15 @@ export async function POST(req: NextRequest) {
       where: { tenantId },
     });
 
-    return NextResponse.json({ ok: true, message: "Todos los datos P2P eliminados" });
+    // 4. Guardar cutoff para no re-importar órdenes viejas al sincronizar
+    const cutoff = Date.now();
+    await prisma.tenantSettings.upsert({
+      where: { tenantId },
+      update: { p2pResetCutoff: cutoff },
+      create: { tenantId, p2pResetCutoff: cutoff },
+    });
+
+    return NextResponse.json({ ok: true, message: "Todos los datos P2P eliminados", cutoff });
   } catch (error: any) {
     return NextResponse.json(
       { ok: false, error: error?.message || "Error al resetear datos P2P" },

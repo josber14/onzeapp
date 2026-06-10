@@ -36,7 +36,7 @@ function formatOrder(o: any) {
   };
 }
 
-async function fetchAllBinanceOrders(apiKey: string, secretKey: string) {
+async function fetchAllBinanceOrders(apiKey: string, secretKey: string, startTimestamp?: number) {
   const allOrders: any[] = [];
   let page = 1;
 
@@ -47,6 +47,9 @@ async function fetchAllBinanceOrders(apiKey: string, secretKey: string) {
     params.set("rows", "100");
     params.set("recvWindow", "5000");
     params.set("timestamp", String(Date.now()));
+    if (startTimestamp) {
+      params.set("startTimestamp", String(startTimestamp));
+    }
 
     const query = params.toString();
     const signature = signQuery(query, secretKey);
@@ -67,6 +70,8 @@ async function fetchAllBinanceOrders(apiKey: string, secretKey: string) {
         String(item.fiat || "").toUpperCase() === "CLP" &&
         String(item.orderStatus || "").toUpperCase() === "COMPLETED"
       ) {
+        const createTime = Number(item.createTime || 0);
+        if (startTimestamp && createTime < startTimestamp) continue;
         allOrders.push(formatOrder(item));
       }
     }
@@ -86,6 +91,13 @@ export async function GET() {
     }
 
     const tenantId = session.tenantId;
+
+    // Leer cutoff post-reset para no re-importar órdenes anteriores
+    const settings = await prisma.tenantSettings.findUnique({
+      where: { tenantId },
+      select: { p2pResetCutoff: true },
+    });
+    const startTimestamp = settings?.p2pResetCutoff ? Number(settings.p2pResetCutoff) : undefined;
 
     let apiKey: string | null = null;
     let secretKey: string | null = null;
@@ -135,7 +147,7 @@ export async function GET() {
     }
 
     try {
-      const allOrders = await fetchAllBinanceOrders(apiKey, secretKey);
+      const allOrders = await fetchAllBinanceOrders(apiKey, secretKey, startTimestamp);
 
       for (const o of allOrders) {
         try {
