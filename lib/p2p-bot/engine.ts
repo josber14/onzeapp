@@ -638,13 +638,13 @@ async function runBinanceCycle(
       bs.isFetching = true;
       try {
         let allRaw: any[] = [];
-        for (let page = 1; page <= 2; page++) {
+        for (let page = 1; page <= 5; page++) {
           const pageRes = await client.getOnlineAds({
             asset: "USDT", fiat: "CLP", tradeType: "BUY", rows: 20, page, payTypes: [],
           });
           const pageData = pageRes?.data ?? [];
           if (pageData.length > 0) allRaw = allRaw.concat(pageData);
-          if (page < 2) await new Promise(r => setTimeout(r, 100));
+          if (page < 5) await new Promise(r => setTimeout(r, 100));
         }
         if (allRaw.length > 0 || bs.cachedCompetitors.length === 0) {
           bs.cachedCompetitors = allRaw.map(normalizeBinanceAd);
