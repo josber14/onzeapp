@@ -10364,7 +10364,6 @@ function addP2PBotStyles(){
   /* end per-ad functions */
 
   window.botStartExchange = async function(){
-    if(botCycleActive) return;
     const ex = botSelectedExchange;
     await fetch("/api/p2p/bot/exchange-config", {
       method:"POST",
@@ -10372,6 +10371,7 @@ function addP2PBotStyles(){
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ exchange: ex, action: "start" })
     });
+    if(botCycleActive) return; // already cycling (another exchange is running)
     // Save interval to backend (used for rate-limit cooldown)
     const interval = Math.round(parseFloat(document.getElementById("botCycleInterval").value)) || 10;
     // Timer runs every 1 second — backend handles rate limits internally
