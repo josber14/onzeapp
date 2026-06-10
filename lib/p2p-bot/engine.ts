@@ -1043,6 +1043,8 @@ async function runBinanceCycle(
   return { actions };
 }
 
+const bybitLastUpdateAt = new Map<string, number>();
+
 async function runBybitCycle(
   tenantId: number,
   config: P2PBotConfigData | P2PBotExchangeConfigData,
@@ -1051,7 +1053,6 @@ async function runBybitCycle(
 ): Promise<{ actions: BotAction[] }> {
   const actions: BotAction[] = [];
   const client = new BybitP2PClient(apiKey, secretKey);
-  const lastAdUpdateAt = new Map<string, number>();
 
   try {
     // 1. Get our current balance (non-critical, continue if fails)
@@ -1250,10 +1251,8 @@ async function runBybitCycle(
       if (targetPrice < minSellPrice) { targetPrice = Math.max(currentPrice, minSellPrice); }
 
       // Avoid updating the same ad too frequently (rate limit protection)
-
-      // Avoid updating the same ad too frequently (rate limit protection)
       const lastUpdateKey = `bybit:${adId}`;
-      const lastUpdate = lastAdUpdateAt.get(lastUpdateKey);
+      const lastUpdate = bybitLastUpdateAt.get(lastUpdateKey);
       const minInterval = 60 * 1000; // 1 minute minimum between updates
       if (lastUpdate && Date.now() - lastUpdate < minInterval) {
         await logBot(tenantId, "debug", "bybit", `Ad ${adId}: cooldown activo, saltando (pasaron ${((Date.now() - lastUpdate) / 1000).toFixed(0)}s)`);
@@ -1291,7 +1290,7 @@ async function runBybitCycle(
             tradingPreferenceSet: strTps,
           };
           await client.updateAd(updateFields);
-          lastAdUpdateAt.set(lastUpdateKey, Date.now());
+          bybitLastUpdateAt.set(lastUpdateKey, Date.now() + 60000);
           actions.push({ action: "update_price", exchange: "bybit", adId, currentPrice, suggestedPrice: targetPrice, reason: `Ad ${adId} actualizado a ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
           await logBot(tenantId, "info", "bybit", `Ad ${adId} precio actualizado: ${currentPrice} → ${targetPrice.toFixed(2)}`);
         } catch (e: any) {
@@ -1341,6 +1340,7 @@ async function runBybitCycle(
                 } catch (e3: any) {
                   await logBot(tenantId, "warn", "bybit", `Anuncio ${newAdId}: no se pudo activar online (${e3.message}), reintentando próximo ciclo`);
                 }
+                bybitLastUpdateAt.set(lastUpdateKey, Date.now() + 120000);
                 actions.push({ action: "recreate_ad", exchange: "bybit", adId: newAdId, suggestedPrice: targetPrice, reason: `Nuevo anuncio creado tras rate-limit`, timestamp: Date.now() });
                 await prisma.p2PBotAd.update({
                   where: { id: managedAd.id },
@@ -1356,15 +1356,16 @@ async function runBybitCycle(
                 try {
                   const retryRes = await client.postAd(postFields);
                   const retryId = retryRes?.result?.item?.id ?? retryRes?.result?.id;
-                  if (retryId) {
-                    await new Promise(r => setTimeout(r, 2000));
-                    try { await client.updateAd({ id: String(retryId), status: 10 }); } catch {}
-                    await prisma.p2PBotAd.update({
-                      where: { id: managedAd.id },
-                      data: { adId: String(retryId) },
-                    });
-                    await logBot(tenantId, "info", "bybit", `Anuncio recreado como ${retryId} (precio ajustado: ${retryPrice.toFixed(2)})`);
-                  }
+                    if (retryId) {
+                      await new Promise(r => setTimeout(r, 2000));
+                      try { await client.updateAd({ id: String(retryId), status: 10 }); } catch {}
+                      bybitLastUpdateAt.set(lastUpdateKey, Date.now() + 120000);
+                      await prisma.p2PBotAd.update({
+                        where: { id: managedAd.id },
+                        data: { adId: String(retryId) },
+                      });
+                      await logBot(tenantId, "info", "bybit", `Anuncio recreado como ${retryId} (precio ajustado: ${retryPrice.toFixed(2)})`);
+                    }
                 } catch {}
               } else {
                 await logBot(tenantId, "warn", "bybit", `Ad ${adId}: error al recrear: ${e2.message}`);
@@ -1384,7 +1385,7 @@ async function runBybitCycle(
             await logBot(tenantId, "info", "bybit", `Ad ${adId}: 90043, reintentando con ajuste >0.5% (${adjustPrice.toFixed(2)})`);
             try {
               await client.updateAd({ id: adId, actionType: "MODIFY", price: adjustPrice.toFixed(2) });
-              lastAdUpdateAt.set(lastUpdateKey, Date.now());
+              bybitLastUpdateAt.set(lastUpdateKey, Date.now() + 60000);
               actions.push({ action: "update_price", exchange: "bybit", adId, currentPrice, suggestedPrice: adjustPrice, reason: `Ad ${adId} forzado a ${adjustPrice.toFixed(2)}`, timestamp: Date.now() });
             } catch(e2: any) {
               await logBot(tenantId, "warn", "bybit", `Ad ${adId}: error post-90043: ${e2.message}`);
