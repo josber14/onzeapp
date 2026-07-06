@@ -100,13 +100,28 @@ export async function getStoredCookies(tenantId: number): Promise<string | null>
   const raw = cfg.chatCookies as any;
   if (typeof raw === "string") return parseCookies(raw);
   if (Array.isArray(raw)) return raw.map((c: any) => `${c.name}=${c.value}`).join("; ");
+  if (raw.cookies) {
+    return raw.cookies.map((c: any) => `${c.name}=${c.value}`).join("; ");
+  }
   return null;
 }
 
-export async function storeCookies(tenantId: number, cookies: string): Promise<void> {
+export async function getStorageState(tenantId: number): Promise<{ cookies: any[]; origins?: any[] } | null> {
+  const cfg = await prisma.p2PBotExchangeConfig.findUnique({
+    where: { tenantId_exchange: { tenantId, exchange: "binance" } },
+  });
+  if (!cfg?.chatCookies) return null;
+  const raw = cfg.chatCookies as any;
+  if (typeof raw === "object" && raw !== null && raw.cookies) {
+    return raw as { cookies: any[]; origins?: any[] };
+  }
+  return null;
+}
+
+export async function storeCookies(tenantId: number, data: string | { cookies: any[]; origins?: any[] }): Promise<void> {
   await prisma.p2PBotExchangeConfig.upsert({
     where: { tenantId_exchange: { tenantId, exchange: "binance" } },
-    update: { chatCookies: cookies },
-    create: { tenantId, exchange: "binance", chatCookies: cookies },
+    update: { chatCookies: data as any },
+    create: { tenantId, exchange: "binance", chatCookies: data as any },
   });
 }

@@ -84,6 +84,10 @@ export class BinanceP2PClient {
     const res = await fetch(url, opts);
     const weightStr = res.headers.get("X-SAPI-USED-IP-WEIGHT-1M") || res.headers.get("x-sapi-used-ip-weight-1m") || res.headers.get("x-mbx-used-weight") || "0";
     this.latestWeight = parseInt(weightStr, 10) || 0;
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => "");
+      throw new Error(`Binance HTTP ${res.status} para ${endpoint}: ${bodyText.slice(0, 300)}`);
+    }
     const text = await res.text();
     if (!text) throw new Error(`Binance empty response (HTTP ${res.status}) for ${endpoint}`);
     let data: any;
@@ -147,8 +151,8 @@ export class BinanceP2PClient {
 
   // ─── Private: own ads ────────────────────────────────────────
 
-  async getMyAds(page = 1, rows = 50) {
-    return this.privateRequest("/sapi/v1/c2c/ads/listWithPagination", { page, rows }, undefined, true);
+  async getMyAds(page = 1, rows = 20) {
+    return this.privateRequest("/sapi/v1/c2c/ads/listWithPagination", { page, rows: Math.min(rows, 20) }, undefined, true);
   }
 
   async getAdDetail(adId: string) {
@@ -160,15 +164,16 @@ export class BinanceP2PClient {
   }
 
   async updateAd(params: Record<string, any>) {
-    const { adId, price } = params;
-    const body = { advNo: String(adId), price: String(price) };
+    const { adId, price, surplusAmount } = params;
+    const body: Record<string, any> = { advNo: String(adId), price: String(price) };
+    if (surplusAmount != null && Number(surplusAmount) > 0) body.surplusAmount = String(Number(surplusAmount).toFixed(2));
     let lastErr: any;
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         return await this.privateRequest("/sapi/v1/c2c/ads/update", {}, body);
       } catch (e: any) {
         lastErr = e;
-        if (e.message?.includes("code: -9000")) {
+        if (e.message?.includes("code: -9000") && !e.message?.includes("187049")) {
           await new Promise(r => setTimeout(r, 500));
           continue;
         }
@@ -181,17 +186,7 @@ export class BinanceP2PClient {
   async updateAdQuantity(adId: string, quantity: number) {
     const body: Record<string, any> = { advNo: String(adId) };
     if (quantity > 0) body.surplusAmount = String(quantity);
-    try {
-      return await this.privateRequest("/sapi/v1/c2c/ads/update", {}, body);
-    } catch (e: any) {
-      if (e.message?.includes("187049")) {
-        // Binance rejects quantity update; try updating price instead to "wake up" the ad
-        const detailRes = await this.getAdDetail(adId);
-        const currentPrice = detailRes?.data?.adv?.price || "0";
-        return await this.privateRequest("/sapi/v1/c2c/ads/update", {}, { advNo: String(adId), price: String(currentPrice) });
-      }
-      throw e;
-    }
+    return await this.privateRequest("/sapi/v1/c2c/ads/update", {}, body);
   }
 
   async removeAd(adId: string) {

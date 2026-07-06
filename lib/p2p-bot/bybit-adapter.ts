@@ -213,8 +213,8 @@ export class BybitP2PClient {
     tokenId: string;
     currencyId: string;
     side: "0" | "1";
-    page?: number;
-    size?: number;
+    page?: string;
+    size?: string;
   }) {
     return this.request("/v5/p2p/item/online", params);
   }

@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
           binanceAds = raw.map((a: any) => {
             const localAd = ads.find(la => la.adId === String(a.advNo || a.id || a.advId));
             const methods = (a.tradeMethods || []).map((pm: any) => pm.identifier || pm.paymentMethodId || pm.payType || String(pm));
+            const liveStatus = a.status === 10 || a.publishStatus === "online" ? "online" : "offline";
             return {
               id: localAd?.id || a.advNo || a.id,
               adId: String(a.advNo || a.id || a.advId),
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
               maxAmount: Number(a.maxSingleTransAmount ?? a.maxAmount) || 0,
               paymentMethods: methods,
               payTime: a.paymentPeriod || a.payTime || 15,
-              status: a.status === 10 || a.publishStatus === "online" ? "online" : "offline",
+              status: localAd?.status || liveStatus,
               isActive: a.isOnline ?? true,
               botManaged: localAd?.botManaged || false,
               botEnabled: localAd?.botEnabled || false,
@@ -128,6 +129,7 @@ export async function GET(req: NextRequest) {
               const typeId = String(p.paymentType ?? p);
               return { id: typeId, name: payNameMap[typeId] || typeId };
             });
+            const bybitLiveStatus = String(a.status) === "10" ? "online" : "offline";
             return {
             id: localAd?.id || a.id,
             adId: a.id,
@@ -142,7 +144,7 @@ export async function GET(req: NextRequest) {
             maxAmount: Number(a.maxSingleTransAmount ?? a.maxAmount) || 0,
             paymentMethods,
             payTime: a.paymentPeriod || 15,
-            status: String(a.status) === "10" ? "online" : "offline",
+            status: localAd?.status || bybitLiveStatus,
             isActive: a.isOnline ?? true,
             botManaged: localAd?.botManaged || false,
             botEnabled: localAd?.botEnabled || false,

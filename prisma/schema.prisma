@@ -740,11 +740,13 @@ model P2PChatState {
   erutRequested     Boolean  @default(false)
   erutReceived      Boolean  @default(false)
   retryCount        Int      @default(0)
+  transferFailCount Int      @default(0)
   partialAmount     Decimal? @db.Decimal(18, 8)
   totalAmount       Decimal? @db.Decimal(18, 8)
   lastClientMsgAt   DateTime?
   lastBotMsgAt      DateTime?
   lastBotMsg        String?
+  lastClientMsgSeen String?
   appealAt          DateTime?
   paidAt            DateTime?
   completedAt       DateTime?

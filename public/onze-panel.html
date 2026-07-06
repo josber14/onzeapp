@@ -2175,11 +2175,11 @@
             <div id="binance-creds-status" style="margin-bottom:16px; padding:10px; border-radius:8px; background:#1a3a5a; font-size:13px; color:#aaa;">Verificando estado...</div>
             <div style="margin-bottom:12px;">
               <label style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">API Key</label>
-              <input id="input-binance-api-key" type="password" autocomplete="new-password" placeholder="Ingresa tu Binance API Key" style="width:100%; padding:10px; background:#071828; border:1px solid #1a3a5a; border-radius:6px; color:#fff; font-size:13px; box-sizing:border-box;">
+               <input id="input-binance-api-key" type="text" autocomplete="off" style="width:100%;padding:10px;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#fff;font-size:13px;box-sizing:border-box;-webkit-text-security:disc" placeholder="Ingresa tu Binance API Key">
             </div>
             <div style="margin-bottom:16px;">
               <label style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">Secret Key</label>
-              <input id="input-binance-secret-key" type="password" autocomplete="new-password" placeholder="Ingresa tu Binance Secret Key" style="width:100%; padding:10px; background:#071828; border:1px solid #1a3a5a; border-radius:6px; color:#fff; font-size:13px; box-sizing:border-box;">
+               <input id="input-binance-secret-key" type="text" autocomplete="off" style="width:100%;padding:10px;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#fff;font-size:13px;box-sizing:border-box;-webkit-text-security:disc" placeholder="Ingresa tu Binance Secret Key">
             </div>
             <button id="btn-save-binance-creds" style="padding:10px 20px; background:#007bff; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:14px;">Guardar credenciales</button>
           </div>
@@ -2191,7 +2191,11 @@
               <span id="botChatCookiesStatus" style="font-size:11px;"></span>
             </div>
             <textarea id="botChatCookies" rows="5" style="width:100%;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#e2e8f0;font-size:11px;font-family:monospace;padding:8px;resize:vertical;box-sizing:border-box;" placeholder='[{"name":"cookie_name","value":"cookie_value",...}]'></textarea>
-            <button class="btn" type="button" onclick="window.botSaveChatCookies()" style="margin-top:6px;font-size:12px;">Guardar cookies</button>
+            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+              <button class="btn" type="button" onclick="window.botSaveChatCookies()" style="font-size:12px;">Guardar cookies</button>
+              <button class="btn" type="button" onclick="window.botRenewCookies()" style="font-size:12px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);color:#fbbf24;">🔄 Renovar cookies</button>
+              <span id="botChatCookiesRenewStatus" style="font-size:11px;display:flex;align-items:center;"></span>
+            </div>
           </div>
         </div>
         <div style="margin-top:18px;text-align:right;border-top:1px solid rgba(148,163,184,.06);padding-top:12px;">
@@ -9369,21 +9373,28 @@ function addP2PBotStyles(){
     .bot-payment-input{display:flex;gap:6px;}
     .bot-payment-input input{flex:1;padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;font-family:inherit;}
     .bot-ads-list{display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;}
-    .bot-ad-card{background:rgba(15,23,42,.3);border:1px solid rgba(148,163,184,.08);border-radius:10px;padding:12px;transition:border-color .15s;}
-    .bot-ad-card:hover{border-color:rgba(148,163,184,.18);}
-    .bot-ad-card .ad-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;}
-    .bot-ad-card .ad-header .ad-type{font-weight:700;font-size:12px;padding:2px 8px;border-radius:5px;}
+    .bot-ad-card{background:rgba(15,23,42,.35);border:1px solid rgba(148,163,184,.08);border-radius:12px;padding:14px;transition:border-color .15s,box-shadow .15s;}
+    .bot-ad-card:hover{border-color:rgba(148,163,184,.16);box-shadow:0 1px 6px rgba(0,0,0,.15);}
+    .bot-ad-card .ad-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+    .bot-ad-card .ad-header .ad-type{font-weight:700;font-size:12px;padding:3px 10px;border-radius:6px;}
     .bot-ad-card .ad-header .ad-type.buy{color:#34d399;background:rgba(52,211,153,.1);}
     .bot-ad-card .ad-header .ad-type.sell{color:#fb7185;background:rgba(251,113,133,.1);}
-    .bot-ad-card .ad-body{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;font-size:11px;color:#94a3b8;}
+    .bot-ad-card .ad-body{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;font-size:11px;color:#94a3b8;}
     .bot-ad-card .ad-body span{display:flex;flex-direction:column;}
     .bot-ad-card .ad-body .val{color:#cbd5e1;font-weight:600;font-variant-numeric:tabular-nums;}
-    .bot-ad-card .ad-footer{display:flex;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;gap:6px;}
-    .bot-ad-card .ad-status{font-size:10px;padding:2px 8px;border-radius:8px;font-weight:600;}
-    .bot-ad-card .ad-status.online{background:rgba(52,211,139,.12);color:#34d399;}
+    .bot-ad-card .ad-footer{display:flex;justify-content:space-between;align-items:center;margin-top:10px;flex-wrap:wrap;gap:6px;}
+    .bot-ad-card .ad-status{font-size:10px;padding:3px 10px;border-radius:6px;font-weight:600;}
+    .bot-ad-card .ad-status.online,
+    .bot-ad-card .ad-status.active{background:rgba(52,211,139,.12);color:#34d399;}
     .bot-ad-card .ad-status.private{background:rgba(251,191,36,.12);color:#fbbf24;}
     .bot-ad-card .ad-status.offline{background:rgba(148,163,184,.12);color:#94a3b8;}
-    .bot-ad-card .ad-actions{display:flex;gap:6px;}
+    .bot-ad-card .ad-actions{display:flex;align-items:center;gap:4px;}
+    .bot-ad-card .ad-icon-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;border:1px solid rgba(148,163,184,.08);background:rgba(15,23,42,.4);color:#94a3b8;cursor:pointer;transition:all .12s;}
+    .bot-ad-card .ad-icon-btn:hover{background:rgba(148,163,184,.08);color:#e2e8f0;border-color:rgba(148,163,184,.15);}
+    .bot-ad-card .ad-icon-btn.danger:hover{background:rgba(248,113,113,.08);color:#fb7185;border-color:rgba(248,113,113,.15);}
+    .bot-ad-card .ad-icon-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+    .bot-ad-card .ad-actions .toggle-switch{width:36px;height:20px;}
+    .bot-ad-card .ad-actions .toggle-switch .slider::before{width:16px;height:16px;}
     .ad-bot-config{margin-top:10px;border-top:1px solid rgba(148,163,184,.1);padding-top:10px;}
     .ad-bot-config-inner{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
     .ad-bot-config-inner label{display:flex;flex-direction:column;font-size:10px;color:#94a3b8;gap:2px;}
@@ -9452,51 +9463,49 @@ function addP2PBotStyles(){
     .bot-card{background:rgba(15,23,42,.3);border:1px solid rgba(148,163,184,.06);border-radius:12px;padding:14px;}
 
     /* Config collapsible */
-    .bot-config-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 0;font-size:11px;color:#64748b;font-weight:600;transition:color .15s;background:none;border:none;font-family:inherit;}
-    .bot-config-toggle:hover{color:#94a3b8;}
-    .bot-config-toggle .arrow{transition:transform .2s;display:inline-block;}
-    .bot-config-toggle .arrow.open{transform:rotate(90deg);}
+    .bot-config-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 14px;font-size:11px;color:#64748b;font-weight:600;transition:all .15s;background:none;border:none;font-family:inherit;width:100%;text-align:left;border-top:1px solid rgba(148,163,184,.05);}
+    .bot-config-toggle:hover{color:#94a3b8;background:rgba(148,163,184,.03);}
+    .bot-config-toggle .arrow{transition:transform .2s;display:inline-flex;font-size:8px;color:#475569;}
+    .bot-config-toggle .arrow.open{transform:rotate(180deg);}
+    .bot-config-toggle .cfg-label{flex:1;}
+    .bot-config-toggle .cfg-count{font-size:9px;background:rgba(148,163,184,.06);color:#64748b;padding:1px 7px;border-radius:4px;font-weight:500;}
     /* Ads row layout */
-    .bot-ads-row{display:flex;flex-direction:column;gap:6px;}
-    .bot-ad-pill{display:flex;flex-direction:column;border-radius:12px;background:linear-gradient(135deg,rgba(15,23,42,.5),rgba(15,23,42,.3));border:1px solid rgba(148,163,184,.1);transition:all .12s;overflow:hidden;}
+    .bot-ads-row{display:flex;flex-direction:column;gap:8px;}
+    .bot-ad-pill{display:flex;flex-direction:column;border-radius:14px;background:rgba(15,23,42,.45);border:1px solid rgba(148,163,184,.08);transition:all .15s;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.15);}
+    .bot-ad-pill:hover{border-color:rgba(148,163,184,.16);background:rgba(15,23,42,.55);box-shadow:0 2px 8px rgba(0,0,0,.2);}
+    .bot-ad-pill.selected{border-color:var(--brand);background:rgba(37,99,235,.06);box-shadow:0 0 0 1px rgba(37,99,235,.15);}
 
-    .bot-ad-pill:hover{border-color:rgba(148,163,184,.2);background:linear-gradient(135deg,rgba(15,23,42,.6),rgba(15,23,42,.4));}
+    .bot-ad-card-header{display:flex;align-items:center;gap:10px;padding:12px 14px 0;font-size:12px;font-weight:600;color:#e2e8f0;}
 
-    .bot-ad-pill.selected{border-color:var(--brand);background:rgba(37,99,235,.08);}
+    .bot-ad-card-header .sell-label{display:inline-flex;align-items:center;gap:5px;color:#fb7185;font-weight:700;font-size:11px;background:rgba(251,113,133,.08);padding:2px 10px 2px 8px;border-radius:6px;letter-spacing:.3px;text-transform:uppercase;}
+    .bot-ad-card-header .sell-label::before{content:'';width:6px;height:6px;border-radius:50%;background:#fb7185;}
 
-    .bot-ad-card-header{display:flex;align-items:center;gap:8px;padding:10px 12px 0;font-size:12px;font-weight:600;color:#e2e8f0;}
+    .bot-ad-card-header .status-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;margin-left:auto;padding:3px 10px;border-radius:6px;white-space:nowrap;letter-spacing:.2px;}
 
-    .bot-ad-card-header .sell-label{color:#ef4444;font-weight:700;}
+    .bot-ad-card-header .status-badge .dot{width:6px;height:6px;border-radius:50%;background:#34d399;box-shadow:0 0 6px rgba(52,211,153,.4);}
+    .bot-ad-card-header .status-badge.offline{background:rgba(100,116,139,.1);color:#94a3b8;}
+    .bot-ad-card-header .status-badge.offline .dot{background:#64748b;box-shadow:none;}
 
-    .bot-ad-card-header .status-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:500;margin-left:auto;padding:2px 8px;border-radius:4px;white-space:nowrap;}
+    .bot-ad-card-body{padding:6px 14px 2px;display:flex;flex-direction:row;align-items:center;gap:16px;flex-wrap:wrap;}
 
-    .bot-ad-card-header .status-badge .dot{width:6px;height:6px;border-radius:50%;background:#34d399;}
+    .bot-ad-card-price{font-size:24px;font-weight:800;color:#34d399;line-height:1.2;font-variant-numeric:tabular-nums;letter-spacing:-.3px;flex:0 0 auto;}
+    .bot-ad-card-price .currency{font-size:12px;font-weight:600;color:#6ee7b7;margin-left:4px;}
 
-    .bot-ad-card-body{padding:8px 12px 4px;display:flex;flex-direction:column;gap:6px;}
+    .bot-ad-card-pair{font-size:11px;color:#64748b;font-weight:500;flex:1 1 auto;min-width:0;}
 
-    .bot-ad-card-price{font-size:22px;font-weight:800;color:#34d399;line-height:1.2;padding:4px 0 2px;}
-
-    .bot-ad-card-rows{display:flex;flex-direction:column;gap:2px;font-size:11px;color:#94a3b8;}
-
-    .bot-ad-card-rows .row{display:flex;align-items:center;gap:6px;}
-
-    .bot-ad-card-rows .row .label{color:#64748b;min-width:52px;}
-
-    .bot-ad-card-rows .row .value{color:#e2e8f0;font-weight:600;margin-left:auto;}
-
-    .bot-ad-card-rows .row .sync-btn{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:rgba(148,163,184,.08);color:#94a3b8;font-size:10px;cursor:pointer;transition:all .12s;flex-shrink:0;}
-    .bot-ad-card-rows .row .sync-btn:hover{background:rgba(52,211,153,.15);color:#34d399;}
+    .bot-ad-card-rows{display:flex;flex-direction:column;gap:3px;padding:0 14px;font-size:11px;color:#94a3b8;min-width:0;}
+    .bot-ad-card-rows .row{display:flex;align-items:center;gap:5px;padding:1px 0;}
+    .bot-ad-card-rows .row .label{color:#64748b;font-size:10px;}
+    .bot-ad-card-rows .row .value{color:#e2e8f0;font-weight:600;font-variant-numeric:tabular-nums;}
+    .bot-ad-card-rows .row .sync-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;background:rgba(148,163,184,.06);color:#64748b;font-size:11px;cursor:pointer;transition:all .12s;flex-shrink:0;border:1px solid transparent;}
+    .bot-ad-card-rows .row .sync-btn:hover{background:rgba(52,211,153,.1);color:#34d399;border-color:rgba(52,211,153,.2);}
     .bot-ad-card-rows .row .sync-btn:active{transform:rotate(180deg);}
 
-    .bot-ad-card-methods{display:flex;flex-wrap:wrap;gap:4px;padding:4px 12px 6px;}
+    .bot-ad-card-methods{display:flex;flex-wrap:wrap;gap:4px;padding:4px 14px 8px;}
+    .bot-ad-card-methods .pm-badge{font-size:10px;padding:2px 10px;border-radius:6px;background:rgba(37,99,235,.08);color:#93c5fd;font-weight:500;white-space:nowrap;border:1px solid rgba(37,99,235,.12);}
 
-    .bot-ad-card-methods .pm-badge{font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(37,99,235,.12);color:#93c5fd;font-weight:500;white-space:nowrap;}
-
-    .bot-ad-card-actions{display:flex;align-items:center;justify-content:space-between;padding:6px 12px 8px;border-top:1px solid rgba(148,163,184,.06);}
-
-    .bot-ad-card-header .menu-btn{background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;padding:2px 4px;line-height:1;letter-spacing:1px;transition:color .12s;}
-
-    .bot-ad-card-header .menu-btn:hover{color:#e2e8f0;}
+    .bot-ad-card-header .menu-btn{background:rgba(148,163,184,.06);border:1px solid transparent;color:#64748b;font-size:16px;cursor:pointer;padding:2px 8px;line-height:1;letter-spacing:1px;transition:all .12s;border-radius:6px;height:28px;display:flex;align-items:center;}
+    .bot-ad-card-header .menu-btn:hover{background:rgba(148,163,184,.12);color:#e2e8f0;border-color:rgba(148,163,184,.1);}
 
     .bot-ad-menu-dropdown{position:fixed;background:#1e293b;border:1px solid rgba(148,163,184,.15);border-radius:8px;padding:4px;z-index:9999;min-width:150px;box-shadow:0 8px 24px rgba(0,0,0,.3);opacity:0;visibility:hidden;transition:opacity .12s,visibility .12s;}
     .bot-ad-menu-dropdown.open{opacity:1;visibility:visible;}
@@ -9582,7 +9591,7 @@ function addP2PBotStyles(){
 
         <!-- Four cards: Config exchange → Anuncios → Credenciales → Config anuncio -->
         <div class="bot-cols">
-          <!-- Exchange-level config (first, collapsible) -->
+          <!-- Exchange-level config (hidden for Binance, visible for Bybit) -->
           <div id="botExchangeConfigSection" class="bot-card bot-cols-full">
             <button class="bot-config-toggle" id="botExConfigToggle" onclick="var c=document.getElementById('botExchangeConfigGrid');var a=this.querySelector('.arrow');c.style.display=c.style.display==='none'?'grid':'none';a.classList.toggle('open');">
               <span class="arrow open">▶</span> Config del exchange <span style="font-size:10px;color:#64748b;font-weight:400;">(default para todos los anuncios)</span>
@@ -9654,16 +9663,16 @@ function addP2PBotStyles(){
 
           <!-- Anuncios (second) -->
           <div id="botAdsSection" class="bot-card" style="grid-column:1/-1;">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-              <span style="font-size:13px;font-weight:700;color:#e2e8f0;">Anuncios</span>
-              <span style="font-size:11px;color:#64748b;" id="botAdsExchangeLabel">Binance</span>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+              <span style="font-size:14px;font-weight:800;color:#f1f5f9;letter-spacing:.2px;">Anuncios</span>
+              <span class="bot-section-title" style="margin:0;font-size:12px;font-weight:500;color:#64748b;"><span id="botAdsExchangeLabel">Binance</span></span>
               <span style="font-size:11px;font-weight:600;color:#fbbf24;" id="botCambiosCounter"></span>
               <span style="flex:1;"></span>
-              <button class="btn small ghost" type="button" onclick="window.botLoadAds()" style="font-size:10px;">↻</button>
-              <button class="btn small ghost" type="button" onclick="window.botPanelNewAd()" style="font-size:10px;">+ Nuevo</button>
+              <button class="btn small ghost" type="button" onclick="window.botLoadAds()" style="font-size:10px;padding:5px 10px;border-radius:6px;">↻ Sincronizar</button>
+              <button class="btn small" type="button" onclick="window.botPanelNewAd()" style="font-size:10px;padding:5px 12px;border-radius:6px;">+ Nuevo anuncio</button>
             </div>
             <div id="botAdsList" class="bot-ads-row">
-              <div style="color:#64748b;font-size:12px;text-align:center;padding:12px 0;">Cargando anuncios...</div>
+              <div style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">Cargando anuncios...</div>
             </div>
           </div>
           <div id="botBybitAdSection" class="bot-card" style="grid-column:1/-1;display:none;">
@@ -9813,31 +9822,12 @@ function addP2PBotStyles(){
               </div>
               <!-- Order list -->
               <div id="botPanelOrdersList" class="bot-orders-container" style="max-height:350px;"></div>
-               <!-- Chat overlay -->
-               <div id="botOrderChatOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(2,6,23,.85);backdrop-filter:blur(8px);z-index:100;border-radius:0;overflow:hidden;">
-                 <div style="display:flex;flex-direction:column;height:100%;max-width:900px;margin:0 auto;">
-                   <div style="display:flex;align-items:center;gap:8px;padding:12px 20px;background:rgba(15,23,42,.95);border-bottom:1px solid rgba(148,163,184,.08);">
-                     <div style="flex:1;min-width:0;">
-                       <div style="font-size:15px;font-weight:700;color:#f1f5f9;" id="botOrderChatCounterparty">—</div>
-                       <div style="font-size:11px;color:#64748b;" id="botOrderChatOrderInfo">#0000000000</div>
-                     </div>
-                     <button class="close-btn" type="button" onclick="window.botPanelCloseChat()" style="font-size:22px;width:36px;height:36px;">&times;</button>
-                   </div>
-                   <div id="botOrderChatMessages" style="flex:1;overflow-y:auto;padding:16px 20px;background:rgba(6,10,26,.6);">
-                     <div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">No hay mensajes previos. El chat se habilitará al conectarse con el exchange.</div>
-                   </div>
-                   <div style="display:flex;gap:10px;padding:12px 20px;background:rgba(15,23,42,.95);border-top:1px solid rgba(148,163,184,.08);">
-                     <input id="botOrderChatInput" type="text" placeholder="Escribe un mensaje..." onkeydown="if(event.key==='Enter')window.botPanelSendChatMessage()" style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:14px;font-family:inherit;outline:none;">
-                     <button class="btn" type="button" onclick="window.botPanelSendChatMessage()" style="border-radius:8px;padding:10px 18px;">Enviar</button>
-                   </div>
-                 </div>
-               </div>
+               <!-- Chat overlay moved to body by JS -->
             </div>
             <!-- Tab: Anuncios -->
             <div id="botPanelAds" class="bot-panel-tab-content" style="display:none;">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
                 <p class="section-text" style="margin:0;">Tus anuncios en el exchange.</p>
-                <button class="btn small" type="button" onclick="window.botPanelNewAd()">+ Nuevo Anuncio</button>
               </div>
               <!-- Ad form -->
               <div id="botPanelAdForm" style="display:none;"></div>
@@ -9959,6 +9949,10 @@ function addP2PBotStyles(){
       if(bybitSection) bybitSection.style.display = "none";
     }
 
+    // Show/hide exchange config section (hidden for Binance, visible for others like Bybit)
+    const exchangeConfigSection = document.getElementById("botExchangeConfigSection");
+    if(exchangeConfigSection) exchangeConfigSection.style.display = exchange === "binance" ? "none" : "";
+
     // Show exchange config grid (circuit breaker, volume, interval)
     const exchangeConfigGrid = document.getElementById("botExchangeConfigGrid");
     if(exchangeConfigGrid) exchangeConfigGrid.style.display = "grid";
@@ -9984,18 +9978,22 @@ function addP2PBotStyles(){
       const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange, { credentials:"include" });
       const d = await r.json();
       if(!d?.ok || !d?.ads?.length){
-        container.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:12px 0;">Sin anuncios</div>';
+        container.innerHTML = '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px 0;border:1px dashed rgba(148,163,184,.08);border-radius:10px;margin-top:4px;">Sin anuncios disponibles</div>';
         return;
       }
       const sellAds = d.ads.filter(a => (a.tradeType||'').toUpperCase() === 'SELL' && (a.asset||'').toUpperCase() === 'USDT' && (a.fiat||'').toUpperCase() === 'CLP');
       if(!sellAds.length){
-        container.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:12px 0;">Sin anuncios de venta USDT/CLP</div>';
+        container.innerHTML = '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px 0;border:1px dashed rgba(148,163,184,.08);border-radius:10px;margin-top:4px;">Sin anuncios de venta USDT/CLP</div>';
         return;
       }
       container.innerHTML = sellAds.map(function(a, idx){
         return botRenderAdPill(a, idx);
       }).join('');
       botUpdateBuyPrice();
+      sellAds.forEach(function(a){
+        if(a.botSafeMarginPct > 0 && window.botAdUpdateSafeMarginHint) botAdUpdateSafeMarginHint(a.id);
+        if(window.botAdUpdateRealCost) botAdUpdateRealCost(a.id);
+      });
     }catch(e){ console.warn("[P2P Bot] botLoadAds error:", e); }
   };
 
@@ -10015,7 +10013,7 @@ function addP2PBotStyles(){
         return;
       }
       const botEnabled = a.botEnabled === true;
-      const isOnline = botEnabled && (a.status === 'online' || a.isActive === true);
+    const isOnline = botEnabled && (a.status === 'online' || a.status === 'active' || a.isActive === true);
       var pms = a.paymentMethods;
       if(pms && typeof pms === 'string') pms = [pms];
       var pmBadges = (pms && Array.isArray(pms)) ? pms.slice(0,3) : [];
@@ -10066,7 +10064,7 @@ function addP2PBotStyles(){
     var pmBadges = (pms && Array.isArray(pms)) ? pms.slice(0,3) : [];
     var pmExtra = (pms && Array.isArray(pms) && pms.length > 3) ? '+' + (pms.length - 3) : '';
     const isOnline = botEnabled && (a.status === 'online' || a.isActive === true);
-    const cfgDisplay = (!isFirst && window['_adCfgOpen'] && window['_adCfgOpen'][realId]) ? '' : 'none';
+    const cfgDisplay = (window['_adCfgOpen'] && window['_adCfgOpen'][realId]) ? '' : 'none';
     // Config grid template
     var strategy = a.botStrategy || 'top1';
     var top1Diff = a.botTop1Diff != null ? a.botTop1Diff : '';
@@ -10079,42 +10077,44 @@ function addP2PBotStyles(){
     var payType = (a.botCompetePayTypes && a.botCompetePayTypes.length && a.botCompetePayTypes[0] === '__match_ad__') ? 'match' : 'all';
     var top1Style = strategy === 'spread' ? 'display:none;' : '';
     var spreadStyle = strategy === 'top1' ? 'display:none;' : '';
+    const cfgFields = [];
+    if (strategy !== 'spread') cfgFields.push('Top1Diff');
+    if (strategy !== 'top1') cfgFields.push('SpreadPct');
+    cfgFields.push('PriceSource','CommissionPct','SafeMarginPct','MinCompetitorCapital','CompetePayType','CycleInterval','CircuitBreakPct','DailyVolumeCapUsdt');
+    const cfgCount = cfgFields.length;
     return `<div class="bot-ad-pill" data-ad-real-id="${realId}" data-ad-adid="${a.adId||''}">
       <div class="bot-ad-card-header">
-        <span class="sell-label">Vender</span><span style="flex:1;">${a.asset||'USDT'} con ${a.fiat||'CLP'}</span>
-        <span class="status-badge" style="background:${isOnline?'rgba(52,211,153,.12)':'rgba(100,116,139,.12)'};color:${isOnline?'#34d399':'#94a3b8'};"><span class="dot" style="background:${isOnline?'#34d399':'#64748b'};"></span>${isOnline ? 'En línea' : 'Desconectado'}</span>
+        <span class="sell-label">Vender</span>
+        <span style="flex:1;font-size:12px;font-weight:500;color:#94a3b8;">${a.asset||'USDT'} / ${a.fiat||'CLP'}</span>
+        <span class="status-badge${isOnline?'':' offline'}"><span class="dot"></span>${isOnline ? 'En línea' : 'Desconectado'}</span>
         <label class="toggle-switch">
           <input type="checkbox" ${botEnabled?'checked':''} onchange="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',this.checked)">
           <span class="slider"></span>
         </label>
-        <div class="bot-ad-menu-wrapper" style="position:relative;">
         <button class="menu-btn" onclick="event.stopPropagation();window.botToggleAdMenu(${realId},event);">⋯</button>
         <div class="bot-ad-menu-dropdown" id="botAdMenu_${realId}">
           <button class="menu-item" onclick="event.stopPropagation();window.botSimpleEditAd(${realId})">Editar anuncio</button>
           <button class="menu-item danger" onclick="event.stopPropagation();window.botPanelDeleteAd(${realId},'${escHtml(a.adId||'')}')">Borrar anuncio</button>
         </div>
-        </div>
       </div>
-      <div class="bot-ad-card-body" style="cursor:${isFirst?'default':'pointer'};" onclick="${isFirst?'':'botToggleAdCfg('+realId+')'}">
-        <div class="bot-ad-card-price"><span id="botAdPrice_${realId}" style="color:#34d399;">${fmt(a.price)}</span> CLP</div>
+      <div class="bot-ad-card-body" style="cursor:pointer;" onclick="botToggleAdCfg(${realId})">
+        <div class="bot-ad-card-price"><span id="botAdPrice_${realId}">${fmt(a.price)}</span><span class="currency">CLP</span></div>
+        <div class="bot-ad-card-pair">USDT → CLP</div>
         <div class="bot-ad-card-rows">
-          <div class="row"><span class="label">Balance</span><span class="value" id="botAdAmount_${realId}">${fmtFlex(a.amount)} ${a.asset||'USDT'}</span><span class="sync-btn" onclick="event.stopPropagation();botSyncQuantity(${realId})" title="Sincronizar saldo">↻</span></div>
-          <div class="row"><span class="label">Límite</span><span class="value" id="botAdLimits_${realId}">$${fmtInt(a.minAmount||0)} - $${fmtInt(a.maxAmount||0)} CLP</span></div>
+          <div class="row"><span class="label">Balance</span><span class="value" id="botAdAmount_${realId}">${fmtFlex(a.amount)} USDT</span><span class="sync-btn" onclick="event.stopPropagation();botSyncQuantity(${realId})" title="Sincronizar saldo">⟳</span></div>
+          <div class="row"><span class="label">Límite</span><span class="value" id="botAdLimits_${realId}">$${fmtInt(a.minAmount||0)} – $${fmtInt(a.maxAmount||0)}</span></div>
         </div>
       </div>
       <div class="bot-ad-card-methods">
         ${pmBadges.map(function(pm){ return '<span class="pm-badge">'+fmtPayName(pm)+'</span>'; }).join('')}
-        ${pmExtra ? '<span class="pm-badge" style="background:rgba(148,163,184,.1);color:#94a3b8;">'+escHtml(pmExtra)+'</span>' : ''}
+        ${pmExtra ? '<span class="pm-badge" style="background:rgba(148,163,184,.06);color:#64748b;border-color:rgba(148,163,184,.08);">'+escHtml(pmExtra)+'</span>' : ''}
       </div>
-      ${isFirst?'':`<div style="padding:0 12px 4px;cursor:pointer;" onclick="botToggleAdCfg(${realId})">
-        <div style="display:flex;align-items:center;gap:4px;font-size:10px;color:#64748b;padding:2px 0;">
-          <span style="flex:1;border-top:1px solid rgba(148,163,184,.06);"></span>
-          <span id="adCfgArrow_${realId}" style="transition:transform .2s;font-size:8px;">▼</span>
-          <span style="font-weight:500;">Config</span>
-          <span style="flex:1;border-top:1px solid rgba(148,163,184,.06);"></span>
-        </div>
-      </div>`}
-      ${isFirst?'':`<div class="bot-ad-pill-cfg" id="adCfg_${realId}" style="display:${cfgDisplay};padding:6px 12px 10px;">
+      <button class="bot-config-toggle" type="button" onclick="botToggleAdCfg(${realId})">
+        <span class="arrow" id="adCfgArrow_${realId}">▼</span>
+        <span class="cfg-label">Configuración</span>
+        <span class="cfg-count">${cfgCount} campos</span>
+      </button>
+      <div class="bot-ad-pill-cfg" id="adCfg_${realId}" style="display:${cfgDisplay};padding:8px 14px 12px;">
         <div class="bot-config-grid">
           <label>Estrategia
             <select id="adCfg_${realId}_Strategy" onchange="botAdCfgStrategyChange(${realId},this.value);botSaveAdCfgField(${realId},'botStrategy',this.value)">
@@ -10130,21 +10130,21 @@ function addP2PBotStyles(){
           </label>
           <label>Precio fuente
             <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
-              <select id="adCfg_${realId}_PriceSource" onchange="botSaveAdCfgField(${realId},'botPriceSource',this.value);botUpdateAdCostBadge(${realId})" style="flex:0 0 100px;padding:7px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;outline:none;font-family:inherit;">
+              <select id="adCfg_${realId}_PriceSource" onchange="botSaveAdCfgField(${realId},'botPriceSource',this.value);botUpdateAdCostBadge(${realId});botAdUpdateSafeMarginHint(${realId})" style="flex:0 0 100px;padding:7px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;outline:none;font-family:inherit;">
                 <option value="capacity" ${priceSource==='capacity'?'selected':''}>Capacity</option>
                 <option value="manual" ${priceSource==='manual'?'selected':''}>Manual</option>
               </select>
-              <input id="adCfg_${realId}_PriceFloorPct" type="number" step="0.01" value="${priceFloor}" placeholder="895.83" onchange="botUpdateAdCostBadge(${realId});botSaveAdCfgField(${realId},'botPriceFloorPct',this.value);botAdUpdateRealCost(${realId})" oninput="botAdUpdateRealCost(${realId})" style="flex:1;min-width:0;">
+              <input id="adCfg_${realId}_PriceFloorPct" type="number" step="0.01" value="${priceFloor}" placeholder="895.83" onchange="botUpdateAdCostBadge(${realId});botSaveAdCfgField(${realId},'botPriceFloorPct',this.value);botAdUpdateRealCost(${realId});botAdUpdateSafeMarginHint(${realId})" oninput="botAdUpdateRealCost(${realId});botAdUpdateSafeMarginHint(${realId})" style="flex:1;min-width:0;">
             </div>
           </label>
           <label id="adCfg_${realId}_CommissionPctLabel" class="ad-pill-comm-field" style="display:${botSelectedExchange==='bybit'?'none':''};">Comisión (%)
             <input id="adCfg_${realId}_CommissionPct" type="number" step="0.01" value="${commission}" placeholder="0.14" onchange="botSaveAdCfgField(${realId},'botCommissionPct',this.value);botUpdateAdCostBadge(${realId})">
             <span id="adCfg_${realId}_RealCost" style="font-size:11px;color:#34d399;font-weight:600;"></span>
           </label>
-          <label>Margen seguridad (%)
-            <input id="adCfg_${realId}_SafeMarginPct" type="number" step="0.01" value="${safeMargin}" placeholder="0" onchange="botSaveAdCfgField(${realId},'botSafeMarginPct',this.value);botAdUpdateSafeMarginHint(${realId})" oninput="botAdUpdateSafeMarginHint(${realId})">
+          <form autocomplete="off" style="display:contents"><label>Margen seguridad (%)
+            <input id="adCfg_${realId}_SafeMarginPct" type="number" step="0.01" value="${safeMargin}" placeholder="0" autocomplete="off" oninput="botAdUpdateSafeMarginHint(${realId});window.botSafeSave(${realId},this)">
             <span id="adCfg_${realId}_SafeMarginHint" style="font-size:10px;color:#34d399;"></span>
-          </label>
+          </label></form>
           <label>Capital min competidor (USDT)
             <input id="adCfg_${realId}_MinCompetitorCapital" type="number" step="1" value="${minCapital}" placeholder="Sin filtro" onchange="botSaveAdCfgField(${realId},'botMinCompetitorCapital',this.value)">
           </label>
@@ -10164,11 +10164,11 @@ function addP2PBotStyles(){
             <input id="adCfg_${realId}_DailyVolumeCapUsdt" type="number" step="1" value="${a.botDailyVolumeCapUsdt != null ? a.botDailyVolumeCapUsdt : ''}" placeholder="Sin límite" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botDailyVolumeCapUsdt',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
           </label>
         </div>
-      </div>`}
+      </div>
     </div>`;
   }
 
-  window.botToggleAdCfg = function(realId){
+  window.botToggleAdCfg = async function(realId){
     if(!window._adCfgOpen) window._adCfgOpen = {};
     var open = !window._adCfgOpen[realId];
     window._adCfgOpen[realId] = open;
@@ -10176,6 +10176,10 @@ function addP2PBotStyles(){
     if(el) el.style.display = open ? '' : 'none';
     var arrow = document.getElementById("adCfgArrow_" + realId);
     if(arrow) arrow.style.transform = open ? 'rotate(180deg)' : '';
+    // Sincronizar capacities del servidor antes de leer
+    if(typeof syncP2PCapacityFromServer === 'function'){
+      await syncP2PCapacityFromServer();
+    }
     botUpdateAdCostBadge(realId);
     botAdUpdateSafeMarginHint(realId);
     botAdUpdateRealCost(realId);
@@ -10188,23 +10192,57 @@ function addP2PBotStyles(){
     if(s) s.style.display = value === 'top1' ? 'none' : '';
   };
 
+  window.botSafeSave = function(realId, el){
+    var val = el.value;
+    var saveVal;
+    if(val === '' || isNaN(Number(val))) {
+      saveVal = null; // clear per-ad override → usa exchange config
+    } else {
+      saveVal = Number(val);
+    }
+    var container = document.querySelector('[data-ad-real-id="' + realId + '"]');
+    var adId = container ? container.getAttribute('data-ad-adid') : '';
+    fetch('/api/p2p/bot/ads',{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({exchange:window.botSelectedExchange||'Binance',id:realId,adId:adId||'',botSafeMarginPct:saveVal})}).then(function(r){el.style.outline=r.ok?'2px solid #22c55e':'2px solid #fb7185';setTimeout(function(){el.style.outline=''},800)}).catch(function(){el.style.outline='2px solid #fb7185';setTimeout(function(){el.style.outline=''},800)});
+  };
+  window.botSafeFieldFlash = function(el){ el.style.outline='2px solid #22c55e'; setTimeout(function(){ el.style.outline=''; }, 800); };
   window.botSaveAdCfgField = function(realId, field, value){
     var body = { exchange: botSelectedExchange, id: realId };
+    // Read adId from the parent container's data attribute
+    var container = document.querySelector('[data-ad-real-id="' + realId + '"]');
+    var adId = container ? container.getAttribute('data-ad-adid') : '';
+    if (adId) body.adId = adId;
     if(field === 'botCompetePayTypes'){
       body[field] = value === 'match' ? ['__match_ad__'] : ['all'];
     } else {
       body[field] = value === '' ? null : (field === 'botStrategy' || field === 'botPriceSource' ? value : Number(value));
     }
+    var safeInput = document.getElementById("adCfg_" + realId + "_SafeMarginPct");
+    if(safeInput) safeInput.style.outline = "2px solid #fbbf24";
     fetch("/api/p2p/bot/ads", {
       method:"PUT", credentials:"include",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify(body)
-    }).catch(function(e){ console.warn("[P2P Bot] save cfg error:", e); });
+    }).then(function(r){
+      if(r.ok && safeInput) safeInput.style.outline = "2px solid #34d399";
+      else if(!r.ok){
+        if(safeInput) safeInput.style.outline = "2px solid #fb7185";
+        console.warn("[P2P Bot] save cfg error: HTTP", r.status, r.statusText);
+      }
+      setTimeout(function(){ if(safeInput) safeInput.style.outline = ""; }, 1500);
+    }).catch(function(e){
+      if(safeInput) safeInput.style.outline = "2px solid #fb7185";
+      setTimeout(function(){ if(safeInput) safeInput.style.outline = ""; }, 1500);
+      console.warn("[P2P Bot] save cfg error:", e);
+    });
   };
 
   window.botSaveAdCfgBulk = function(realId){
     if(!realId) return;
     var body = { exchange: botSelectedExchange, id: realId };
+    // Read adId from the parent container's data attribute
+    var container = document.querySelector('[data-ad-real-id="' + realId + '"]');
+    var adId = container ? container.getAttribute('data-ad-adid') : '';
+    if (adId) body.adId = adId;
     body.botStrategy       = document.getElementById("adCfg_" + realId + "_Strategy").value;
     body.botTop1Diff       = parseFloat(document.getElementById("adCfg_" + realId + "_Top1Diff").value);
     if(isNaN(body.botTop1Diff)) body.botTop1Diff = null;
@@ -10232,24 +10270,44 @@ function addP2PBotStyles(){
       method:"PUT", credentials:"include",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify(body)
-    }).then(function(){ window.botLoadAds(); }).catch(function(e){ console.warn("[P2P Bot] save bulk error:", e); });
+    }).then(function(r){
+      if(r.ok) window.botLoadAds();
+      else console.warn("[P2P Bot] save bulk error: HTTP", r.status, r.statusText);
+    }).catch(function(e){ console.warn("[P2P Bot] save bulk error:", e); });
   };
 
   window.botUpdateAdCostBadge = function(realId){
     var source = document.getElementById("adCfg_" + realId + "_PriceSource")?.value || 'manual';
     if(source === 'manual') { botRefreshAdPrices(); botAdUpdateRealCost(realId); return; }
     var cache = window.__p2pCapacityCache;
-    if(!cache || !Array.isArray(cache) || cache.length === 0){
-      fetch('/api/p2p/capacity', { credentials: 'include' }).then(function(r){ return r.json(); }).then(function(data){
-        if(data?.ok && Array.isArray(data.items)) window.__p2pCapacityCache = data.items;
-        botUpdateAdCostBadge(realId);
+    var active;
+      if(cache && Array.isArray(cache) && cache.length > 0){
+        active = findActiveCapacityFrom(cache);
+      }
+      if(!active){
+        fetch('/api/p2p/capacity', { credentials: 'include' }).then(function(r){ return r.json(); }).then(function(data){
+          if(data?.ok && Array.isArray(data.items)){
+            var fetched = findActiveCapacityFrom(data.items);
+          if(fetched){
+            var fi = document.getElementById("adCfg_" + realId + "_PriceFloorPct");
+            if(fi) { fi.value = Number(fetched.buyPrice).toFixed(2); botSaveAdCfgField(realId, 'botPriceFloorPct', fi.value); }
+          } else {
+            var fi2 = document.getElementById("adCfg_" + realId + "_PriceFloorPct");
+            if(fi2) { fi2.value = "0"; botSaveAdCfgField(realId, 'botPriceFloorPct', "0"); }
+          }
+        } else {
+          var fi3 = document.getElementById("adCfg_" + realId + "_PriceFloorPct");
+          if(fi3) { fi3.value = "0"; botSaveAdCfgField(realId, 'botPriceFloorPct', "0"); }
+        }
+        botRefreshAdPrices();
+        botAdUpdateRealCost(realId);
       }).catch(function(){});
       return;
     }
-    var active = cache.find(function(c){ return c.buyPrice && c.status !== "finished" && !c._capital; });
-    if(active){
-      var floorInp = document.getElementById("adCfg_" + realId + "_PriceFloorPct");
-      if(floorInp) floorInp.value = Number(active.buyPrice).toFixed(2);
+    var floorInp = document.getElementById("adCfg_" + realId + "_PriceFloorPct");
+    if(floorInp) {
+      floorInp.value = Number(active.buyPrice).toFixed(2);
+      botSaveAdCfgField(realId, 'botPriceFloorPct', floorInp.value);
     }
     botRefreshAdPrices();
     botAdUpdateRealCost(realId);
@@ -10264,7 +10322,7 @@ function addP2PBotStyles(){
     if(source === 'capacity'){
       var cache = window.__p2pCapacityCache;
       if(cache && Array.isArray(cache)){
-        var active = cache.find(function(c){ return c.buyPrice && c.status !== "finished" && !c._capital; });
+        var active = findActiveCapacityFrom(cache);
         if(active?.buyPrice){
           basePrice = Number(active.buyPrice);
           priceSource = active.provider || active.country || "Capacity";
@@ -10416,7 +10474,7 @@ function addP2PBotStyles(){
           return;
         }
       }catch(e){}
-      if(botCycleActive) botCycleTimer = setTimeout(scheduleBotCycle, 1000);
+      if(botCycleActive) botCycleTimer = setTimeout(scheduleBotCycle, 300);
     }
     scheduleBotCycle();
     await window.botRefreshExchange();
@@ -10479,34 +10537,29 @@ function addP2PBotStyles(){
       fetch("/api/p2p/bot/orders?limit=20&live=true&exchange=" + ex, { credentials:"include" }).then(r=>r.json()).then(d=>{ if(d?.ok) renderBotOrders(d.orders); }).catch(()=>{});
     }catch(e){}
 
-    try{
-      const exRes = await fetch("/api/p2p/bot/exchange-config?_=" + Math.random().toString(36).slice(2), { credentials:"include" });
-      const exData = await exRes.json();
-      var allExchanges = {};
-      var anyRunning = false;
-      var runningLabel = "";
-      if(exData?.ok && exData?.configs){
-        for(var exKey in exData.configs){
-          var enabled = exData.configs[exKey]?.enabled;
-          allExchanges[exKey] = enabled;
-          if(enabled){
-            anyRunning = true;
-            runningLabel = runningLabel ? runningLabel + ", " + exKey.charAt(0).toUpperCase() + exKey.slice(1) : exKey.charAt(0).toUpperCase() + exKey.slice(1);
+    fetch("/api/p2p/bot/exchange-config?_=" + Math.random().toString(36).slice(2), { credentials:"include" })
+      .then(r=>r.json()).then(exData=>{
+        var allExchanges = {};
+        var runningLabel = "";
+        if(exData?.ok && exData?.configs){
+          for(var exKey in exData.configs){
+            var enabled = exData.configs[exKey]?.enabled;
+            allExchanges[exKey] = enabled;
+            if(enabled){
+              runningLabel = runningLabel ? runningLabel + ", " + exKey.charAt(0).toUpperCase() + exKey.slice(1) : exKey.charAt(0).toUpperCase() + exKey.slice(1);
+            }
           }
         }
-      }
-      var exStatus = exData?.ok && exData?.configs?.[ex];
-      if(exStatus){
-        updateBotUI({ running: exStatus.enabled, config: exStatus, _allExchanges: allExchanges, _runningLabel: runningLabel });
-        if(!skipConfig) updateExchangeConfig(exStatus);
-      }else{
-        updateBotUI({ running: false, _allExchanges: allExchanges, _runningLabel: runningLabel });
-      }
-    }catch(e){
-      console.warn("Bot refresh exchange-config error:", e);
-    }
+        var exStatus = exData?.ok && exData?.configs?.[ex];
+        if(exStatus){
+          updateBotUI({ running: exStatus.enabled, config: exStatus, _allExchanges: allExchanges, _runningLabel: runningLabel });
+          if(!skipConfig) updateExchangeConfig(exStatus);
+        }else{
+          updateBotUI({ running: false, _allExchanges: allExchanges, _runningLabel: runningLabel });
+        }
+      }).catch(()=>{});
 
-    await loadCredentials(ex);
+    loadCredentials(ex).catch(()=>{});
     botUpdateBuyPrice();
     botRefreshAdPrices();
   }
@@ -10553,14 +10606,18 @@ function addP2PBotStyles(){
     var pct = parseFloat(document.getElementById("botExSafeMarginPct").value) || 0;
     var hint = document.getElementById("botExSafeMarginHint");
     if(!hint) return;
-    if(pct <= 0){ hint.textContent = ""; return; }
-    var refPrice = getActiveCapacityBuyPrice();
+    // Leer del input PriceFloorPct (lo actualiza botUpdateBuyPrice / el motor),
+    // no del cache, para que coincida con el valor que el motor usa en safeFloor.
+    var refPrice = parseFloat(document.getElementById("botExPriceFloorPct")?.value) || 0;
     if(!refPrice){
       var priceEl = document.querySelector(".bot-ad-card-price span");
       if(priceEl){
         var txt = priceEl.textContent.replace(/[^0-9.,]/g, "").replace(",", ".");
         refPrice = parseFloat(txt) || 0;
       }
+    }
+    if(!refPrice){
+      refPrice = getActiveCapacityBuyPrice() || 0;
     }
     var commPct = parseFloat(document.getElementById("botExCommissionPct").value) || 0;
     var realCost = refPrice > 0 ? refPrice * (1 + commPct / 100) : refPrice;
@@ -10571,20 +10628,38 @@ function addP2PBotStyles(){
     hint.style.color = "#34d399";
   };
 
-  window.botAdUpdateSafeMarginHint = function(realId){
-    var pct = parseFloat(document.getElementById("adCfg_" + realId + "_SafeMarginPct").value) || 0;
+  window.botAdUpdateSafeMarginHint = async function(realId){
     var hint = document.getElementById("adCfg_" + realId + "_SafeMarginHint");
     if(!hint) return;
-    if(pct <= 0){ hint.textContent = ""; return; }
-    var refPrice = getActiveCapacityBuyPrice();
-    if(!refPrice){
-      var priceEl = document.getElementById("botAdPrice_" + realId);
-      if(priceEl){
-        var txt = priceEl.textContent.replace(/[^0-9.,]/g, "").replace(",", ".");
-        refPrice = parseFloat(txt) || 0;
+    var pctInput = document.getElementById("adCfg_" + realId + "_SafeMarginPct").value;
+    var pct = parseFloat(pctInput);
+    if(pctInput === "" || isNaN(pct)) pct = parseFloat(document.getElementById("botExSafeMarginPct").value) || 0;
+    var refPrice = null;
+    var src = document.getElementById("adCfg_" + realId + "_PriceSource")?.value;
+    if(src === 'capacity'){
+      var activePrice = getActiveCapacityBuyPrice();
+      if(activePrice){
+        refPrice = activePrice;
+      } else {
+        try {
+          const r = await fetch('/api/p2p/capacity', { credentials: 'include' });
+          const d = await r.json();
+          if(d?.ok && Array.isArray(d.items)){
+            var found = findActiveCapacityFrom(d.items);
+            if(found) refPrice = Number(found.buyPrice);
+          }
+        } catch(e) {}
+      }
+    } else {
+      var floorInp = document.getElementById("adCfg_" + realId + "_PriceFloorPct");
+      if(floorInp && floorInp.value !== '' && !isNaN(parseFloat(floorInp.value))){
+        refPrice = parseFloat(floorInp.value);
+      }
+      if(!refPrice){
+        var activePrice = getActiveCapacityBuyPrice();
+        if(activePrice) refPrice = activePrice;
       }
     }
-    // Get commission (per-ad or exchange)
     var commPct = parseFloat(document.getElementById("adCfg_" + realId + "_CommissionPct").value);
     if(!commPct || isNaN(commPct)) commPct = parseFloat(document.getElementById("botExCommissionPct").value) || 0;
     var realCost = refPrice > 0 ? refPrice * (1 + commPct / 100) : refPrice;
@@ -10641,10 +10716,21 @@ function addP2PBotStyles(){
   function getActiveCapacityBuyPrice(){
     const cache = window.__p2pCapacityCache;
     if(cache && Array.isArray(cache)){
-      const active = cache.find(c => c.buyPrice && c.status !== "finished" && !c._capital);
+      const sorted = cache.slice().sort(function(a,b){
+        return new Date(a.createdAt || a.date || 0).getTime() - new Date(b.createdAt || b.date || 0).getTime();
+      });
+      const active = sorted.find(c => c.buyPrice && c.status !== "finished" && c.status !== "_capital");
       if(active?.buyPrice) return Number(active.buyPrice);
     }
     return null;
+  }
+
+  function findActiveCapacityFrom(arr){
+    if(!Array.isArray(arr) || arr.length === 0) return null;
+    var sorted = arr.slice().sort(function(a,b){
+      return new Date(a.createdAt || a.date || 0).getTime() - new Date(b.createdAt || b.date || 0).getTime();
+    });
+    return sorted.find(function(c){ return c.buyPrice && c.status !== "finished" && c.status !== "_capital"; }) || null;
   }
 
   function renderBotLogs(logs){
@@ -10761,6 +10847,40 @@ function addP2PBotStyles(){
     }
   };
 
+  window.botRenewCookies = async function(){
+    const statusEl = document.getElementById("botChatCookiesRenewStatus");
+    if(!statusEl) return;
+    statusEl.innerHTML = '<span style="color:#fbbf24;">⏳ Abriendo Chrome...</span>';
+    try{
+      const r = await fetch("/api/p2p/bot/chat/login", { method:"POST", credentials:"include" });
+      const d = await r.json();
+      if(!d?.ok){
+        statusEl.innerHTML = '<span style="color:#fb7185;">' + (d.error || "Error") + '</span>';
+        return;
+      }
+      statusEl.innerHTML = '<span style="color:#fbbf24;">🔓 Inicia sesión en la ventana de Chrome que se abrió. Esperando...</span>';
+      // Poll status every 2 seconds
+      const poll = setInterval(async function(){
+        try{
+          const r2 = await fetch("/api/p2p/bot/chat/login", { credentials:"include" });
+          const d2 = await r2.json();
+          if(d2?.status === "logged_in"){
+            clearInterval(poll);
+            statusEl.innerHTML = '<span style="color:#34d399;">✅ Cookies renovadas correctamente</span>';
+            setTimeout(function(){ statusEl.innerHTML = ""; }, 4000);
+            // Reload credentials to update the textarea
+            if(window.botRefreshExchange) window.botRefreshExchange();
+          } else if(d2?.status === "timeout" || d2?.status === "error"){
+            clearInterval(poll);
+            statusEl.innerHTML = '<span style="color:#fb7185;">❌ ' + (d2.error || "Error al renovar") + '</span>';
+          }
+        } catch(e){}
+      }, 2000);
+    } catch(e){
+      statusEl.innerHTML = '<span style="color:#fb7185;">❌ Error de conexión</span>';
+    }
+  };
+
   async function loadCredentials(exchange){
     const fields = document.getElementById("botCredFields");
     const status = document.getElementById("botCredStatus");
@@ -10768,9 +10888,11 @@ function addP2PBotStyles(){
 
     if(exchange === "binance"){
       fields.innerHTML = `
-        <label>API Key <input id="botCredApiKey" type="password" autocomplete="new-password" placeholder="Binance API Key"></label>
-        <label>Secret Key <input id="botCredSecret" type="password" autocomplete="new-password" placeholder="Binance Secret Key"></label>
+        <form id="cred-form-binance" autocomplete="off">
+        <label>API Key <input id="botCredApiKey" type="text" autocomplete="off" style="-webkit-text-security:disc" placeholder="Binance API Key" form="cred-form-binance"></label>
+        <label>Secret Key <input id="botCredSecret" type="text" autocomplete="off" style="-webkit-text-security:disc" placeholder="Binance Secret Key" form="cred-form-binance"></label>
         <button class="btn" type="button" style="margin-bottom:4px;" onclick="window.botSaveCredentials()">Guardar</button>
+        </form>
       `;
       try{
         const r = await fetch("/api/binance/credentials", { credentials:"include" });
@@ -10787,9 +10909,11 @@ function addP2PBotStyles(){
       }catch(e){ status.innerHTML = '<span style="color:#94a3b8;">Sin configurar</span>'; }
     }else if(exchange === "bybit"){
       fields.innerHTML = `
-        <label>API Key <input id="botCredApiKey" type="password" autocomplete="new-password" placeholder="Bybit API Key"></label>
-        <label>Secret Key <input id="botCredSecret" type="password" autocomplete="new-password" placeholder="Bybit Secret Key"></label>
+        <form id="cred-form-bybit" autocomplete="off">
+        <label>API Key <input id="botCredApiKey" type="text" autocomplete="off" style="-webkit-text-security:disc" placeholder="Bybit API Key" form="cred-form-bybit"></label>
+        <label>Secret Key <input id="botCredSecret" type="text" autocomplete="off" style="-webkit-text-security:disc" placeholder="Bybit Secret Key" form="cred-form-bybit"></label>
         <button class="btn" type="button" style="margin-bottom:4px;" onclick="window.botSaveCredentials()">Guardar</button>
+        </form>
       `;
       try{
         const r = await fetch("/api/p2p/bot/bybit-credentials", { credentials:"include" });
@@ -10806,10 +10930,12 @@ function addP2PBotStyles(){
       }catch(e){ status.innerHTML = '<span style="color:#94a3b8;">Sin configurar</span>'; }
     }else if(exchange === "okx"){
       fields.innerHTML = `
-        <label>API Key <input id="botCredApiKey" type="password" autocomplete="new-password" placeholder="OKX API Key"></label>
-        <label>Secret Key <input id="botCredSecret" type="password" autocomplete="new-password" placeholder="OKX Secret Key"></label>
-        <label>Passphrase <input id="botCredPassphrase" type="password" autocomplete="new-password" placeholder="OKX Passphrase"></label>
+        <form id="cred-form-okx" autocomplete="off">
+        <label>API Key <input id="botCredApiKey" type="text" autocomplete="off" style="-webkit-text-security:disc" placeholder="OKX API Key" form="cred-form-okx"></label>
+        <label>Secret Key <input id="botCredSecret" type="text" autocomplete="off" style="-webkit-text-security:disc" placeholder="OKX Secret Key" form="cred-form-okx"></label>
+        <label>Passphrase <input id="botCredPassphrase" type="text" autocomplete="off" style="-webkit-text-security:disc" placeholder="OKX Passphrase" form="cred-form-okx"></label>
         <button class="btn" type="button" style="margin-bottom:4px;" onclick="window.botSaveCredentials()">Guardar</button>
+        </form>
       `;
       try{
         const r = await fetch("/api/p2p/bot/okx-credentials", { credentials:"include" });
@@ -10896,13 +11022,12 @@ function addP2PBotStyles(){
           const res = await fetch('/api/p2p/capacity', { credentials: 'include' });
           const data = await res.json();
           if(data?.ok && Array.isArray(data.items)){
-            window.__p2pCapacityCache = data.items;
             cache = data.items;
           }
         } catch(e) {}
       }
       if(cache && Array.isArray(cache)){
-        const active = cache.find(c => c.buyPrice && c.status !== "finished" && !c._capital);
+        const active = findActiveCapacityFrom(cache);
         if(active?.buyPrice){
           basePrice = Number(active.buyPrice);
           priceSource = active.provider || active.country || "Capacity";
@@ -11145,14 +11270,19 @@ function addP2PBotStyles(){
 
   function orderCard(o){
     const isSell = o.tradeType === "SELL";
-    const isActive = o.status === "pending" || o.status === "paid";
-    const statusColor = o.status === "completed" ? "#34d399" : o.status === "cancelled" ? "#ef4444" : o.status === "paid" ? "#60a5fa" : "#fbbf24";
-    const statusBg = o.status === "completed" ? "rgba(52,211,153,.12)" : o.status === "cancelled" ? "rgba(239,68,68,.12)" : o.status === "paid" ? "rgba(96,165,250,.12)" : "rgba(251,191,36,.12)";
-    const statusLabel = o.status === "completed" ? "Completada" : o.status === "cancelled" ? "Cancelada" : o.status === "paid" ? "Pagado" : "En curso";
+    const isActive = o.status === "pending" || o.status === "paid" || o.status === "appealed";
+    const statusColor = o.status === "completed" ? "#34d399" : o.status === "cancelled" ? "#ef4444" : o.status === "paid" ? "#60a5fa" : o.status === "appealed" ? "#f59e0b" : "#fbbf24";
+    const statusBg = o.status === "completed" ? "rgba(52,211,153,.12)" : o.status === "cancelled" ? "rgba(239,68,68,.12)" : o.status === "paid" ? "rgba(96,165,250,.12)" : o.status === "appealed" ? "rgba(245,158,11,.15)" : "rgba(251,191,36,.12)";
+    const statusLabel = o.status === "completed" ? "Completada" : o.status === "cancelled" ? "Cancelada" : o.status === "paid" ? "Pagado" : o.status === "appealed" ? "⚠️ Apelada" : "En curso";
+    // Unread badge
+    const lastReadStr = localStorage.getItem("botChatLastRead_" + o.orderNumber);
+    const lastRead = lastReadStr ? Number(lastReadStr) : 0;
+    const lastMsgAt = o.lastClientMsgAt ? new Date(o.lastClientMsgAt).getTime() : 0;
+    const hasUnread = lastMsgAt > lastRead;
     const dateStr = o.createdAt ? new Date(Number(o.createdAt)).toLocaleDateString("es-CL", { day:"2-digit", month:"short", year:"numeric" }) : "";
     const timeStr = o.createdAt ? new Date(Number(o.createdAt)).toLocaleTimeString("es-CL", { hour:"2-digit", minute:"2-digit" }) : "";
     return `
-    <div class="bot-order-card" style="background:rgba(15,23,42,.5);border-radius:10px;padding:0;margin-bottom:8px;border:1px solid rgba(148,163,184,.06);overflow:hidden;">
+    <div class="bot-order-card" style="background:rgba(15,23,42,.5);border-radius:10px;padding:0;margin-bottom:8px;border:1px solid ${o.status === "appealed" ? "rgba(245,158,11,.3)" : "rgba(148,163,184,.06)"};${o.status === "appealed" ? "border-left:3px solid #f59e0b;" : ""}overflow:hidden;">
       <!-- Row 1: Trade type + Status -->
       <div style="display:flex;align-items:center;padding:10px 12px 6px;">
         <span style="font-size:13px;font-weight:700;color:${isSell ? "#ef4444" : "#34d399"};">${isSell ? "↗ Venta" : "↙ Compra"}</span>
@@ -11183,17 +11313,21 @@ function addP2PBotStyles(){
         ${o.status === "pending" ? `<div style="display:flex;justify-content:flex-end;padding:2px 0 4px;">
           <span class="bot-order-timer" data-created="${Number(o.createdAt || 0)}" data-paytime="${Number(o.payTime || 15)}" style="font-size:11px;color:#fbbf24;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:0.5px;">⏳ --:--</span>
         </div>` : ""}
+        ${o.status === "appealed" ? `<div style="display:flex;align-items:center;gap:6px;padding:4px 0 0;font-size:11px;color:#f59e0b;">
+          <span>⚠️ Esta orden fue apelada — revisa el chat para más detalles</span>
+        </div>` : ""}
       </div>
       <!-- Footer: Chat + Date -->
       <div style="display:flex;align-items:center;padding:6px 12px;border-top:1px solid rgba(148,163,184,.04);background:rgba(0,0,0,.1);">
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
           ${o.status !== "cancelled" ? `
-          <button class="btn small ghost" type="button" style="font-size:10px;padding:3px 8px;display:inline-flex;align-items:center;gap:4px;" onclick="window.botPanelOpenChat('${escHtml(o.orderNumber)}')">
+          <button class="btn small ghost" type="button" style="font-size:10px;padding:3px 8px;display:inline-flex;align-items:center;gap:4px;position:relative;" onclick="window.botPanelOpenChat('${escHtml(o.orderNumber)}')">
             <svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             ${escHtml(o.counterparty || "Chat")}
+            ${hasUnread ? '<span style="position:absolute;top:-2px;right:-2px;width:8px;height:8px;border-radius:50%;background:#60a5fa;box-shadow:0 0 4px rgba(96,165,250,.6);"></span>' : ""}
           </button>` : ""}
-          ${o.status === "pending" ? `
-          <button id="btn-verify-${escHtml(o.orderNumber)}" class="btn small" type="button" style="font-size:10px;padding:3px 8px;" onclick="window.botPanelVerifyOrder('${escHtml(o.orderNumber)}')">${botIsOrderVerified(o.orderNumber, o.verified) ? '✓ Verificado' : '✓ Verificar'}</button>` : ""}
+          ${o.status === "pending" && !botIsOrderVerified(o.orderNumber, o.verified) ? `
+          <button id="btn-verify-${escHtml(o.orderNumber)}" class="btn small" type="button" style="font-size:10px;padding:3px 8px;" onclick="window.botPanelVerifyOrder('${escHtml(o.orderNumber)}')">✓ Verificar</button>` : ""}
           ${o.status === "paid" ? `
           <button class="btn small danger" type="button" style="font-size:10px;padding:3px 8px;" onclick="window.botPanelReleaseOrder('${escHtml(o.orderNumber)}')">Liberar</button>` : ""}
         </div>
@@ -11294,8 +11428,34 @@ function addP2PBotStyles(){
     botLastOrderIds = currentIds;
   }
 
+  function botCreateChatOverlay(){
+    if(document.getElementById("botOrderChatOverlay")) return;
+    const div = document.createElement("div");
+    div.id = "botOrderChatOverlay";
+    div.style.cssText = "display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(2,6,23,.85);backdrop-filter:blur(8px);z-index:999999;border-radius:0;overflow:hidden;";
+    div.innerHTML = '<div style="display:flex;flex-direction:column;height:100%;max-width:900px;margin:0 auto;">' +
+      '<div style="display:flex;align-items:center;gap:8px;padding:12px 20px;background:rgba(15,23,42,.95);border-bottom:1px solid rgba(148,163,184,.08);">' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-size:15px;font-weight:700;color:#f1f5f9;" id="botOrderChatCounterparty">—</div>' +
+          '<div style="font-size:11px;color:#64748b;" id="botOrderChatOrderInfo">#0000000000</div>' +
+        '</div>' +
+        '<button class="close-btn" type="button" onclick="window.botPanelCloseChat()" style="font-size:22px;width:36px;height:36px;">&times;</button>' +
+        '<button type="button" onclick="window.botPanelDiagnoseChat()" title="Diagnóstico Playwright" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:14px;padding:4px;">🔍</button>' +
+      '</div>' +
+      '<div id="botOrderChatMessages" style="flex:1;overflow-y:auto;padding:16px 20px;background:rgba(6,10,26,.6);">' +
+        '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">No hay mensajes previos. El chat se habilitará al conectarse con el exchange.</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:10px;padding:12px 20px;background:rgba(15,23,42,.95);border-top:1px solid rgba(148,163,184,.08);">' +
+        '<input id="botOrderChatInput" type="text" placeholder="Escribe un mensaje..." onkeydown="if(event.key===\'Enter\')window.botPanelSendChatMessage()" style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:14px;font-family:inherit;outline:none;">' +
+        '<button class="btn" type="button" onclick="window.botPanelSendChatMessage()" style="border-radius:8px;padding:10px 18px;">Enviar</button>' +
+      '</div>' +
+    '</div>';
+    document.body.appendChild(div);
+  }
+
   function botStartOrdersPolling(){
     botStopOrdersPolling();
+    botCreateChatOverlay();
     // Poll for new orders every 8s
     botOrdersPollInterval = setInterval(async () => {
       const container = document.getElementById("botPanelOrdersList");
@@ -11384,16 +11544,6 @@ function addP2PBotStyles(){
         const isLive = a.fromBybit || a.fromBinance;
         const exchangeLabel = a.fromBybit ? 'Bybit' : a.fromBinance ? 'Binance' : null;
         const botEnabled = a.botEnabled === true;
-        const botTop1Diff = a.botTop1Diff != null ? a.botTop1Diff : '';
-        const botSpreadPct = a.botSpreadPct != null ? a.botSpreadPct : '';
-        const botSafeMarginPct = a.botSafeMarginPct != null ? a.botSafeMarginPct : '';
-        const botPriceFloorPct = a.botPriceFloorPct != null ? a.botPriceFloorPct : '';
-        const botCommissionPct = a.botCommissionPct != null ? a.botCommissionPct : '';
-        const botMinCapital = a.botMinCompetitorCapital != null ? a.botMinCompetitorCapital : '';
-        const botPriceSource = a.botPriceSource || 'manual';
-        const botStrategy = a.botStrategy || 'top1';
-        const botCompetePayTypes = a.botCompetePayTypes;
-        const payFilterVal = botCompetePayTypes && botCompetePayTypes.length && botCompetePayTypes[0] === '__match_ad__' ? 'match' : 'all';
         return `
         <div class="bot-ad-card">
           <div class="ad-header">
@@ -11404,9 +11554,19 @@ function addP2PBotStyles(){
               ${botEnabled ? '<span style="font-size:10px;background:rgba(5,150,105,.2);color:#6ee7b7;padding:1px 6px;border-radius:4px;margin-left:4px;">Bot activo</span>' : ''}
             </div>
             <div class="ad-actions">
-              <button class="btn small ghost" type="button" onclick="window.botPanelEditAd(${isLive ? "'" + a.adId + "'" : a.id})">Editar</button>
-              ${isLive ? '' : `<button class="btn small ghost" type="button" onclick="window.botPanelToggleAd(${a.id},${!a.isActive})">${a.isActive ? 'Desactivar' : 'Activar'}</button>`}
-              <button class="btn small danger" type="button" onclick="window.botPanelDeleteAd(${a.id},${isLive ? "'" + a.adId + "'" : 'null'})">Eliminar</button>
+              <button class="ad-icon-btn" type="button" onclick="window.botPanelEditAd(${a.id != null ? a.id : "'" + escHtml(String(a.adId)) + "'"})" title="Editar anuncio">
+                <svg viewBox="0 0 24 24"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+              </button>
+              <span style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:#64748b;letter-spacing:.3px;text-transform:uppercase;">
+                <span>Bot</span>
+                <label class="toggle-switch" title="${botEnabled ? 'Apagar bot' : 'Prender bot'}">
+                  <input type="checkbox" ${botEnabled?'checked':''} onchange="toggleBotAdEnabled(${a.id},this.checked,'${escHtml(a.adId||'')}')">
+                  <span class="slider"></span>
+                </label>
+              </span>
+              <button class="ad-icon-btn danger" type="button" onclick="window.botPanelDeleteAd(${a.id},${isLive ? "'" + a.adId + "'" : 'null'})" title="Eliminar anuncio">
+                <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+              </button>
             </div>
           </div>
           <div class="ad-body">
@@ -11418,52 +11578,10 @@ function addP2PBotStyles(){
             <span>Tipo <span class="val">${a.priceType === 'fixed' ? 'Fijo' : 'Flotante'}</span></span>
           </div>
           <div class="ad-footer">
-            <span class="ad-status ${a.status}">${a.status === 'online' ? 'Online' : a.status === 'private' ? 'Privado' : 'Desconectado'}</span>
-            <div style="display:flex;gap:6px;align-items:center;">
-              <button class="btn small ${botEnabled ? 'active' : 'ghost'}" type="button" style="font-size:10px;padding:2px 8px;" onclick="toggleBotAdEnabled(${a.id},${!botEnabled})">${botEnabled ? 'Bot ON' : 'Bot OFF'}</button>
-              <span style="font-size:11px;color:#64748b;">${new Date(a.createdAt).toLocaleDateString('es-CL')} ${isLive ? '· Sincronizado' : ''}</span>
-            </div>
+            <span class="ad-status ${a.status === 'active' ? 'online' : a.status}" title="Estado crudo: ${a.status}">${a.status === 'online' || a.status === 'active' ? 'Activo' : a.status === 'private' ? 'Privado' : 'Desconectado'}</span>
+            <span style="font-size:11px;color:#64748b;">${new Date(a.createdAt).toLocaleDateString('es-CL')} ${isLive ? '· Sincronizado' : ''}</span>
           </div>
-          ${botEnabled ? `<div class="ad-bot-config" id="adBotConfig_${a.id}">
-            <div class="ad-bot-config-inner">
-              <label>Estrategia
-                <select onchange="saveBotAdConfig(${a.id},'botStrategy',this.value);var p=document.getElementById('adBotConfig_${a.id}');p.querySelector('#adBotTop1DiffLabel_${a.id}').style.display=this.value==='spread'?'none':'';p.querySelector('#adBotSpreadPctLabel_${a.id}').style.display=this.value==='top1'?'none':''">
-                  <option value="top1" ${botStrategy === 'top1' ? 'selected' : ''}>Top 1</option>
-                  <option value="spread" ${botStrategy === 'spread' ? 'selected' : ''}>Spread</option>
-                </select>
-              </label>
-              <label id="adBotTop1DiffLabel_${a.id}" style="${botStrategy === 'spread' ? 'display:none' : ''}">Dif. top 1 (CLP)
-                <input type="number" step="0.01" value="${botTop1Diff}" placeholder="0.1" onchange="saveBotAdConfig(${a.id},'botTop1Diff',this.value)">
-              </label>
-              <label id="adBotSpreadPctLabel_${a.id}" style="${botStrategy === 'top1' ? 'display:none' : ''}">Spread (%)
-                <input type="number" step="0.1" value="${botSpreadPct}" placeholder="0.5" onchange="saveBotAdConfig(${a.id},'botSpreadPct',this.value)">
-              </label>
-              <label>Precio fuente
-                <select onchange="saveBotAdConfig(${a.id},'botPriceSource',this.value)">
-                  <option value="manual" ${botPriceSource === 'manual' ? 'selected' : ''}>Manual</option>
-                  <option value="capacity" ${botPriceSource === 'capacity' ? 'selected' : ''}>Capacity</option>
-                </select>
-              </label>
-              <label>Precio min (CLP)
-                <input type="number" step="0.01" value="${botPriceFloorPct}" placeholder="Capacidad activa" onchange="saveBotAdConfig(${a.id},'botPriceFloorPct',this.value)">
-              </label>
-              <label>Comisión (%)
-                <input type="number" step="0.01" value="${botCommissionPct}" placeholder="0.14" onchange="saveBotAdConfig(${a.id},'botCommissionPct',this.value)">
-              </label>
-              <label>Margen seguridad (%)
-                <input type="number" step="0.01" value="${botSafeMarginPct}" placeholder="0" onchange="saveBotAdConfig(${a.id},'botSafeMarginPct',this.value)">
-              </label>
-              <label>Capital min competidor (USDT)
-                <input type="number" step="1" value="${botMinCapital}" placeholder="Sin filtro" onchange="saveBotAdConfig(${a.id},'botMinCompetitorCapital',this.value)">
-              </label>
-              <label>Filtrar pago
-                <select onchange="saveBotAdConfig(${a.id},'botCompetePayTypes',this.value)">
-                  <option value="all" ${payFilterVal === 'all' ? 'selected' : ''}>Todos</option>
-                  <option value="match" ${payFilterVal === 'match' ? 'selected' : ''}>Mismos del anuncio</option>
-                </select>
-              </label>
-            </div>
-          </div>` : ''}
+          
         </div>`;
       }).join("");
     }catch(e){}
@@ -11483,6 +11601,14 @@ function addP2PBotStyles(){
 
   window.botPanelEditAd = async function(id){
     botPanelAdEditingId = id;
+    botPanelSimpleEditMode = true;
+    var sub = document.querySelector(".bot-panel-sub");
+    if(sub) sub.style.display = "none";
+    document.querySelectorAll(".bot-panel-tab-content").forEach(function(c){
+      c.style.display = c.id === "botPanelAds" ? "" : "none";
+    });
+    var adsList = document.getElementById("botPanelAdsList");
+    if(adsList) adsList.style.display = "none";
     try{
       const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange, { credentials:"include" });
       const d = await r.json();
@@ -11517,19 +11643,17 @@ function addP2PBotStyles(){
   };
 
   window.botPanelCancelAdForm = function(){
-    if(botPanelSimpleEditMode){
-      var sub = document.querySelector(".bot-panel-sub");
-      if(sub) sub.style.display = "";
-      var modalHead = document.querySelector("#botPanelModal .modal-head");
-      if(modalHead) modalHead.style.display = "";
-      document.getElementById("botPanelExchangeLabel").textContent = botSelectedExchange.charAt(0).toUpperCase() + botSelectedExchange.slice(1);
-      var adsList = document.getElementById("botPanelAdsList");
-      if(adsList) adsList.style.display = "";
-      window.botSwitchPanelTab('ads');
-      botPanelSimpleEditMode = false;
-    }
+    var sub = document.querySelector(".bot-panel-sub");
+    if(sub) sub.style.display = "";
+    var modalHead = document.querySelector("#botPanelModal .modal-head");
+    if(modalHead) modalHead.style.display = "";
+    document.getElementById("botPanelExchangeLabel").textContent = botSelectedExchange.charAt(0).toUpperCase() + botSelectedExchange.slice(1);
+    var adsList = document.getElementById("botPanelAdsList");
+    if(adsList){ adsList.style.display = ""; loadPanelAds(); }
+    window.botSwitchPanelTab('ads');
     document.getElementById("botPanelAdForm").style.display = "none";
     botPanelAdEditingId = null;
+    botPanelSimpleEditMode = false;
   };
 
   function fmt(n){
@@ -11792,7 +11916,7 @@ function addP2PBotStyles(){
 
         <div class="af-actions">
           <button class="af-btn-cancel" type="button" onclick="window.botPanelCancelAdForm()">Cancelar</button>
-          <button class="af-btn-save" type="button" onclick="window.botPanelSaveAd()">${isEdit ? 'Actualizar' : 'Crear Anuncio'}</button>
+          <button class="af-btn-save" type="button" onclick="window.botPanelSaveAd()">Guardar</button>
         </div>
       </div>
     `;
@@ -11937,31 +12061,36 @@ function addP2PBotStyles(){
   };
 
   /* Per-ad bot config */
-  window.toggleBotAdEnabled = async function(id, enabled){
+  window.toggleBotAdEnabled = async function(id, enabled, adId){
     try{
-      await fetch("/api/p2p/bot/ads", {
+      const body = { id, exchange: botSelectedExchange, botEnabled: enabled, botManaged: enabled };
+      if (adId) body.adId = adId;
+      const r = await fetch("/api/p2p/bot/ads", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ id, exchange: botSelectedExchange, botEnabled: enabled, botManaged: enabled })
+        body: JSON.stringify(body)
       });
+      if(!r.ok) console.warn("[P2P Bot] toggleBotAdEnabled error: HTTP", r.status, r.statusText);
       loadPanelAds();
-    }catch(e){}
+    }catch(e){ console.warn("[P2P Bot] toggleBotAdEnabled error:", e); }
   };
 
-  window.saveBotAdConfig = async function(id, field, value){
+  window.saveBotAdConfig = async function(id, field, value, adId){
     const body = { id, exchange: botSelectedExchange };
+    if (adId) body.adId = adId;
     if(field === 'botCompetePayTypes'){
       body[field] = value === 'match' ? ['__match_ad__'] : ['all'];
     } else {
       body[field] = value === '' ? null : (field === 'botStrategy' || field === 'botPriceSource' ? value : Number(value));
     }
     try{
-      await fetch("/api/p2p/bot/ads", {
+      const r = await fetch("/api/p2p/bot/ads", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify(body)
       });
-    }catch(e){}
+      if(!r.ok) console.warn("[P2P Bot] saveBotAdConfig error: HTTP", r.status, r.statusText);
+    }catch(e){ console.warn("[P2P Bot] saveBotAdConfig error:", e); }
   };
   /* end per-ad bot config */
 
@@ -12599,13 +12728,42 @@ function addP2PBotStyles(){
   };
 
   let botPanelChatActiveOrder = null;
+  let botPanelChatRefreshInterval = null;
+  let botPanelChatLastMsgTime = 0;
+
+  function renderChatMessageHtml(m){
+    if(m.type === "system" || m.type === "auto_reply" && m.self === false){
+      return '<div style="display:flex;justify-content:center;margin-bottom:8px;"><div style="background:rgba(148,163,184,.06);color:#94a3b8;padding:4px 12px;border-radius:12px;font-size:11px;text-align:center;">' + escHtml(m.content) + '</div></div>';
+    }
+    if(m.type === "image"){
+      const time = m.createTime ? new Date(Number(m.createTime)).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"}) : "";
+      const isSelf = m.self;
+      const sender = isSelf ? "Tú" : (m.fromNickName || "Contraparte");
+      const imgUrl = m.imageUrl || m.thumbnailUrl;
+      const proxyUrl = "/api/p2p/bot/chat/image?url=" + encodeURIComponent(imgUrl);
+      return '<div style="display:flex;flex-direction:column;align-items:' + (isSelf ? 'flex-end' : 'flex-start') + ';margin-bottom:8px;">' +
+        '<div style="font-size:10px;color:#64748b;margin-bottom:3px;padding:0 4px;">' + escHtml(sender) + ' subió un comprobante</div>' +
+        '<div onclick="window.botOpenImagePreview(\'' + encodeURIComponent(imgUrl) + '\')" style="max-width:200px;border-radius:12px;overflow:hidden;border:1px solid rgba(148,163,184,.12);cursor:pointer;">' +
+        '<img src="' + proxyUrl + '" alt="Comprobante de pago" style="width:100%;display:block;" loading="lazy">' +
+        '</div>' +
+        '<div style="font-size:9px;color:#64748b;margin-top:2px;">' + time + '</div></div>';
+    }
+    const time = m.createTime ? new Date(Number(m.createTime)).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"}) : "";
+    const isSelf = m.self;
+    const sender = isSelf ? "Tú" : (m.fromNickName || "Contraparte");
+    return '<div style="display:flex;flex-direction:column;align-items:' + (isSelf ? 'flex-end' : 'flex-start') + ';margin-bottom:8px;">' +
+      '<div style="font-size:10px;color:#64748b;margin-bottom:2px;padding:0 4px;">' + escHtml(sender) + '</div>' +
+      '<div style="background:' + (isSelf ? 'var(--brand)' : 'rgba(30,41,59,.8)') + ';color:' + (isSelf ? '#fff' : '#e2e8f0') + ';padding:8px 14px;border-radius:' + (isSelf ? '12px 12px 4px 12px' : '12px 12px 12px 4px') + ';font-size:13px;max-width:85%;word-wrap:break-word;border:1px solid ' + (isSelf ? 'transparent' : 'rgba(148,163,184,.08)') + ';white-space:pre-wrap;min-width:120px;">' +
+      escHtml(m.content) +
+      '<div style="font-size:9px;color:' + (isSelf ? 'rgba(255,255,255,.5)' : '#64748b') + ';margin-top:3px;text-align:right;">' + time + '</div></div></div>';
+  }
 
   window.botOpenImagePreview = function(imgUrl){
     if(!imgUrl) return;
     const url = decodeURIComponent(imgUrl);
     const proxyUrl = "/api/p2p/bot/chat/image?url=" + encodeURIComponent(url);
     const overlay = document.createElement("div");
-    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;";
+    overlay.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.85);z-index:99999999;display:flex;align-items:center;justify-content:center;cursor:pointer;";
     overlay.onclick = () => overlay.remove();
     const img = document.createElement("img");
     img.src = proxyUrl;
@@ -12615,7 +12773,15 @@ function addP2PBotStyles(){
   };
 
   window.botPanelOpenChat = async function(orderNumber){
+    if(botPanelChatRefreshInterval) clearInterval(botPanelChatRefreshInterval);
+    botPanelChatRefreshInterval = null;
+    botPanelChatLastMsgTime = 0;
+
+    // Mark as read
+    localStorage.setItem("botChatLastRead_" + orderNumber, String(Date.now()));
+
     botPanelChatActiveOrder = orderNumber;
+    window._buyerNameFetched = false;
     const orders = window.botPanelOrdersData || [];
     const order = orders.find(o => o.orderNumber === orderNumber);
     document.getElementById("botOrderChatCounterparty").textContent = order?.counterparty || "—";
@@ -12626,7 +12792,7 @@ function addP2PBotStyles(){
     document.getElementById("botOrderChatInput").value = "";
 
     const msgContainer = document.getElementById("botOrderChatMessages");
-    msgContainer.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Cargando mensajes...</div>';
+    msgContainer.innerHTML = '<div data-chat-placeholder style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Cargando mensajes...</div>';
     document.getElementById("botOrderChatOverlay").style.display = "";
 
     // Fetch real chat messages from Binance API
@@ -12634,44 +12800,65 @@ function addP2PBotStyles(){
       const r = await fetch("/api/p2p/bot/chat?orderNo=" + encodeURIComponent(orderNumber) + "&exchange=" + botSelectedExchange, { credentials:"include" });
       const d = await r.json();
       if(d?.ok && d?.messages?.length){
-        msgContainer.innerHTML = d.messages.map(m => {
-          if(m.type === "system" || m.type === "auto_reply" && m.self === false){
-            return '<div style="display:flex;justify-content:center;margin-bottom:8px;"><div style="background:rgba(148,163,184,.06);color:#94a3b8;padding:4px 12px;border-radius:12px;font-size:11px;text-align:center;">' + escHtml(m.content) + '</div></div>';
-          }
-          if(m.type === "image"){
-            const time = m.createTime ? new Date(Number(m.createTime)).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"}) : "";
-            const isSelf = m.self;
-            const sender = isSelf ? "Tú" : (m.fromNickName || "Contraparte");
-            const imgUrl = m.imageUrl || m.thumbnailUrl;
-            const proxyUrl = "/api/p2p/bot/chat/image?url=" + encodeURIComponent(imgUrl);
-            return '<div style="display:flex;flex-direction:column;align-items:' + (isSelf ? 'flex-end' : 'flex-start') + ';margin-bottom:8px;">' +
-              '<div style="font-size:10px;color:#64748b;margin-bottom:3px;padding:0 4px;">' + escHtml(sender) + ' subió un comprobante</div>' +
-              '<div onclick="window.botOpenImagePreview(\'' + encodeURIComponent(imgUrl) + '\')" style="max-width:200px;border-radius:12px;overflow:hidden;border:1px solid rgba(148,163,184,.12);cursor:pointer;">' +
-              '<img src="' + proxyUrl + '" alt="Comprobante de pago" style="width:100%;display:block;" loading="lazy">' +
-              '</div>' +
-              '<div style="font-size:9px;color:#64748b;margin-top:2px;">' + time + '</div></div>';
-          }
-          const time = m.createTime ? new Date(Number(m.createTime)).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"}) : "";
-          const isSelf = m.self;
-          const sender = isSelf ? "Tú" : (m.fromNickName || "Contraparte");
-          return '<div style="display:flex;flex-direction:column;align-items:' + (isSelf ? 'flex-end' : 'flex-start') + ';margin-bottom:8px;">' +
-            '<div style="font-size:10px;color:#64748b;margin-bottom:2px;padding:0 4px;">' + escHtml(sender) + '</div>' +
-            '<div style="background:' + (isSelf ? 'var(--brand)' : 'rgba(30,41,59,.8)') + ';color:' + (isSelf ? '#fff' : '#e2e8f0') + ';padding:8px 14px;border-radius:' + (isSelf ? '12px 12px 4px 12px' : '12px 12px 12px 4px') + ';font-size:13px;max-width:85%;word-wrap:break-word;border:1px solid ' + (isSelf ? 'transparent' : 'rgba(148,163,184,.08)') + ';white-space:pre-wrap;min-width:120px;">' +
-            escHtml(m.content) +
-            '<div style="font-size:9px;color:' + (isSelf ? 'rgba(255,255,255,.5)' : '#64748b') + ';margin-top:3px;text-align:right;">' + time + '</div></div></div>';
-        }).join("");
+        msgContainer.innerHTML = d.messages.map(renderChatMessageHtml).join("");
+        botPanelChatLastMsgTime = Math.max(...d.messages.map(m => Number(m.createTime)));
         msgContainer.scrollTop = msgContainer.scrollHeight;
       } else {
-        msgContainer.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">No hay mensajes previos.</div>';
+        msgContainer.innerHTML = '<div data-chat-placeholder style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">No hay mensajes previos.</div>';
       }
     } catch(e){
-      msgContainer.innerHTML = '<div style="color:#fb7185;font-size:12px;text-align:center;padding:20px 0;">Error al cargar mensajes: ' + escHtml(e.message) + '</div>';
+      msgContainer.innerHTML = '<div data-chat-placeholder style="color:#fb7185;font-size:12px;text-align:center;padding:20px 0;">Error al cargar mensajes: ' + escHtml(e.message) + '</div>';
     }
+
+    // Auto-refresh every 5 seconds (reload all messages each time)
+    botPanelChatRefreshInterval = setInterval(async () => {
+      if(!botPanelChatActiveOrder) return;
+      try{
+        // Update counterparty name if order status changed (paid reveals real name)
+        const updatedOrders = window.botPanelOrdersData || [];
+        const updatedOrder = updatedOrders.find(o => o.orderNumber === botPanelChatActiveOrder);
+        if(updatedOrder?.counterparty){
+          const currentName = document.getElementById("botOrderChatCounterparty").textContent;
+          if(updatedOrder.counterparty !== currentName && updatedOrder.counterparty !== "—"){
+            document.getElementById("botOrderChatCounterparty").textContent = updatedOrder.counterparty;
+          }
+        }
+
+        // Fetch all messages and replace entire content (avoids filtering/sync issues)
+        const r2 = await fetch("/api/p2p/bot/chat?orderNo=" + encodeURIComponent(botPanelChatActiveOrder) + "&exchange=" + botSelectedExchange, { credentials:"include" });
+        const d2 = await r2.json();
+        if(!d2?.ok || !d2?.messages?.length) return;
+        const container = document.getElementById("botOrderChatMessages");
+        if(!container) return;
+        const html = d2.messages.map(renderChatMessageHtml).join("");
+        // Only update if content actually changed (prevents flicker)
+        if(container.innerHTML !== html){
+          container.innerHTML = html;
+          container.scrollTop = container.scrollHeight;
+        }
+
+        // If buyer just marked as paid, try to fetch real name from Binance page
+        const hasPaidMsg = d2.messages.some(m => m.type === "system" && (m.content.includes("pago") || m.content.includes("paid") || m.content.includes("Pagó") || m.content.includes("confirmó")));
+        if(hasPaidMsg && !window._buyerNameFetched){
+          window._buyerNameFetched = true;
+          fetch("/api/p2p/bot/chat/buyer-name?orderNo=" + encodeURIComponent(botPanelChatActiveOrder), { credentials:"include" })
+            .then(r => r.json())
+            .then(d => {
+              if(d?.ok && d?.name){
+                document.getElementById("botOrderChatCounterparty").textContent = d.name;
+              }
+            }).catch(() => {});
+        }
+      } catch(_){}
+    }, 5000);
   };
 
   window.botPanelCloseChat = function(){
+    if(botPanelChatRefreshInterval) clearInterval(botPanelChatRefreshInterval);
+    botPanelChatRefreshInterval = null;
     document.getElementById("botOrderChatOverlay").style.display = "none";
     botPanelChatActiveOrder = null;
+    botPanelChatLastMsgTime = 0;
   };
 
   window.botPanelSendChatMessage = async function(){
@@ -12679,21 +12866,72 @@ function addP2PBotStyles(){
     const input = document.getElementById("botOrderChatInput");
     if(!input || !input.value.trim()) return;
     const msgContainer = document.getElementById("botOrderChatMessages");
+    if(!msgContainer) return;
     const text = input.value.trim();
-    if(msgContainer){
-      const empty = msgContainer.querySelector("div[style*='text-align:center']");
-      if(empty) msgContainer.innerHTML = "";
-      msgContainer.innerHTML += '<div style="display:flex;justify-content:flex-end;margin-bottom:6px;"><div style="background:var(--brand);color:#fff;padding:8px 14px;border-radius:12px 12px 4px 12px;font-size:13px;max-width:85%;word-wrap:break-word;">' + escHtml(text) + '<div style="font-size:9px;color:rgba(255,255,255,.5);margin-top:3px;">' + new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"}) + '</div></div></div>';
-      msgContainer.scrollTop = msgContainer.scrollHeight;
-    }
+    input.value = "";
+    // Show message instantly (optimistic)
+    const placeholder = msgContainer.querySelector('[data-chat-placeholder]');
+    if(placeholder) msgContainer.innerHTML = "";
+    msgContainer.innerHTML += '<div data-msg="' + escHtml(text).slice(0, 50) + '" style="display:flex;justify-content:flex-end;margin-bottom:6px;"><div style="background:var(--brand);color:#fff;padding:8px 14px;border-radius:12px 12px 4px 12px;font-size:13px;max-width:85%;word-wrap:break-word;">' + escHtml(text) + '<div style="font-size:9px;color:rgba(255,255,255,.5);margin-top:3px;">' + new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"}) + '</div></div></div>';
+    window._lastSentText = text;
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+    // Send in background
     try{
-      await fetch("/api/p2p/bot/orders", {
+      const r = await fetch("/api/p2p/bot/orders", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ action: "chat", orderNumber: botPanelChatActiveOrder, exchange: botSelectedExchange, message: text })
       });
-    }catch(e){}
-    input.value = "";
+      const d = await r.json();
+      if(!d?.ok){
+        const errEl = document.createElement("div");
+        errEl.style.cssText = "color:#ef4444;font-size:11px;text-align:center;padding:6px;background:rgba(239,68,68,.08);border-radius:6px;margin-bottom:6px;";
+        errEl.textContent = "❌ Error al enviar: " + (d?.error || "No se pudo enviar el mensaje");
+        msgContainer.appendChild(errEl);
+        msgContainer.scrollTop = msgContainer.scrollHeight;
+      }
+    } catch(e){
+      const errEl = document.createElement("div");
+      errEl.style.cssText = "color:#ef4444;font-size:11px;text-align:center;padding:6px;background:rgba(239,68,68,.08);border-radius:6px;margin-bottom:6px;";
+      errEl.textContent = "❌ Error de conexión al enviar mensaje";
+      msgContainer.appendChild(errEl);
+      msgContainer.scrollTop = msgContainer.scrollHeight;
+    }
+  };
+
+  window.botPanelDiagnoseChat = async function(){
+    if(!botPanelChatActiveOrder) return;
+    const msgContainer = document.getElementById("botOrderChatMessages");
+    if(!msgContainer) return;
+    const diagEl = document.createElement("div");
+    diagEl.style.cssText = "color:#94a3b8;font-size:11px;text-align:center;padding:8px;background:rgba(148,163,184,.06);border-radius:6px;margin-bottom:6px;white-space:pre-wrap;font-family:monospace;";
+    diagEl.textContent = "🔍 Diagnosticando...";
+    msgContainer.appendChild(diagEl);
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+    try{
+      const r = await fetch("/api/p2p/bot/chat/diagnose?orderNo=" + encodeURIComponent(botPanelChatActiveOrder), { credentials:"include" });
+      const d = await r.json();
+      if(d?.ok){
+        let txt = "🔍 Diagnóstico:\n";
+        txt += "Cookies: " + (d.hasCookies ? "✅" : "❌ No hay") + "\n";
+        if (d.hasStorageState !== undefined) txt += "StorageState: " + (d.hasStorageState ? "✅" : "❌") + "\n";
+        if(d.navigation) d.navigation.forEach((n, i) => {
+          txt += `\nIntento ${i+1}:\n`;
+          txt += `  URL: ${n.url || "?"}\n`;
+          txt += `  Login: ${n.isLogin ? "⚠️ Sí" : "✅ No"}\n`;
+          txt += `  Not Found: ${n.notFound ? "⚠️ Sí" : "✅ No"}\n`;
+          txt += `  Orden encontrada: ${n.foundOrder ? "✅" : "❌ No"}\n`;
+          txt += `  Textarea: ${n.hasTextarea ? "✅" : "❌ No"}\n`;
+          if(n.bodyPreview) txt += `  Body:\n${n.bodyPreview.slice(0, 600)}\n`;
+        });
+        diagEl.textContent = txt;
+      } else {
+        diagEl.textContent = "❌ Error: " + (d.error || "desconocido");
+      }
+    } catch(e){
+      diagEl.textContent = "❌ Error de conexión: " + e.message;
+    }
+    msgContainer.scrollTop = msgContainer.scrollHeight;
   };
 
   window.botPanelAcceptOrder = async function(orderNumber){
@@ -14937,6 +15175,7 @@ function addP2PBotStyles(){
     try{
       if(typeof IS_ADMIN_ROLE !== "undefined" && IS_ADMIN_ROLE) return true;
       if(window.currentUserContext?.role === "super_admin_global" || window.currentUserContext?.role === "super_admin_cliente") return true;
+      if(document.body.classList.contains("onze-admin-visible")) return true;
 
       const possibleKeys = [
         "onzeUser",
@@ -15075,7 +15314,7 @@ function addP2PBotStyles(){
     if(document.getElementById("view-p2p-dashboard")) return;
 
     const section = document.createElement("section");
-    section.className = "view";
+    section.className = "view admin-only-view";
     section.id = "view-p2p-dashboard";
 
     section.innerHTML = `
@@ -15198,13 +15437,18 @@ function addP2PBotStyles(){
 
       document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
+
+      // Refrescar datos del dashboard P2P al navegar
+      if(typeof syncP2PCapacityFromServer === 'function') syncP2PCapacityFromServer();
+      if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
+      if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
     });
   }
 
   function initP2PDashboard(){
+    addP2PDashboardStyles();
+    buildP2PDashboardView();
     if(isOnzeSuperAdminForP2PDashboard()){
-      addP2PDashboardStyles();
-      buildP2PDashboardView();
       addP2PDashboardNavButton();
     }
     setTimeout(initBinanceSalesSync, 500);
@@ -15325,6 +15569,15 @@ function addP2PBotStyles(){
     }
 
     setTimeout(updateOnzeDropdownActiveState, 80);
+
+    // Refrescar datos al navegar al Dashboard P2P
+    if(viewName === 'p2p-dashboard'){
+      setTimeout(function(){
+        if(typeof syncP2PCapacityFromServer === 'function') syncP2PCapacityFromServer();
+        if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
+        if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
+      }, 100);
+    }
   }
 
   function createMenuGroup(title, items){
@@ -15497,7 +15750,6 @@ function addP2PBotStyles(){
       }
     }
     saveP2PCapacity(caps, true);
-    window.__p2pCapacityCache = null;
     renderP2PCapacityPanel();
     renderP2PDashboardFromBinance();
   };
@@ -15530,24 +15782,8 @@ function addP2PBotStyles(){
 
     const avgSellPrice = totalUsdtSold > 0 ? totalClpReceived / totalUsdtSold : 0;
 
-    const capitalEl = document.getElementById("p2pDashCapital");
-    const clpReceivedEl = document.getElementById("p2pDashProfitToday");
-    const realProfitEl = document.getElementById("p2pDashProfitMonth");
-    const volumeEl = document.getElementById("p2pDashVolume");
-    const volumeSubEl = document.getElementById("p2pDashVolumeSub");
-    const salesCountEl = document.getElementById("p2pDashCycles");
-    const avgSellEl = document.getElementById("p2pDashAvgProfit");
-
-    if(!showManual){
-      if(capitalEl) capitalEl.textContent = `${p2pMoney(totalUsdtSold, 2)} USDT`;
-      if(clpReceivedEl) clpReceivedEl.textContent = `${p2pMoney(totalClpReceived, 0)} CLP`;
-      if(realProfitEl) realProfitEl.textContent = "Pendiente";
-      if(typeof updateP2PCapitalCard === "function") updateP2PCapitalCard();
-      if(salesCountEl) salesCountEl.textContent = String(completedSales.length);
-      if(avgSellEl) avgSellEl.textContent = `${p2pMoney(avgSellPrice, 2)} CLP`;
-    }else{
-      if(salesCountEl) salesCountEl.textContent = String(completedSales.length);
-    }
+    // Las cards resumen las actualiza updateP2PDashboardWithCapacity (basado en capacities)
+    // para evitar conflictos entre dos funciones escribiendo los mismos elementos.
 
     const historyEmpty = Array.from(document.querySelectorAll(".p2p-dashboard-empty"))
       .find(el => el.textContent.includes("Sin operaciones P2P") || el.textContent.includes("sincronizadas") || el.closest(".p2p-dashboard-panel")?.innerText.includes("Ventas Binance"));
@@ -15881,47 +16117,37 @@ function addP2PBotStyles(){
     return Array.isArray(window.__p2pCapacityCache) ? window.__p2pCapacityCache : [];
   };
 
-  function saveP2PCapacity(items, skipServer = false){
+  function saveP2PCapacity(items){
     const arr = Array.isArray(items) ? items : [];
-    const previous = window.__p2pCapacityCache || [];
-    const newIds = new Set(arr.map(p => p.id));
-
     window.__p2pCapacityCache = arr;
     window.__p2pCapacityLastSave = Date.now();
     localStorage.setItem(CAPACITY_KEY, JSON.stringify(arr));
+  }
 
-    if(!skipServer){
-      for (const item of arr) {
-        const prev = previous.find(p => p.id === item.id);
-        if (!prev || JSON.stringify(prev) !== JSON.stringify(item)) {
-          window.__p2pCapacityPendingSync[item.id] = {
-            item: { ...item },
-            savedAt: Date.now()
-          };
-
-          // Incluir saleParts como finalSaleParts para persistir asignaciones activas
-          const serverItem = {
-            ...item,
-            finalSaleParts: Array.isArray(item.saleParts) ? item.saleParts : (item.finalSaleParts || null)
-          };
-
-          fetch('/api/p2p/capacity', {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ item: serverItem })
-          })
-          .then(res => {
-            if(!res.ok) throw new Error("No se pudo guardar capacity en servidor");
-
-            if(window.__p2pCapacityPendingSync[item.id]){
-              window.__p2pCapacityPendingSync[item.id].postedOkAt = Date.now();
-            }
-          })
-          .catch(e => console.warn('Error sync capacity:', e));
+  function postP2PCapacityToServer(item, onSuccess){
+    (function retry(item, attempt){
+      fetch('/api/p2p/capacity?confirm=manual', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item })
+      })
+      .then(async res => {
+        const data = await res.json().catch(()=>null);
+        if(!res.ok || !data?.ok){
+          throw new Error(data?.error || res.statusText || "Error servidor");
         }
-      }
-    }
+        if(typeof onSuccess === 'function') onSuccess(item);
+      })
+      .catch(e => {
+        console.warn('Error sync capacity (intento '+(attempt+1)+'):', e.message);
+        if(attempt < 2){
+          setTimeout(function(){ retry(item, attempt+1); }, 2000);
+        } else {
+          if(typeof showToast === "function") showToast("⚠️ No se pudo guardar capacity en servidor");
+        }
+      });
+    })(item, 0);
   }
 
   window.syncP2PCapacityFromServer = async function syncP2PCapacityFromServer(){
@@ -15958,8 +16184,12 @@ function addP2PBotStyles(){
         if(p2pManualMode || recentlyCleared){
           if(data.items.length > 0 && recentlyCleared){
             for(const item of data.items){
-              fetch('/api/p2p/capacity?id=' + encodeURIComponent(item.id) + '&confirm=manual', { method:'DELETE', credentials:'include' })
-                .catch(() => {});
+              // Solo borrar items que existían antes del clear (no los creados después)
+              const itemCreatedAt = new Date(item.createdAt || 0).getTime();
+              if(itemCreatedAt < lastClear || lastClear === 0){
+                fetch('/api/p2p/capacity?id=' + encodeURIComponent(item.id) + '&confirm=manual', { method:'DELETE', credentials:'include' })
+                  .catch(() => {});
+              }
             }
           }
           if(p2pManualMode && recentlyCleared){
@@ -15975,11 +16205,6 @@ function addP2PBotStyles(){
         const previous = window.__p2pCapacityCache || [];
         const serverItems = data.items;
         const previousLocalItems = Array.isArray(window.__p2pCapacityCache) ? window.__p2pCapacityCache : [];
-
-        // Si el servidor devolvió vacío, limpiar pendingSync para que no resucite items borrados.
-        if(serverItems.length === 0){
-          window.__p2pCapacityPendingSync = {};
-        }
 
         const serverIds = new Set(serverItems.map(item => item.id));
         const now = Date.now();
@@ -16005,46 +16230,46 @@ function addP2PBotStyles(){
           localCache.forEach(l => { if(l?.id) localById[l.id] = l; });
         }
 
-        // También preservar items del cache local que no están en el servidor
-        // (ej: importados manualmente en localStorage).
+        // Preservar items locales que no están en el servidor SOLO si:
+        // 1. Están en pending sync (aún no se han guardado en el servidor), O
+        // 2. Hubo un guardado local reciente (< 5 min) — evita que una falla
+        //    temporal del servidor borre capacities legítimos.
+        // Items que no cumplen ninguna condición (ni pending, ni save reciente)
+        // se consideran borrados intencionalmente del servidor y NO se resucitan.
+        const pendingIds = new Set(Object.keys(window.__p2pCapacityPendingSync || {}));
+        const lastSave = Number(window.__p2pCapacityLastSave || 0);
+        const recentlySaved = lastSave && (Date.now() - lastSave) < 300000;
         if(Array.isArray(localCache)){
           localCache.forEach(localItem => {
-            if(localItem?.id && !serverIds.has(localItem.id) && !protectedLocalItems.find(p => p.id === localItem.id)){
-              protectedLocalItems.push(localItem);
+            if(localItem?.id && !serverIds.has(localItem.id)){
+              const keep = pendingIds.has(localItem.id) || recentlySaved;
+              if(keep && !protectedLocalItems.find(p => p.id === localItem.id)){
+                protectedLocalItems.push(localItem);
+              }
             }
           });
         }
 
-        const mergedServerItems = serverItems.map(srv => {
-          const local = localById[srv.id];
-          if(!local){
-            // Sin datos locales: usar finalSaleParts del servidor como saleParts
-            return {
+          // Neon es la unica fuente de verdad. Solo sobreescribimos campos persistidos
+          // cuando hay un guardado local reciente (<5min) para evitar race conditions.
+          const recentLocalSave = window.__p2pCapacityLastSave && (Date.now() - window.__p2pCapacityLastSave) < 300000;
+          const mergedServerItems = serverItems.map(srv => {
+            const local = localById[srv.id];
+            const base = {
               ...srv,
               saleParts: Array.isArray(srv.finalSaleParts) ? srv.finalSaleParts : [],
             };
-          }
-          const finishedLocal = local.status === 'finished' && srv.status !== 'finished';
-          return {
-            ...srv,
-            ...(finishedLocal ? {
-              status: local.status,
-              finishedAt: local.finishedAt,
-              finalSoldUsdt: local.finalSoldUsdt,
-              finalClpReceived: local.finalClpReceived,
-              finalCommissionUsdt: local.finalCommissionUsdt,
-              finalCommissionClp: local.finalCommissionClp,
-              finalSaleParts: local.finalSaleParts,
-            } : {}),
-            usedUsdt: Number(local.usedUsdt || 0),
-            clpReceived: Number(local.clpReceived || 0),
-            commissionUsdt: Number(local.commissionUsdt || 0),
-            commissionClp: Number(local.commissionClp || 0),
-            saleParts: Array.isArray(local.saleParts) ? local.saleParts : [],
-            paidClp: Number(local.paidClp || 0),
-            manualPaymentsClp: Number(local.manualPaymentsClp || 0),
-          };
-        });
+            if (!local) return base;
+            if (!recentLocalSave) return base;
+            // Solo capacityClp y manualPaymentsClp se persisten en el servidor.
+            // Los campos runtime (usedUsdt, clpReceived, etc.) los recalcula calculateP2PCapacityStats().
+            return {
+              ...base,
+              capacityClp: Number(local.capacityClp || 0),
+              manualPaymentsClp: Number(local.manualPaymentsClp || 0),
+              manualPaymentClp: Number(local.manualPaymentClp || 0),
+            };
+          });
 
         // Filtrar registros especiales de capital inicial que no deben mostrarse como capacities
         const filteredServer = mergedServerItems.filter(c => c.status !== "_capital");
@@ -16864,27 +17089,8 @@ function addP2PBotStyles(){
       items.push(newCapacity);
 
       saveP2PCapacity(items);
-
-      fetch('/api/p2p/capacity?confirm=manual', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item: newCapacity })
-      })
-      .then(async res => {
-        const data = await res.json().catch(()=>null);
-
-        if(!res.ok || !data?.ok){
-          console.warn("No se pudo guardar capacity en servidor:", res.status, data);
-          alert("El capacity se creó en pantalla, pero no se pudo guardar en servidor. Revisa consola.");
-          return;
-        }
-
+      postP2PCapacityToServer(newCapacity, function(){
         console.log("✅ Capacity guardado en servidor:", newCapacity.id);
-      })
-      .catch(err => {
-        console.warn("Error guardando capacity directo:", err);
-        alert("Error guardando capacity en servidor. Revisa consola.");
       });
       closeP2PCapacityModal();
       renderP2PCapacityPanel();
@@ -17209,39 +17415,33 @@ function addP2PBotStyles(){
         manualPaymentsClp: Number(cap.manualPaymentsClp || 0) + payment
       };
     } else {
-      // Pago parcial: bajar capacity total
       const newCapacityClp = capacityClpTotal - payment;
       const newUsdt = buyPrice > 0 ? newCapacityClp / buyPrice : 0;
-      capacities[idx] = {
-        ...cap,
-        capacityClp: newCapacityClp,
-        usdtAmount: newUsdt,
-        manualPaymentsClp: (Number(cap.manualPaymentsClp || 0)) + payment
-      };
+      if (clpReceived >= newCapacityClp * 0.99) {
+        capacities[idx] = {
+          ...cap,
+          status: "finished",
+          finishedAt: new Date().toISOString(),
+          finalSoldUsdt: Number(capStats.usedUsdt || 0),
+          finalClpReceived: clpReceived,
+          finalCommissionUsdt: Number(capStats.commissionUsdt || 0),
+          finalCommissionClp: Number(capStats.commissionClp || 0),
+          finalSaleParts: capStats.saleParts || [],
+          manualPaymentClp: Number(cap.manualPaymentClp || 0) + payment,
+          manualPaymentsClp: (Number(cap.manualPaymentsClp || 0)) + payment
+        };
+      } else {
+        capacities[idx] = {
+          ...cap,
+          capacityClp: newCapacityClp,
+          usdtAmount: newUsdt,
+          manualPaymentsClp: (Number(cap.manualPaymentsClp || 0)) + payment
+        };
+      }
     }
 
     saveP2PCapacity(capacities);
-
-    const updatedCapacity = capacities[idx];
-    fetch('/api/p2p/capacity?confirm=manual', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item: updatedCapacity })
-    })
-    .then(async res => {
-      const data = await res.json().catch(()=>null);
-      if(!res.ok || !data?.ok){
-        console.warn("No se pudo guardar capacity completado en servidor:", res.status, data);
-        alert("El capacity se completó en pantalla, pero no se pudo guardar en servidor. Revisa consola.");
-      }else{
-        console.log("✅ Capacity completado guardado en servidor:", updatedCapacity.id);
-      }
-    })
-    .catch(err => {
-      console.warn("Error guardando capacity completado:", err);
-      alert("Error guardando capacity completado en servidor. Revisa consola.");
-    });
+    postP2PCapacityToServer(capacities[idx]);
 
     renderP2PCapacityPanel();
     updateP2PDashboardWithCapacity();
@@ -17527,13 +17727,7 @@ function addP2PBotStyles(){
       items[idx].note = note.trim();
 
       saveP2PCapacity(items);
-
-      fetch('/api/p2p/capacity?confirm=manual', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item: items[idx] })
-      }).catch(e => console.warn('Error updating capacity on server:', e));
+      postP2PCapacityToServer(items[idx]);
 
       closeP2PCapacityEditModal();
       renderP2PCapacityPanel();
@@ -17593,11 +17787,6 @@ function addP2PBotStyles(){
     window.__p2pCapacityCache = items;
     localStorage.setItem(CAPACITY_KEY, JSON.stringify(items));
 
-    fetch('/api/p2p/capacity?id=' + encodeURIComponent(id) + '&confirm=manual', {
-      method: 'DELETE',
-      credentials: 'include'
-    }).catch(e => console.warn('Error delete capacity:', e));
-
     renderP2PCapacityPanel();
     updateP2PDashboardWithCapacity();
 
@@ -17606,9 +17795,24 @@ function addP2PBotStyles(){
       openCompletedCapacitiesModal();
     }
 
-    if(typeof showToast === "function"){
-      showToast("Capacity P2P eliminado");
-    }
+    (function retryDelete(did, attempt){
+      fetch('/api/p2p/capacity?id=' + encodeURIComponent(did) + '&confirm=manual', {
+        method: 'DELETE',
+        credentials: 'include'
+      })
+      .then(res => {
+        if(!res.ok) throw new Error("Error servidor: " + res.status);
+        if(typeof showToast === "function") showToast("Capacity P2P eliminado");
+      })
+      .catch(e => {
+        console.warn('Error delete capacity (intento '+(attempt+1)+'):', e);
+        if(attempt < 2){
+          setTimeout(function(){ retryDelete(did, attempt+1); }, 2000);
+        } else {
+          if(typeof showToast === "function") showToast("❌ No se pudo eliminar del servidor: " + e.message);
+        }
+      });
+    })(id, 0);
   };
 
   window.finishP2PCapacity = function(id){
@@ -17651,29 +17855,13 @@ function addP2PBotStyles(){
     item.finalSaleParts = Array.isArray(current?.saleParts) ? current.saleParts : [];
 
     saveP2PCapacity(items);
-
-    fetch('/api/p2p/capacity?confirm=manual', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item })
-    })
-    .then(async res => {
-      const data = await res.json().catch(()=>null);
-      if(!res.ok || !data?.ok){
-        console.warn("No se pudo guardar capacity finalizado en servidor:", res.status, data);
-        alert("El capacity se finalizó en pantalla, pero no se pudo guardar en servidor. Revisa consola.");
-      }else{
-        console.log("✅ Capacity finalizado guardado en servidor:", item.id);
-      }
-    })
-    .catch(err => {
-      console.warn("Error guardando capacity finalizado:", err);
-      alert("Error guardando capacity finalizado en servidor. Revisa consola.");
-    });
+    postP2PCapacityToServer(item);
 
     renderP2PCapacityPanel();
     updateP2PDashboardWithCapacity();
+    if(typeof botUpdateBuyPrice === 'function'){
+      botUpdateBuyPrice();
+    }
 
     if(typeof showToast === "function"){
       showToast("Capacity P2P finalizado");
@@ -17781,21 +17969,10 @@ function addP2PBotStyles(){
       return ad - bd;
     }).forEach((c, i) => { globalOrder[c.id] = i + 1; });
 
-    // Excluir registros especiales de capital inicial
+    // Orden fijo: más antiguo primero. Sin prioridad por "movimiento" para que no se reordenen solas.
     const displayItems = items.filter(c => c.status !== "finished" && c.status !== "_capital").slice().sort((a,b) => {
-      const aFinished = a.status === "finished";
-      const bFinished = b.status === "finished";
-
-      if(aFinished !== bFinished) return aFinished ? 1 : -1;
-
-      const aHasMovement = Number(a.usedUsdt || 0) > 0 && Number(a.remainingUsdt || 0) > 0;
-      const bHasMovement = Number(b.usedUsdt || 0) > 0 && Number(b.remainingUsdt || 0) > 0;
-
-      if(aHasMovement !== bHasMovement) return aHasMovement ? -1 : 1;
-
       const ad = new Date(a.date || a.createdAt || 0).getTime();
       const bd = new Date(b.date || b.createdAt || 0).getTime();
-
       return ad - bd;
     });
 
@@ -18003,7 +18180,7 @@ function addP2PBotStyles(){
     try{
       const res = await fetch("/api/p2p/initial-capital");
       const data = await res.json();
-      if(data.ok && typeof data.value === "number" && data.value > 0){
+      if(data.ok && typeof data.value === "number" && data.value >= 0){
         const local = getP2PInitialCapital();
         if(Math.abs(data.value - local) > 0.01){
           localStorage.setItem(P2P_INITIAL_CAPITAL_KEY, String(data.value));
@@ -18248,7 +18425,7 @@ function addP2PBotStyles(){
           ">Guardar</button>
         </div>
 
-        <button type="button" onclick="saveP2PInitialCapital(0);closeP2PInitialCapitalModal();updateP2PCapitalCard();" style="
+        <button type="button" onclick="saveP2PInitialCapital(0);syncP2PInitialCapitalToServer(0);closeP2PInitialCapitalModal();updateP2PCapitalCard();" style="
           width:100%;margin-top:12px;border:0;border-radius:16px;padding:13px 14px;background:#dc2626;color:#fff;font-size:15px;font-weight:1000;cursor:pointer;
         ">Reiniciar</button>
       </div>
@@ -19042,8 +19219,16 @@ function addP2PBotStyles(){
       };
     }
     saveP2PCapacity(caps);
-    // saveP2PCapacity ya agrega los items a pendingSync y los POSTea al servidor,
-    // protegiendo el estado "finished" contra sobrescritura del servidor.
+    // Persistir cada capacity finalizado al servidor
+    for(const capStats of toFinish){
+      const idx = caps.findIndex(c => c.id === capStats.id);
+      if(idx < 0) continue;
+      postP2PCapacityToServer(caps[idx]);
+    }
+    // Refrescar el bot para que tome el siguiente capacity activo
+    if(typeof botUpdateBuyPrice === 'function'){
+      botUpdateBuyPrice();
+    }
   }
 
   window.syncBinanceSales = function syncBinanceSales(silent = false){
@@ -19375,6 +19560,7 @@ function addP2PBotStyles(){
 
     caps[idx] = cap;
     saveP2PCapacity(caps);
+    postP2PCapacityToServer(cap);
     return true;
   };
 
@@ -19532,14 +19718,12 @@ function addP2PBotStyles(){
     // 7. Limpiar capital propio
     localStorage.removeItem(OWN_CAPITAL_KEY);
 
-    // 8. Activar modo manual por 60s para que el servidor no resucite datos
-    localStorage.setItem('__p2pManualMode', 'true');
+    // 8. NOTA: ya no activamos modo manual aquí. El servidor ya está limpio
+    //    (POST /api/p2p/reset) y el flag __p2pManualMode causaba que cualquier
+    //    capacity nuevo creado en los siguientes 60s fuera borrado del servidor
+    //    en el próximo sync. Se mantiene el lastClear para referencia.
     localStorage.setItem('__p2pCapacityLastClear', String(Date.now()));
     window.__p2pCapacityLastClear = Date.now();
-    setTimeout(() => {
-      localStorage.removeItem('__p2pManualMode');
-      console.log("✅ Modo manual P2P desactivado — ahora los capacities se guardarán en el servidor");
-    }, 70000);
 
     // 9. Forzar el reinicio del baseline ahora
     const midnightTs = getP2PCapacityChileMidnightTs();
@@ -19560,10 +19744,10 @@ function addP2PBotStyles(){
   function checkBinanceCredentials(){
     const statusEl = document.getElementById('binance-creds-status');
     if(!statusEl) return;
-    fetch('/api/binance/credentials')
+    fetch('/api/binance/credentials', { credentials: 'include' })
       .then(r => r.json())
       .then(data => {
-        if(data.configured){
+        if(data.ok && data.configured){
           statusEl.style.background = '#0a3a1a';
           statusEl.style.color = '#00ff88';
           statusEl.innerHTML = '✅ Credenciales configuradas' +
@@ -19595,6 +19779,7 @@ function addP2PBotStyles(){
 
     fetch('/api/binance/credentials', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ apiKey, secretKey })
     })

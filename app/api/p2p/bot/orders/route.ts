@@ -6,6 +6,19 @@ import { BybitP2PClient, bybitOrderGroup, bybitOrderStatusLabel } from "@/lib/p2
 import { fetchLiveOrders } from "@/lib/p2p-bot/live";
 import { prisma } from "@/lib/prisma";
 
+async function enrichOrdersWithChatData(orders: any[], tenantId: number, exchange: string) {
+  if (!orders.length) return;
+  const orderNumbers = orders.map(o => o.orderNumber);
+  const chatStates = await prisma.p2PChatState.findMany({
+    where: { tenantId, exchange, orderNumber: { in: orderNumbers } },
+    select: { orderNumber: true, lastClientMsgAt: true },
+  });
+  const chatMap = new Map(chatStates.map(c => [c.orderNumber, c.lastClientMsgAt]));
+  for (const o of orders) {
+    o.lastClientMsgAt = chatMap.get(o.orderNumber)?.toISOString() || null;
+  }
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -30,6 +43,7 @@ export async function GET(req: NextRequest) {
       try {
         const result = await fetchLiveOrders(exchange, session.tenantId, limit);
         if (result.orders.length > 0) {
+          await enrichOrdersWithChatData(result.orders, session.tenantId, exchange);
           return Response.json({ ok: true, orders: result.orders, live: true });
         }
       } catch (e: any) {
@@ -37,6 +51,7 @@ export async function GET(req: NextRequest) {
       }
       // Fallback: return DB orders
       const localOrders = await getBotOrders(session.tenantId, limit, exchange);
+      await enrichOrdersWithChatData(localOrders, session.tenantId, exchange);
       return Response.json({ ok: true, orders: localOrders, live: false });
     }
 
@@ -114,6 +129,8 @@ export async function GET(req: NextRequest) {
       return true;
     });
 
+    await enrichOrdersWithChatData(deduped, session.tenantId, exchange);
+
     return Response.json({ ok: true, orders: deduped });
   } catch (error: any) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });
@@ -165,8 +182,9 @@ export async function POST(req: NextRequest) {
         } catch (e: any) {
           console.warn("[Verify] verifyOrder error (ignored):", e.message);
         }
-        // Send welcome message via Playwright (only if not already sent)
-        if (!cs.lastBotMsgAt) {
+        // Send welcome message only if chat bot is enabled
+        const exchCfg = await prisma.p2PBotExchangeConfig.findFirst({ where: { tenantId, exchange: "binance" } });
+        if (exchCfg?.chatBotEnabled && !cs.lastBotMsgAt) {
           try {
             const [sellRes, buyRes] = await Promise.all([
               client.getOrders({ page: 1, rows: 50, tradeType: "SELL" }),
@@ -189,10 +207,27 @@ export async function POST(req: NextRequest) {
         if (!message) {
           return Response.json({ ok: false, error: "Mensaje requerido" }, { status: 400 });
         }
-        const { BinanceP2PClient } = await import("@/lib/p2p-bot/binance-adapter");
-        const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
-        await client.sendChatMessage(orderNumber, message);
-        return Response.json({ ok: true, action, result: "Mensaje enviado" });
+        const { sendChatMessage: sendViaPlaywright } = await import("@/lib/p2p-bot/chat-playwright");
+        const { sendChatViaBAPI, getStoredCookies } = await import("@/lib/p2p-bot/chat-browser");
+        const cookies = await getStoredCookies(tenantId);
+        if (!cookies) {
+          return Response.json({ ok: false, error: "No hay cookies guardadas. Configura las cookies de Binance en el panel." }, { status: 400 });
+        }
+
+        const pwRes = await sendViaPlaywright(orderNumber, message, cookies, undefined, tenantId);
+        if (pwRes.ok) {
+          return Response.json({ ok: true, action, result: "Mensaje enviado" });
+        }
+        const pwErr = pwRes.error || "Playwright falló sin mensaje";
+
+        // BAPI fallback (Binance Web API, uses cookies)
+        const bapiRes = await sendChatViaBAPI(orderNumber, message, cookies);
+        if (bapiRes.ok) {
+          return Response.json({ ok: true, action, result: "Mensaje enviado (BAPI)" });
+        }
+        const bapiErr = bapiRes.error || "BAPI falló sin mensaje";
+
+        return Response.json({ ok: false, error: `Playwright: ${pwErr} | BAPI: ${bapiErr}` }, { status: 500 });
       }
 
       return Response.json({ ok: false, error: `Acción no soportada para Binance: ${action}` }, { status: 400 });

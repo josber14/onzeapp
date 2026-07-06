@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import type { ChatState, ChatMessage } from "./types";
 import { sendChatViaBAPI, getStoredCookies } from "./chat-browser";
 import { sendChatMessage as sendViaPlaywright } from "./chat-playwright";
-import { fetchChatMessages } from "./chat-playwright";
 
 const MAX_RETRIES = 3;
 
@@ -40,6 +39,7 @@ export async function processChats(
   for (const rawOrder of liveOrders) {
     const orderNo = rawOrder.orderNumber ?? rawOrder.orderNo ?? rawOrder.id ?? "";
     if (!orderNo) continue;
+    if (seenOrders.has(orderNo)) continue;
     seenOrders.add(orderNo);
 
     const order = normalizeOrder(rawOrder, exchange);
@@ -119,6 +119,7 @@ async function processOrder(
   const isCancelled = order.group === "cancelled" && order.status !== "pending";
   const isPaid = order.status === "paid" || order.group === "paid";
   const isPending = order.status === "pending" || order.group === "pending";
+  const isAppealed = order.status === "appealed" || order.group === "appealed";
 
   let cs = await prisma.p2PChatState.findUnique({
     where: { tenantId_exchange_orderNumber: { tenantId, exchange, orderNumber: orderNo } },
@@ -128,6 +129,9 @@ async function processOrder(
 
   if (!cs) {
     if (!isPending && !isPaid && !isCompleted) return;
+
+    // Never message completed orders that have no chat state (completed before bot activated)
+    if (isCompleted) return;
 
     // Skip orders from previous days that don't have a chat state yet
     if (order.createdAt) {
@@ -154,7 +158,10 @@ async function processOrder(
   }
 
   // If order is completed, send final message and mark done
-  if (isCompleted && cs.state !== "completed" && cs.state !== "closed") {
+  if (isCompleted) {
+    // Double-check in DB to avoid duplicates from race conditions
+    const current = await prisma.p2PChatState.findUnique({ where: { id: cs.id }, select: { state: true } });
+    if (current?.state === "completed" || current?.state === "closed") return;
     const msg = await buildCompletionMessage(cs, tenantId, exchange);
     await sendAndTrack(client, exchange, order.orderNumber, cs, msg, order.createdAt ? new Date(order.createdAt).getTime() : undefined);
     await updateState(cs.id, "completed", { completedAt: new Date() });
@@ -167,13 +174,25 @@ async function processOrder(
     return;
   }
 
-  if (!isPending && !isPaid && !isCompleted) return;
+  // If order is appealed, notify and close
+  if (isAppealed && cs.state !== "completed" && cs.state !== "closed") {
+    if (cs.state !== "awaiting_verification") {
+      await sendAndTrack(client, exchange, order.orderNumber, cs,
+        "⚠️ El comprador ha abierto una apelación en la orden. Un asesor revisará el caso a la brevedad."
+      );
+    }
+    await updateState(cs.id, "closed", { appealAt: new Date() });
+    return;
+  }
+
+  if (!isPending && !isPaid && !isCompleted && !isAppealed) return;
 
   // Fetch chat messages for response handling
   const msgs = await fetchMessages(exchange, client, orderNo, order.createdAt);
-  const lastClientMsg = findLastClientMsg(msgs, cs.lastBotMsgAt);
+  const sinceTime = cs.lastClientMsgAt ? new Date(cs.lastClientMsgAt).getTime() : null;
+  const lastClientMsg = findLastClientMsg(msgs, sinceTime);
 
-  await logMsg(tenantId, exchange, `[Chat] processOrder ${orderNo} state=${cs.state} pending=${isPending} paid=${isPaid} msgs=${msgs.length} lastClientMsg=${lastClientMsg?.content?.slice(0, 30) || 'null'}`);
+  await logMsg(tenantId, exchange, `[Chat] processOrder ${orderNo} state=${cs.state} pending=${isPending} paid=${isPaid} msgs=${msgs.length} lastClientMsg=${lastClientMsg?.content?.slice(0, 30)?.replace(/\n/g,'|') || 'null'}`);
 
   if (cs.state === "awaiting_verification") {
     if (order.verified) {
@@ -182,14 +201,39 @@ async function processOrder(
     return;
   }
 
+  // Handle paid status BEFORE processing client messages
+  if (isPaid) {
+    if (cs.state === "account_sent") {
+      await sendAndTrack(client, exchange, orderNo, cs,
+        "Recibimos tu aviso de pago ✅ Vamos a verificar la información."
+      );
+      await updateState(cs.id, "payment_made", { paidAt: new Date() });
+      return;
+    }
+    if (!["account_sent", "payment_made", "awaiting_comprobant", "completed", "closed", "awaiting_verification"].includes(cs.state)) {
+      await sendAndTrack(client, exchange, orderNo, cs,
+        "Recibimos tu aviso de pago ✅ Vamos a verificar la información."
+      );
+      await updateState(cs.id, "payment_made", { paidAt: new Date() });
+      return;
+    }
+  }
+
   // Handle client response for any active conversation state
-  if (lastClientMsg && cs.state !== "completed" && cs.state !== "closed") {
+  if (lastClientMsg && cs.state !== "completed" && cs.state !== "closed" && cs.state !== "payment_made") {
     const textContent = lastClientMsg.content?.trim() || "";
-    // Image-only message without text: don't respond, fall through to isPaid handler
     if (!textContent && lastClientMsg.imageUrl) {
-      if (!isPaid) return; // wait silently for text or paid marker
+      if (!isPaid) return;
     } else {
       await handleClientResponse(tenantId, exchange, client, cs, order, lastClientMsg.content, activeAds);
+      if (lastClientMsg.content || lastClientMsg.imageUrl) {
+        const msgTime = lastClientMsg.createTime > 0 ? new Date(lastClientMsg.createTime) : new Date();
+        await prisma.p2PChatState.update({
+          where: { id: cs.id },
+          data: { lastClientMsgAt: msgTime },
+        });
+        cs.lastClientMsgAt = msgTime;
+      }
       return;
     }
   }
@@ -207,24 +251,6 @@ async function processOrder(
       );
       await updateState(cs.id, "awaiting_problem");
     }
-    return;
-  }
-
-  // Handle buyer marking as paid in pre-account state (no account sent yet)
-  if (isPaid && !["account_sent", "payment_made", "awaiting_comprobant", "completed", "closed", "awaiting_verification"].includes(cs.state)) {
-    await sendAndTrack(client, exchange, orderNo, cs,
-      "Recibimos tu aviso de pago ✅ Vamos a verificar la información."
-    );
-    await updateState(cs.id, "payment_made", { paidAt: new Date() });
-    return;
-  }
-
-  // Handle buyer marking as paid after account sent
-  if (cs.state === "account_sent" && isPaid) {
-    await sendAndTrack(client, exchange, orderNo, cs,
-      "Recibimos tu aviso de pago ✅ Vamos a verificar la información."
-    );
-    await updateState(cs.id, "payment_made", { paidAt: new Date() });
     return;
   }
 
@@ -481,7 +507,9 @@ async function handleClientResponse(
     }
 
     case "awaiting_company_type": {
-      const companyType = matchCompanyType(textLower);
+      const opt = matchOption(textLower, 2);
+      let companyType = opt === 1 ? true : opt === 2 ? false : null;
+      if (companyType === null) companyType = matchCompanyType(textLower);
       if (companyType === true) {
         await sendAndTrack(client, exchange, order.orderNumber, cs,
           "Entendido. Por favor adjunta el ERUT de la empresa para validar la información y emitir la factura.\n\nLos datos de la cuenta ya están disponibles más arriba."
@@ -507,8 +535,7 @@ async function handleClientResponse(
       break;
     }
 
-    case "awaiting_problem":
-    case "awaiting_problem_type": {
+    case "awaiting_problem": {
       const opt = matchOption(textLower, 2);
       if (opt === 1) {
         await sendAndTrack(client, exchange, order.orderNumber, cs,
@@ -516,20 +543,10 @@ async function handleClientResponse(
         );
         await updateState(cs.id, "account_sent", { retryCount: 0 });
       } else if (opt === 2 || matchProblemType(textLower) !== null) {
-        const problemType = matchProblemType(textLower);
-        if (problemType === "limit" || problemType === "limit_daily") {
-          await sendAndTrack(client, exchange, order.orderNumber, cs,
-            "¿Cuánto te permite transferir tu banco?"
-          );
-          await updateState(cs.id, "awaiting_limit_amount", { retryCount: 0 });
-        } else if (problemType === "not_working") {
-          await handleTransferFails(tenantId, exchange, client, order, cs, activeAds, textLower);
-        } else {
-          await sendAndTrack(client, exchange, order.orderNumber, cs,
-            "Cuéntame más, ¿qué sucede?"
-          );
-          await updateState(cs.id, "account_sent", { retryCount: 0 });
-        }
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          "¿Qué tipo de problema?\n  1) Límite diario\n  2) No me funciona el banco\n\nResponde 1 o 2."
+        );
+        await updateState(cs.id, "awaiting_problem_type", { retryCount: 0 });
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
@@ -540,6 +557,33 @@ async function handleClientResponse(
             "No entendí. ¿Necesitas más tiempo o estás teniendo problemas?\n  1) Más tiempo\n  2) Problemas\n\nResponde 1 o 2."
           );
           await updateState(cs.id, "awaiting_problem", { retryCount });
+        }
+      }
+      break;
+    }
+
+    case "awaiting_problem_type": {
+      const opt = matchOption(textLower, 2);
+      if (opt === 1 || textLower.includes("límite") || textLower.includes("limite")) {
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          "¿Cuál es el límite diario de tu banco para transferencias?"
+        );
+        await updateState(cs.id, "awaiting_limit_amount", { retryCount: 0 });
+      } else if (opt === 2 || textLower.includes("no funciona") || textLower.includes("no me funciona") || textLower.includes("banco")) {
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          "Lamentamos el problema con tu banco. Cuando soluciones y estés listo, vuelve a tomar la orden. ¡Te esperamos! 👍🏻"
+        );
+        await updateState(cs.id, "closed");
+      } else {
+        retryCount++;
+        if (retryCount >= MAX_RETRIES) {
+          await sendAndTrack(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.");
+          await updateState(cs.id, "closed", { retryCount });
+        } else {
+          await sendAndTrack(client, exchange, order.orderNumber, cs,
+            "No entendí. ¿Qué tipo de problema?\n  1) Límite diario\n  2) No me funciona el banco\n\nResponde 1 o 2."
+          );
+          await updateState(cs.id, "awaiting_problem_type", { retryCount });
         }
       }
       break;
@@ -587,8 +631,6 @@ async function handleClientResponse(
 
 /* ─── Transfer fails (3 attempts then close) ─────────────────── */
 
-let transferFailCount = new Map<string, number>();
-
 async function handleTransferFails(
   tenantId: number,
   exchange: string,
@@ -598,16 +640,13 @@ async function handleTransferFails(
   activeAds: any[],
   _text: string
 ) {
-  const key = `${exchange}:${order.orderNumber}`;
-  const fails = (transferFailCount.get(key) || 0) + 1;
-  transferFailCount.set(key, fails);
+  const fails = (cs.transferFailCount || 0) + 1;
 
   if (fails >= 3) {
     await sendAndTrack(client, exchange, order.orderNumber, cs,
       "Puede ser un problema con tu banco. Lamentablemente no podemos extender más el tiempo. Intenta más tarde cuando se resuelva.\n\nQuedamos atentos para la próxima."
     );
-    await updateState(cs.id, "closed");
-    transferFailCount.delete(key);
+    await updateState(cs.id, "closed", { transferFailCount: 0 });
     return;
   }
 
@@ -627,13 +666,13 @@ async function handleTransferFails(
       chosenAccountIds: [...alreadySentIds, next.id],
       chosenBank: next.bank,
       retryCount: 0,
+      transferFailCount: fails,
     });
   } else {
     await sendAndTrack(client, exchange, order.orderNumber, cs,
       "Puede ser un problema con tu banco. Lamentablemente no podemos extender más el tiempo. Intenta más tarde cuando se resuelva.\n\nQuedamos atentos para la próxima."
     );
-    await updateState(cs.id, "closed");
-    transferFailCount.delete(key);
+    await updateState(cs.id, "closed", { transferFailCount: 0 });
   }
 }
 
@@ -711,18 +750,9 @@ export function normalizeOrder(raw: any, exchange: string) {
   };
 }
 
-async function fetchMessages(exchange: string, client: any, orderNo: string, orderCreatedAt?: string): Promise<ChatMessage[]> {
+async function fetchMessages(exchange: string, client: any, orderNo: string, _orderCreatedAt?: string): Promise<ChatMessage[]> {
+  // REST API: fast (~1s), returns real user messages (type: "text") and system (type: "system")
   try {
-    // Try Playwright first (Binance REST API is dead)
-    if (exchange === "binance") {
-      const ts = orderCreatedAt ? new Date(orderCreatedAt).getTime() : undefined;
-      const pwRes = await fetchChatMessages(orderNo, ts);
-      if (pwRes.ok && pwRes.messages.length > 0) {
-        return pwRes.messages.sort((a, b) => a.createTime - b.createTime);
-      }
-    }
-
-    // Fallback: REST API
     let raw: any;
     if (exchange === "binance") {
       const res = await client.getChatMessages(orderNo);
@@ -744,15 +774,15 @@ async function fetchMessages(exchange: string, client: any, orderNo: string, ord
   }
 }
 
-function findLastClientMsg(msgs: ChatMessage[], since: Date | string | null): ChatMessage | null {
-  const sinceTime = since ? new Date(since).getTime() : 0;
-  let last: ChatMessage | null = null;
+function findLastClientMsg(msgs: ChatMessage[], sinceTime?: number | null): ChatMessage | null {
+  // messages are sorted oldest-first; return first one newer than sinceTime
   for (const m of msgs) {
-    if (!m.self && m.createTime > sinceTime && m.type === "user" && (m.content.trim() || m.imageUrl)) {
-      last = m;
-    }
+    if (m.self || m.type === "system") continue;
+    if (!m.content.trim() && !m.imageUrl) continue;
+    if (sinceTime !== null && sinceTime !== undefined && m.createTime <= sinceTime) continue;
+    return m;
   }
-  return last;
+  return null;
 }
 
 function hasComprobant(msgs: ChatMessage[], since: Date | string | null): boolean {
@@ -832,8 +862,8 @@ function matchBank(text: string, accounts: any[]): any | null {
 }
 
 function matchCompanyType(text: string): boolean | null {
-  if (text.includes("empresa") || text === "1") return true;
-  if (text.includes("personal") || text === "2") return false;
+  if (text.includes("empresa")) return true;
+  if (text.includes("personal")) return false;
   return null;
 }
 

@@ -85,7 +85,7 @@ export default async function DashboardPage() {
   params.set("_v", String(Date.now()));
 
   const query = params.toString();
-  panelSrc = query ? `/onze-panel.html?${query}` : "/onze-panel.html";
+  panelSrc = query ? `/api/panel?${query}` : "/api/panel";
 
   return (
     <main className="min-h-screen" style={{background: "linear-gradient(180deg, #020617 0%, #071828 100%)"}}>

@@ -54,6 +54,11 @@ export async function POST(req: NextRequest) {
   if (!item?.id) {
     return NextResponse.json({ ok: false, error: "Falta id" }, { status: 400 });
   }
+  const existing = await prisma.p2PCapacity.findUnique({ where: { id: String(item.id) } });
+  const incomingStatus = String(item.status || "active");
+  if (existing?.status === "finished" && incomingStatus === "active" && !confirmPost) {
+    return NextResponse.json({ ok: false, error: "Capacity ya estaba finalizado en servidor" }, { status: 409 });
+  }
   const data: any = {
     tenantId: session.tenantId,
     provider: String(item.provider || ""),
@@ -61,7 +66,7 @@ export async function POST(req: NextRequest) {
     buyPrice: Number(item.buyPrice || 0),
     usdtAmount: Number(item.usdtAmount || 0),
     date: String(item.date || ""),
-    status: String(item.status || "active"),
+    status: incomingStatus,
     finishedAt: item.finishedAt ? new Date(item.finishedAt) : null,
     finalSoldUsdt: item.finalSoldUsdt !== undefined && item.finalSoldUsdt !== null ? Number(item.finalSoldUsdt) : null,
     finalClpReceived: item.finalClpReceived !== undefined && item.finalClpReceived !== null ? Number(item.finalClpReceived) : null,
@@ -72,11 +77,12 @@ export async function POST(req: NextRequest) {
     manualPaymentClp: item.manualPaymentClp !== undefined && item.manualPaymentClp !== null ? Number(item.manualPaymentClp) : null,
     manualPaymentsClp: item.manualPaymentsClp !== undefined && item.manualPaymentsClp !== null ? Number(item.manualPaymentsClp) : null,
   };
-  await prisma.p2PCapacity.upsert({
+  const upserted = await prisma.p2PCapacity.upsert({
     where: { id: String(item.id) },
     update: data,
     create: { id: String(item.id), ...data },
   });
+  console.log("[P2P POST] upserted", upserted.id, "→ status:", upserted.status);
   return NextResponse.json({ ok: true });
 }
 
