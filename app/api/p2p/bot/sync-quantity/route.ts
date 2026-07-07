@@ -23,12 +23,13 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { exchange, adId } = body;
+    const label = body.label || req.nextUrl.searchParams.get("label") || "ONZE";
     if (!exchange || !adId) {
       return Response.json({ ok: false, error: "exchange y adId requeridos" });
     }
 
     if (exchange === "binance") {
-      const creds = await getBinanceCredentials(session.tenantId);
+      const creds = await getBinanceCredentials(session.tenantId, label);
       if (!creds) return Response.json({ ok: false, error: "Sin credenciales Binance" });
       const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
 
@@ -36,14 +37,19 @@ export async function POST(req: NextRequest) {
       const balance = Number(balanceRes?.balance ?? 0);
       if (balance <= 0) return Response.json({ ok: false, error: "Saldo USDT no disponible" });
 
-      await client.updateAdQuantity(adId, balance);
+      const detailRes = await client.getAdDetail(adId).catch(() => null);
+      const adDetail = detailRes?.data?.adv || detailRes?.data || {};
+      const currentPrice = Number(adDetail?.price ?? 0);
+
+      await client.updateAdQuantity(adId, balance, currentPrice);
 
       return Response.json({ ok: true, quantity: balance });
     }
 
     if (exchange === "bybit") {
-      const creds = await prisma.bybitCredentials.findUnique({
-        where: { tenantId: session.tenantId, isActive: true },
+      const creds = await prisma.bybitCredentials.findFirst({
+        where: { tenantId: session.tenantId, isActive: true, label },
+        orderBy: { id: "asc" },
       });
       if (!creds) return Response.json({ ok: false, error: "Sin credenciales Bybit" });
       const client = new BybitP2PClient(creds.apiKey, creds.secretKey);

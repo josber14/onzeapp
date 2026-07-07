@@ -37,11 +37,12 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const limit = Number(searchParams.get("limit") || 50);
     const exchange = (searchParams.get("exchange") || "binance") as "binance" | "bybit" | "okx";
+    const label = searchParams.get("label") || "ONZE";
     const live = searchParams.get("live") === "true";
 
     if (live) {
       try {
-        const result = await fetchLiveOrders(exchange, session.tenantId, limit);
+        const result = await fetchLiveOrders(exchange, session.tenantId, limit, label);
         if (result.orders.length > 0) {
           await enrichOrdersWithChatData(result.orders, session.tenantId, exchange);
           return Response.json({ ok: true, orders: result.orders, live: true });
@@ -50,20 +51,21 @@ export async function GET(req: NextRequest) {
         // Live API failed, fall through to DB
       }
       // Fallback: return DB orders
-      const localOrders = await getBotOrders(session.tenantId, limit, exchange);
+      const localOrders = await getBotOrders(session.tenantId, limit, exchange, label);
       await enrichOrdersWithChatData(localOrders, session.tenantId, exchange);
       return Response.json({ ok: true, orders: localOrders, live: false });
     }
 
     // Fetch from local DB first
-    const localOrders = await getBotOrders(session.tenantId, limit, exchange);
+    const localOrders = await getBotOrders(session.tenantId, limit, exchange, label);
 
     // For Bybit, also try to fetch live orders from API
     let bybitOrders: any[] = [];
     if (!exchange || exchange === "bybit") {
       try {
-        const creds = await prisma.bybitCredentials.findUnique({
-          where: { tenantId: session.tenantId, isActive: true },
+        const creds = await prisma.bybitCredentials.findFirst({
+          where: { tenantId: session.tenantId, label, isActive: true },
+          orderBy: { id: "asc" },
         });
         if (creds) {
           const client = new BybitP2PClient(creds.apiKey, creds.secretKey);
@@ -141,6 +143,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { action, orderNumber, exchange, message } = body;
+    const label = body.label || req.nextUrl.searchParams.get("label") || "ONZE";
 
     if (!action || !orderNumber) {
       return Response.json({ ok: false, error: "action y orderNumber requeridos" }, { status: 400 });
@@ -209,7 +212,7 @@ export async function POST(req: NextRequest) {
         }
         const { sendChatMessage: sendViaPlaywright } = await import("@/lib/p2p-bot/chat-playwright");
         const { sendChatViaBAPI, getStoredCookies } = await import("@/lib/p2p-bot/chat-browser");
-        const cookies = await getStoredCookies(tenantId);
+        const cookies = await getStoredCookies(tenantId, label);
         if (!cookies) {
           return Response.json({ ok: false, error: "No hay cookies guardadas. Configura las cookies de Binance en el panel." }, { status: 400 });
         }
@@ -234,8 +237,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (exchange === "bybit") {
-      const creds = await prisma.bybitCredentials.findUnique({
-        where: { tenantId: tenantId!, isActive: true },
+      const creds = await prisma.bybitCredentials.findFirst({
+        where: { tenantId: tenantId!, isActive: true, label },
+        orderBy: { id: "asc" },
       });
       if (!creds) {
         return Response.json({ ok: false, error: "Sin credenciales Bybit" }, { status: 400 });

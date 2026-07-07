@@ -1,3 +1,4 @@
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
@@ -11,15 +12,17 @@ async function getSession() {
   return verifySessionToken(token);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session?.tenantId) {
       return Response.json({ ok: false, error: "No autorizado" }, { status: 401 });
     }
+    const label = req.nextUrl.searchParams.get("label") || "ONZE";
 
-    const creds = await prisma.binanceCredentials.findUnique({
-      where: { tenantId: session.tenantId },
+    const creds = await prisma.binanceCredentials.findFirst({
+      where: { tenantId: session.tenantId, label },
+      orderBy: { id: "asc" },
       select: { apiKey: true, secretKey: true, isActive: true, testStatus: true, lastTestedAt: true, updatedAt: true }
     });
 
@@ -37,7 +40,7 @@ export async function GET() {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const session = await getSession();
     if (!session?.tenantId) {
@@ -46,16 +49,25 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const { apiKey, secretKey } = body;
+    const label = body.label || request.nextUrl.searchParams.get("label") || "ONZE";
 
     if (!apiKey || !secretKey) {
       return Response.json({ ok: false, error: "API Key y Secret Key son requeridos" }, { status: 400 });
     }
 
-    await prisma.binanceCredentials.upsert({
-      where: { tenantId: session.tenantId },
-      update: { apiKey, secretKey, isActive: true, updatedAt: new Date() },
-      create: { tenantId: session.tenantId, apiKey, secretKey, isActive: true },
+    const existing = await prisma.binanceCredentials.findFirst({
+      where: { tenantId: session.tenantId, label },
     });
+    if (existing) {
+      await prisma.binanceCredentials.update({
+        where: { id: existing.id },
+        data: { apiKey, secretKey, isActive: true, updatedAt: new Date() },
+      });
+    } else {
+      await prisma.binanceCredentials.create({
+        data: { tenantId: session.tenantId, label, apiKey, secretKey, isActive: true },
+      });
+    }
 
     return Response.json({ ok: true, message: "Credenciales guardadas correctamente" });
   } catch (error: any) {

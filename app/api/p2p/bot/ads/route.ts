@@ -14,16 +14,17 @@ async function getSession() {
   return verifySessionToken(token);
 }
 
-async function getBybitClient(tenantId: number) {
-  const creds = await prisma.bybitCredentials.findUnique({
-    where: { tenantId, isActive: true },
+async function getBybitClient(tenantId: number, label = "ONZE") {
+  const creds = await prisma.bybitCredentials.findFirst({
+    where: { tenantId, isActive: true, label },
+    orderBy: { id: "asc" },
   });
   if (!creds) return null;
   return new BybitP2PClient(creds.apiKey, creds.secretKey);
 }
 
-async function getBinanceClient(tenantId: number) {
-  const creds = await getBinanceCredentials(tenantId);
+async function getBinanceClient(tenantId: number, label?: string) {
+  const creds = await getBinanceCredentials(tenantId, label);
   if (!creds) return null;
   return new BinanceP2PClient(creds.apiKey, creds.secretKey);
 }
@@ -37,9 +38,10 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const exchange = searchParams.get("exchange");
+    const label = searchParams.get("label") || "ONZE";
 
     // Fetch from local DB
-    const where: any = { tenantId: session.tenantId };
+    const where: any = { tenantId: session.tenantId, label };
     if (exchange) where.exchange = exchange;
 
     const ads = await prisma.p2PBotAd.findMany({
@@ -51,7 +53,7 @@ export async function GET(req: NextRequest) {
     let binanceAds: any[] = [];
     if (!exchange || exchange === "binance") {
       try {
-        const client = await getBinanceClient(session.tenantId);
+        const client = await getBinanceClient(session.tenantId, label);
         if (client) {
           const res = await client.getMyAds(1, 50);
           const raw = Array.isArray(res?.data)
@@ -231,6 +233,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
+    const label = body.label || req.nextUrl.searchParams.get("label") || "ONZE";
     const { id, adId, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged, botEnabled, botTop1Diff, botSafeMarginPct, botCompetePayTypes, botPriceFloorPct, botPriceSource, botCommissionPct, botMinCompetitorCapital, botStrategy, botSpreadPct, botCycleInterval, botCircuitBreakPct, botDailyVolumeCapUsdt } = body;
 
     if (!exchange) {
@@ -335,6 +338,7 @@ export async function PUT(req: NextRequest) {
     // Create new
     const createData: any = {
       tenantId: session.tenantId,
+      label,
       exchange,
       tradeType: tradeType || "SELL",
       asset: asset || "USDT",

@@ -1,30 +1,30 @@
 import { prisma } from "@/lib/prisma";
 import { createHmac } from "crypto";
 
-export async function getBinanceCredentials(tenantId: number) {
-  return prisma.binanceCredentials.findUnique({ where: { tenantId } });
+export async function getBinanceCredentials(tenantId: number, label = "ONZE") {
+  return prisma.binanceCredentials.findUnique({ where: { tenantId_label: { tenantId, label } } });
 }
 
-export async function saveBinanceCredentials(tenantId: number, apiKey: string, secretKey: string) {
+export async function saveBinanceCredentials(tenantId: number, apiKey: string, secretKey: string, label = "ONZE") {
   await prisma.binanceCredentials.upsert({
-    where: { tenantId },
+    where: { tenantId_label: { tenantId, label } },
     update: { apiKey, secretKey, isActive: true },
-    create: { tenantId, apiKey, secretKey, isActive: true },
+    create: { tenantId, label, apiKey, secretKey, isActive: true },
   });
 }
 
-export async function testBinanceCredentials(tenantId: number) {
+export async function testBinanceCredentials(tenantId: number, label = "ONZE") {
   try {
-    const creds = await getBinanceCredentials(tenantId);
+    const creds = await getBinanceCredentials(tenantId, label);
     if (!creds) return { ok: false, error: "No credentials" };
     await prisma.binanceCredentials.update({
-      where: { tenantId },
+      where: { tenantId_label: { tenantId, label } },
       data: { lastTestedAt: new Date(), testStatus: "success" },
     });
     return { ok: true };
   } catch (e: any) {
     await prisma.binanceCredentials.update({
-      where: { tenantId },
+      where: { tenantId_label: { tenantId, label } },
       data: { lastTestedAt: new Date(), testStatus: "failed" },
     });
     return { ok: false, error: e.message };
@@ -183,9 +183,12 @@ export class BinanceP2PClient {
     throw lastErr;
   }
 
-  async updateAdQuantity(adId: string, quantity: number) {
+  async updateAdQuantity(adId: string, quantity: number, currentPrice?: number) {
     const body: Record<string, any> = { advNo: String(adId) };
     if (quantity > 0) body.surplusAmount = String(quantity);
+    // Binance silently no-ops surplusAmount-only updates on some ads — sending the
+    // (unchanged) current price alongside it is what makes the update actually stick.
+    if (currentPrice != null && Number(currentPrice) > 0) body.price = String(currentPrice);
     return await this.privateRequest("/sapi/v1/c2c/ads/update", {}, body);
   }
 

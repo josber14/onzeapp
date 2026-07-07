@@ -236,10 +236,11 @@ export async function getBotStatus(
 
 export async function getExchangeConfig(
   tenantId: number,
-  exchange: BotExchange
+  exchange: BotExchange,
+  label = "ONZE"
 ): Promise<P2PBotExchangeConfigData | null> {
   const config = await prisma.p2PBotExchangeConfig.findUnique({
-    where: { tenantId_exchange: { tenantId, exchange } },
+    where: { tenantId_exchange_label: { tenantId, exchange, label } },
   });
   if (!config) return null;
   return {
@@ -271,7 +272,8 @@ export async function getExchangeConfig(
 export async function saveExchangeConfig(
   tenantId: number,
   exchange: BotExchange,
-  data: Partial<P2PBotExchangeConfigData>
+  data: Partial<P2PBotExchangeConfigData>,
+  label = "ONZE"
 ) {
   const update: any = {};
   if (data.enabled !== undefined) update.enabled = data.enabled;
@@ -292,10 +294,11 @@ export async function saveExchangeConfig(
   if (data.chatCookies !== undefined) update.chatCookies = data.chatCookies;
 
   await prisma.p2PBotExchangeConfig.upsert({
-    where: { tenantId_exchange: { tenantId, exchange } },
+    where: { tenantId_exchange_label: { tenantId, exchange, label } },
     update,
     create: {
       tenantId,
+      label,
       exchange,
       enabled: data.enabled ?? false,
       strategy: data.strategy ?? "top1",
@@ -314,22 +317,22 @@ export async function saveExchangeConfig(
   });
 }
 
-export async function startExchangeBot(tenantId: number, exchange: BotExchange) {
+export async function startExchangeBot(tenantId: number, exchange: BotExchange, label = "ONZE") {
   await saveExchangeConfig(tenantId, exchange, {
     enabled: true,
     pauseUntil: null,
     lastStartedAt: new Date().toISOString(),
-  });
-  await logBot(tenantId, "info", exchange, `Bot ${exchange} iniciado manualmente`);
+  }, label);
+  await logBot(tenantId, "info", exchange, `Bot ${exchange} iniciado manualmente`, undefined, label);
   return { ok: true };
 }
 
-export async function stopExchangeBot(tenantId: number, exchange: BotExchange) {
+export async function stopExchangeBot(tenantId: number, exchange: BotExchange, label = "ONZE") {
   await prisma.p2PBotExchangeConfig.update({
-    where: { tenantId_exchange: { tenantId, exchange } },
+    where: { tenantId_exchange_label: { tenantId, exchange, label } },
     data: { enabled: false, lastStoppedAt: new Date() },
   });
-  await logBot(tenantId, "info", exchange, `Bot ${exchange} detenido manualmente`);
+  await logBot(tenantId, "info", exchange, `Bot ${exchange} detenido manualmente`, undefined, label);
   return { ok: true };
 }
 
@@ -349,11 +352,13 @@ export async function getBotLogs(
   tenantId: number,
   limit = 50,
   level?: string,
-  exchange?: string
+  exchange?: string,
+  label?: string
 ) {
   const where: any = { tenantId };
   if (level) where.level = level;
   if (exchange) where.exchange = exchange;
+  if (label) where.label = label;
 
   const logs = await prisma.p2PBotLog.findMany({
     where,
@@ -370,10 +375,12 @@ export async function getBotLogs(
 export async function getBotOrders(
   tenantId: number,
   limit = 50,
-  exchange?: string
+  exchange?: string,
+  label?: string
 ) {
   const where: any = { tenantId };
   if (exchange) where.exchange = exchange;
+  if (label) where.label = label;
 
   const orders = await prisma.p2PBotOrder.findMany({
     where,
@@ -397,14 +404,15 @@ export async function logBot(
   level: string,
   exchange: string | null,
   message: string,
-  details?: any
+  details?: any,
+  label?: string
 ) {
   await prisma.p2PBotLog.create({
-    data: { tenantId, level, exchange, message, details: details || undefined },
+    data: { tenantId, level, exchange, message, details: details || undefined, label: label || "ONZE" },
   });
 }
 
-export async function executeBotCycle(tenantId: number) {
+export async function executeBotCycle(tenantId: number, label = "ONZE") {
   const config = await getBotConfig(tenantId);
   const isGloballyDisabled = !config || !config.enabled;
   const isPaused =
@@ -417,7 +425,7 @@ export async function executeBotCycle(tenantId: number) {
 
   for (const exchange of exchanges) {
     try {
-      const exchangeConfig = await getExchangeConfig(tenantId, exchange);
+      const exchangeConfig = await getExchangeConfig(tenantId, exchange, label);
       const activeConfig = (exchangeConfig || config) as P2PBotExchangeConfigData | P2PBotConfigData;
 
       // Check if chat should run independently of bot enabled state
@@ -438,10 +446,10 @@ export async function executeBotCycle(tenantId: number) {
 
       if (exchange === "binance") {
         const creds = await prisma.binanceCredentials.findFirst({
-          where: { tenantId, isActive: true },
+          where: { tenantId, isActive: true, label },
         });
         if (!creds) {
-          await logBot(tenantId, "warn", "binance", "Sin credenciales Binance configuradas");
+          await logBot(tenantId, "warn", "binance", "Sin credenciales Binance configuradas", undefined, label);
           cycleState.binance = buildBinanceState(getBinanceState(tenantId));
           continue;
         }
@@ -452,7 +460,7 @@ export async function executeBotCycle(tenantId: number) {
         if (!isDisabled) {
           binancePromises.push((async () => {
             try {
-              const result = await runBinanceCycle(tenantId, activeConfig, creds.apiKey, creds.secretKey);
+              const result = await runBinanceCycle(tenantId, activeConfig, creds.apiKey, creds.secretKey, label);
               cycleState.binance = buildBinanceState(getBinanceState(tenantId));
               if (result.actions.length > 0) {
                 actions.push(...result.actions);
@@ -482,11 +490,11 @@ export async function executeBotCycle(tenantId: number) {
         if (binancePromises.length > 0) await Promise.all(binancePromises);
         if (cycleState.binance === undefined) cycleState.binance = buildBinanceState(getBinanceState(tenantId));
       } else if (exchange === "bybit") {
-        const creds = await prisma.bybitCredentials.findUnique({
-          where: { tenantId, isActive: true },
+        const creds = await prisma.bybitCredentials.findFirst({
+          where: { tenantId, isActive: true, label },
         });
         if (!creds) {
-          await logBot(tenantId, "warn", "bybit", "Sin credenciales Bybit configuradas");
+          await logBot(tenantId, "warn", "bybit", "Sin credenciales Bybit configuradas", undefined, label);
           continue;
         }
 
@@ -496,7 +504,7 @@ export async function executeBotCycle(tenantId: number) {
         if (!isDisabled) {
           bybitPromises.push((async () => {
             try {
-              const result = await runBybitCycle(tenantId, activeConfig, creds.apiKey, creds.secretKey);
+              const result = await runBybitCycle(tenantId, activeConfig, creds.apiKey, creds.secretKey, label);
               if (result.actions.length > 0) {
                 actions.push(...result.actions);
                 await logBot(tenantId, "info", "bybit", `${result.actions.length} acción(es) ejecutada(s)`, { actions: result.actions });
@@ -642,7 +650,8 @@ async function runBinanceCycle(
   tenantId: number,
   config: P2PBotConfigData | P2PBotExchangeConfigData,
   apiKey: string,
-  secretKey: string
+  secretKey: string,
+  label = "ONZE"
 ): Promise<{ actions: BotAction[] }> {
   const actions: BotAction[] = [];
   const client = new BinanceP2PClient(apiKey, secretKey);
@@ -1217,7 +1226,8 @@ async function runBybitCycle(
   tenantId: number,
   config: P2PBotConfigData | P2PBotExchangeConfigData,
   apiKey: string,
-  secretKey: string
+  secretKey: string,
+  label = "ONZE"
 ): Promise<{ actions: BotAction[] }> {
   const actions: BotAction[] = [];
   const client = new BybitP2PClient(apiKey, secretKey);

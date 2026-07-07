@@ -23,10 +23,12 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const exchange = searchParams.get("exchange") || "bybit";
+    const label = searchParams.get("label") || "ONZE";
 
     if (exchange === "bybit") {
-      const creds = await prisma.bybitCredentials.findUnique({
-        where: { tenantId: session.tenantId, isActive: true },
+      const creds = await prisma.bybitCredentials.findFirst({
+        where: { tenantId: session.tenantId, isActive: true, label },
+        orderBy: { id: "asc" },
       });
       if (!creds) {
         return Response.json({ ok: false, error: "Sin credenciales Bybit" });
@@ -51,8 +53,9 @@ export async function GET(req: NextRequest) {
     }
 
     if (exchange === "binance") {
-      const creds = await prisma.binanceCredentials.findUnique({
-        where: { tenantId: session.tenantId, isActive: true },
+      const creds = await prisma.binanceCredentials.findFirst({
+        where: { tenantId: session.tenantId, isActive: true, label },
+        orderBy: { id: "asc" },
       });
       if (!creds) {
         return Response.json({ ok: false, error: "Sin credenciales Binance" });

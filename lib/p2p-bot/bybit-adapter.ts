@@ -1,38 +1,53 @@
 import { prisma } from "@/lib/prisma";
 import { createHmac } from "crypto";
 
-export async function getBybitCredentials(tenantId: number) {
-  return prisma.bybitCredentials.findUnique({ where: { tenantId } });
+export async function getBybitCredentials(tenantId: number, label = "ONZE") {
+  return prisma.bybitCredentials.findFirst({
+    where: { tenantId, isActive: true, label },
+    orderBy: { id: "asc" },
+  });
 }
 
 export async function saveBybitCredentials(
   tenantId: number,
   apiKey: string,
-  secretKey: string
+  secretKey: string,
+  label = "ONZE"
 ) {
-  await prisma.bybitCredentials.upsert({
-    where: { tenantId },
-    update: { apiKey, secretKey, isActive: true },
-    create: { tenantId, apiKey, secretKey, isActive: true },
+  const existing = await prisma.bybitCredentials.findFirst({
+    where: { tenantId, label },
   });
+  if (existing) {
+    await prisma.bybitCredentials.update({
+      where: { id: existing.id },
+      data: { apiKey, secretKey, isActive: true },
+    });
+  } else {
+    await prisma.bybitCredentials.create({
+      data: { tenantId, label, apiKey, secretKey, isActive: true },
+    });
+  }
 }
 
-export async function testBybitCredentials(tenantId: number) {
+export async function testBybitCredentials(tenantId: number, label = "ONZE") {
   try {
-    const creds = await getBybitCredentials(tenantId);
+    const creds = await getBybitCredentials(tenantId, label);
     if (!creds) return { ok: false, error: "No credentials" };
     const client = new BybitP2PClient(creds.apiKey, creds.secretKey);
     await client.getAccountInfo();
     await prisma.bybitCredentials.update({
-      where: { tenantId },
+      where: { id: creds.id },
       data: { lastTestedAt: new Date(), testStatus: "success" },
     });
     return { ok: true };
   } catch (e: any) {
-    await prisma.bybitCredentials.update({
-      where: { tenantId },
-      data: { lastTestedAt: new Date(), testStatus: "failed" },
-    });
+    const creds = await getBybitCredentials(tenantId, label);
+    if (creds) {
+      await prisma.bybitCredentials.update({
+        where: { id: creds.id },
+        data: { lastTestedAt: new Date(), testStatus: "failed" },
+      });
+    }
     return { ok: false, error: e.message };
   }
 }

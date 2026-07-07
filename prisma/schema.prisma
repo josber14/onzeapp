@@ -40,9 +40,9 @@ model Tenant {
   updatedAt            DateTime               @updatedAt
   auditLogs            AuditLog[]
   balanceMovements     BalanceMovement[]
-  binanceCredentials   BinanceCredentials?
+  binanceCredentials   BinanceCredentials[]
   binanceOrders        BinanceOrder[]
-  bybitCredentials     BybitCredentials?
+  bybitCredentials     BybitCredentials[]
   collaboratorPayments CollaboratorPayment[]
   dataSources          DataSource[]
   earningsMovements    EarningsMovement[]
@@ -50,7 +50,7 @@ model Tenant {
   initialCapitals      InitialCapital[]
   internalFundings     InternalFunding[]
   liquidityAlerts      LiquidityAlert[]
-  OkxCredentials       OkxCredentials?
+  OkxCredentials       OkxCredentials[]
   operations           Operation[]
   customers            OperatorCustomer[]
   P2PAccount          P2PAccount[]
@@ -536,7 +536,8 @@ model PasswordResetCode {
 
 model BinanceCredentials {
   id           Int       @id @default(autoincrement())
-  tenantId     Int       @unique
+  tenantId     Int
+  label        String    @default("ONZE")
   apiKey       String
   secretKey    String
   isActive     Boolean   @default(true)
@@ -546,6 +547,7 @@ model BinanceCredentials {
   updatedAt    DateTime  @updatedAt
   tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@unique([tenantId, label])
   @@index([tenantId])
 }
 
@@ -657,7 +659,8 @@ model P2PBotConfig {
 
 model BybitCredentials {
   id           Int       @id @default(autoincrement())
-  tenantId     Int       @unique
+  tenantId     Int
+  label        String    @default("ONZE")
   apiKey       String
   secretKey    String
   isActive     Boolean   @default(true)
@@ -667,12 +670,14 @@ model BybitCredentials {
   updatedAt    DateTime  @updatedAt
   tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@unique([tenantId, label])
   @@index([tenantId])
 }
 
 model P2PBotOrder {
   id           Int      @id @default(autoincrement())
   tenantId     Int
+  label        String?
   exchange     String
   orderNumber  String
   tradeType    String
@@ -697,6 +702,7 @@ model P2PBotOrder {
 model P2PBotLog {
   id        Int      @id @default(autoincrement())
   tenantId  Int
+  label     String?
   level     String
   exchange  String?
   message   String
@@ -711,7 +717,8 @@ model P2PBotLog {
 
 model OkxCredentials {
   id           Int       @id @default(autoincrement())
-  tenantId     Int       @unique
+  tenantId     Int
+  label        String    @default("ONZE")
   apiKey       String
   secretKey    String
   passphrase   String?
@@ -719,9 +726,10 @@ model OkxCredentials {
   lastTestedAt DateTime?
   testStatus   String?
   createdAt    DateTime  @default(now())
-    updatedAt    DateTime  @default(now())
-    Tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  updatedAt    DateTime  @default(now())
+  Tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
+  @@unique([tenantId, label])
   @@index([tenantId])
 }
 
@@ -778,6 +786,7 @@ model P2PAccount {
 model P2PBotExchangeConfig {
   id                   Int       @id @default(autoincrement())
   tenantId             Int
+  label                String    @default("ONZE")
   exchange             String
   enabled              Boolean   @default(false)
   strategy             String    @default("top1")
@@ -802,13 +811,14 @@ model P2PBotExchangeConfig {
   safeMarginPct        Decimal   @default(0) @db.Decimal(8, 4)
   Tenant               Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  @@unique([tenantId, exchange])
+  @@unique([tenantId, exchange, label])
   @@index([tenantId])
 }
 
 model P2PBotAd {
   id                     Int       @id @default(autoincrement())
   tenantId               Int
+  label                  String    @default("ONZE")
   exchange               String
   adId                   String?
   tradeType              String    @default("SELL")

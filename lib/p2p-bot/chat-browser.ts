@@ -92,9 +92,9 @@ export async function sendChatViaBAPI(
   return { ok: false, error: lastErr };
 }
 
-export async function getStoredCookies(tenantId: number): Promise<string | null> {
+export async function getStoredCookies(tenantId: number, label = "ONZE"): Promise<string | null> {
   const cfg = await prisma.p2PBotExchangeConfig.findUnique({
-    where: { tenantId_exchange: { tenantId, exchange: "binance" } },
+    where: { tenantId_exchange_label: { tenantId, exchange: "binance", label } },
   });
   if (!cfg?.chatCookies) return null;
   const raw = cfg.chatCookies as any;
@@ -106,9 +106,9 @@ export async function getStoredCookies(tenantId: number): Promise<string | null>
   return null;
 }
 
-export async function getStorageState(tenantId: number): Promise<{ cookies: any[]; origins?: any[] } | null> {
+export async function getStorageState(tenantId: number, label = "ONZE"): Promise<{ cookies: any[]; origins?: any[] } | null> {
   const cfg = await prisma.p2PBotExchangeConfig.findUnique({
-    where: { tenantId_exchange: { tenantId, exchange: "binance" } },
+    where: { tenantId_exchange_label: { tenantId, exchange: "binance", label } },
   });
   if (!cfg?.chatCookies) return null;
   const raw = cfg.chatCookies as any;
@@ -118,9 +118,9 @@ export async function getStorageState(tenantId: number): Promise<{ cookies: any[
   return null;
 }
 
-export async function storeCookies(tenantId: number, data: string | { cookies: any[]; origins?: any[] }): Promise<void> {
+export async function storeCookies(tenantId: number, data: string | { cookies: any[]; origins?: any[] }, label = "ONZE"): Promise<void> {
   await prisma.p2PBotExchangeConfig.upsert({
-    where: { tenantId_exchange: { tenantId, exchange: "binance" } },
+    where: { tenantId_exchange_label: { tenantId, exchange: "binance", label } },
     update: { chatCookies: data as any },
     create: { tenantId, exchange: "binance", chatCookies: data as any },
   });

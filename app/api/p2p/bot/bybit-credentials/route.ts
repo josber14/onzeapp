@@ -12,15 +12,17 @@ async function getSession() {
   return verifySessionToken(token);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session?.tenantId) {
       return Response.json({ ok: false, error: "No autorizado" }, { status: 401 });
     }
+    const label = req.nextUrl.searchParams.get("label") || "ONZE";
     const { prisma } = await import("@/lib/prisma");
-    const creds = await prisma.bybitCredentials.findUnique({
-      where: { tenantId: session.tenantId },
+    const creds = await prisma.bybitCredentials.findFirst({
+      where: { tenantId: session.tenantId, label },
+      orderBy: { id: "asc" },
       select: {
         isActive: true,
         lastTestedAt: true,
@@ -41,16 +43,17 @@ export async function POST(req: NextRequest) {
     if (!session?.tenantId) {
       return Response.json({ ok: false, error: "No autorizado" }, { status: 401 });
     }
+    const label = req.nextUrl.searchParams.get("label") || "ONZE";
     const body = await req.json();
     const { apiKey, secretKey, test } = body;
 
     if (apiKey && secretKey) {
       const { saveBybitCredentials } = await import("@/lib/p2p-bot/bybit-adapter");
-      await saveBybitCredentials(session.tenantId, apiKey, secretKey);
+      await saveBybitCredentials(session.tenantId, apiKey, secretKey, label);
     }
 
     if (test) {
-      const result = await testBybitCredentials(session.tenantId);
+      const result = await testBybitCredentials(session.tenantId, label);
       return Response.json({ ok: true, testResult: result });
     }
 

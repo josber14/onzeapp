@@ -102,8 +102,9 @@ export async function GET() {
     let apiKey: string | null = null;
     let secretKey: string | null = null;
 
-    const creds = await prisma.binanceCredentials.findUnique({
+    const creds = await prisma.binanceCredentials.findFirst({
       where: { tenantId },
+      orderBy: { id: "asc" },
       select: { apiKey: true, secretKey: true, isActive: true },
     });
 

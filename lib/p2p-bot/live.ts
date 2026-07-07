@@ -20,17 +20,19 @@ function setCache(key: string, data: any, ttlMs: number) {
   cache.set(key, { data, expiresAt: Date.now() + ttlMs });
 }
 
-async function getClient(exchange: BotExchange, tenantId: number) {
+async function getClient(exchange: BotExchange, tenantId: number, label = "ONZE") {
   if (exchange === "binance") {
     const creds = await prisma.binanceCredentials.findFirst({
-      where: { tenantId, isActive: true },
+      where: { tenantId, isActive: true, label },
+      orderBy: { id: "asc" },
     });
     if (!creds) throw new Error("Sin credenciales Binance configuradas");
     return { client: new BinanceP2PClient(creds.apiKey, creds.secretKey) as any, exchange };
   }
   if (exchange === "bybit") {
-    const creds = await prisma.bybitCredentials.findUnique({
-      where: { tenantId, isActive: true },
+    const creds = await prisma.bybitCredentials.findFirst({
+      where: { tenantId, isActive: true, label },
+      orderBy: { id: "asc" },
     });
     if (!creds) throw new Error("Sin credenciales Bybit configuradas");
     return { client: new BybitP2PClient(creds.apiKey, creds.secretKey) as any, exchange };
@@ -38,12 +40,12 @@ async function getClient(exchange: BotExchange, tenantId: number) {
   throw new Error("Exchange no soportado: " + exchange);
 }
 
-export async function fetchLiveMarket(exchange: BotExchange, tenantId: number, side: "0" | "1" = "1") {
+export async function fetchLiveMarket(exchange: BotExchange, tenantId: number, side: "0" | "1" = "1", label = "ONZE") {
   const cacheKey = `market:${exchange}:${side}`;
   const cached = getCached<{ competitors: any[]; totalCompetitors: number; cycleAt: string; ourAd: null; targetPrice: null; fetchAt: string }>(cacheKey);
   if (cached) return cached;
 
-  const { client } = await getClient(exchange, tenantId);
+  const { client } = await getClient(exchange, tenantId, label);
 
   let rawCompetitors: any[] = [];
   if (exchange === "binance") {
@@ -94,12 +96,12 @@ export async function fetchLiveMarket(exchange: BotExchange, tenantId: number, s
   return result;
 }
 
-export async function fetchLiveOrders(exchange: BotExchange, tenantId: number, limit = 50) {
+export async function fetchLiveOrders(exchange: BotExchange, tenantId: number, limit = 50, label = "ONZE") {
   const cacheKey = `orders:${exchange}`;
   const cached = getCached<{ orders: any[] }>(cacheKey);
   if (cached) return cached;
 
-  const { client } = await getClient(exchange, tenantId);
+  const { client } = await getClient(exchange, tenantId, label);
 
   let orders: any[] = [];
   if (exchange === "binance") {

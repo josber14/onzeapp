@@ -2170,7 +2170,13 @@
           <h2 style="color:#00d4ff; margin-bottom:8px;">Ajustes</h2>
           <p style="color:#aaa; margin-bottom:24px;">Configuración de integraciones y credenciales.</p>
           <div style="background:#0d2137; border:1px solid #1a3a5a; border-radius:12px; padding:24px; margin-bottom:24px;">
-            <h3 style="color:#fff; margin-bottom:4px;">🔑 Credenciales Binance P2P</h3>
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+              <h3 style="color:#fff; margin:0;">🔑 Credenciales Binance P2P</h3>
+              <div style="display:flex;gap:4px;border:1px solid rgba(148,163,184,.15);border-radius:8px;overflow:hidden;">
+                <button class="btn ajustes-acct-btn active" data-label="ONZE" onclick="window.ajustesSetCredsLabel('ONZE')" style="border-radius:0;padding:5px 14px;font-size:12px;font-weight:700;">ONZE</button>
+                <button class="btn ajustes-acct-btn" data-label="ZINPLE" onclick="window.ajustesSetCredsLabel('ZINPLE')" style="border-radius:0;padding:5px 14px;font-size:12px;font-weight:700;">ZINPLE</button>
+              </div>
+            </div>
             <p style="color:#aaa; font-size:13px; margin-bottom:16px;">Ingresa tu API Key y Secret Key de Binance para conectar tus operaciones P2P.</p>
             <div id="binance-creds-status" style="margin-bottom:16px; padding:10px; border-radius:8px; background:#1a3a5a; font-size:13px; color:#aaa;">Verificando estado...</div>
             <div style="margin-bottom:12px;">
@@ -9292,6 +9298,10 @@ function addP2PBotStyles(){
     .bot-account-card .acct-label{font-weight:700;color:#f1f5f9;font-size:13px;}
     .bot-account-card .acct-detail{font-size:11px;color:#94a3b8;margin-top:3px;line-height:1.5;}
     .bot-account-card .acct-actions{display:flex;gap:6px;margin-top:8px;justify-content:flex-end;}
+    .bot-acct-btn{background:transparent;border:none;color:#94a3b8;cursor:pointer;transition:all .15s;}
+    .bot-acct-btn.active{background:rgba(0,212,255,.12);color:#00d4ff;}
+    .ajustes-acct-btn{background:transparent;border:none;color:#94a3b8;cursor:pointer;transition:all .15s;}
+    .ajustes-acct-btn.active{background:rgba(0,212,255,.12);color:#00d4ff;}
 
     /* Chat */
     .bot-chat-box{max-height:200px;overflow-y:auto;border:1px solid rgba(148,163,184,.08);border-radius:8px;padding:8px;background:rgba(15,23,42,.25);}
@@ -9535,10 +9545,14 @@ function addP2PBotStyles(){
     <section class="section-card">
       <div class="section-top">
         <div>
-          <h2 class="section-title" style="font-size:18px;">ONZE P2P Bot</h2>
+          <h2 class="section-title" style="font-size:18px;">P2P Bot</h2>
           <p class="section-text" style="margin-top:2px;font-size:12px;color:#64748b;">Bot autom\u00E1tico de P2P Market Making</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <div style="display:flex;gap:4px;margin-right:8px;border:1px solid rgba(148,163,184,.15);border-radius:8px;overflow:hidden;">
+            <button class="btn bot-acct-btn active" data-label="ONZE" onclick="window.botSetActiveLabel('ONZE')" style="border-radius:0;padding:5px 14px;font-size:12px;font-weight:700;">ONZE</button>
+            <button class="btn bot-acct-btn" data-label="ZINPLE" onclick="window.botSetActiveLabel('ZINPLE')" style="border-radius:0;padding:5px 14px;font-size:12px;font-weight:700;">ZINPLE</button>
+          </div>
           <span id="botStatusIndicator" class="bot-status-indicator stopped">
             <span class="bot-status-dot stopped" id="botStatusDot"></span>
             <span id="botStatusText">Detenido</span>
@@ -9928,6 +9942,19 @@ function addP2PBotStyles(){
       setTimeout(window.botRefreshExchange, 300);
     });
   }
+
+  var botActiveLabel = "ONZE";
+  var botLabelData = {}; // separate state per label
+
+  window.botSetActiveLabel = function(label){
+    if(label === botActiveLabel) return;
+    botActiveLabel = label;
+    document.querySelectorAll(".bot-acct-btn").forEach(function(b){
+      b.classList.toggle("active", b.getAttribute("data-label") === label);
+    });
+    // Reinitialize view for the new label
+    if(typeof botRefreshExchange === "function") botRefreshExchange(false);
+  };
 
   window.botSelectExchange = function(exchange){
     botSelectedExchange = exchange;
@@ -10427,7 +10454,7 @@ function addP2PBotStyles(){
       method:"POST",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ exchange: ex, action: "start" })
+      body: JSON.stringify({ exchange: ex, action: "start", label: botActiveLabel })
     });
     if(botCycleActive) return; // already cycling (another exchange is running)
     // Save interval to backend (used for rate-limit cooldown)
@@ -10438,7 +10465,7 @@ function addP2PBotStyles(){
     botCycleActive = true;
     async function scheduleBotCycle(){
       try{
-        const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include" });
+        const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ label: botActiveLabel }) });
         const data = await res.json();
         if(data?.state?.binance){
           const st = data.state.binance;
@@ -10485,7 +10512,7 @@ function addP2PBotStyles(){
     chatCycleActive = true;
     async function scheduleBotCycle(){
       try{
-        const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include" });
+        const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ label: botActiveLabel }) });
         window.botRefreshExchange(true);
       }catch(e){}
       if(chatCycleActive) chatCycleTimer = setTimeout(scheduleBotCycle, 2000);
@@ -10513,7 +10540,7 @@ function addP2PBotStyles(){
       method:"POST",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ exchange: ex, action: "stop" })
+      body: JSON.stringify({ exchange: ex, action: "stop", label: botActiveLabel })
     }).then(async r => {
       if(!r.ok){
         const errData = await r.json().catch(()=>({}));
@@ -10526,18 +10553,19 @@ function addP2PBotStyles(){
 
   async function botRefreshExchange(skipConfig){
     const ex = botSelectedExchange;
+    const lbl = "&label=" + encodeURIComponent(botActiveLabel);
     // Each fetch is independent so one failure doesn't block the rest
     try{
       fetch("/api/p2p/bot/config", { credentials:"include" }).then(r=>r.json()).then(d=>{ if(d?.ok && d?.config) updateBotConfig(d.config); }).catch(()=>{});
     }catch(e){}
     try{
-      fetch("/api/p2p/bot/logs?limit=200&exchange=" + encodeURIComponent(ex), { credentials:"include" }).then(r=>r.json()).then(d=>{ if(d?.ok) renderBotLogs(d.logs); }).catch(()=>{});
+      fetch("/api/p2p/bot/logs?limit=200&exchange=" + encodeURIComponent(ex) + lbl, { credentials:"include" }).then(r=>r.json()).then(d=>{ if(d?.ok) renderBotLogs(d.logs); }).catch(()=>{});
     }catch(e){}
     try{
-      fetch("/api/p2p/bot/orders?limit=20&live=true&exchange=" + ex, { credentials:"include" }).then(r=>r.json()).then(d=>{ if(d?.ok) renderBotOrders(d.orders); }).catch(()=>{});
+      fetch("/api/p2p/bot/orders?limit=20&live=true&exchange=" + ex + lbl, { credentials:"include" }).then(r=>r.json()).then(d=>{ if(d?.ok) renderBotOrders(d.orders); }).catch(()=>{});
     }catch(e){}
 
-    fetch("/api/p2p/bot/exchange-config?_=" + Math.random().toString(36).slice(2), { credentials:"include" })
+    fetch("/api/p2p/bot/exchange-config?_=" + Math.random().toString(36).slice(2) + lbl, { credentials:"include" })
       .then(r=>r.json()).then(exData=>{
         var allExchanges = {};
         var runningLabel = "";
@@ -19741,21 +19769,26 @@ function addP2PBotStyles(){
 })();
 
 (function(){
+  let ajustesCredsLabel = "ONZE";
+
   function checkBinanceCredentials(){
     const statusEl = document.getElementById('binance-creds-status');
     if(!statusEl) return;
-    fetch('/api/binance/credentials', { credentials: 'include' })
+    statusEl.style.background = '#1a3a5a';
+    statusEl.style.color = '#aaa';
+    statusEl.innerHTML = 'Verificando estado...';
+    fetch('/api/binance/credentials?label=' + encodeURIComponent(ajustesCredsLabel), { credentials: 'include' })
       .then(r => r.json())
       .then(data => {
         if(data.ok && data.configured){
           statusEl.style.background = '#0a3a1a';
           statusEl.style.color = '#00ff88';
-          statusEl.innerHTML = '✅ Credenciales configuradas' +
+          statusEl.innerHTML = '✅ Credenciales configuradas (' + ajustesCredsLabel + ')' +
             (data.updatedAt ? ' · Última actualización: ' + new Date(data.updatedAt).toLocaleDateString('es-CL') : '');
         } else {
           statusEl.style.background = '#3a1a0a';
           statusEl.style.color = '#ff8800';
-          statusEl.innerHTML = '⚠️ Credenciales no configuradas. Ingresa tu API Key y Secret Key.';
+          statusEl.innerHTML = '⚠️ Credenciales no configuradas para ' + ajustesCredsLabel + '. Ingresa tu API Key y Secret Key.';
         }
       })
       .catch(() => {
@@ -19763,6 +19796,19 @@ function addP2PBotStyles(){
         statusEl.innerHTML = '❌ Error verificando credenciales';
       });
   }
+
+  window.ajustesSetCredsLabel = function(label){
+    if(label === ajustesCredsLabel) return;
+    ajustesCredsLabel = label;
+    document.querySelectorAll(".ajustes-acct-btn").forEach(function(b){
+      b.classList.toggle("active", b.getAttribute("data-label") === label);
+    });
+    const apiKeyEl = document.getElementById('input-binance-api-key');
+    const secretKeyEl = document.getElementById('input-binance-secret-key');
+    if(apiKeyEl) apiKeyEl.value = '';
+    if(secretKeyEl) secretKeyEl.value = '';
+    checkBinanceCredentials();
+  };
 
   function saveBinanceCredentials(){
     const apiKey = document.getElementById('input-binance-api-key')?.value?.trim();
@@ -19781,7 +19827,7 @@ function addP2PBotStyles(){
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiKey, secretKey })
+      body: JSON.stringify({ apiKey, secretKey, label: ajustesCredsLabel })
     })
     .then(r => r.json())
     .then(data => {
@@ -19790,7 +19836,7 @@ function addP2PBotStyles(){
         document.getElementById('input-binance-secret-key').value = '';
         checkBinanceCredentials();
         if(typeof showToast === 'function'){
-          showToast('✅ Credenciales Binance guardadas correctamente');
+          showToast('✅ Credenciales Binance guardadas correctamente (' + ajustesCredsLabel + ')');
         } else {
           alert('✅ Credenciales guardadas correctamente');
         }

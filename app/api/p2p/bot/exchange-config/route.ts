@@ -12,15 +12,17 @@ async function getSession() {
   return verifySessionToken(token);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session?.tenantId) {
       return Response.json({ ok: false, error: "No autorizado" }, { status: 401 });
     }
 
+    const label = req.nextUrl.searchParams.get("label") || "ONZE";
+
     const configs = await prisma.p2PBotExchangeConfig.findMany({
-      where: { tenantId: session.tenantId },
+      where: { tenantId: session.tenantId, label },
     });
 
     const result: Record<string, any> = {};
@@ -67,6 +69,7 @@ export async function PUT(req: NextRequest) {
 
     const body = await req.json();
     const { exchange, ...data } = body;
+    const label = data.label || "ONZE";
 
     if (!exchange || !["binance", "bybit", "okx"].includes(exchange)) {
       return Response.json({ ok: false, error: "Exchange inválido" }, { status: 400 });
@@ -92,10 +95,8 @@ export async function PUT(req: NextRequest) {
       update.enabled = true;
       update.pauseUntil = null;
       update.lastStartedAt = new Date();
-      // Also enable global bot config and ensure exchange is in list
-      // Build list from all enabled exchange configs to survive data corruption
       const allEnabledExchanges = await prisma.p2PBotExchangeConfig.findMany({
-        where: { tenantId: session.tenantId, enabled: true },
+        where: { tenantId: session.tenantId, label, enabled: true },
         select: { exchange: true },
       });
       let enabledList = allEnabledExchanges.map(e => e.exchange);
@@ -113,11 +114,12 @@ export async function PUT(req: NextRequest) {
 
     const config = await prisma.p2PBotExchangeConfig.upsert({
       where: {
-        tenantId_exchange: { tenantId: session.tenantId, exchange },
+        tenantId_exchange_label: { tenantId: session.tenantId, exchange, label },
       },
       update,
       create: {
         tenantId: session.tenantId,
+        label,
         exchange,
         enabled: data.enabled ?? data.action === "start" ? true : false,
         strategy: data.strategy ?? "top1",

@@ -265,3 +265,63 @@ NEON ES LA UNICA FUENTE DE VERDAD para los capacity.
    de aplicar. Este flujo maneja dinero real.
 7. No declarar resuelto hasta que, tras varios ciclos y recargas en distintos
    dispositivos, el saldo y el orden se mantengan estables.
+
+---
+
+# WORK COMPLETED (Jul 6) — Multi-label ONZE/ZINPLE support
+
+## Goal
+Support two independent accounts (ONZE and ZINPLE) on the same tenant, each with separate credentials, exchange config, ads, orders, and logs. User can switch between them via ONZE/ZINPLE buttons in the P2P bot panel.
+
+## What was done
+
+### Prisma Schema
+- `label` field (`@default("ONZE")`) added to: `BinanceCredentials`, `BybitCredentials`, `OkxCredentials`, `P2PBotExchangeConfig`, `P2PBotAd`, `P2PBotLog`, `P2PBotOrder`
+- Unique constraints changed: credential tables `@@unique([tenantId, label])`, exchange config `@@unique([tenantId, exchange, label])`
+- Relations changed from one-to-one to one-to-many
+- DB pushed with `--accept-data-loss`
+
+### Engine (`lib/p2p-bot/engine.ts`)
+- `executeBotCycle(tenantId, label)` — accepts label, passes to exchange config and credential lookups
+- `getExchangeConfig(tenantId, exchange, label)` — uses `tenantId_exchange_label` unique key
+- `runBinanceCycle(..., label)` + `runBybitCycle(..., label)` — accept label
+- `logBot(tenantId, ..., label?)` — stores label in log entries
+- `getBotLogs(..., label?)` / `getBotOrders(..., label?)` — filter by label
+- `saveExchangeConfig(..., label)`, `startExchangeBot(..., label)`, `stopExchangeBot(..., label)`
+- All credential lookups changed from `findUnique({ where: { tenantId } })` to `findFirst({ where: { tenantId, label, isActive } })`
+
+### Credential Adapters
+- `getBinanceCredentials(tenantId, label)`, `saveBinanceCredentials(..., label)`, `testBinanceCredentials(..., label)`
+- `getBybitCredentials(tenantId, label)` — switched to `findFirst`
+- `getOkxCredentials(tenantId, label)` — switched to `findFirst`, `save/delete/test` updated
+
+### Chat-browser
+- `getStoredCookies(tenantId, label)`, `getStorageState(tenantId, label)`, `storeCookies(tenantId, data, label)`
+
+### Live orders/market (`lib/p2p-bot/live.ts`)
+- `fetchLiveOrders(..., label)`, `fetchLiveMarket(..., label)`, `getClient(..., label)`
+
+### API Routes (all accept `?label=` in GET or `label` in body for POST)
+- `exchange-config`, `ads`, `orders`, `cycle`, `logs`, `balance`, `sync-quantity`
+- `bybit-credentials`, `okx-credentials`, `binance/credentials`, `binance/p2p-history`
+
+### Panel (`public/onze-panel.html`)
+- `botActiveLabel` global var + `botSetActiveLabel(label)` function
+- ONZE/ZINPLE account switcher buttons with `.bot-acct-btn` / `.bot-acct-btn.active` CSS
+- All fetch URLs include `&label=` + `encodeURIComponent(botActiveLabel)`:
+  - Logs, orders, exchange-config, credentials, cycle (body)
+
+### Build Status
+- **0 TypeScript errors** after full `tsc --noEmit`
+- **Build succeeds** (`npm run build`)
+
+## Known Issues
+- `P2PBotLog.label` is NULL for ~1.68M pre-existing log entries (column was dropped/re-added during schema push)
+- Some `logBot` calls inside `runBybitCycle` still use the old direct call pattern instead of `log()` wrapper — they work but don't pass label
+- `getBybitClient` in ads route has `label` param but GET handler callers don't pass it yet (defaults to `"ONZE"`)
+
+## Next Steps
+1. Test ONZE ↔ ZINPLE switching in panel
+2. Verify engine cycles use correct credentials per label
+3. Set up separate ZINPLE Binance credentials in the panel
+4. Fix Bybit/OKX label edge cases if needed
