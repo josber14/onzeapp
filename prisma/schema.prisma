@@ -869,8 +869,10 @@ model P2PCycle {
   minCloseBalance Decimal?             @db.Decimal(18, 8)
   firstOrderNumber String?
   firstOrderClp   Decimal?             @db.Decimal(18, 2)
+  firstOrderTime  DateTime?
   lastOrderNumber String?
   lastOrderClp    Decimal?             @db.Decimal(18, 2)
+  lastOrderTime   DateTime?
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
   manualSales     P2PCycleManualSale[]

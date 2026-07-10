@@ -91,8 +91,10 @@ export async function POST(req: NextRequest) {
         totalManualClp,
         firstOrderNumber: firstOrder?.orderNumber ?? null,
         firstOrderClp: firstOrder ? Number(firstOrder.totalPrice) || 0 : null,
+        firstOrderTime: firstOrder ? new Date(Number(firstOrder.createTime) || Number(firstOrder.createDate)) : null,
         lastOrderNumber: lastOrder?.orderNumber ?? null,
         lastOrderClp: lastOrder ? Number(lastOrder.totalPrice) || 0 : null,
+        lastOrderTime: lastOrder ? new Date(Number(lastOrder.createTime) || Number(lastOrder.createDate)) : null,
       },
       include: { manualSales: true },
     });

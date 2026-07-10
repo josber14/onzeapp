@@ -26,12 +26,30 @@ export async function POST(req: NextRequest) {
       return Response.json({ ok: false, error: "Ya hay un ciclo activo para esta etiqueta", cycle: existing });
     }
 
+    // El nuevo ciclo continúa exactamente donde terminó el último cerrado (un
+    // instante después de su última orden capturada), no desde "ahora". Así,
+    // si el usuario se demora en iniciar el siguiente ciclo, ninguna orden que
+    // haya entrado en el medio queda sin contar. Si el ciclo anterior no tuvo
+    // ninguna orden, se usa su hora de cierre. Si es el primer ciclo de todos,
+    // arranca desde ahora (comportamiento original).
+    const lastClosed = await prisma.p2PCycle.findFirst({
+      where: { tenantId: session.tenantId, label, status: "closed" },
+      orderBy: { id: "desc" },
+    });
+
+    let startTime = new Date();
+    if (lastClosed?.lastOrderTime) {
+      startTime = new Date(lastClosed.lastOrderTime.getTime() + 1);
+    } else if (lastClosed?.endTime) {
+      startTime = lastClosed.endTime;
+    }
+
     const cycle = await prisma.p2PCycle.create({
       data: {
         tenantId: session.tenantId,
         label,
         status: "active",
-        startTime: new Date(),
+        startTime,
         minCloseBalance: minCloseBalance ?? undefined,
       },
     });
