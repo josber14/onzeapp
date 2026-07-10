@@ -37,11 +37,7 @@ export async function POST(req: NextRequest) {
       const balance = Number(balanceRes?.balance ?? 0);
       if (balance <= 0) return Response.json({ ok: false, error: "Saldo USDT no disponible" });
 
-      const detailRes = await client.getAdDetail(adId).catch(() => null);
-      const adDetail = detailRes?.data?.adv || detailRes?.data || {};
-      const currentPrice = Number(adDetail?.price ?? 0);
-
-      await client.updateAdQuantity(adId, balance, currentPrice);
+      await client.updateAdQuantity(adId, balance);
 
       return Response.json({ ok: true, quantity: balance });
     }

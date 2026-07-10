@@ -1,3 +1,4 @@
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
@@ -83,7 +84,7 @@ async function fetchAllBinanceOrders(apiKey: string, secretKey: string, startTim
   return allOrders;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const session = await getSession();
     if (!session?.tenantId) {
@@ -91,6 +92,7 @@ export async function GET() {
     }
 
     const tenantId = session.tenantId;
+    const label = req.nextUrl.searchParams.get("label") || "ONZE";
 
     // Leer cutoff post-reset para no re-importar órdenes anteriores
     const settings = await prisma.tenantSettings.findUnique({
@@ -103,7 +105,7 @@ export async function GET() {
     let secretKey: string | null = null;
 
     const creds = await prisma.binanceCredentials.findFirst({
-      where: { tenantId },
+      where: { tenantId, isActive: true, label },
       orderBy: { id: "asc" },
       select: { apiKey: true, secretKey: true, isActive: true },
     });

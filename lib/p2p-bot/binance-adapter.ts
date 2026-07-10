@@ -60,7 +60,7 @@ export class BinanceP2PClient {
       .join("&");
   }
 
-  private async privateRequest(endpoint: string, params: Record<string, any> = {}, bodyPayload?: any, paramsInBody = false): Promise<any> {
+  async privateRequest(endpoint: string, params: Record<string, any> = {}, bodyPayload?: any, paramsInBody = false): Promise<any> {
     if (paramsInBody) {
       bodyPayload = { ...(bodyPayload || {}), ...params };
       params = {};
@@ -163,33 +163,104 @@ export class BinanceP2PClient {
     return this.privateRequest("/sapi/v1/c2c/ads/post", {}, params);
   }
 
+  // Replica el botón "TODO" de la web de Binance. Lista blanca EXACTA capturada
+  // del request real de la app (32 campos) — no lista negra, no forward-all.
+  // Cada campo con el tipo/valor EXACTO de getAdDetail (números como números,
+  // sin String()). Cambia SOLO price.
   async updateAd(params: Record<string, any>) {
-    const { adId, price, surplusAmount } = params;
-    const body: Record<string, any> = { advNo: String(adId), price: String(price) };
-    if (surplusAmount != null && Number(surplusAmount) > 0) body.surplusAmount = String(Number(surplusAmount).toFixed(2));
-    let lastErr: any;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        return await this.privateRequest("/sapi/v1/c2c/ads/update", {}, body);
-      } catch (e: any) {
-        lastErr = e;
-        if (e.message?.includes("code: -9000") && !e.message?.includes("187049")) {
-          await new Promise(r => setTimeout(r, 500));
-          continue;
-        }
-        throw e;
-      }
-    }
-    throw lastErr;
+    const { adId, price } = params;
+    const detailRes = await this.getAdDetail(String(adId));
+    const detail = detailRes?.data;
+    if (!detail) throw new Error(`No se pudo leer el detalle del anuncio ${adId} antes de actualizar`);
+
+    const body: Record<string, any> = {
+      adAdditionalKycVerifyItems: detail.adAdditionalKycVerifyItems ?? [],
+      adTags: detail.adTags ?? [],
+      advNo: detail.advNo,
+      advStatus: detail.advStatus,
+      asset: detail.asset,
+      assetScale: detail.assetScale,
+      autoReplyMsg: detail.autoReplyMsg,
+      buyerBtcPositionLimit: detail.buyerBtcPositionLimit,
+      buyerRegDaysLimit: detail.buyerRegDaysLimit,
+      classify: detail.classify,
+      fiatScale: detail.fiatScale,
+      fiatUnit: detail.fiatUnit,
+      initAmount: detail.initAmount,
+      isSafePayment: false,
+      isStarTraderAdditionalKycExclusion: false,
+      isStarTraderCounterpartyConditionsExclusion: false,
+      launchCountry: [],
+      maxSingleTransAmount: detail.maxSingleTransAmount,
+      minSingleTransAmount: detail.minSingleTransAmount,
+      onlineDelayTime: 0,
+      onlineNow: true,
+      payTimeLimit: detail.payTimeLimit,
+      price: String(price), // único cambio intencional
+      priceFloatingRatio: detail.priceFloatingRatio,
+      priceScale: detail.priceScale,
+      priceType: detail.priceType,
+      remarks: detail.remarks,
+      takerAdditionalKycRequired: detail.takerAdditionalKycRequired,
+      tradeMethods: detail.tradeMethods,
+      tradeType: detail.tradeType,
+      visible: 1,
+      voucherTemplateNo: "",
+    };
+
+    return this.privateRequest("/sapi/v1/c2c/ads/update", {}, body);
   }
 
-  async updateAdQuantity(adId: string, quantity: number, currentPrice?: number) {
-    const body: Record<string, any> = { advNo: String(adId) };
-    if (quantity > 0) body.surplusAmount = String(quantity);
-    // Binance silently no-ops surplusAmount-only updates on some ads — sending the
-    // (unchanged) current price alongside it is what makes the update actually stick.
-    if (currentPrice != null && Number(currentPrice) > 0) body.price = String(currentPrice);
-    return await this.privateRequest("/sapi/v1/c2c/ads/update", {}, body);
+  // Replica el botón "TODO" (resincronizar cantidad) de la web de Binance.
+  // Fórmula EXACTA confirmada por soporte de Binance: initAmount no es un valor
+  // libre — hay que preservar (initAmount - surplusAmount), que representa lo ya
+  // vendido. Para llevar surplusAmount a un valor nuevo:
+  //   initAmount_after = initAmount_before + (surplusAmount_after - surplusAmount_before)
+  async updateAdQuantity(adId: string, targetSurplusAmount: number) {
+    const detailRes = await this.getAdDetail(String(adId));
+    const detail = detailRes?.data;
+    if (!detail) throw new Error(`No se pudo leer el detalle del anuncio ${adId} antes de sincronizar cantidad`);
+
+    const initAmountBefore = Number(detail.initAmount);
+    const surplusAmountBefore = Number(detail.surplusAmount);
+    const initAmountAfter = initAmountBefore + (targetSurplusAmount - surplusAmountBefore);
+
+    const body: Record<string, any> = {
+      adAdditionalKycVerifyItems: detail.adAdditionalKycVerifyItems ?? [],
+      adTags: detail.adTags ?? [],
+      advNo: detail.advNo,
+      advStatus: detail.advStatus,
+      asset: detail.asset,
+      assetScale: detail.assetScale,
+      autoReplyMsg: detail.autoReplyMsg,
+      buyerBtcPositionLimit: detail.buyerBtcPositionLimit,
+      buyerRegDaysLimit: detail.buyerRegDaysLimit,
+      classify: detail.classify,
+      fiatScale: detail.fiatScale,
+      fiatUnit: detail.fiatUnit,
+      initAmount: initAmountAfter.toFixed(2), // único cambio intencional
+      isSafePayment: false,
+      isStarTraderAdditionalKycExclusion: false,
+      isStarTraderCounterpartyConditionsExclusion: false,
+      launchCountry: [],
+      maxSingleTransAmount: detail.maxSingleTransAmount,
+      minSingleTransAmount: detail.minSingleTransAmount,
+      onlineDelayTime: 0,
+      onlineNow: true,
+      payTimeLimit: detail.payTimeLimit,
+      price: detail.price, // sin cambiar
+      priceFloatingRatio: detail.priceFloatingRatio,
+      priceScale: detail.priceScale,
+      priceType: detail.priceType,
+      remarks: detail.remarks,
+      takerAdditionalKycRequired: detail.takerAdditionalKycRequired,
+      tradeMethods: detail.tradeMethods,
+      tradeType: detail.tradeType,
+      visible: 1,
+      voucherTemplateNo: "",
+    };
+
+    return this.privateRequest("/sapi/v1/c2c/ads/update", {}, body);
   }
 
   async removeAd(adId: string) {

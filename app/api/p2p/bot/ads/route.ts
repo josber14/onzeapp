@@ -59,10 +59,16 @@ export async function GET(req: NextRequest) {
           const raw = Array.isArray(res?.data)
             ? res.data
             : res?.data?.items || res?.data?.list || res?.data?.records || res?.data?.result || res?.result || res?.list || [];
+          // Sort ads so most recent comes first (defensive: handle duplicates)
+          const sortedAds = [...ads].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
           binanceAds = raw.map((a: any) => {
-            const localAd = ads.find(la => la.adId === String(a.advNo || a.id || a.advId));
+            // Normalize advNo handling: Binance API returns advNo nested under `adv` sometimes
+            const adv = a.adv || a;
+            const binanceAdvNo = String(adv.advNo || adv.adNo || adv.id || a.advNo || a.id || a.advId);
+            const localAd = sortedAds.find(la => la.adId === binanceAdvNo);
             const methods = (a.tradeMethods || []).map((pm: any) => pm.identifier || pm.paymentMethodId || pm.payType || String(pm));
-            const liveStatus = a.status === 10 || a.publishStatus === "online" ? "online" : "offline";
+            const rawLiveStatus = a.status ?? a.advStatus ?? a.adStatus;
+            const liveStatus = rawLiveStatus === 1 || rawLiveStatus === 10 || rawLiveStatus === "ONLINE" || rawLiveStatus === "online" ? "online" : "offline";
             return {
               id: localAd?.id || a.advNo || a.id,
               adId: String(a.advNo || a.id || a.advId),
@@ -85,7 +91,7 @@ export async function GET(req: NextRequest) {
               botTop1Diff: localAd?.botTop1Diff ? Number(localAd.botTop1Diff) : null,
               botSpreadPct: localAd?.botSpreadPct ? Number(localAd.botSpreadPct) : null,
               botPriceFloorPct: localAd?.botPriceFloorPct ? Number(localAd.botPriceFloorPct) : null,
-              botPriceSource: localAd?.botPriceSource || "manual",
+              botPriceSource: localAd?.botPriceSource || "capacity",
               botCommissionPct: localAd?.botCommissionPct ? Number(localAd.botCommissionPct) : null,
               botSafeMarginPct: localAd?.botSafeMarginPct ? Number(localAd.botSafeMarginPct) : null,
               botMinCompetitorCapital: localAd?.botMinCompetitorCapital ? Number(localAd.botMinCompetitorCapital) : null,
@@ -154,7 +160,7 @@ export async function GET(req: NextRequest) {
             botTop1Diff: localAd?.botTop1Diff ? Number(localAd.botTop1Diff) : null,
             botSpreadPct: localAd?.botSpreadPct ? Number(localAd.botSpreadPct) : null,
             botPriceFloorPct: localAd?.botPriceFloorPct ? Number(localAd.botPriceFloorPct) : null,
-            botPriceSource: localAd?.botPriceSource || "manual",
+            botPriceSource: localAd?.botPriceSource || "capacity",
             botCommissionPct: localAd?.botCommissionPct ? Number(localAd.botCommissionPct) : null,
             botSafeMarginPct: localAd?.botSafeMarginPct ? Number(localAd.botSafeMarginPct) : null,
             botMinCompetitorCapital: localAd?.botMinCompetitorCapital ? Number(localAd.botMinCompetitorCapital) : null,
@@ -195,7 +201,7 @@ export async function GET(req: NextRequest) {
       botTop1Diff: a.botTop1Diff ? Number(a.botTop1Diff) : null,
       botSpreadPct: a.botSpreadPct ? Number(a.botSpreadPct) : null,
       botPriceFloorPct: a.botPriceFloorPct ? Number(a.botPriceFloorPct) : null,
-      botPriceSource: a.botPriceSource || "manual",
+      botPriceSource: a.botPriceSource || "capacity",
       botCommissionPct: a.botCommissionPct ? Number(a.botCommissionPct) : null,
       botSafeMarginPct: a.botSafeMarginPct ? Number(a.botSafeMarginPct) : null,
       botMinCompetitorCapital: a.botMinCompetitorCapital ? Number(a.botMinCompetitorCapital) : null,
@@ -279,16 +285,28 @@ export async function PUT(req: NextRequest) {
     // Resolve local DB record: by id, or by adId+exchange, or create new
     let dbRecord = null;
     const numericId = Number(id);
+    let labelFix = false;
     // Only try findUnique by id if numericId is a safe positive integer (DB auto-increment IDs are small)
     if (!isNaN(numericId) && numericId > 0 && numericId < 2147483647) {
       const found = await prisma.p2PBotAd.findUnique({ where: { id: numericId } });
       if (found && found.tenantId === session.tenantId) dbRecord = found;
     }
     if (!dbRecord && adId) {
-      const found = await prisma.p2PBotAd.findFirst({
-        where: { tenantId: session.tenantId, exchange, adId: String(adId) },
+      let found = await prisma.p2PBotAd.findFirst({
+        where: { tenantId: session.tenantId, exchange, adId: String(adId), label },
       });
-      if (found) dbRecord = found;
+      if (found) {
+        dbRecord = found;
+      } else {
+        // Fallback: try without label filter (edge case where label was changed after ad creation)
+        found = await prisma.p2PBotAd.findFirst({
+          where: { tenantId: session.tenantId, exchange, adId: String(adId) },
+        });
+        if (found) {
+          dbRecord = found;
+          if (found.label !== label) labelFix = true;
+        }
+      }
     }
     // If id was given but not a DB id, try it as adId (only if it's a safe string length)
     if (!dbRecord && !adId && id && numericId < 2147483647) {
@@ -299,6 +317,7 @@ export async function PUT(req: NextRequest) {
     }
 
     const updateData: any = {};
+    if (labelFix) updateData.label = label;
     if (tradeType !== undefined) updateData.tradeType = tradeType;
     if (asset !== undefined) updateData.asset = asset;
     if (fiat !== undefined) updateData.fiat = fiat;
@@ -325,6 +344,7 @@ export async function PUT(req: NextRequest) {
     if (botCycleInterval !== undefined) updateData.botCycleInterval = botCycleInterval;
     if (botCircuitBreakPct !== undefined) updateData.botCircuitBreakPct = botCircuitBreakPct;
     if (botDailyVolumeCapUsdt !== undefined) updateData.botDailyVolumeCapUsdt = botDailyVolumeCapUsdt;
+    if (body.label !== undefined) updateData.label = body.label;
 
     if (dbRecord) {
       updateData.updatedAt = new Date();

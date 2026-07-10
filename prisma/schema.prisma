@@ -62,6 +62,7 @@ model Tenant {
   p2pChatStates        P2PChatState[]
   p2pBotMarketSnapshots P2PBotMarketSnapshot[]
   p2pCapacities        P2PCapacity[]
+  p2pCycles            P2PCycle[]
   rateLists            RateList[]
   subscriptions        Subscription[]
   ownerUser            User?                  @relation("TenantOwner", fields: [ownerUserId], references: [id])
@@ -840,7 +841,7 @@ model P2PBotAd {
   botTop1Diff            Decimal?  @db.Decimal(18, 8)
   botSpreadPct           Decimal?  @db.Decimal(8, 4)
   botPriceFloorPct       Decimal?  @db.Decimal(8, 4)
-  botPriceSource         String?   @default("manual")
+  botPriceSource         String?   @default("capacity")
   botCommissionPct       Decimal?  @db.Decimal(8, 4)
   botSafeMarginPct       Decimal?  @db.Decimal(8, 4)
   botMinCompetitorCapital Decimal? @db.Decimal(18, 2)
@@ -854,6 +855,40 @@ model P2PBotAd {
 
   @@index([tenantId])
   @@index([exchange])
+}
+model P2PCycle {
+  id              Int                  @id @default(autoincrement())
+  tenantId        Int
+  label           String               @default("ONZE")
+  startTime       DateTime             @default(now())
+  endTime         DateTime?
+  status          String               @default("active")
+  totalUsdt       Decimal              @default(0) @db.Decimal(18, 8)
+  totalBinanceClp Decimal              @default(0) @db.Decimal(18, 2)
+  totalManualClp  Decimal              @default(0) @db.Decimal(18, 2)
+  minCloseBalance Decimal?             @db.Decimal(18, 8)
+  firstOrderNumber String?
+  firstOrderClp   Decimal?             @db.Decimal(18, 2)
+  lastOrderNumber String?
+  lastOrderClp    Decimal?             @db.Decimal(18, 2)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  manualSales     P2PCycleManualSale[]
+  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, label, status])
+  @@index([tenantId])
+}
+
+model P2PCycleManualSale {
+  id        Int      @id @default(autoincrement())
+  cycleId   Int
+  concept   String
+  amountClp Decimal  @db.Decimal(18, 2)
+  createdAt DateTime @default(now())
+  cycle     P2PCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+
+  @@index([cycleId])
 }
 
 model P2PBotMarketSnapshot {

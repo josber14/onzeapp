@@ -324,4 +324,236 @@ Support two independent accounts (ONZE and ZINPLE) on the same tenant, each with
 1. Test ONZE ↔ ZINPLE switching in panel
 2. Verify engine cycles use correct credentials per label
 3. Set up separate ZINPLE Binance credentials in the panel
+
+---
+
+# SOLUCIÓN DEFINITIVA — Error 187049/187040 al actualizar anuncios Binance (RESUELTO, jul 2026)
+
+**NO ROMPER ESTO.** Costó días de debugging (varias sesiones, incluyendo contacto directo con
+soporte de Binance) llegar a esta solución. Si en el futuro alguien "simplifica" o "limpia"
+`updateAd`/`updateAdQuantity` en `lib/p2p-bot/binance-adapter.ts` sin leer esto primero, el
+197049/187040 va a volver.
+
+## Síntoma
+Al llamar `/sapi/v1/c2c/ads/update` para cambiar precio o cantidad de un anuncio P2P, Binance
+respondía `{"code":-9000,"msg":"187049"}` (a veces `"187040"`) y el anuncio dejaba de competir.
+Pasaba más seguido cuando el anuncio tenía órdenes activas sin liberar.
+
+## Causa raíz (confirmada por soporte oficial de Binance, vía chat de soporte)
+1. **`/sapi/v1/c2c/ads/update` valida la configuración COMPLETA del anuncio en cada llamada.**
+   No es un endpoint de "patch" — un payload parcial (solo `price` o solo `surplusAmount`) hace
+   fallar la validación de cantidad/límite de tenencia, especialmente cuando hay órdenes
+   pendientes que ya redujeron el inventario disponible. 187049 = "buyer holding limit" fuera
+   de rango; 187040 = cantidad por debajo del mínimo. Ambos son de VALIDACIÓN, no un bloqueo
+   automático por orden pendiente.
+2. **`initAmount` no es un valor libre.** No se puede poner "el saldo de la wallet" ni "el saldo
+   repartido entre anuncios" directamente en `initAmount` — eso fue lo que probamos primero y
+   falló el 100% de las veces con 187040. La fórmula EXACTA que dio soporte de Binance:
+
+   ```
+   surplusAmount_antes - surplusAmount_después = initAmount_antes - initAmount_después
+   ⇒ initAmount_después = initAmount_antes + (surplusAmount_deseado - surplusAmount_antes)
+   ```
+
+   `(initAmount - surplusAmount)` representa lo YA VENDIDO del anuncio — es un invariante que
+   hay que preservar. Cambiar `surplusAmount` a un valor nuevo requiere mover `initAmount` por
+   la MISMA diferencia, no ponerle un valor absoluto nuevo.
+
+## La solución (implementada en `lib/p2p-bot/binance-adapter.ts`)
+
+Ambos métodos (`updateAd` para precio, `updateAdQuantity` para cantidad) siguen el mismo patrón:
+
+1. Leer el anuncio completo con `getAdDetail(adId)` (`/sapi/v1/c2c/ads/getDetailByNo`).
+2. Armar el body con una **lista blanca EXACTA de 32 campos** — capturada del request real de
+   la app web de Binance (no una lista negra "reenviar todo excepto X", eso fue un intento
+   anterior que funcionaba ~80% de las veces pero no al 100%):
+   `adAdditionalKycVerifyItems, adTags, advNo, advStatus, asset, assetScale, autoReplyMsg,
+   buyerBtcPositionLimit, buyerRegDaysLimit, classify, fiatScale, fiatUnit, initAmount,
+   isSafePayment, isStarTraderAdditionalKycExclusion, isStarTraderCounterpartyConditionsExclusion,
+   launchCountry, maxSingleTransAmount, minSingleTransAmount, onlineDelayTime, onlineNow,
+   payTimeLimit, price, priceFloatingRatio, priceScale, priceType, remarks,
+   takerAdditionalKycRequired, tradeMethods, tradeType, visible, voucherTemplateNo`.
+3. Todos los tipos EXACTOS de `getAdDetail` — `priceType`/`advStatus`/`assetScale`/`fiatScale`/
+   `priceScale`/`visible` son NÚMEROS, no strings ni booleanos. NO usar `String()` en ellos.
+4. Campos que `getAdDetail` NUNCA devuelve (hay que hardcodearlos, confirmados de una captura
+   real): `isSafePayment: false`, `isStarTraderAdditionalKycExclusion: false`,
+   `isStarTraderCounterpartyConditionsExclusion: false`, `launchCountry: []`,
+   `onlineDelayTime: 0`, `onlineNow: true`, `visible: 1` (número), `voucherTemplateNo: ""`.
+5. **`updateAd`**: único campo que cambia intencionalmente es `price` (`String(price)`).
+   **`updateAdQuantity`**: único campo que cambia es `initAmount`, calculado con la fórmula de
+   arriba — `price` se deja igual (`detail.price`, sin tocar).
+
+## Qué NO hacer (ya se probó y falló)
+- ❌ Mandar payload parcial (`{advNo, price}` o `{advNo, surplusAmount}` solo) → 187049 casi
+  siempre.
+- ❌ Poner `surplusAmount` directamente en el body → Binance a veces acepta con código 000000
+  pero NO aplica el cambio (silent no-op) — confirmado leyendo el anuncio de nuevo después.
+- ❌ Poner `initAmount` a un valor absoluto (saldo de wallet, o saldo repartido entre N
+  anuncios) sin la fórmula → 187040 el 100% de las veces (0 de ~90 intentos en pruebas reales).
+- ❌ Repartir el saldo entre anuncios activos (`balance / cantidad de anuncios`) — no es
+  necesario con la fórmula correcta, y probarlo aisladamente sin la fórmula empeoró las cosas.
+- ❌ Agregar `priceType: "0"` o cualquier transformación de tipo — la app web nunca lo hace.
+- ❌ Bloquear/saltar el ciclo de precio cuando el "quantity sync" tocó el anuncio ese ciclo —
+  causaba que el precio nunca se actualizara si el sync fallaba en loop (bug real, ya
+  eliminado). El update de precio debe correr SIEMPRE, independiente del sync de cantidad.
+
+## Automatización del sync de cantidad (`engine.ts`, dentro de `runBinanceCycle`)
+Corre en cada ciclo si hay 2+ anuncios gestionados: compara el saldo real de la wallet
+(`client.getBalance("USDT")`, vía `/sapi/v1/asset/get-funding-asset`) contra la cantidad
+publicada de CADA anuncio (`myAds` del ciclo), y llama `updateAdQuantity(adId, balance)` — con
+el **saldo COMPLETO**, no repartido — si difieren en más de 0.5 USDT. Esto reemplaza el "TODO"
+manual que el usuario hacía en la app de Binance cada vez que entraba una orden por el anuncio
+contrario.
+
+## Verificación (jul 2026)
+Confirmado en producción con monitoreo en vivo: tras aplicar la fórmula correcta, el sync de
+cantidad pasó de 0% de éxito (~90 intentos fallidos seguidos) a funcionar de forma consistente
+en el primer intento tras el fix. El update de precio ya tenía buena tasa de éxito desde la
+lista blanca de 32 campos, con recuperación automática en el próximo ciclo cuando fallaba por
+una orden activa.
+
+---
+
+# ACTUALIZACIÓN — Ambos anuncios (ONZE/ZINPLE) funcionando de forma estable (jul 10 2026)
+
+Tras la sesión del jul 10 2026 (varias horas de monitoreo en vivo con ambos anuncios de ZINPLE
+activos: "todos los bancos" y "Banco Estado"), se encontraron y arreglaron 4 problemas
+DISTINTOS del original 187049 de más arriba. Si en el futuro alguno de los dos anuncios deja
+de funcionar bien, revisar esta lista ANTES de escribirle a Binance — es muy probable que sea
+uno de estos 4, ya resuelto una vez.
+
+## 1. Límite de velocidad de cuenta NO revelado (confirmado por soporte de Binance)
+
+Binance confirmó explícitamente (soporte, jul 2026): existe un límite de cuánto se puede
+actualizar un anuncio (precio Y cantidad) en poco tiempo, **por CUENTA, no por anuncio**, y
+**no revelan el número exacto ni la ventana de tiempo** ("para evitar manipulación").
+Consecuencia: aunque el payload/fórmula sea 100% correcto, un update puede fallar con 187049
+simplemente por exceso de actividad reciente en la cuenta (órdenes entrando, otros updates,
+pruebas manuales, etc). Esto es ESPERADO y no indica que el código esté mal.
+
+Evidencia empírica (jul 10): incrementos chicos de cantidad (+1 a +100 USDT) funcionaron
+sueltos, pero acumular ~290 USDT de subida en ~10 min hizo fallar el siguiente intento. Luego,
+tras dejar de martillar (ver punto 2), hasta saltos de ~5.300 USDT funcionaron sin problema —
+el "cupo" se recupera solo con el tiempo si no se sigue insistiendo.
+
+## 2. Bug real: cooldown "fantasma" que nunca se activaba (YA ARREGLADO)
+
+El código de precio (`runBinanceCycle` en `engine.ts`) SIEMPRE tuvo un mecanismo de cooldown
+por anuncio (`AdState.lastRateLimitError` / `rateLimitBackoffMs`, ya revisado antes de cada
+intento de subida/bajada de precio) — pero **nunca se le asignaba un valor** en ningún lado del
+código. Resultado: cuando un update de precio fallaba por 187049 (tras su reintento de 10s
+inline), el bot NO esperaba nada y volvía a intentar el mismo cambio en el siguiente ciclo
+(~10-30s después), sin parar, manteniendo el "cupo" de la cuenta siempre gastado.
+
+**Arreglo**: en el catch del segundo intento (tras el retry de 10s) del bloque de 187049/187040
+en el update de precio, ahora se asigna:
+```js
+as.lastRateLimitError = Date.now();
+as.rateLimitBackoffMs = 5 * 60 * 1000; // 5 min
+```
+Con eso, el chequeo que YA existía al inicio del ciclo de precio (`if (as.lastRateLimitError > 0
+&& Date.now() - as.lastRateLimitError < as.rateLimitBackoffMs) { saltar }`) empieza a funcionar
+de verdad.
+
+## 3. Cooldown de cantidad solo cubría subidas (YA ARREGLADO)
+
+El sync de cantidad (bloque nuevo agregado esta sesión, dentro de `runBinanceCycle`, después de
+leer `myAds`) originalmente solo ponía en cooldown las SUBIDAS de cantidad al fallar con 187049,
+asumiendo que las bajadas "siempre funcionan" (cierto la mayoría de las veces, pero NO siempre —
+se confirmó en vivo un caso donde una bajada también chocó con 187049 y quedó reintentando sin
+parar, sin cooldown, porque el código lo excluía a propósito).
+
+**Arreglo**: el cooldown de 5 minutos (`AdState.qtySyncCooldownUntil`) ahora aplica a CUALQUIER
+fallo 187049 en cantidad, sin importar si era subida o bajada.
+
+**IMPORTANTE — el tamaño del salto de cantidad NO se limita.** Se probó limitar la subida a
+pasos de 60 USDT por ciclo (en vez del salto completo al saldo real), y el usuario pidió
+explícitamente revertirlo: el comportamiento correcto y confirmado por Binance es enviar el
+**saldo COMPLETO de la wallet de una vez** (`client.updateAdQuantity(ma.adId, balance)`, sin
+partir el salto). Si esto se vuelve a romper, NO reintroducir el límite de pasos sin que el
+usuario lo pida explícitamente — el cooldown de 5 min tras un fallo es la única protección
+que debe existir.
+
+## 4. Bug real y raíz del "anuncio no compite": sin competidor viable, el precio se quedaba
+   congelado en vez de caer al piso de seguridad (YA ARREGLADO)
+
+Este fue el bug más importante encontrado. En el cálculo de precio por competidor
+(`runBinanceCycle`, tras el filtro de "viable"): cuando NINGÚN competidor calificaba como
+viable (ej: todo el mercado leído está por debajo de nuestro costo real, o los únicos viables
+eran nuestros propios anuncios), el código original hacía `continue` — saltaba el anuncio ese
+ciclo SIN TOCAR NADA, dejando el precio pegado en el último valor que tenía, indefinidamente,
+aunque ese precio ya no tuviera nada que ver con el mercado ni con el piso de seguridad.
+
+**Regla de negocio confirmada explícitamente por el usuario**: "el margen de seguridad es
+únicamente para que no se baje de ese precio cuando otros competidores entren por debajo —
+el anuncio NUNCA puede quedarse fijo". Es decir: el piso de seguridad es un límite INFERIOR,
+no un valor de reposo. Si no hay a quién seguir, el anuncio debe caer directo al piso (el
+precio más competitivo posible sin vender bajo costo), no quedarse donde estaba.
+
+**Arreglo**: se quitaron los `continue` tempranos cuando `viable`/`sortedCompetitors` quedan
+vacíos (ahora solo loguean y siguen el flujo), y el cálculo de `targetPrice` cambió de:
+```js
+let targetPrice = currentPrice;
+if (targetCompetitor) targetPrice = Number(targetCompetitor.price) - adTop1Diff;
+```
+a:
+```js
+let targetPrice = targetCompetitor ? Number(targetCompetitor.price) - adTop1Diff : safeFloor;
+```
+Así, sin competidor objetivo, el default es el piso de seguridad — nunca el precio anterior.
+
+## 5. Bug real: solo se leía 1 página (20) de competidores, perdiendo a los que quedan justo
+   en el borde (YA ARREGLADO)
+
+El fetch de competidores en modo "igualar métodos de pago del anuncio" (`__match_ad__`, usa
+`client.getOnlineAds(...)`) pedía **una sola página de 20 resultados** ordenados del más barato
+al más caro. Se confirmó en vivo un caso real: un competidor legítimo y "ganable" (Tyra SpA,
+935.75, con BCI Chile) apareció exactamente en la posición #20 — el último lugar de esa página.
+Por la volatilidad normal del mercado P2P (precios cambian cada pocos segundos), ese competidor
+entraba y salía de la ventana de 20 constantemente, así que el bot lo veía a veces sí, a veces
+no, sin ningún patrón visible en los logs — el precio parecía "no reaccionar" sin ningún error.
+
+**Nota técnica importante**: Binance RECHAZA pedir más de 20 filas por página en este endpoint
+(`/bapi/c2c/v2/friendly/c2c/adv/search`) — devuelve `{"code":"000002","message":"illegal
+parameter"}` si se pide `rows > 20`. No se puede simplemente subir el número.
+
+**Arreglo**: ahora se piden página 1 Y página 2 en paralelo (`Promise.all`) y se combinan — 40
+competidores en vez de 20. Esto le da margen suficiente para no perder a alguien que esté justo
+en el borde de la ventana anterior.
+
+## 6. NO resuelto todavía — el bot depende de que la pestaña del panel esté abierta
+
+El ciclo del bot NO corre en el servidor de forma independiente — lo dispara un timer en el
+navegador (`scheduleBotCycle()` en `onze-panel.html`, llama a `/api/p2p/bot/cycle` cada ~300ms
+mientras la vista del panel está montada). Si se navega a otra sección de la app (ej. "Ir a
+admin", que es un link de navegación completa) o se cierra la pestaña, el ciclo se detiene por
+completo aunque en la base de datos siga marcado como "activo". Se observaron varios cortes de
+varios minutos por esto durante la sesión — cada corte genera un salto grande pendiente de
+corregir al reactivar, lo cual puede a su vez chocar más fácil con el límite de velocidad del
+punto 1.
+
+**Propuesta pendiente de confirmar con el usuario**: mover el disparo del ciclo a una función
+programada de Netlify (server-side, no depende del navegador). Limitación: Netlify solo permite
+programar cada 1 minuto como mínimo (hoy reacciona cada ~10-30s), sería más lento pero nunca se
+detendría por navegación. No implementado aún — requiere autorización explícita antes de tocar
+infraestructura.
+
+## Checklist de diagnóstico rápido si un anuncio "deja de funcionar" de nuevo
+
+1. ¿Hay logs de 187049 recientes? Si sí, ¿aparece "en cooldown... saltando" después del primer
+   fallo, o sigue reintentando cada ciclo sin parar? Si sigue martillando sin cooldown, revisar
+   que los puntos 2 y 3 de arriba sigan aplicados (no se hayan revertido por accidente).
+2. ¿El precio está pegado en un valor que no cambia hace muchos ciclos? Revisar si hay un log
+   "viable vacío" repetido — si lo hay, confirmar que el `targetPrice` calculado sea el
+   `safeFloor` y no el `currentPrice` (punto 4).
+3. ¿Se ve en la app un competidor claramente ganable que el bot no está usando? Revisar cuántas
+   páginas de competidores se están leyendo (punto 5) y en qué posición aparece ese competidor
+   en una consulta directa a `/bapi/c2c/v2/friendly/c2c/adv/search` con los mismos payTypes y
+   `tradeType: "BUY"` (OJO: `tradeType: "BUY"` es el que muestra anuncios de VENTA/competidores
+   reales — usar `"SELL"` por error muestra el lado de compradores, no de competidores).
+4. ¿El bot lleva minutos sin ciclar? Revisar `P2PBotLog` — si el último log tiene más de ~2
+   minutos, es el problema del punto 6 (pestaña cerrada o navegación fuera del panel).
+5. Antes de escribirle a Binance por un 187049/187040 "nuevo", revisar que el payload siga
+   siendo exactamente la lista blanca de 32 campos con la fórmula de `initAmount` — si eso está
+   intacto, casi seguro es el límite de velocidad del punto 1, no un problema de payload.
 4. Fix Bybit/OKX label edge cases if needed

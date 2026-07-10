@@ -9471,6 +9471,9 @@ function addP2PBotStyles(){
     .bot-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
     .bot-cols-full{grid-column:1/-1;}
     .bot-card{background:rgba(15,23,42,.3);border:1px solid rgba(148,163,184,.06);border-radius:12px;padding:14px;}
+    .bot-cycle-tile{background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:9px 12px;}
+    .bot-cycle-tile-label{font-size:10px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;}
+    .bot-cycle-tile-value{font-size:14px;color:#e2e8f0;font-weight:700;}
 
     /* Config collapsible */
     .bot-config-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 14px;font-size:11px;color:#64748b;font-weight:600;transition:all .15s;background:none;border:none;font-family:inherit;width:100%;text-align:left;border-top:1px solid rgba(148,163,184,.05);}
@@ -9682,7 +9685,7 @@ function addP2PBotStyles(){
               <span class="bot-section-title" style="margin:0;font-size:12px;font-weight:500;color:#64748b;"><span id="botAdsExchangeLabel">Binance</span></span>
               <span style="font-size:11px;font-weight:600;color:#fbbf24;" id="botCambiosCounter"></span>
               <span style="flex:1;"></span>
-              <button class="btn small ghost" type="button" onclick="window.botLoadAds()" style="font-size:10px;padding:5px 10px;border-radius:6px;">↻ Sincronizar</button>
+              <button class="btn small ghost" type="button" onclick="window.botSyncNow()" style="font-size:10px;padding:5px 10px;border-radius:6px;">↻ Sincronizar</button>
               <button class="btn small" type="button" onclick="window.botPanelNewAd()" style="font-size:10px;padding:5px 12px;border-radius:6px;">+ Nuevo anuncio</button>
             </div>
             <div id="botAdsList" class="bot-ads-row">
@@ -9693,7 +9696,7 @@ function addP2PBotStyles(){
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
               <span style="font-size:13px;font-weight:700;color:#e2e8f0;">Anuncio Bybit</span>
               <span style="flex:1;"></span>
-              <button class="btn small ghost" type="button" onclick="window.botLoadAds()" style="font-size:10px;">↻</button>
+              <button class="btn small ghost" type="button" onclick="window.botSyncNow()" style="font-size:10px;">↻</button>
             </div>
             <div id="botBybitAdContent"></div>
           </div>
@@ -9707,7 +9710,50 @@ function addP2PBotStyles(){
             <div id="botCredFields" class="bot-cred-fields" style="margin-top:10px;"></div>
             <div id="botCredStatus" style="margin-top:8px;font-size:12px;color:#94a3b8;"></div>
           </div>
-
+          <!-- Cycle de ventas P2P -->
+          <div id="botCycleSection" class="bot-card" style="grid-column:1/-1;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:14px;font-weight:800;color:#f1f5f9;letter-spacing:.2px;">🔄 Ciclo de Ventas</span>
+                <span id="botCycleLabel" style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:999px;background:rgba(148,163,184,.12);color:#94a3b8;">Inactivo</span>
+              </div>
+              <span style="flex:1;"></span>
+              <button class="btn small" id="botCycleStartBtn" onclick="window.botCycleStart()" style="font-size:11px;padding:6px 14px;border-radius:7px;background:linear-gradient(135deg,#059669,#047857);border:none;color:#fff;font-weight:700;">▶ Iniciar Ciclo</button>
+              <button class="btn small secondary" id="botCycleAddSaleBtn" onclick="window.botCycleAddSale()" style="font-size:11px;padding:6px 14px;border-radius:7px;display:none;font-weight:700;">+ Venta Manual</button>
+              <button class="btn small" id="botCycleCloseBtn" onclick="window.botCycleClose()" style="font-size:11px;padding:6px 14px;border-radius:7px;display:none;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.3);color:#fca5a5;font-weight:700;">■ Cerrar Ciclo</button>
+              <button class="btn small secondary" onclick="window.botCycleShowHistory()" style="font-size:11px;padding:6px 14px;border-radius:7px;font-weight:700;">📜 Historial</button>
+            </div>
+            <p id="botCycleEmptyHint" style="margin-top:10px;font-size:12px;color:#64748b;">No hay un ciclo activo. Inicia uno para llevar el conteo automático de ventas de esta cuenta.</p>
+            <div id="botCycleInfo" style="margin-top:12px;display:none;">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;">
+                <div class="bot-cycle-tile">
+                  <div class="bot-cycle-tile-label">Inicio</div>
+                  <div class="bot-cycle-tile-value" id="botCycleStartTime" style="font-size:13px;">—</div>
+                </div>
+                <div class="bot-cycle-tile">
+                  <div class="bot-cycle-tile-label">USDT vendidos</div>
+                  <div class="bot-cycle-tile-value" id="botCycleUsdt">0</div>
+                </div>
+                <div class="bot-cycle-tile">
+                  <div class="bot-cycle-tile-label">CLP Binance</div>
+                  <div class="bot-cycle-tile-value" id="botCycleBinanceClp">0</div>
+                </div>
+                <div class="bot-cycle-tile">
+                  <div class="bot-cycle-tile-label">CLP manual</div>
+                  <div class="bot-cycle-tile-value" id="botCycleManualClp">0</div>
+                </div>
+                <div class="bot-cycle-tile" style="border-color:rgba(0,212,255,.25);">
+                  <div class="bot-cycle-tile-label">Total CLP</div>
+                  <div class="bot-cycle-tile-value" id="botCycleTotalClp" style="color:#00d4ff;">0</div>
+                </div>
+                <div class="bot-cycle-tile">
+                  <div class="bot-cycle-tile-label">Auto-cierre en</div>
+                  <div class="bot-cycle-tile-value" id="botCycleMinClose" style="font-size:13px;">—</div>
+                </div>
+              </div>
+            </div>
+            <div id="botCycleManualList" style="margin-top:10px;font-size:11px;color:#94a3b8;display:none;"></div>
+          </div>
           <!-- no more separate per-ad config container -- config is inline in each ad pill -->
         </div>
 
@@ -9943,17 +9989,25 @@ function addP2PBotStyles(){
     });
   }
 
-  var botActiveLabel = "ONZE";
+  var botActiveLabel = localStorage.getItem("botActiveLabel") || "ONZE";
+  window.botActiveLabel = botActiveLabel; // otros bloques <script> (ej. sync de ventas Binance) leen esto
   var botLabelData = {}; // separate state per label
+  // Sync active class on page load
+  document.querySelectorAll(".bot-acct-btn").forEach(function(b){
+    b.classList.toggle("active", b.getAttribute("data-label") === botActiveLabel);
+  });
 
   window.botSetActiveLabel = function(label){
-    if(label === botActiveLabel) return;
     botActiveLabel = label;
+    window.botActiveLabel = label;
+    localStorage.setItem("botActiveLabel", label);
     document.querySelectorAll(".bot-acct-btn").forEach(function(b){
       b.classList.toggle("active", b.getAttribute("data-label") === label);
     });
     // Reinitialize view for the new label
     if(typeof botRefreshExchange === "function") botRefreshExchange(false);
+    if(typeof botLoadAds === "function") botLoadAds();
+    botCycleRefresh();
   };
 
   window.botSelectExchange = function(exchange){
@@ -9994,6 +10048,13 @@ function addP2PBotStyles(){
 
   /* Per-ad functions for main view */
 
+  window.botSyncNow = async function(){
+    try{
+      await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ label: botActiveLabel || "ONZE", force: true }) });
+    }catch(_){}
+    window.botLoadAds();
+  };
+
   window.botLoadAds = async function(){
     const container = document.getElementById("botAdsList");
     if(botSelectedExchange === "bybit"){
@@ -10002,8 +10063,12 @@ function addP2PBotStyles(){
     }
     if(!container) return;
     try{
-      const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange, { credentials:"include" });
+      var labelParam = (typeof botActiveLabel !== 'undefined' && botActiveLabel) ? '&label=' + encodeURIComponent(botActiveLabel) : '';
+      const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange + labelParam, { credentials:"include" });
       const d = await r.json();
+      if(d?.ok && Array.isArray(d.ads)){
+        console.log("[botLoadAds] ads:", d.ads.map(function(a){ return { id: a.id, adId: a.adId, botEnabled: a.botEnabled, price: a.price, status: a.status, priceSource: a.botPriceSource }; }));
+      }
       if(!d?.ok || !d?.ads?.length){
         container.innerHTML = '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px 0;border:1px dashed rgba(148,163,184,.08);border-radius:10px;margin-top:4px;">Sin anuncios disponibles</div>';
         return;
@@ -10017,6 +10082,7 @@ function addP2PBotStyles(){
         return botRenderAdPill(a, idx);
       }).join('');
       botUpdateBuyPrice();
+      botRefreshAdPrices();
       sellAds.forEach(function(a){
         if(a.botSafeMarginPct > 0 && window.botAdUpdateSafeMarginHint) botAdUpdateSafeMarginHint(a.id);
         if(window.botAdUpdateRealCost) botAdUpdateRealCost(a.id);
@@ -10028,7 +10094,8 @@ function addP2PBotStyles(){
     const content = document.getElementById("botBybitAdContent");
     if(!content) return;
     try{
-      const r = await fetch("/api/p2p/bot/ads?exchange=bybit", { credentials:"include" });
+      var labelParam = (typeof botActiveLabel !== 'undefined' && botActiveLabel) ? '&label=' + encodeURIComponent(botActiveLabel) : '';
+      const r = await fetch("/api/p2p/bot/ads?exchange=bybit" + labelParam, { credentials:"include" });
       const d = await r.json();
       if(!d?.ok || !d?.ads?.length){
         content.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:8px 0;">Sin anuncio</div>';
@@ -10051,11 +10118,10 @@ function addP2PBotStyles(){
           <div class="bot-ad-card-header">
             <span class="sell-label">Vender</span><span style="flex:1;">${a.asset||'USDT'} con ${a.fiat||'CLP'}</span>
             <span class="status-badge" style="background:${isOnline?'rgba(52,211,153,.12)':'rgba(100,116,139,.12)'};color:${isOnline?'#34d399':'#94a3b8'};"><span class="dot" style="background:${isOnline?'#34d399':'#64748b'};"></span>${isOnline ? 'En línea' : 'Desconectado'}</span>
-            <label class="toggle-switch">
-              <input type="checkbox" ${botEnabled?'checked':''} onchange="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',this.checked)">
+            <span class="toggle-switch" onclick="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',!${botEnabled})">
+              <input type="checkbox" ${botEnabled?'checked':''}>
               <span class="slider"></span>
-            </label>
-            <div class="bot-ad-menu-wrapper" style="position:relative;">
+            </span>
             <button class="menu-btn" onclick="event.stopPropagation();window.botToggleAdMenu(${a.id},event);">⋯</button>
             <div class="bot-ad-menu-dropdown" id="botAdMenu_${a.id}">
               <button class="menu-item" onclick="event.stopPropagation();window.botSimpleEditAd(${a.id})">Editar anuncio</button>
@@ -10096,7 +10162,7 @@ function addP2PBotStyles(){
     var strategy = a.botStrategy || 'top1';
     var top1Diff = a.botTop1Diff != null ? a.botTop1Diff : '';
     var spreadPct = a.botSpreadPct != null ? a.botSpreadPct : '';
-    var priceSource = a.botPriceSource || 'manual';
+    var priceSource = a.botPriceSource || 'capacity';
     var priceFloor = a.botPriceFloorPct != null ? a.botPriceFloorPct : '';
     var commission = a.botCommissionPct != null ? a.botCommissionPct : '';
     var safeMargin = a.botSafeMarginPct != null ? a.botSafeMarginPct : '';
@@ -10114,10 +10180,10 @@ function addP2PBotStyles(){
         <span class="sell-label">Vender</span>
         <span style="flex:1;font-size:12px;font-weight:500;color:#94a3b8;">${a.asset||'USDT'} / ${a.fiat||'CLP'}</span>
         <span class="status-badge${isOnline?'':' offline'}"><span class="dot"></span>${isOnline ? 'En línea' : 'Desconectado'}</span>
-        <label class="toggle-switch">
-          <input type="checkbox" ${botEnabled?'checked':''} onchange="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',this.checked)">
+        <span class="toggle-switch" onclick="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',!${botEnabled})">
+          <input type="checkbox" ${botEnabled?'checked':''}>
           <span class="slider"></span>
-        </label>
+        </span>
         <button class="menu-btn" onclick="event.stopPropagation();window.botToggleAdMenu(${realId},event);">⋯</button>
         <div class="bot-ad-menu-dropdown" id="botAdMenu_${realId}">
           <button class="menu-item" onclick="event.stopPropagation();window.botSimpleEditAd(${realId})">Editar anuncio</button>
@@ -10229,11 +10295,11 @@ function addP2PBotStyles(){
     }
     var container = document.querySelector('[data-ad-real-id="' + realId + '"]');
     var adId = container ? container.getAttribute('data-ad-adid') : '';
-    fetch('/api/p2p/bot/ads',{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({exchange:window.botSelectedExchange||'Binance',id:realId,adId:adId||'',botSafeMarginPct:saveVal})}).then(function(r){el.style.outline=r.ok?'2px solid #22c55e':'2px solid #fb7185';setTimeout(function(){el.style.outline=''},800)}).catch(function(){el.style.outline='2px solid #fb7185';setTimeout(function(){el.style.outline=''},800)});
+    fetch('/api/p2p/bot/ads',{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({exchange:window.botSelectedExchange||'Binance',id:realId,adId:adId||'',botSafeMarginPct:saveVal,label:window.botActiveLabel||'ONZE'})}).then(function(r){el.style.outline=r.ok?'2px solid #22c55e':'2px solid #fb7185';setTimeout(function(){el.style.outline=''},800)}).catch(function(){el.style.outline='2px solid #fb7185';setTimeout(function(){el.style.outline=''},800)});
   };
   window.botSafeFieldFlash = function(el){ el.style.outline='2px solid #22c55e'; setTimeout(function(){ el.style.outline=''; }, 800); };
   window.botSaveAdCfgField = function(realId, field, value){
-    var body = { exchange: botSelectedExchange, id: realId };
+    var body = { exchange: botSelectedExchange, id: realId, label: botActiveLabel || "ONZE" };
     // Read adId from the parent container's data attribute
     var container = document.querySelector('[data-ad-real-id="' + realId + '"]');
     var adId = container ? container.getAttribute('data-ad-adid') : '';
@@ -10265,7 +10331,7 @@ function addP2PBotStyles(){
 
   window.botSaveAdCfgBulk = function(realId){
     if(!realId) return;
-    var body = { exchange: botSelectedExchange, id: realId };
+    var body = { exchange: botSelectedExchange, id: realId, label: botActiveLabel || "ONZE" };
     // Read adId from the parent container's data attribute
     var container = document.querySelector('[data-ad-real-id="' + realId + '"]');
     var adId = container ? container.getAttribute('data-ad-adid') : '';
@@ -10379,7 +10445,7 @@ function addP2PBotStyles(){
     var ex = botSelectedExchange;
     if(!ex) return;
     try{
-      var r = await fetch("/api/p2p/bot/ads?exchange=" + encodeURIComponent(ex), { credentials:"include" });
+      var r = await fetch("/api/p2p/bot/ads?exchange=" + encodeURIComponent(ex) + "&label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
       var d = await r.json();
       if(!d?.ok || !Array.isArray(d.ads)) return;
       d.ads.forEach(function(a){
@@ -10410,7 +10476,7 @@ function addP2PBotStyles(){
   });
 
   window.botToggleAdMain = function(id, adId, enabled){
-    var body = { exchange: botSelectedExchange, botEnabled: enabled, botManaged: enabled };
+    var body = { exchange: botSelectedExchange, botEnabled: enabled, botManaged: enabled, label: botActiveLabel || "ONZE" };
     if(adId) body.adId = String(adId);
     else if(id) body.id = Number(id);
     fetch("/api/p2p/bot/ads", {
@@ -10434,7 +10500,7 @@ function addP2PBotStyles(){
       var r = await fetch("/api/p2p/bot/sync-quantity", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ exchange: botSelectedExchange, adId: adId })
+        body: JSON.stringify({ exchange: botSelectedExchange, adId: adId, label: botActiveLabel || "ONZE" })
       });
       var d = await r.json();
       if(d?.ok){
@@ -10495,6 +10561,7 @@ function addP2PBotStyles(){
           }
         }
         window.botRefreshExchange(true);
+        botCycleRefresh();
         // If backend says nothing is running, stop the cycle
         if(data?.ok && data?.running === false){
           botStopCycle();
@@ -10690,8 +10757,7 @@ function addP2PBotStyles(){
     }
     var commPct = parseFloat(document.getElementById("adCfg_" + realId + "_CommissionPct").value);
     if(!commPct || isNaN(commPct)) commPct = parseFloat(document.getElementById("botExCommissionPct").value) || 0;
-    var realCost = refPrice > 0 ? refPrice * (1 + commPct / 100) : refPrice;
-    var threshold = realCost > 0 ? realCost * (1 + pct / 100) : 0;
+    var threshold = refPrice > 0 ? refPrice * (1 + (commPct + pct) / 100) : 0;
     hint.textContent = refPrice > 0
       ? "→ ignora bajo $" + threshold.toFixed(2)
       : "→ " + pct + "% sobre tu costo real";
@@ -10703,7 +10769,7 @@ function addP2PBotStyles(){
     setField("botExStrategy", cfg.strategy || "top1");
     setField("botExTop1Diff", cfg.top1Diff ?? 0.1);
     setField("botExSpreadPct", cfg.spreadPct || 0.5);
-    setField("botExPriceSource", cfg.priceSource || "manual");
+    setField("botExPriceSource", cfg.priceSource || "capacity");
     setField("botExPriceFloorPct", cfg.priceFloorPct ?? 0);
     setField("botExCommissionPct", cfg.commissionPct ?? 0.14);
     setField("botExSafeMarginPct", cfg.safeMarginPct ?? 0);
@@ -10829,7 +10895,7 @@ function addP2PBotStyles(){
       method:"PUT",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ exchange: ex, strategy, top1Diff, spreadPct, priceSource, priceFloorPct, commissionPct, safeMarginPct, minCompetitorCapital, competePayTypes, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, chatBotEnabled })
+      body: JSON.stringify({ exchange: ex, label: botActiveLabel || "ONZE", strategy, top1Diff, spreadPct, priceSource, priceFloorPct, commissionPct, safeMarginPct, minCompetitorCapital, competePayTypes, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, chatBotEnabled })
     });
     var cb = document.getElementById("botChatBotEnabled");
     if(cb) cb.checked = chatBotEnabled;
@@ -10923,7 +10989,7 @@ function addP2PBotStyles(){
         </form>
       `;
       try{
-        const r = await fetch("/api/binance/credentials", { credentials:"include" });
+        const r = await fetch("/api/binance/credentials?label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
         const d = await r.json();
         if(d?.ok && d?.credentials){
           document.getElementById("botCredApiKey").value = d.credentials.apiKey || "";
@@ -10944,7 +11010,7 @@ function addP2PBotStyles(){
         </form>
       `;
       try{
-        const r = await fetch("/api/p2p/bot/bybit-credentials", { credentials:"include" });
+        const r = await fetch("/api/p2p/bot/bybit-credentials?label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
         const d = await r.json();
         if(d?.ok && d?.credentials){
           document.getElementById("botCredApiKey").value = d.credentials.apiKey || "";
@@ -10966,7 +11032,7 @@ function addP2PBotStyles(){
         </form>
       `;
       try{
-        const r = await fetch("/api/p2p/bot/okx-credentials", { credentials:"include" });
+        const r = await fetch("/api/p2p/bot/okx-credentials?label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
         const d = await r.json();
         if(d?.ok && d?.credentials){
           document.getElementById("botCredApiKey").value = d.credentials.apiKey || "";
@@ -10991,17 +11057,18 @@ function addP2PBotStyles(){
       return;
     }
 
+    const lbl = botActiveLabel || "ONZE";
     let url, body;
     if(ex === "binance"){
       url = "/api/binance/credentials";
-      body = { apiKey, secretKey, test: true };
+      body = { apiKey, secretKey, test: true, label: lbl };
     }else if(ex === "bybit"){
       url = "/api/p2p/bot/bybit-credentials";
-      body = { apiKey, secretKey, test: true };
+      body = { apiKey, secretKey, test: true, label: lbl };
     }else if(ex === "okx"){
       const passphrase = document.getElementById("botCredPassphrase")?.value.trim();
       url = "/api/p2p/bot/okx-credentials";
-      body = { apiKey, secretKey, passphrase, test: true };
+      body = { apiKey, secretKey, passphrase, test: true, label: lbl };
     }
 
     const res = await fetch(url, {
@@ -11368,7 +11435,7 @@ function addP2PBotStyles(){
     const container = document.getElementById("botPanelOrdersList");
     if(!container) return;
     try{
-      const r = await fetch("/api/p2p/bot/orders?limit=50&live=true&exchange=" + botSelectedExchange, { credentials:"include" });
+      const r = await fetch("/api/p2p/bot/orders?limit=50&live=true&exchange=" + botSelectedExchange + "&label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
       const d = await r.json();
       window.botPanelOrdersData = d?.ok && d?.orders ? d.orders : [];
       window.botPopulateFilterDropdowns();
@@ -11489,7 +11556,7 @@ function addP2PBotStyles(){
       const container = document.getElementById("botPanelOrdersList");
       if(!container) return;
       try{
-        const r = await fetch("/api/p2p/bot/orders?limit=50&live=true&exchange=" + botSelectedExchange, { credentials:"include" });
+        const r = await fetch("/api/p2p/bot/orders?limit=50&live=true&exchange=" + botSelectedExchange + "&label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
         const d = await r.json();
         const newOrders = d?.ok && d?.orders ? d.orders : [];
         const oldData = window.botPanelOrdersData || [];
@@ -11562,7 +11629,7 @@ function addP2PBotStyles(){
     const container = document.getElementById("botPanelAdsList");
     if(!container) return;
     try{
-      const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange, { credentials:"include" });
+      const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange + "&label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
       const d = await r.json();
       if(!d?.ok || !d?.ads?.length){
         container.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Sin anuncios para ' + botSelectedExchange + '. Crea uno nuevo.</div>';
@@ -11587,10 +11654,10 @@ function addP2PBotStyles(){
               </button>
               <span style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:#64748b;letter-spacing:.3px;text-transform:uppercase;">
                 <span>Bot</span>
-                <label class="toggle-switch" title="${botEnabled ? 'Apagar bot' : 'Prender bot'}">
-                  <input type="checkbox" ${botEnabled?'checked':''} onchange="toggleBotAdEnabled(${a.id},this.checked,'${escHtml(a.adId||'')}')">
+                <span class="toggle-switch" title="${botEnabled ? 'Apagar bot' : 'Prender bot'}" onclick="event.stopPropagation();toggleBotAdEnabled(${a.id},!${botEnabled},'${escHtml(a.adId||'')}')">
+                  <input type="checkbox" ${botEnabled?'checked':''}>
                   <span class="slider"></span>
-                </label>
+                </span>
               </span>
               <button class="ad-icon-btn danger" type="button" onclick="window.botPanelDeleteAd(${a.id},${isLive ? "'" + a.adId + "'" : 'null'})" title="Eliminar anuncio">
                 <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
@@ -11638,7 +11705,8 @@ function addP2PBotStyles(){
     var adsList = document.getElementById("botPanelAdsList");
     if(adsList) adsList.style.display = "none";
     try{
-      const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange, { credentials:"include" });
+      var labelParam = (typeof botActiveLabel !== 'undefined' && botActiveLabel) ? '&label=' + encodeURIComponent(botActiveLabel) : '';
+      const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange + labelParam, { credentials:"include" });
       const d = await r.json();
       const ad = d?.ads?.find(a => a.id === id);
       if(ad) renderAdForm(ad);
@@ -11662,7 +11730,8 @@ function addP2PBotStyles(){
     var modalHead = document.querySelector("#botPanelModal .modal-head");
     if(modalHead) modalHead.style.display = "none";
     try{
-      const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange, { credentials:"include" });
+      var labelParam = (typeof botActiveLabel !== 'undefined' && botActiveLabel) ? '&label=' + encodeURIComponent(botActiveLabel) : '';
+      const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange + labelParam, { credentials:"include" });
       const d = await r.json();
       const ad = d?.ads?.find(a => a.id === id);
       if(ad) renderAdForm(ad);
@@ -12004,6 +12073,7 @@ function addP2PBotStyles(){
     const body = {
       id: botPanelAdEditingId || undefined,
       exchange: botSelectedExchange,
+      label: botActiveLabel || "ONZE",
       tradeType,
       asset,
       fiat,
@@ -12067,7 +12137,7 @@ function addP2PBotStyles(){
       await fetch("/api/p2p/bot/ads", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ id, exchange: botSelectedExchange, isActive })
+        body: JSON.stringify({ id, exchange: botSelectedExchange, isActive, label: botActiveLabel || "ONZE" })
       });
       loadPanelAds();
     }catch(e){}
@@ -12075,14 +12145,14 @@ function addP2PBotStyles(){
 
   window.toggleBotManaged = async function(id){
     try{
-      const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange, { credentials:"include" });
+      const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange + "&label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
       const d = await r.json();
       const ad = d?.ads?.find(a => a.id === id);
       if(!ad) return;
       await fetch("/api/p2p/bot/ads", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ id, exchange: botSelectedExchange, botManaged: !ad.botManaged })
+        body: JSON.stringify({ id, exchange: botSelectedExchange, botManaged: !ad.botManaged, label: botActiveLabel || "ONZE" })
       });
       loadPanelAds();
     }catch(e){}
@@ -12091,7 +12161,7 @@ function addP2PBotStyles(){
   /* Per-ad bot config */
   window.toggleBotAdEnabled = async function(id, enabled, adId){
     try{
-      const body = { id, exchange: botSelectedExchange, botEnabled: enabled, botManaged: enabled };
+      const body = { id, exchange: botSelectedExchange, botEnabled: enabled, botManaged: enabled, label: botActiveLabel || "ONZE" };
       if (adId) body.adId = adId;
       const r = await fetch("/api/p2p/bot/ads", {
         method:"POST", credentials:"include",
@@ -12104,7 +12174,7 @@ function addP2PBotStyles(){
   };
 
   window.saveBotAdConfig = async function(id, field, value, adId){
-    const body = { id, exchange: botSelectedExchange };
+    const body = { id, exchange: botSelectedExchange, label: botActiveLabel || "ONZE" };
     if (adId) body.adId = adId;
     if(field === 'botCompetePayTypes'){
       body[field] = value === 'match' ? ['__match_ad__'] : ['all'];
@@ -12139,7 +12209,7 @@ function addP2PBotStyles(){
 
   window.botPanelCheckBalance = async function(){
     try{
-      const r = await fetch("/api/p2p/bot/balance?exchange=" + botSelectedExchange, { credentials:"include" });
+      const r = await fetch("/api/p2p/bot/balance?exchange=" + botSelectedExchange + "&label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
       const d = await r.json();
       if(d?.ok && d?.available !== undefined && d?.available > 0){
         document.getElementById("p2pAdAmount").value = fmt(d.available);
@@ -13034,6 +13104,309 @@ function addP2PBotStyles(){
     return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
   }
 
+  async function botCycleRefresh(){
+    const lbl = "?label=" + encodeURIComponent(botActiveLabel || "ONZE");
+    try{
+      const res = await fetch("/api/p2p/cycle/status" + lbl, { credentials:"include" });
+      const data = await res.json();
+      if(!data?.ok) return;
+      const cycle = data.active;
+      const startBtn = document.getElementById("botCycleStartBtn");
+      const addBtn = document.getElementById("botCycleAddSaleBtn");
+      const closeBtn = document.getElementById("botCycleCloseBtn");
+      const info = document.getElementById("botCycleInfo");
+      const labelEl = document.getElementById("botCycleLabel");
+      const emptyHint = document.getElementById("botCycleEmptyHint");
+      if(cycle){
+        startBtn.style.display = "none";
+        addBtn.style.display = "";
+        closeBtn.style.display = "";
+        info.style.display = "block";
+        if(emptyHint) emptyHint.style.display = "none";
+        labelEl.textContent = "Activo · " + (cycle.label || "ONZE");
+        labelEl.style.background = "rgba(0,255,136,.14)";
+        labelEl.style.color = "#00ff88";
+        document.getElementById("botCycleStartTime").textContent = new Date(cycle.startTime).toLocaleString();
+        document.getElementById("botCycleUsdt").textContent = Number(cycle.totalUsdt || 0).toFixed(2);
+        document.getElementById("botCycleBinanceClp").textContent = "$" + Math.round(Number(cycle.totalBinanceClp || 0)).toLocaleString();
+        document.getElementById("botCycleManualClp").textContent = "$" + Math.round(Number(cycle.totalManualClp || 0)).toLocaleString();
+        document.getElementById("botCycleTotalClp").textContent = "$" + Math.round(Number(cycle.totalBinanceClp || 0) + Number(cycle.totalManualClp || 0)).toLocaleString();
+        document.getElementById("botCycleMinClose").textContent = cycle.minCloseBalance ? Number(cycle.minCloseBalance).toFixed(2) + " USDT" : "—";
+        const listEl = document.getElementById("botCycleManualList");
+        if(cycle.manualSales?.length){
+          listEl.style.display = "block";
+          listEl.innerHTML = "<div style='font-weight:700;color:#cbd5e1;margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:.3px;'>Ventas manuales</div>" +
+            cycle.manualSales.map(s =>
+              "<div style='display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(148,163,184,.08);'>" +
+                "<span>" + escHtml(s.concept) + "</span>" +
+                "<span style='color:#fbbf24;font-weight:700;'>$" + Math.round(Number(s.amountClp)).toLocaleString() + "</span>" +
+              "</div>"
+            ).join("");
+        }else{
+          listEl.style.display = "none";
+        }
+      }else{
+        startBtn.style.display = "";
+        addBtn.style.display = "none";
+        closeBtn.style.display = "none";
+        info.style.display = "none";
+        if(emptyHint) emptyHint.style.display = "";
+        labelEl.textContent = "Inactivo";
+        labelEl.style.background = "rgba(148,163,184,.12)";
+        labelEl.style.color = "#94a3b8";
+      }
+    }catch(e){}
+  }
+
+  function botCycleModalShell(id, titleHtml, bodyHtml){
+    let modal = document.getElementById(id);
+    if(modal) modal.remove();
+    modal = document.createElement("div");
+    modal.id = id;
+    modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;";
+    modal.innerHTML = `
+      <div style="background:#0d2137;border:1px solid #2a4a6a;border-radius:16px;padding:24px;max-width:420px;width:90%;">
+        <h3 style="color:#00d4ff;margin-bottom:8px;">${titleHtml}</h3>
+        ${bodyHtml}
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.addEventListener("mousedown", (e) => { if(e.target === modal) modal.remove(); });
+    return modal;
+  }
+
+  window.botCycleStart = function(){
+    const lbl = botActiveLabel || "ONZE";
+    botCycleModalShell("botCycleStartModal", "▶ Iniciar ciclo de ventas", `
+      <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
+        Cuenta: <strong style="color:#fff;">${escHtml(lbl)}</strong><br>
+        Se contarán las ventas P2P y manuales desde este momento hasta que cierres el ciclo.
+      </p>
+      <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">Monto mínimo USDT para auto-cierre</label>
+      <p style="color:#64748b;font-size:11px;margin-bottom:8px;">Cuando el saldo del bot baje a este nivel, el ciclo se cerrará solo. Deja 0 para cerrarlo solo al llegar a 0.</p>
+      <input id="botCycleStartMinInput" type="text" inputmode="decimal" value="90"
+        style="width:100%;box-sizing:border-box;padding:10px;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#fff;margin-bottom:8px;">
+      <p id="botCycleStartErr" style="color:#fca5a5;font-size:12px;margin-bottom:8px;display:none;"></p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+        <button onclick="document.getElementById('botCycleStartModal').remove()"
+          style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
+        <button onclick="window.botCycleStartConfirm()"
+          style="padding:10px 16px;background:#00ff88;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Iniciar</button>
+      </div>
+    `);
+    setTimeout(() => document.getElementById("botCycleStartMinInput")?.focus(), 50);
+  };
+
+  window.botCycleStartConfirm = async function(){
+    const lbl = botActiveLabel || "ONZE";
+    const errEl = document.getElementById("botCycleStartErr");
+    const minClose = parseFloat(document.getElementById("botCycleStartMinInput")?.value || "0") || 0;
+    try{
+      const res = await fetch("/api/p2p/cycle/start", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ label: lbl, minCloseBalance: minClose })
+      });
+      const data = await res.json();
+      if(!data.ok){
+        if(errEl){ errEl.textContent = data.error || "Error al iniciar ciclo"; errEl.style.display = "block"; }
+        return;
+      }
+      document.getElementById("botCycleStartModal")?.remove();
+      botCycleRefresh();
+    }catch(e){
+      if(errEl){ errEl.textContent = "Error al iniciar ciclo"; errEl.style.display = "block"; }
+    }
+  };
+
+  window.botCycleAddSale = function(){
+    botCycleModalShell("botCycleAddSaleModal", "+ Venta manual", `
+      <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
+        Registra una venta que no pasó por Binance (ej. pago directo a un cliente) dentro del ciclo activo.
+      </p>
+      <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">Concepto</label>
+      <input id="botCycleSaleConceptInput" type="text" placeholder="Ej: PayPal - Juan Pérez"
+        style="width:100%;box-sizing:border-box;padding:10px;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#fff;margin-bottom:12px;">
+      <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">Monto en CLP</label>
+      <input id="botCycleSaleAmountInput" type="text" inputmode="decimal" placeholder="Ej: 150.000" oninput="this.value=this.value.replace(/[^0-9]/g,'').replace(/\\B(?=(\\d{3})+(?!\\d))/g,'.');"
+        style="width:100%;box-sizing:border-box;padding:10px;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#fff;margin-bottom:8px;">
+      <p id="botCycleSaleErr" style="color:#fca5a5;font-size:12px;margin-bottom:8px;display:none;"></p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+        <button onclick="document.getElementById('botCycleAddSaleModal').remove()"
+          style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
+        <button onclick="window.botCycleAddSaleConfirm()"
+          style="padding:10px 16px;background:#00ff88;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Agregar</button>
+      </div>
+    `);
+    setTimeout(() => document.getElementById("botCycleSaleConceptInput")?.focus(), 50);
+  };
+
+  window.botCycleAddSaleConfirm = async function(){
+    const errEl = document.getElementById("botCycleSaleErr");
+    const showErr = (msg) => { if(errEl){ errEl.textContent = msg; errEl.style.display = "block"; } };
+    const concept = (document.getElementById("botCycleSaleConceptInput")?.value || "").trim();
+    const amountClp = Number((document.getElementById("botCycleSaleAmountInput")?.value || "").replace(/[^0-9]/g, ""));
+    if(!concept){ showErr("Ingresa un concepto"); return; }
+    if(!amountClp || amountClp <= 0){ showErr("Ingresa un monto válido"); return; }
+    try{
+      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
+      const status = await res.json();
+      if(!status?.ok || !status?.active){ showErr("No hay ciclo activo"); return; }
+      const addRes = await fetch("/api/p2p/cycle/manual-sale", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ cycleId: status.active.id, concept, amountClp })
+      });
+      const addData = await addRes.json();
+      if(!addData.ok){ showErr(addData.error || "Error al agregar venta manual"); return; }
+      document.getElementById("botCycleAddSaleModal")?.remove();
+      botCycleRefresh();
+    }catch(e){ showErr("Error al agregar venta manual"); }
+  };
+
+  window.botCycleClose = async function(){
+    const lbl = botActiveLabel || "ONZE";
+    let preview = null;
+    try{
+      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(lbl), { credentials:"include" });
+      const status = await res.json();
+      preview = status?.active || null;
+    }catch(e){}
+    const totalUsdt = preview ? Number(preview.totalUsdt || 0).toFixed(2) : "—";
+    const totalClp = preview ? Math.round(Number(preview.totalBinanceClp || 0) + Number(preview.totalManualClp || 0)).toLocaleString() : "—";
+    botCycleModalShell("botCycleCloseModal", "■ Cerrar ciclo de ventas", `
+      <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
+        Se calcularán los totales finales de este ciclo y quedará archivado.
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <div class="bot-cycle-tile" style="flex:1;"><div class="bot-cycle-tile-label">USDT vendidos</div><div class="bot-cycle-tile-value">${totalUsdt}</div></div>
+        <div class="bot-cycle-tile" style="flex:1;border-color:rgba(0,212,255,.25);"><div class="bot-cycle-tile-label">Total CLP</div><div class="bot-cycle-tile-value" style="color:#00d4ff;">$${totalClp}</div></div>
+      </div>
+      <p id="botCycleCloseErr" style="color:#fca5a5;font-size:12px;margin-bottom:8px;display:none;"></p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button onclick="document.getElementById('botCycleCloseModal').remove()"
+          style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
+        <button onclick="window.botCycleCloseConfirm()"
+          style="padding:10px 16px;background:rgba(239,68,68,.85);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Cerrar ciclo</button>
+      </div>
+    `);
+  };
+
+  window.botCycleCloseConfirm = async function(){
+    const errEl = document.getElementById("botCycleCloseErr");
+    try{
+      const res = await fetch("/api/p2p/cycle/close", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ label: botActiveLabel || "ONZE" })
+      });
+      const data = await res.json();
+      if(!data.ok){
+        if(errEl){ errEl.textContent = data.error || "Error al cerrar ciclo"; errEl.style.display = "block"; }
+        return;
+      }
+      document.getElementById("botCycleCloseModal")?.remove();
+      window.botCycleShowCloseResult(data.cycle);
+      botCycleRefresh();
+    }catch(e){
+      if(errEl){ errEl.textContent = "Error al cerrar ciclo"; errEl.style.display = "block"; }
+    }
+  };
+
+  function botCycleOrderRow(label, orderNumber, clp){
+    if(!orderNumber) return `<div class="bot-cycle-tile" style="flex:1;"><div class="bot-cycle-tile-label">${label}</div><div class="bot-cycle-tile-value" style="font-size:12px;color:#64748b;">Sin órdenes</div></div>`;
+    return `<div class="bot-cycle-tile" style="flex:1;">
+      <div class="bot-cycle-tile-label">${label}</div>
+      <div class="bot-cycle-tile-value" style="font-size:12px;">#${escHtml(String(orderNumber))}</div>
+      <div style="font-size:12px;color:#fbbf24;font-weight:700;margin-top:2px;">$${Math.round(Number(clp || 0)).toLocaleString()}</div>
+    </div>`;
+  }
+
+  window.botCycleShowCloseResult = function(cycle){
+    const totalUsdt = Number(cycle.totalUsdt || 0).toFixed(2);
+    const totalClp = Math.round(Number(cycle.totalBinanceClp || 0) + Number(cycle.totalManualClp || 0)).toLocaleString();
+    botCycleModalShell("botCycleResultModal", "✅ Ciclo cerrado", `
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <div class="bot-cycle-tile" style="flex:1;"><div class="bot-cycle-tile-label">USDT vendidos</div><div class="bot-cycle-tile-value">${totalUsdt}</div></div>
+        <div class="bot-cycle-tile" style="flex:1;border-color:rgba(0,212,255,.25);"><div class="bot-cycle-tile-label">Total CLP</div><div class="bot-cycle-tile-value" style="color:#00d4ff;">$${totalClp}</div></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        ${botCycleOrderRow("Primera orden", cycle.firstOrderNumber, cycle.firstOrderClp)}
+        ${botCycleOrderRow("Última orden", cycle.lastOrderNumber, cycle.lastOrderClp)}
+      </div>
+      <div style="display:flex;justify-content:flex-end;">
+        <button onclick="document.getElementById('botCycleResultModal').remove()"
+          style="padding:10px 16px;background:#00ff88;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Cerrar</button>
+      </div>
+    `);
+  };
+
+  window.botCycleShowHistory = async function(){
+    const lbl = botActiveLabel || "ONZE";
+    let cycles = [];
+    try{
+      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(lbl), { credentials:"include" });
+      const data = await res.json();
+      cycles = data?.recent || [];
+    }catch(e){}
+    const rows = cycles.length ? cycles.map(c => {
+      const totalClp = Math.round(Number(c.totalBinanceClp || 0) + Number(c.totalManualClp || 0)).toLocaleString();
+      const start = c.startTime ? new Date(c.startTime).toLocaleString() : "—";
+      const end = c.endTime ? new Date(c.endTime).toLocaleString() : "—";
+      return `<div style="padding:10px 0;border-bottom:1px solid rgba(148,163,184,.1);display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div style="flex:1;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;margin-bottom:4px;">
+            <span>${start} → ${end}</span>
+            <span style="color:#00d4ff;font-weight:700;">$${totalClp}</span>
+          </div>
+          <div style="font-size:11px;color:#64748b;">
+            ${Number(c.totalUsdt || 0).toFixed(2)} USDT · Primera #${escHtml(String(c.firstOrderNumber || "—"))} · Última #${escHtml(String(c.lastOrderNumber || "—"))}
+          </div>
+        </div>
+        <button onclick="window.botCycleDelete(${c.id})" title="Eliminar este ciclo"
+          style="flex-shrink:0;padding:5px 9px;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:6px;cursor:pointer;font-size:12px;">🗑</button>
+      </div>`;
+    }).join("") : `<p style="color:#64748b;font-size:13px;">Todavía no hay ciclos cerrados para ${escHtml(lbl)}.</p>`;
+    botCycleModalShell("botCycleHistoryModal", "📜 Historial de ciclos", `
+      <div style="max-height:400px;overflow-y:auto;margin-bottom:16px;">${rows}</div>
+      <div style="display:flex;justify-content:space-between;">
+        ${cycles.length ? `<button onclick="window.botCycleDeleteAll()"
+          style="padding:10px 16px;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:6px;cursor:pointer;font-weight:700;">Vaciar historial</button>` : `<span></span>`}
+        <button onclick="document.getElementById('botCycleHistoryModal').remove()"
+          style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cerrar</button>
+      </div>
+    `);
+  };
+
+  window.botCycleDelete = async function(id){
+    if(!confirm("¿Eliminar este ciclo del historial? No se puede deshacer.")) return;
+    try{
+      const res = await fetch("/api/p2p/cycle/delete", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ id })
+      });
+      const data = await res.json();
+      if(!data.ok){ alert(data.error || "No se pudo eliminar"); return; }
+      window.botCycleShowHistory();
+    }catch(e){ alert("Error al eliminar"); }
+  };
+
+  window.botCycleDeleteAll = async function(){
+    const lbl = botActiveLabel || "ONZE";
+    if(!confirm(`¿Vaciar TODO el historial de ciclos cerrados de ${lbl}? No se puede deshacer.`)) return;
+    try{
+      const res = await fetch("/api/p2p/cycle/delete", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ all: true, label: lbl })
+      });
+      const data = await res.json();
+      if(!data.ok){ alert(data.error || "No se pudo vaciar"); return; }
+      window.botCycleShowHistory();
+    }catch(e){ alert("Error al vaciar historial"); }
+  };
+
   function initP2PBot(){
     try{ console.log("[P2P Bot] init started"); }catch(e){}
 
@@ -13042,6 +13415,7 @@ function addP2PBotStyles(){
     addP2PBotNavButton();
     setTimeout(function(){ window.botSelectExchange('binance'); }, 100);
     setTimeout(window.botRefreshExchange, 500);
+    setTimeout(botCycleRefresh, 800);
     setTimeout(function(){
       var chatCb = document.getElementById("botChatBotEnabled");
       if(chatCb?.checked && !botCycleTimer && !chatCycleTimer) botStartChatCycle();
@@ -15972,7 +16346,8 @@ function addP2PBotStyles(){
     btn.textContent = "Sincronizando...";
 
     try{
-      const res = await fetch("/api/binance/p2p-history", {
+      var p2pLbl = (typeof botActiveLabel !== 'undefined' && botActiveLabel) ? '?label=' + encodeURIComponent(botActiveLabel) : '';
+      const res = await fetch("/api/binance/p2p-history" + p2pLbl, {
         method:"GET",
         credentials:"include"
       });
@@ -19167,10 +19542,12 @@ function addP2PBotStyles(){
   }, 500);
 
   function saveBinanceSales(orders){
+    // Combina con TODO lo ya guardado (no solo las manuales) — cada sync trae
+    // solo la cuenta activa (ONZE o ZINPLE), así que descartar lo demás borraba
+    // las ventas de la otra cuenta cada vez que se sincronizaba.
     const existing = loadP2PBinanceOrders();
-    const manualOrders = existing.filter(o => o._manual || String(o.orderNumber || '').startsWith('manual_'));
-    const merged = [...manualOrders, ...orders];
-    // Deduplicar por orderNumber (API tiene prioridad)
+    const merged = [...orders, ...existing];
+    // Deduplicar por orderNumber (la API, más fresca, tiene prioridad)
     const seen = new Set();
     const deduped = [];
     for (const o of merged) {
@@ -19227,7 +19604,10 @@ function addP2PBotStyles(){
     const toFinish = stats.capacities.filter(c =>
       c.status === "active" &&
       Number(c.capacityClp || c.totalCost || 0) > 0 &&
-      Number(c.clpReceived || 0) >= Number(c.capacityClp || c.totalCost || 0)
+      // Tolerancia de 1 CLP (moneda sin decimales) — la suma de muchas ventas
+      // pequeñas puede quedar unos centavos por debajo del monto exacto por
+      // redondeo, sin que eso signifique que falta saldo real por vender.
+      Number(c.clpReceived || 0) >= Number(c.capacityClp || c.totalCost || 0) - 1
     );
     if(!toFinish.length) return;
 
@@ -19267,7 +19647,8 @@ function addP2PBotStyles(){
     btn.disabled = true;
     btn.textContent = 'Sincronizando...';
 
-    fetch('/api/binance/p2p-history')
+    var lblParam = (typeof botActiveLabel !== 'undefined' && botActiveLabel) ? '?label=' + encodeURIComponent(botActiveLabel) : '';
+    fetch('/api/binance/p2p-history' + lblParam)
       .then(res => res.json())
       .then(data => {
         if(data.ok && data.orders){
@@ -20630,6 +21011,7 @@ function addP2PBotStyles(){
       console.error("Error en loadRateLists:", err);
     }
   }
+  window.__reloadRateLists = loadRateLists;
 
   // ============================================================
   // API: Crear nueva lista
@@ -22029,7 +22411,7 @@ function addP2PBotStyles(){
   // ============================================================
   // ACCIONES
   // ============================================================
-  function handleAddPair() {
+  async function handleAddPair() {
     const originSel = getEl("rateListEditorOrigin");
     const destSel = getEl("rateListEditorDestination");
     const origin = originSel.value.trim();
@@ -22070,15 +22452,19 @@ function addP2PBotStyles(){
     originSel.value = "";
     destSel.value = "";
     renderPairs();
+    // Guardar de inmediato para que el par no se pierda si el usuario navega
+    // hacia atrás sin apretar "Guardar cambios".
+    await persistCurrentList(true);
   }
 
-  function handlePairsGridClick(e) {
+  async function handlePairsGridClick(e) {
     const delBtn = e.target.closest(".rate-pair-delete");
     if (delBtn) {
       const idx = Number(delBtn.getAttribute("data-idx"));
       if (Number.isFinite(idx) && currentPairs[idx]) {
         currentPairs.splice(idx, 1);
         renderPairs();
+        await persistCurrentList(true);
       }
     }
   }
@@ -22115,19 +22501,21 @@ function addP2PBotStyles(){
   // ============================================================
   // GUARDAR
   // ============================================================
-  async function handleSave() {
-    if (!currentList) return;
+  // silent=true se usa para auto-guardar pares apenas se agregan/quitan,
+  // sin popups ni validar campos que el usuario no está tocando en ese momento.
+  async function persistCurrentList(silent) {
+    if (!currentList) return false;
     const name = getEl("rateListEditorName").value.trim();
     const profitMode = getEditorSelectedProfitMode();
     const profit = Number(getEl("rateListEditorProfit").value);
 
     if (!name) {
-      alert("El nombre es obligatorio.");
-      return;
+      if (!silent) alert("El nombre es obligatorio.");
+      return false;
     }
     if (profitMode === "fixed" && (!Number.isFinite(profit) || profit < 0)) {
-      alert("El % de ganancia es inválido.");
-      return;
+      if (!silent) alert("El % de ganancia es inválido.");
+      return false;
     }
 
     // Resolver countryIds desde el nombre del país
@@ -22146,8 +22534,8 @@ function addP2PBotStyles(){
         logoDataUrl = await readEditorLogoFileAsDataUrl(logoInput.files[0]);
       } catch (err) {
         console.error("Error leyendo logo:", err);
-        alert("No pude leer el logo. Intenta con otra imagen.");
-        return;
+        if (!silent) alert("No pude leer el logo. Intenta con otra imagen.");
+        return false;
       }
     }
 
@@ -22183,16 +22571,23 @@ function addP2PBotStyles(){
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert("Error al guardar: " + (err.error || res.status));
-        return;
+        if (!silent) alert("Error al guardar: " + (err.error || res.status));
+        else console.error("Error auto-guardando par:", err.error || res.status);
+        return false;
       }
       const data = await res.json();
       currentList = data.rateList;
-      alert("Cambios guardados ✓");
+      if (!silent) alert("Cambios guardados ✓");
+      return true;
     } catch (err) {
       console.error("Error save:", err);
-      alert("Error de conexión al guardar.");
+      if (!silent) alert("Error de conexión al guardar.");
+      return false;
     }
+  }
+
+  async function handleSave() {
+    await persistCurrentList(false);
   }
 
   // Cache de países (id por nombre normalizado)
