@@ -556,4 +556,43 @@ infraestructura.
 5. Antes de escribirle a Binance por un 187049/187040 "nuevo", revisar que el payload siga
    siendo exactamente la lista blanca de 32 campos con la fórmula de `initAmount` — si eso está
    intacto, casi seguro es el límite de velocidad del punto 1, no un problema de payload.
-4. Fix Bybit/OKX label edge cases if needed
+6. ¿El bot lleva minutos sin ciclar y el usuario dice que no salió del panel ni cerró la
+   pestaña? Sospechar del punto 7 (cambio de pestaña ONZE/ZINPLE cortando el ciclo real) antes
+   que del punto 6 (navegación fuera del panel) — confirmar revisando si el usuario cambió de
+   cuenta en la UI justo antes del corte.
+
+## 7. NO era solo el punto 5 — el fetch de 1 página también estaba en el caché general de
+   competidores, y cambiar de pestaña ONZE/ZINPLE cortaba el ciclo real (AMBOS ARREGLADOS, jul 11 2026)
+
+Dos bugs distintos encontrados el mismo día, ambos con síntomas parecidos a "el anuncio no
+compite" o "el bot se detiene solo":
+
+**7a. El modo "competir con todos los bancos" también leía solo 1 página.** El arreglo del
+punto 5 (2 páginas) se aplicó primero solo al modo `__match_ad__` (igualar métodos de pago del
+anuncio). Pero el anuncio configurado para competir contra TODO el mercado (`competePayTypes:
+null`, `bs.cachedCompetitors`) usaba un fetch completamente distinto, en otra parte de
+`runBinanceCycle`, que también solo pedía 1 página. Mismo síntoma: un competidor real y ganable
+justo arriba del precio (ej. 936 cuando el piso estaba en 935.12) nunca entraba a la lista, y el
+anuncio quedaba pegado en el piso de seguridad. **Arreglo**: ese fetch también pide 2 páginas
+en paralelo ahora.
+
+**7b. Cambiar de pestaña ONZE/ZINPLE en el panel cortaba el ciclo real del bot.** El timer que
+dispara el ciclo cada ~300ms (`scheduleBotCycle()`) leía la variable global `botActiveLabel`
+EN VIVO en cada vuelta, no la cuenta con la que se había iniciado. Si el usuario cambiaba de
+pestaña a la OTRA cuenta mientras esta estaba apagada, el timer empezaba a mandar
+`label: <cuenta apagada>` al backend, que respondía `running: false`, y el código **detenía el
+timer por completo** (pensando que ya no había nada que hacer) — dejando de atender a la cuenta
+que sí estaba corriendo, sin ningún error visible. Esto es MUY probablemente la explicación real
+de varios de los cortes de "bot detenido" vistos en la sesión — no solo la navegación fuera del
+panel (punto 6).
+
+**Arreglo**: se agregó `botCyclingLabel` (variable separada de `botActiveLabel`) que se fija
+al presionar "Iniciar" y no cambia por mirar la otra pestaña. El timer (`scheduleBotCycle`)
+usa `botCyclingLabel`, no `botActiveLabel`. "Detener" solo corta el timer real si la cuenta que
+se detiene es la que efectivamente está corriendo (`botCyclingLabel === botActiveLabel`); si se
+detiene la cuenta que solo se está mirando (y no es la que corre), no toca el ciclo de la otra.
+
+**Si se vuelve a tocar `botStartExchange`/`botStopExchange`/`scheduleBotCycle` en el futuro**:
+NUNCA volver a leer `botActiveLabel` dentro del loop del timer — siempre usar la variable
+capturada al iniciar (`botCyclingLabel`). Es la causa más sutil y con más impacto que se
+encontró en toda la sesión, porque no deja ningún error en los logs, solo silencio.
