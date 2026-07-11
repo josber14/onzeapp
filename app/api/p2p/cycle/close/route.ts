@@ -43,8 +43,9 @@ export async function POST(req: NextRequest) {
     const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
 
     const startMs = Number(cycle.startTime);
+    const endMs = Date.now();
     const { totalUsdt, totalBinanceClp, orderCount, firstOrder, lastOrder } =
-      await computeCycleOrderStats(client, startMs);
+      await computeCycleOrderStats(client, startMs, endMs);
 
     const totalManualClp = Number(cycle.totalManualClp);
 
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
       where: { id: cycle.id },
       data: {
         status: "closed",
-        endTime: new Date(),
+        endTime: new Date(endMs),
         totalUsdt,
         totalBinanceClp,
         totalManualClp,

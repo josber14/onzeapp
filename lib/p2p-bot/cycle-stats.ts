@@ -3,20 +3,24 @@ import { BinanceP2PClient } from "./binance-adapter";
 // getOrders() no reenvía un filtro de status a Binance (el endpoint no lo soporta
 // de forma confiable) — hay que filtrar acá por completadas, si no se suman
 // órdenes canceladas/apeladas/en curso que nunca se pagaron de verdad.
-export async function computeCycleOrderStats(client: BinanceP2PClient, startMs: number) {
+//
+// El rango de fecha (startTimestamp/endTimestamp) SÍ se filtra directo en
+// Binance — es más confiable que traer páginas sueltas y filtrar acá: con
+// volumen alto de órdenes, nuevas órdenes se insertan mientras se pagina,
+// corriendo los límites de cada página y perdiendo órdenes reales en el medio
+// (confirmado en vivo: un ciclo perdió más de la mitad de sus ventas por esto).
+// endMs por defecto es "ahora", para el cálculo en vivo del ciclo activo.
+export async function computeCycleOrderStats(client: BinanceP2PClient, startMs: number, endMs?: number) {
+  const endTimestamp = endMs ?? Date.now();
   const allOrders: any[] = [];
   for (let page = 1; page <= 5; page++) {
-    const pageRes = await client.getOrders({ page, rows: 100 });
+    const pageRes = await client.getOrders({ page, rows: 100, startTimestamp: startMs, endTimestamp });
     const pageData = pageRes?.data || [];
     if (pageData.length === 0) break;
     allOrders.push(...pageData);
   }
 
-  const cycleOrders = allOrders.filter((o: any) => {
-    if (o.orderStatus !== "COMPLETED") return false;
-    const t = Number(o.createTime) || Number(o.createDate) || 0;
-    return t >= startMs;
-  });
+  const cycleOrders = allOrders.filter((o: any) => o.orderStatus === "COMPLETED");
 
   let totalUsdt = 0;
   let totalBinanceClp = 0;

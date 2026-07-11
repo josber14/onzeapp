@@ -324,7 +324,7 @@ export class BinanceP2PClient {
 
   // ─── Orders ──────────────────────────────────────────────────
 
-  async getOrders(params: { page: number; rows: number; tradeType?: string; status?: string }) {
+  async getOrders(params: { page: number; rows: number; tradeType?: string; status?: string; startTimestamp?: number; endTimestamp?: number }) {
     const allParams: Record<string, any> = {
       page: params.page || 1,
       rows: params.rows || 50,
@@ -332,6 +332,13 @@ export class BinanceP2PClient {
       recvWindow: 60000,
       timestamp: Date.now(),
     };
+    // Filtrar por rango de fecha DIRECTO en Binance (soportado por este endpoint)
+    // es mucho más confiable que traer páginas sueltas y filtrar acá: con
+    // volumen alto de órdenes, nuevas órdenes se insertan mientras se pagina,
+    // corriendo los límites de cada página y perdiendo/duplicando resultados.
+    // Con startTimestamp/endTimestamp la ventana queda fija en el servidor.
+    if (params.startTimestamp != null) allParams.startTimestamp = params.startTimestamp;
+    if (params.endTimestamp != null) allParams.endTimestamp = params.endTimestamp;
     const queryStr = this.buildQueryString(allParams);
     const signature = this.sign(queryStr);
     const url = `${this.apiBase}/sapi/v1/c2c/orderMatch/listUserOrderHistory?${queryStr}&signature=${encodeURIComponent(signature)}`;
