@@ -1794,6 +1794,22 @@ async function autoCloseCycle(
   const minClose = cycle.minCloseBalance ? Number(cycle.minCloseBalance) : 0;
   if (balance >= minClose) return;
 
+  // El saldo "libre" de Binance baja mientras hay órdenes pendientes (estado
+  // TRADING) — ese USDT queda bloqueado aunque la orden nunca se complete
+  // (se cancele por tiempo o la cancele el comprador), y se libera solo poco
+  // después. Confirmado en vivo: un ciclo se cerró con saldo=29.67 que en
+  // realidad eran varias órdenes pendientes bloqueando fondos, no ventas
+  // reales — 3 minutos después el saldo ya había vuelto a ~1.700 USDT solo.
+  // Por eso NO se cierra mientras haya alguna orden todavía sin resolver:
+  // solo se confía en el saldo bajo cuando no hay nada "en el aire".
+  const recentOrdersRes = await client.getOrders({ page: 1, rows: 20 });
+  const recentOrders = recentOrdersRes?.data || [];
+  const hasPending = recentOrders.some((o: any) => o.orderStatus === "TRADING");
+  if (hasPending) {
+    await log( "info", null, `Auto-close: saldo bajo (${balance}) pero hay orden(es) pendiente(s) sin resolver — se espera a que se resuelvan antes de cerrar el ciclo ${cycle.id}`);
+    return;
+  }
+
   await log( "info", null, `Auto-cerrando ciclo ${cycle.id}: balance USDT=${balance}, minClose=${minClose}`);
 
   const startMs = Number(cycle.startTime);
