@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { BybitP2PClient, bybitOrderGroup, bybitOrderStatusLabel } from "./bybit-adapter";
 import { BinanceP2PClient } from "./binance-adapter";
+import { computeCycleOrderStats } from "./cycle-stats";
 import { processChats } from "./chat-agent";
 import { initBrowser } from "./chat-playwright";
 import type {
@@ -1773,40 +1774,32 @@ async function autoCloseCycle(
   if (!cycle) return;
 
   const balanceRes = await client.getBalance("USDT");
-  let balance = 0;
+  // Si la consulta de saldo falla o no trae el campo esperado, NO se puede
+  // confirmar el saldo real — antes esto caía a `balance = 0`, lo que
+  // disparaba un auto-cierre falso (0 < minClose) aunque el saldo real
+  // nunca hubiera bajado. Ahora se aborta el chequeo este ciclo en vez de
+  // asumir que el saldo es 0.
+  let balance: number | null = null;
   if (balanceRes?.balance !== undefined) {
     balance = Number(balanceRes.balance);
   } else if (balanceRes?.result?.balance) {
     const usdtCoin = balanceRes.result.balance?.find((c: any) => c.coin === "USDT");
-    balance = usdtCoin ? Number(usdtCoin.walletBalance) : 0;
+    balance = usdtCoin ? Number(usdtCoin.walletBalance) : null;
+  }
+  if (balance === null || Number.isNaN(balance)) {
+    await log( "warn", null, `Auto-close: no se pudo leer el saldo real, se salta este chequeo (ciclo ${cycle.id})`);
+    return;
   }
 
   const minClose = cycle.minCloseBalance ? Number(cycle.minCloseBalance) : 0;
-  if (balance > 0 && balance >= minClose) return;
+  if (balance >= minClose) return;
 
   await log( "info", null, `Auto-cerrando ciclo ${cycle.id}: balance USDT=${balance}, minClose=${minClose}`);
 
-  const ordersRes = await client.getOrders({ page: 1, rows: 100 });
-  const allOrders: any[] = [];
-  const firstPage = ordersRes?.data || ordersRes?.result?.items || [];
-  allOrders.push(...firstPage);
-
   const startMs = Number(cycle.startTime);
-  const cycleOrders = allOrders.filter((o: any) => {
-    const t = Number(o.createTime) || Number(o.createDate) || 0;
-    return t >= startMs;
-  });
-
-  let totalUsdt = 0;
-  let totalBinanceClp = 0;
-  for (const o of cycleOrders) {
-    const status = o.orderStatus || o.status;
-    if (typeof status === "string" && status !== "COMPLETED") continue;
-    if (typeof status === "number" && status !== 2) continue;
-    totalUsdt += Number(o.amount) || 0;
-    const price = o.totalPrice || o.amount * o.price || 0;
-    totalBinanceClp += Number(price) || 0;
-  }
+  const endMs = Date.now();
+  const { totalUsdt, totalBinanceClp, firstOrder, lastOrder } =
+    await computeCycleOrderStats(client, startMs, endMs);
 
   const totalManualClp = Number(cycle.totalManualClp);
 
@@ -1814,10 +1807,16 @@ async function autoCloseCycle(
     where: { id: cycle.id },
     data: {
       status: "closed",
-      endTime: new Date(),
+      endTime: new Date(endMs),
       totalUsdt,
       totalBinanceClp,
       totalManualClp,
+      firstOrderNumber: firstOrder?.orderNumber ?? null,
+      firstOrderClp: firstOrder ? Number(firstOrder.totalPrice) || 0 : null,
+      firstOrderTime: firstOrder ? new Date(Number(firstOrder.createTime)) : null,
+      lastOrderNumber: lastOrder?.orderNumber ?? null,
+      lastOrderClp: lastOrder ? Number(lastOrder.totalPrice) || 0 : null,
+      lastOrderTime: lastOrder ? new Date(Number(lastOrder.createTime)) : null,
     },
   });
 
