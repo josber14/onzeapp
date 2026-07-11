@@ -774,14 +774,16 @@ async function runBinanceCycle(
     if (now - bs.lastCompetitorFetch > 300 && !bs.isFetching) {
       bs.isFetching = true;
       try {
+        // Binance limita este endpoint a 20 filas por página (rechaza más), así
+        // que se piden 2 páginas para no perder competidores que queden justo
+        // en el borde de la primera — mismo fix aplicado antes al modo
+        // "igualar métodos de pago", ahora también acá para el modo general.
         let allRaw: any[] = [];
-        for (let page = 1; page <= 1; page++) {
-          const pageRes = await client.getOnlineAds({
-            asset: "USDT", fiat: "CLP", tradeType: "BUY", rows: 100, page, payTypes: [],
-          });
-          const pageData = pageRes?.data ?? [];
-          if (pageData.length > 0) allRaw = allRaw.concat(pageData);
-        }
+        const [page1, page2] = await Promise.all([
+          client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "BUY", rows: 20, page: 1, payTypes: [] }),
+          client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "BUY", rows: 20, page: 2, payTypes: [] }),
+        ]);
+        allRaw = [...(page1?.data ?? []), ...(page2?.data ?? [])];
         await log( "debug", "binance", `Fetch: ${allRaw.length} competidores`);
         if (allRaw.length > 0 || bs.cachedCompetitors.length === 0) {
           bs.cachedCompetitors = allRaw.map(normalizeBinanceAd);
