@@ -10636,6 +10636,7 @@ function addP2PBotStyles(){
 
   async function botRefreshExchange(skipConfig){
     const ex = botSelectedExchange;
+    const requestedLabel = botActiveLabel; // para descartar la respuesta si el usuario cambia de pestaña antes de que llegue
     const lbl = "&label=" + encodeURIComponent(botActiveLabel);
     // Each fetch is independent so one failure doesn't block the rest
     try{
@@ -10650,6 +10651,10 @@ function addP2PBotStyles(){
 
     fetch("/api/p2p/bot/exchange-config?_=" + Math.random().toString(36).slice(2) + lbl, { credentials:"include" })
       .then(r=>r.json()).then(exData=>{
+        // Descartar respuesta si el usuario ya cambió de pestaña — evita que una
+        // respuesta vieja (de la cuenta que se estaba mirando antes) pise por un
+        // instante el estado correcto de la cuenta que se está mirando ahora.
+        if(botActiveLabel !== requestedLabel) return;
         var allExchanges = {};
         var runningLabel = "";
         if(exData?.ok && exData?.configs){
