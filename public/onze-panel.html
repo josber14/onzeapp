@@ -9998,10 +9998,6 @@ function addP2PBotStyles(){
   var botActiveLabel = localStorage.getItem("botActiveLabel") || "ONZE";
   window.botActiveLabel = botActiveLabel; // otros bloques <script> (ej. sync de ventas Binance) leen esto
   var botLabelData = {}; // separate state per label
-  // Sync active class on page load
-  document.querySelectorAll(".bot-acct-btn").forEach(function(b){
-    b.classList.toggle("active", b.getAttribute("data-label") === botActiveLabel);
-  });
 
   window.botSetActiveLabel = function(label){
     botActiveLabel = label;
@@ -13504,6 +13500,15 @@ function addP2PBotStyles(){
 
     addP2PBotStyles();
     buildP2PBotView();
+    // Corrige el botón ONZE/ZINPLE que aparece resaltado por defecto en el HTML
+    // (venía "active" hardcodeado en el template) — recién ahora existen los
+    // botones en el DOM, por eso este ajuste no puede ir antes de esta línea.
+    // Sin esto, el botón ONZE se ve seleccionado aunque en realidad se esté
+    // mostrando la cuenta ZINPLE (que sí puede estar corriendo), y parece que
+    // "ONZE está ejecutando" cuando en verdad son datos de ZINPLE.
+    document.querySelectorAll(".bot-acct-btn").forEach(function(b){
+      b.classList.toggle("active", b.getAttribute("data-label") === botActiveLabel);
+    });
     addP2PBotNavButton();
     setTimeout(function(){ window.botSelectExchange('binance'); }, 100);
     setTimeout(window.botRefreshExchange, 500);
