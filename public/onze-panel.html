@@ -13354,28 +13354,41 @@ function addP2PBotStyles(){
     botCycleHistoryCache = cycles;
     const rows = cycles.length ? cycles.map(c => {
       const totalClp = Math.round(Number(c.totalBinanceClp || 0) + Number(c.totalManualClp || 0)).toLocaleString();
-      const start = c.startTime ? new Date(c.startTime).toLocaleString() : "—";
-      const end = c.endTime ? new Date(c.endTime).toLocaleString() : "—";
-      return `<div style="padding:10px 0;border-bottom:1px solid rgba(148,163,184,.1);display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
-        <div style="flex:1;">
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;margin-bottom:4px;">
-            <span>${start} → ${end}</span>
-            <span style="color:#00d4ff;font-weight:700;">$${totalClp}</span>
+      const binanceClp = Math.round(Number(c.totalBinanceClp || 0)).toLocaleString();
+      const manualClp = Math.round(Number(c.totalManualClp || 0)).toLocaleString();
+      const dateFmt = (d) => d ? new Date(d).toLocaleDateString("es-CL", { day: "2-digit", month: "2-digit" }) : "—";
+      const timeFmt = (d) => d ? new Date(d).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" }) : "—";
+      const sameDay = c.startTime && c.endTime && dateFmt(c.startTime) === dateFmt(c.endTime);
+      const dateRangeLabel = sameDay
+        ? `${dateFmt(c.startTime)} · ${timeFmt(c.startTime)} → ${timeFmt(c.endTime)}`
+        : `${dateFmt(c.startTime)} ${timeFmt(c.startTime)} → ${dateFmt(c.endTime)} ${timeFmt(c.endTime)}`;
+      return `<div style="background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:12px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:10px;">
+          <div>
+            <div style="font-size:10px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.3px;">Ciclo #${c.id}</div>
+            <div style="font-size:12px;color:#cbd5e1;margin-top:2px;">${dateRangeLabel}</div>
           </div>
-          <div style="font-size:11px;color:#64748b;">
-            ${Number(c.totalUsdt || 0).toFixed(2)} USDT · Primera #${escHtml(String(c.firstOrderNumber || "—"))} · Última #${escHtml(String(c.lastOrderNumber || "—"))}
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            <button onclick="window.botCycleShowDetail(${c.id})" title="Ver detalle completo"
+              style="padding:5px 9px;background:rgba(0,212,255,.14);border:1px solid rgba(0,212,255,.3);color:#5fd4ff;border-radius:6px;cursor:pointer;font-size:12px;">👁</button>
+            <button onclick="window.botCycleDelete(${c.id})" title="Eliminar este ciclo"
+              style="padding:5px 9px;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:6px;cursor:pointer;font-size:12px;">🗑</button>
           </div>
         </div>
-        <div style="flex-shrink:0;display:flex;gap:6px;">
-          <button onclick="window.botCycleShowDetail(${c.id})" title="Ver detalle completo"
-            style="padding:5px 9px;background:rgba(0,212,255,.14);border:1px solid rgba(0,212,255,.3);color:#5fd4ff;border-radius:6px;cursor:pointer;font-size:12px;">👁</button>
-          <button onclick="window.botCycleDelete(${c.id})" title="Eliminar este ciclo"
-            style="padding:5px 9px;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:6px;cursor:pointer;font-size:12px;">🗑</button>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:6px;margin-bottom:10px;">
+          <div class="bot-cycle-tile" style="padding:7px 10px;"><div class="bot-cycle-tile-label">USDT</div><div class="bot-cycle-tile-value" style="font-size:13px;">${Number(c.totalUsdt || 0).toFixed(2)}</div></div>
+          <div class="bot-cycle-tile" style="padding:7px 10px;"><div class="bot-cycle-tile-label">CLP Binance</div><div class="bot-cycle-tile-value" style="font-size:13px;">$${binanceClp}</div></div>
+          <div class="bot-cycle-tile" style="padding:7px 10px;"><div class="bot-cycle-tile-label">CLP Manual</div><div class="bot-cycle-tile-value" style="font-size:13px;">$${manualClp}</div></div>
+          <div class="bot-cycle-tile" style="padding:7px 10px;border-color:rgba(0,212,255,.25);"><div class="bot-cycle-tile-label">Total CLP</div><div class="bot-cycle-tile-value" style="font-size:13px;color:#00d4ff;">$${totalClp}</div></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;border-top:1px solid rgba(148,163,184,.08);padding-top:8px;">
+          <span>Primera: <strong style="color:#94a3b8;">#${escHtml(String(c.firstOrderNumber || "—"))}</strong></span>
+          <span>Última: <strong style="color:#94a3b8;">#${escHtml(String(c.lastOrderNumber || "—"))}</strong></span>
         </div>
       </div>`;
     }).join("") : `<p style="color:#64748b;font-size:13px;">Todavía no hay ciclos cerrados para ${escHtml(lbl)}.</p>`;
     botCycleModalShell("botCycleHistoryModal", "📜 Historial de ciclos", `
-      <div style="max-height:400px;overflow-y:auto;margin-bottom:16px;">${rows}</div>
+      <div style="max-height:440px;overflow-y:auto;margin-bottom:16px;">${rows}</div>
       <div style="display:flex;justify-content:space-between;">
         ${cycles.length ? `<button onclick="window.botCycleDeleteAll()"
           style="padding:10px 16px;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:6px;cursor:pointer;font-weight:700;">Vaciar historial</button>` : `<span></span>`}
