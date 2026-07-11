@@ -20,7 +20,12 @@ export async function computeCycleOrderStats(client: BinanceP2PClient, startMs: 
     allOrders.push(...pageData);
   }
 
-  const cycleOrders = allOrders.filter((o: any) => o.orderStatus === "COMPLETED");
+  // Por ahora "Ciclo de Ventas" solo cuenta ventas en CLP — la cuenta puede
+  // tener anuncios en otras monedas (ej. VES) cuyas órdenes no deben mezclarse
+  // en este total (confirmado en vivo: una orden en VES se sumó como si fuera
+  // CLP, inflando el total real del ciclo). Si más adelante se quiere incluir
+  // otras monedas, esto necesita un cambio explícito, no asumir CLP siempre.
+  const cycleOrders = allOrders.filter((o: any) => o.orderStatus === "COMPLETED" && o.fiat === "CLP");
 
   let totalUsdt = 0;
   let totalBinanceClp = 0;
