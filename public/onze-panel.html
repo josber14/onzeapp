@@ -9198,6 +9198,12 @@ if(addProviderBtn){
   let chatCycleTimer = null;
   let botCycleActive = false;
   let chatCycleActive = false;
+  // La cuenta (ONZE/ZINPLE) que el ciclo en vivo está atendiendo de verdad.
+  // Se fija al presionar "Iniciar" y NO cambia solo por cambiar de pestaña —
+  // antes el timer leía botActiveLabel en vivo en cada vuelta, así que mirar
+  // la otra cuenta (si estaba apagada) hacía que el backend respondiera
+  // running:false y el timer se detuviera solo, cortando el ciclo real.
+  let botCyclingLabel = null;
 
 function addP2PBotStyles(){
   if(document.getElementById("onze-bot-styles")) return;
@@ -10516,22 +10522,26 @@ function addP2PBotStyles(){
 
   window.botStartExchange = async function(){
     const ex = botSelectedExchange;
+    const startLabel = botActiveLabel; // fija la cuenta a la que se le da "Iniciar", no la variable en vivo
     await fetch("/api/p2p/bot/exchange-config", {
       method:"POST",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ exchange: ex, action: "start", label: botActiveLabel })
+      body: JSON.stringify({ exchange: ex, action: "start", label: startLabel })
     });
-    if(botCycleActive) return; // already cycling (another exchange is running)
+    // Si ya había un ciclo corriendo para OTRA cuenta, lo reemplaza por esta
+    // (solo puede haber un ciclo en vivo por pestaña del navegador a la vez).
+    if(botCycleActive && botCyclingLabel === startLabel) return;
     // Save interval to backend (used for rate-limit cooldown)
     const interval = Math.round(parseFloat(document.getElementById("botCycleInterval").value)) || 10;
     // Timer runs every 1 second — backend handles rate limits internally
     const botStopExchange = window.botStopExchange;
     botStopCycle();
     botCycleActive = true;
+    botCyclingLabel = startLabel;
     async function scheduleBotCycle(){
       try{
-        const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ label: botActiveLabel }) });
+        const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ label: botCyclingLabel }) });
         const data = await res.json();
         if(data?.state?.binance){
           const st = data.state.binance;
@@ -10576,10 +10586,11 @@ function addP2PBotStyles(){
 
   function botStartChatCycle(){
     if(chatCycleTimer) return;
+    const chatLabel = botActiveLabel; // fija la cuenta, misma razón que en botStartExchange
     chatCycleActive = true;
     async function scheduleBotCycle(){
       try{
-        const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ label: botActiveLabel }) });
+        const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ label: chatLabel }) });
         window.botRefreshExchange(true);
       }catch(e){}
       if(chatCycleActive) chatCycleTimer = setTimeout(scheduleBotCycle, 2000);
@@ -10590,6 +10601,7 @@ function addP2PBotStyles(){
   function botStopCycle(){
     botCycleActive = false;
     chatCycleActive = false;
+    botCyclingLabel = null;
     if(botCycleTimer) clearTimeout(botCycleTimer);
     botCycleTimer = null;
     if(chatCycleTimer) clearTimeout(chatCycleTimer);
@@ -10614,6 +10626,10 @@ function addP2PBotStyles(){
         console.error("[Stop] Error del servidor:", r.status, errData);
       }
     }).finally(() => window.botRefreshExchange());
+    // Solo corta el ciclo en vivo si la cuenta que se detiene es la que
+    // realmente está corriendo — si estás viendo la otra cuenta (que ya
+    // estaba detenida) esto no debe apagar el ciclo real de la que sigue activa.
+    if(botCyclingLabel !== null && botCyclingLabel !== botActiveLabel) return;
     // Stop all cycles (main + chat)
     botStopCycle();
   };
