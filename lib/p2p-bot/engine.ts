@@ -1828,10 +1828,10 @@ async function autoCloseCycle(
       totalBinanceClp,
       totalManualClp,
       firstOrderNumber: firstOrder?.orderNumber ?? null,
-      firstOrderClp: firstOrder ? Number(firstOrder.totalPrice) || 0 : null,
+      firstOrderClp: firstOrder ? Math.round(Number(firstOrder.totalPrice)) || 0 : null,
       firstOrderTime: firstOrder ? new Date(Number(firstOrder.createTime)) : null,
       lastOrderNumber: lastOrder?.orderNumber ?? null,
-      lastOrderClp: lastOrder ? Number(lastOrder.totalPrice) || 0 : null,
+      lastOrderClp: lastOrder ? Math.round(Number(lastOrder.totalPrice)) || 0 : null,
       lastOrderTime: lastOrder ? new Date(Number(lastOrder.createTime)) : null,
     },
   });

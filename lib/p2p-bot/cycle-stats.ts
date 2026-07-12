@@ -31,7 +31,11 @@ export async function computeCycleOrderStats(client: BinanceP2PClient, startMs: 
   let totalBinanceClp = 0;
   for (const o of cycleOrders) {
     totalUsdt += Number(o.amount) || 0;
-    totalBinanceClp += Number(o.totalPrice) || 0;
+    // El CLP no usa decimales, pero Binance a veces marca centavos (ej.
+    // 999994.33) por cómo calcula internamente el monto — se redondea cada
+    // orden ANTES de sumar, para que el total nunca arrastre fracciones de
+    // peso que no existen en la vida real.
+    totalBinanceClp += Math.round(Number(o.totalPrice) || 0);
   }
 
   const sortedByTime = [...cycleOrders].sort((a: any, b: any) => {
