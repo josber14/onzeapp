@@ -596,3 +596,50 @@ detiene la cuenta que solo se está mirando (y no es la que corre), no toca el c
 NUNCA volver a leer `botActiveLabel` dentro del loop del timer — siempre usar la variable
 capturada al iniciar (`botCyclingLabel`). Es la causa más sutil y con más impacto que se
 encontró en toda la sesión, porque no deja ningún error en los logs, solo silencio.
+
+## 8. "Ciclo de Ventas": cierre automático puede perder la ÚLTIMA orden por inconsistencia
+   eventual entre dos endpoints de Binance (ARREGLADO, jul 13 2026)
+
+### Síntoma
+El ciclo 12 se cerró automáticamente sin incluir su última orden real (#22910010456569503744,
+100.000 CLP, ya COMPLETED), aunque el bot había esperado correctamente 7 minutos (logs
+"orden(es) pendiente(s) sin resolver") a que esa misma orden se resolviera antes de cerrar.
+
+### Causa raíz (NO era una cancelación, NO era el chequeo de pendientes)
+`autoCloseCycle` (en `engine.ts`) usa DOS lecturas distintas de Binance en el mismo cierre:
+1. `client.getOrders({ page: 1, rows: 20 })` sin filtro de fecha — lista "en vivo" de órdenes
+   recientes, usada solo para chequear si hay algo en estado `TRADING` (pendiente) antes de
+   cerrar. Esta lectura se actualiza rápido.
+2. `computeCycleOrderStats()` (en `cycle-stats.ts`) — pagina el endpoint de HISTORIAL
+   (`listUserOrderHistory`) filtrado por `startTimestamp`/`endTimestamp`, usado para calcular
+   los totales del ciclo (`totalUsdt`, `totalBinanceClp`, primera/última orden).
+
+Estos dos endpoints de Binance NO se actualizan al mismo tiempo: el endpoint de historial puede
+tardar unos segundos más en indexar una orden que ACABA de pasar a `COMPLETED`. En el ciclo 12,
+la lectura (1) ya no vio la orden como pendiente (por eso el bot procedió a cerrar), pero en ese
+mismo instante la lectura (2) todavía no la reflejaba — la orden se coló justo en ese hueco de
+inconsistencia eventual y quedó fuera del total.
+
+### Arreglo (`lib/p2p-bot/cycle-stats.ts` + `lib/p2p-bot/engine.ts`)
+`computeCycleOrderStats()` ahora acepta un 4to parámetro opcional `extraOrders` — una lista de
+órdenes ya obtenidas por el caller de una lectura más fresca. Esas órdenes se mezclan (con
+dedup por `orderNumber`) con las que trae la paginación del historial, y se re-valida el rango
+de fecha explícitamente (`createTime` dentro de `[startMs, endTimestamp]`) porque `extraOrders`
+puede traer órdenes fuera de la ventana del ciclo. En `autoCloseCycle`, se pasa el `recentOrders`
+que YA se había obtenido para el chequeo de pendientes (`computeCycleOrderStats(client, startMs,
+endMs, recentOrders)`) — así la misma lectura que confirmó "ya no hay nada pendiente" es la que
+alimenta el cálculo de totales, sin depender de que el endpoint de historial ya haya indexado
+esa orden.
+
+### Corrección del dato histórico
+El ciclo 12 (ZINPLE) se corrigió manualmente en la base de datos: `lastOrderNumber` de
+`22910009392536526848` (105.000 CLP) a `22910010456569503744` (100.000 CLP),
+`totalBinanceClp` de `10428611` a `10528611`, `totalUsdt` de `11173.83` a `11280.38`.
+
+### Si vuelve a pasar
+Si un ciclo se cierra y falta la última orden real (verificable comparando `lastOrderNumber`
+contra el historial real de Binance), sospechar primero de esta misma inconsistencia eventual
+antes que de un bug nuevo — es un comportamiento normal de la infraestructura de Binance, no
+algo 100% eliminable, solo mitigado. El `close/route.ts` (cierre MANUAL) no tiene este problema
+de la misma forma porque no hace el chequeo de pendientes previo, pero en teoría podría sufrir
+el mismo lag si el usuario cierra el ciclo justo al segundo en que se completa la última orden.

@@ -1815,7 +1815,7 @@ async function autoCloseCycle(
   const startMs = Number(cycle.startTime);
   const endMs = Date.now();
   const { totalUsdt, totalBinanceClp, firstOrder, lastOrder } =
-    await computeCycleOrderStats(client, startMs, endMs);
+    await computeCycleOrderStats(client, startMs, endMs, recentOrders);
 
   const totalManualClp = Number(cycle.totalManualClp);
 
