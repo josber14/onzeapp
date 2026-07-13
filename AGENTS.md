@@ -643,3 +643,44 @@ antes que de un bug nuevo — es un comportamiento normal de la infraestructura 
 algo 100% eliminable, solo mitigado. El `close/route.ts` (cierre MANUAL) no tiene este problema
 de la misma forma porque no hace el chequeo de pendientes previo, pero en teoría podría sufrir
 el mismo lag si el usuario cierra el ciclo justo al segundo en que se completa la última orden.
+
+## 9. El chequeo de "pendiente" solo miraba el estado TRADING — se perdían órdenes en estados
+   intermedios (ARREGLADO, jul 13 2026)
+
+### Síntoma
+El ciclo 13 se cerró sin 3 órdenes reales: dos completadas DENTRO de la ventana del ciclo
+(19:08 y 19:13, más de 6 y 12 minutos antes del cierre a las 19:20) y una más de una hora
+después (20:14, ya claramente fuera de cualquier ventana de "lag de segundos" del punto 8).
+
+### Causa raíz (más amplia que el punto 8 — un chequeo incompleto, no solo un lag de índice)
+El chequeo de "¿hay algo sin resolver?" en `autoCloseCycle` (`hasPending`) solo consideraba
+pendiente una orden si su estado era exactamente `TRADING`. Pero Binance tiene estados
+intermedios entre `TRADING` (comprador debe pagar) y `COMPLETED` (ej. comprador ya pagó,
+esperando liberación) que NO son `TRADING` pero TAMPOCO son definitivos. Si el chequeo se
+ejecuta justo cuando una orden está en uno de esos estados intermedios, `hasPending` decía
+"no hay nada pendiente" y el ciclo se cerraba, dejando esa orden (que segundos o minutos
+después sí se completaba) fuera del total — sin que fuera ni un lag de indexación ni una
+cancelación, sino un chequeo que no cubría todos los estados "no finales" posibles.
+
+### Arreglo (`lib/p2p-bot/engine.ts`, dentro de `autoCloseCycle`)
+Se cambió el chequeo de "es TRADING" a "NO es un estado FINAL": ahora existe un set explícito
+`FINAL_ORDER_STATUSES = new Set(["COMPLETED", "CANCELLED", "CANCELLED_BY_SYSTEM"])`, y
+`hasPending` es `true` si CUALQUIER orden reciente tiene un estado que no está en ese set —
+sin importar cuál sea el estado intermedio exacto. Esto implementa directamente la regla de
+negocio que pidió el usuario: "para que el ciclo se pueda completar cada orden que entre se
+debe finalizar".
+
+### Corrección del dato histórico
+El ciclo 13 (ZINPLE) se corrigió: `lastOrderNumber` de `22910059360554004480` (100.000 CLP,
+18:57) a `22910078740815556608` (200.000 CLP, 20:14), `totalBinanceClp` de `7987325` a
+`8487325`, `totalUsdt` de `8544.84` a `9078.35`. No hizo falta tocar `endTime` (el próximo
+ciclo arranca desde `lastOrderTime`, no desde `endTime` — ver `start/route.ts`).
+
+### Relación con el punto 8
+Ambos arreglos son complementarios y deben coexistir: el punto 8 (pasar `recentOrders` como
+`extraOrders` a `computeCycleOrderStats`) cubre el lag de indexación del buscador de historial
+para una orden que YA está `COMPLETED` en la lectura fresca. Este punto 9 cubre el caso de que
+esa lectura fresca todavía no la muestre como `COMPLETED` porque de verdad no lo es todavía —
+en ese caso, `hasPending` ahora la sigue tratando como pendiente y el ciclo espera, en vez de
+cerrar antes de tiempo. Si en el futuro vuelve a faltar una orden real en un cierre, revisar
+PRIMERO si `hasPending` sigue usando el set de estados finales (no revertir a solo `TRADING`).

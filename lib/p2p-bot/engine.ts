@@ -1802,9 +1802,19 @@ async function autoCloseCycle(
   // reales — 3 minutos después el saldo ya había vuelto a ~1.700 USDT solo.
   // Por eso NO se cierra mientras haya alguna orden todavía sin resolver:
   // solo se confía en el saldo bajo cuando no hay nada "en el aire".
+  //
+  // "Sin resolver" es CUALQUIER estado que no sea final — no solo TRADING.
+  // Binance tiene estados intermedios entre TRADING y COMPLETED (ej. el
+  // comprador ya pagó, pendiente de liberación) que tampoco son definitivos.
+  // Confirmado en vivo (ciclo 13): dos órdenes completadas quedaron fuera del
+  // cierre porque en el instante del chequeo ya no estaban en TRADING pero
+  // tampoco habían llegado a COMPLETED todavía — el bot las dio por
+  // "resueltas" antes de tiempo. Cada orden que entra debe llegar a un
+  // estado FINAL (completada o cancelada) antes de poder cerrar el ciclo.
+  const FINAL_ORDER_STATUSES = new Set(["COMPLETED", "CANCELLED", "CANCELLED_BY_SYSTEM"]);
   const recentOrdersRes = await client.getOrders({ page: 1, rows: 20 });
   const recentOrders = recentOrdersRes?.data || [];
-  const hasPending = recentOrders.some((o: any) => o.orderStatus === "TRADING");
+  const hasPending = recentOrders.some((o: any) => !FINAL_ORDER_STATUSES.has(o.orderStatus));
   if (hasPending) {
     await log( "info", null, `Auto-close: saldo bajo (${balance}) pero hay orden(es) pendiente(s) sin resolver — se espera a que se resuelvan antes de cerrar el ciclo ${cycle.id}`);
     return;
