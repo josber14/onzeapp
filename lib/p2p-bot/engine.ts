@@ -1145,9 +1145,9 @@ async function runBinanceCycle(
             await log( "info", "binance", `Ad ${adId}: retry OK — ${currentPrice} → ${targetPrice.toFixed(2)}`);
           } catch (e2: any) {
             as.lastRateLimitError = Date.now();
-            as.rateLimitBackoffMs = 60 * 1000;
+            as.rateLimitBackoffMs = 5 * 60 * 1000;
             await log( "warn", "binance",
-              `Ad ${adId}: retry tras 10s también falló: ${e2.message} — en cooldown 60s antes de reintentar`);
+              `Ad ${adId}: retry tras 10s también falló: ${e2.message} — en cooldown 5 min antes de reintentar`);
           }
         } else if (e.message?.includes("187055")) {
           const rangeMatch = e.message.match(/\[([\d.]+)\s*-\s*([\d.]+)\]/);

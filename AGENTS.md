@@ -449,18 +449,21 @@ inline), el bot NO esperaba nada y volvía a intentar el mismo cambio en el sigu
 en el update de precio, ahora se asigna:
 ```js
 as.lastRateLimitError = Date.now();
-as.rateLimitBackoffMs = 60 * 1000; // 60s (bajado de 5 min a pedido del usuario, jul 14 2026)
+as.rateLimitBackoffMs = 5 * 60 * 1000; // 5 min
 ```
 Con eso, el chequeo que YA existía al inicio del ciclo de precio (`if (as.lastRateLimitError > 0
 && Date.now() - as.lastRateLimitError < as.rateLimitBackoffMs) { saltar }`) empieza a funcionar
 de verdad.
 
-**Actualización jul 14 2026**: el valor original de 5 minutos se bajó a 60 segundos porque el
-usuario lo sintió demasiado largo. Se le advirtió explícitamente el riesgo (este cooldown existe
-para no volver a "martillar" el límite de velocidad de cuenta no revelado del punto 1) y eligió
-un término medio en vez de los 5 segundos que pidió originalmente. Si el 187049 vuelve a
-repetirse de forma persistente después de este cambio, ESTE es el primer sospechoso — considerar
-subir el valor de nuevo antes de investigar otra causa.
+**NO BAJAR ESTE VALOR — ya se probó y falló (jul 14 2026).** El usuario pidió bajarlo primero a
+5s, luego se acordó un término medio de 60s como prueba. A los pocos minutos de uso real, 60s
+reprodujo el mismo problema que este punto 2 arregló originalmente (el 187049 volvió a repetirse
+en vez de dar tiempo a que la cuenta recuperara cupo). Se revirtió a 5 minutos y el usuario
+confirmó dejarlo así. Razón para NO seguir probando valores intermedios: el límite de cuenta de
+Binance no tiene un número ni ventana revelados, así que no hay forma de "afinar" este valor de
+forma confiable — cualquier valor más bajo que 5 min es apostar estabilidad comprobada por
+velocidad incierta. Si se quiere que los anuncios reaccionen más rápido, atacar la FRECUENCIA de
+187049 (menos causas de fallo), no el castigo después de que ya ocurrió.
 
 ## 3. Cooldown de cantidad solo cubría subidas (YA ARREGLADO)
 
