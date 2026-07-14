@@ -694,3 +694,43 @@ esa lectura fresca todavía no la muestre como `COMPLETED` porque de verdad no l
 en ese caso, `hasPending` ahora la sigue tratando como pendiente y el ciclo espera, en vez de
 cerrar antes de tiempo. Si en el futuro vuelve a faltar una orden real en un cierre, revisar
 PRIMERO si `hasPending` sigue usando el set de estados finales (no revertir a solo `TRADING`).
+
+## 10. Sync de cantidad "se rompe" tras un cambio de saldo GRANDE hecho FUERA del flujo normal
+    de órdenes del bot (NO es un bug — comportamiento esperado, jul 14 2026)
+
+### Síntoma
+El sync automático de cantidad (`updateAdQuantity`, el "TODO") empezó a fallar el 100% de las
+veces durante ~1h50min (0 éxitos, 20+ fallos seguidos con 187049), mientras el precio seguía
+actualizándose con éxito normal (~95%, cientos de updates exitosos en el mismo período). El
+usuario tuvo que sincronizar la cantidad a mano varias veces mientras tanto.
+
+### Causa raíz (confirmada por el usuario, NO relacionada al cambio de cooldown de ese día)
+El usuario hizo una venta P2P directa (para comprar bs/VES) y un pago por Pay, **ambas por
+FUERA de los anuncios gestionados por el bot**. Estas dos operaciones movieron el saldo real de
+la wallet de golpe, en un salto grande y repentino — muy distinto a como baja el saldo cuando
+entra una orden normal por los anuncios del bot (de a poco, orden por orden). Un salto grande de
+una sola vez es exactamente el tipo de cambio que el límite de velocidad de cuenta no revelado
+de Binance (punto 1) trata con más sospecha — el sync intentaba "alcanzar" ese salto grande en
+`initAmount` y chocaba con 187049 una y otra vez, mientras el precio (cambios chicos, en
+centavos) seguía pasando sin problema porque consume mucho menos "cupo" por cambio.
+
+### Por qué NO se tocó el código
+Se verificó con `git diff` que el código de `engine.ts` y `binance-adapter.ts` no cambió en
+absoluto en los commits recientes (el experimento de cooldown 60s→revert dio diff vacío). El
+sync automático para órdenes NORMALES del bot sigue funcionando exactamente igual que siempre —
+el problema fue específico a un salto de saldo grande originado fuera del flujo del bot, no una
+regresión de código.
+
+### Resolución
+Se resolvió solo, sin cambiar nada: tras el último fallo (17:41), el sync volvió a tener éxito
+(o el usuario lo ajustó a mano) y desde las 17:44 ambos anuncios quedaron sincronizados con el
+saldo real, estable, sin más fallos.
+
+### Checklist si vuelve a pasar
+Antes de sospechar de un bug: preguntar si el usuario hizo alguna operación de saldo POR FUERA
+de los anuncios del bot (venta P2P directa, pago Pay, transferencia, retiro, etc.) justo antes
+de que empezara a fallar. Si la respuesta es sí, es este mismo patrón — no requiere cambio de
+código, solo esperar a que el "cupo" de la cuenta se recupere (igual que el punto 1). Confirmar
+comparando la tasa de éxito del PRECIO en el mismo período: si el precio sigue actualizando bien
+y solo la cantidad falla, es este patrón (salto grande específico de cantidad), no un bloqueo
+general de cuenta.
