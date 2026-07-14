@@ -1067,7 +1067,8 @@ async function runBinanceCycle(
           continue;
         }
         if (as.lastRateLimitError > 0 && Date.now() - as.lastRateLimitError < as.rateLimitBackoffMs) {
-          await log( "warn", "binance", `Ad ${adId}: cooldown activo, saltando subida`);
+          const remainingS = Math.round((as.rateLimitBackoffMs - (Date.now() - as.lastRateLimitError)) / 1000);
+          await log( "warn", "binance", `Ad ${adId}: cooldown activo (${remainingS}s más), saltando subida`);
           continue;
         }
         if (as.priceUpTimestamps.length >= 80) {
