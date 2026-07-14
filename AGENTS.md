@@ -734,3 +734,43 @@ código, solo esperar a que el "cupo" de la cuenta se recupere (igual que el pun
 comparando la tasa de éxito del PRECIO en el mismo período: si el precio sigue actualizando bien
 y solo la cantidad falla, es este patrón (salto grande específico de cantidad), no un bloqueo
 general de cuenta.
+
+## 11. Volumen de órdenes récord (jul 14 2026) — sync de cantidad chocaba en ráfaga al
+    actualizar 2 anuncios seguidos sin pausa (ARREGLADO)
+
+### Contexto
+El mismo día del punto 10 arriba, más tarde, el usuario reportó que la cantidad objetivo de
+Banco Estado no se actualizaba sola y tenía que hacerlo a mano repetidamente. Antes de tocar
+código se verificó a fondo que NO era un problema de configuración: se comparó el payload de
+`updateAd`/`updateAdQuantity` campo por campo contra la lista de 32 campos documentada en el
+punto de la solución 187049/187040 más arriba — coincidía exacto. También se confirmó por
+`git log` que ese archivo (`binance-adapter.ts`) no tuvo NINGÚN cambio funcional en 4 días
+salvo un fix no relacionado (filtro de fecha para cierre de ciclos). Se comparó además el
+volumen real de órdenes: 14 jul tuvo 84 órdenes por $66.461.455 CLP vs 69 órdenes por
+$42.162.476 CLP el 13 jul — 57% más volumen, confirmando que la cuenta estaba bajo más presión
+real que en los días anteriores donde todo funcionó sin problema.
+
+### Causa raíz encontrada (real, no solo "mucho volumen")
+En el bloque de sync de cantidad (`runBinanceCycle`, después de leer `myAds`), cuando AMBOS
+anuncios gestionados necesitaban sincronizar cantidad en el mismo ciclo (típico justo después
+de una orden grande, que cambia el saldo de golpe), el código los actualizaba **uno detrás de
+otro sin ninguna pausa** — a diferencia del loop de PRECIO, que sí tiene 5s de separación entre
+anuncios (`lib/p2p-bot/engine.ts`, cerca de la línea 1195) para no mandar varias llamadas de
+escritura en ráfaga. Se confirmó en vivo: un fallo de cantidad y un fallo de precio del otro
+anuncio ocurrieron con solo 5 segundos de diferencia — varias llamadas de escritura a Binance
+disparadas casi encima, justo el patrón de ráfaga que más choca con el límite de velocidad de
+cuenta no revelado de Binance.
+
+### Arreglo (`lib/p2p-bot/engine.ts`, dentro del bloque de quantity sync)
+Se agregó la misma pausa de 5 segundos entre anuncios que ya existía para precio, pero para el
+loop de cantidad: se agregó una variable `syncedAny` que se pone en `true` después del primer
+intento real de sync (no de los que se saltan por cooldown), y antes de cada intento siguiente
+(si `syncedAny` ya es `true`) se espera 5s. No se tocó el payload ni la fórmula de `initAmount`
+— solo se espació el envío de las llamadas.
+
+### Nota importante
+Esto es un cambio de espaciado, NO una garantía de que el 187049 desaparezca — Binance puede
+seguir rechazando updates por su límite no revelado, sobre todo en días de volumen alto como
+este. El objetivo es reducir la probabilidad de choque por ráfaga, no eliminar el límite en sí
+(eso no está bajo nuestro control). Si el problema persiste después de este cambio, no es una
+señal de que este arreglo esté mal — puede ser simplemente que el volumen del día lo amerite.

@@ -726,6 +726,7 @@ async function runBinanceCycle(
           await log( "info", "binance", `Sync skip: balance USDT = ${balance}`);
         } else {
           let anyNeeded = false;
+          let syncedAny = false;
           for (const ma of managedAds) {
             if (!ma.adId) continue;
             const adInAds = myAds.find((a: any) => a?.id === ma.adId);
@@ -739,6 +740,16 @@ async function runBinanceCycle(
               await log( "info", "binance", `Ad ${ma.adId}: sync de cantidad en cooldown (${remainingS}s más) tras 187049 — saltando`);
               continue;
             }
+            // 5s de separación entre intentos de sync de cantidad de distintos
+            // anuncios en el mismo ciclo (igual que ya existe para precio) —
+            // evita mandar varias llamadas de escritura a Binance en ráfaga
+            // cuando el saldo cambia de golpe (ej. una orden grande), que es
+            // justo el patrón que más choca con el límite de velocidad de
+            // cuenta no revelado por Binance (confirmado en vivo: fallo de
+            // cantidad y fallo de precio del otro anuncio a 5s de distancia).
+            if (syncedAny) {
+              await new Promise(r => setTimeout(r, 5000));
+            }
             try {
               await client.updateAdQuantity(ma.adId, balance);
               as.qtySyncCooldownUntil = 0;
@@ -749,6 +760,7 @@ async function runBinanceCycle(
               }
               await log( "warn", "binance", `Sync fallo ad ${ma.adId}: ${e2.message}`);
             }
+            syncedAny = true;
           }
           if (!anyNeeded) {
             await log( "info", "binance", `Quantity sync: todos los anuncios ya en ${balance} USDT (sin cambios)`);
