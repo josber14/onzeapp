@@ -774,3 +774,33 @@ seguir rechazando updates por su límite no revelado, sobre todo en días de vol
 este. El objetivo es reducir la probabilidad de choque por ráfaga, no eliminar el límite en sí
 (eso no está bajo nuestro control). Si el problema persiste después de este cambio, no es una
 señal de que este arreglo esté mal — puede ser simplemente que el volumen del día lo amerite.
+
+## 12. CONFIRMADO EN VIVO: pausar el bot un rato SÍ libera el cupo de cuenta de Binance
+    (jul 14 2026)
+
+### Contexto
+El mismo día del punto 11, tras varias horas de choques repetidos con 187049 (incluso con una
+prueba aislada de un cambio de $0,006 USDT que también falló — ver conversación de esa sesión),
+el usuario detuvo el bot ZINPLE por completo durante varios minutos, a propósito, específicamente
+para probar si "descansar" la cuenta liberaba el límite de velocidad no revelado de Binance.
+
+### Resultado (medido, no solo percibido)
+Al reactivar el bot, arrancó **completamente limpio**: 0 fallos de 187049/187040 durante los
+primeros 6+ minutos, con 17 actualizaciones de precio exitosas seguidas y el sync de cantidad en
+"sin cambios" constante. Antes de la pausa, el mismo anuncio venía fallando de forma persistente
+(incluso reintentos aislados sin ninguna otra actividad de por medio fallaban).
+
+### Conclusión práctica
+Detener el bot por completo durante varios minutos (no solo esperar con el bot corriendo e
+intentando en loop) es una forma efectiva y confirmada de que la cuenta recupere cupo del límite
+de velocidad de Binance. Esto es distinto a simplemente "esperar el cooldown de 5 min" — parece
+que CUALQUIER intento (aunque esté en su propio cooldown individual, el bot sigue generando
+tráfico de otras llamadas: fetch de competidores, detalle de anuncio, etc.) mantiene cierta
+actividad en la cuenta que quizás retrasa la recuperación completa del cupo compartido.
+
+### Si vuelve a pasar
+Si el 187049 se vuelve persistente (varios cooldowns seguidos sin ningún éxito, ~20-30+ min),
+antes de seguir ajustando código, considerar sugerir al usuario pausar el bot por completo unos
+minutos como primera opción práctica — ya se demostró que funciona. No es una solución de código,
+es una acción operativa, pero vale la pena tenerla presente como opción real antes de seguir
+troubleshooteando indefinidamente.
