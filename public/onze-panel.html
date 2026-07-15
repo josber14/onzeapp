@@ -24297,6 +24297,7 @@ try{
     }
     grid.innerHTML = [
       card('USDT vendido', socioBnMoney(stats.totalUsdtSold, 2) + ' USDT'),
+      card('Comisión Binance', socioBnMoney(stats.totalCommissionUsdt, 4) + ' USDT'),
       card('CLP recibido', socioBnMoney(stats.totalClpReceived, 0) + ' CLP'),
       card('Precio prom. venta', stats.avgSalePrice !== null ? socioBnMoney(stats.avgSalePrice, 2) : '—'),
       card('Precio prom. compra', stats.weightedAvgBuyPrice !== null ? socioBnMoney(stats.weightedAvgBuyPrice, 2) : '—'),
@@ -24317,13 +24318,14 @@ try{
     }
     wrap.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
       <thead><tr style="text-align:left; color:#64748b;">
-        <th style="padding:6px;">Orden</th><th style="padding:6px;">Fecha</th><th style="padding:6px;">USDT</th><th style="padding:6px;">CLP</th><th style="padding:6px;">Precio</th>
+        <th style="padding:6px;">Orden</th><th style="padding:6px;">Fecha</th><th style="padding:6px;">USDT</th><th style="padding:6px;">Comisión</th><th style="padding:6px;">CLP</th><th style="padding:6px;">Precio</th>
       </tr></thead>
       <tbody>${sales.map(function(s){
         return `<tr style="border-top:1px solid rgba(148,163,184,.1);">
           <td style="padding:6px;">${s.orderNumber}</td>
           <td style="padding:6px;">${new Date(s.executedAt).toLocaleString('es-CL')}</td>
           <td style="padding:6px;">${socioBnMoney(s.amount,4)}</td>
+          <td style="padding:6px;">${socioBnMoney(s.commission,4)}</td>
           <td style="padding:6px;">${socioBnMoney(s.totalPrice,0)}</td>
           <td style="padding:6px;">${socioBnMoney(s.unitPrice,2)}</td>
         </tr>`;

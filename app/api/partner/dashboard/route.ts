@@ -31,14 +31,22 @@ function computeFifo(capacities: any[], sales: any[]) {
   );
 
   let totalUsdtSold = 0;
+  let totalCommissionUsdt = 0;
+  let totalUsdtDrawn = 0; // amount + commission: lo que realmente sale de la capacity/wallet
   let totalClpReceived = 0;
   let totalCostClp = 0;
-  let matchedUsdt = 0;
+  let matchedUsdtDrawn = 0;
   let unmatchedUsdt = 0;
 
   for (const s of orderedSales) {
-    let usdtToAllocate = Number(s.amount);
-    totalUsdtSold += usdtToAllocate;
+    const commission = Number(s.commission || 0);
+    // Binance cobra la comisión en USDT ADEMÁS del monto vendido — el USDT que
+    // realmente sale de la capacity/wallet en cada venta es amount + commission,
+    // no solo amount. Sin esto, el saldo de capacity no cuadra con la realidad.
+    let usdtToAllocate = Number(s.amount) + commission;
+    totalUsdtSold += Number(s.amount);
+    totalCommissionUsdt += commission;
+    totalUsdtDrawn += usdtToAllocate;
     totalClpReceived += Number(s.totalPrice);
 
     for (const c of orderedCapacities) {
@@ -48,20 +56,20 @@ function computeFifo(capacities: any[], sales: any[]) {
       const take = Math.min(avail, usdtToAllocate);
       remaining.set(c.id, avail - take);
       totalCostClp += take * Number(c.buyPrice);
-      matchedUsdt += take;
+      matchedUsdtDrawn += take;
       usdtToAllocate -= take;
     }
     if (usdtToAllocate > 0) unmatchedUsdt += usdtToAllocate;
   }
 
   // Ganancia solo se puede afirmar con exactitud sobre la porción con costo conocido.
-  const knownCostRatio = totalUsdtSold > 0 ? matchedUsdt / totalUsdtSold : 0;
-  const clpFromMatched = totalUsdtSold > 0 ? totalClpReceived * knownCostRatio : 0;
-  const realProfitClp = matchedUsdt > 0 ? clpFromMatched - totalCostClp : null;
+  const knownCostRatio = totalUsdtDrawn > 0 ? matchedUsdtDrawn / totalUsdtDrawn : 0;
+  const clpFromMatched = totalUsdtDrawn > 0 ? totalClpReceived * knownCostRatio : 0;
+  const realProfitClp = matchedUsdtDrawn > 0 ? clpFromMatched - totalCostClp : null;
   const profitPct = totalCostClp > 0 && realProfitClp !== null ? (realProfitClp / totalCostClp) * 100 : null;
 
   const avgSalePrice = totalUsdtSold > 0 ? totalClpReceived / totalUsdtSold : null;
-  const weightedAvgBuyPrice = matchedUsdt > 0 ? totalCostClp / matchedUsdt : null;
+  const weightedAvgBuyPrice = matchedUsdtDrawn > 0 ? totalCostClp / matchedUsdtDrawn : null;
 
   const perCapacityBreakdown = orderedCapacities.map((c) => {
     const usdtAmount = Number(c.usdtAmount);
@@ -82,13 +90,15 @@ function computeFifo(capacities: any[], sales: any[]) {
 
   return {
     totalUsdtSold,
+    totalCommissionUsdt,
+    totalUsdtDrawn,
     totalClpReceived,
     avgSalePrice,
     weightedAvgBuyPrice,
-    totalCostClp: matchedUsdt > 0 ? totalCostClp : null,
+    totalCostClp: matchedUsdtDrawn > 0 ? totalCostClp : null,
     profitClp: realProfitClp,
     profitPct,
-    matchedUsdt,
+    matchedUsdtDrawn,
     unmatchedUsdt,
     perCapacityBreakdown,
   };
@@ -120,6 +130,7 @@ export async function GET() {
         amount: Number(s.amount),
         totalPrice: Number(s.totalPrice),
         unitPrice: Number(s.unitPrice),
+        commission: s.commission !== null ? Number(s.commission) : 0,
         executedAt: s.executedAt.toISOString(),
       })),
   });
