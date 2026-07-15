@@ -24128,13 +24128,34 @@ try{
     if(!res.ok || !form || !info) return;
     if(res.exists){
       form.style.display = 'none';
-      info.style.display = 'block';
-      info.textContent = `Conectado${res.name ? ' — ' + res.name : ''}. Última sincronización: ${res.lastSyncedAt ? new Date(res.lastSyncedAt).toLocaleString('es-CL') : 'nunca'}.`;
+      info.style.display = 'flex';
+      info.style.alignItems = 'center';
+      info.style.gap = '10px';
+      info.style.flexWrap = 'wrap';
+      const lastSync = res.lastSyncedAt ? new Date(res.lastSyncedAt).toLocaleString('es-CL') : 'nunca';
+      info.innerHTML = `
+        <span>Conectado${res.name ? ' — ' + res.name : ''}. Última sincronización: ${lastSync}.</span>
+        <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnShowCredsForm()">Cambiar credenciales</button>
+        <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;color:#ef4444;" onclick="window.socioBnDisconnect()">Desconectar</button>
+      `;
     } else {
       form.style.display = 'block';
       info.style.display = 'none';
     }
   }
+
+  window.socioBnShowCredsForm = function(){
+    const form = document.getElementById('socioBnCredsForm');
+    const info = document.getElementById('socioBnConnectedInfo');
+    if(form) form.style.display = 'block';
+    if(info) info.style.display = 'none';
+  };
+
+  window.socioBnDisconnect = async function(){
+    if(!confirm('¿Desconectar la cuenta del socio? Vas a tener que volver a ingresar la API key para reconectarla. Los datos de capacity y ventas ya sincronizadas no se borran.')) return;
+    const res = await socioBnFetch('/api/partner/credentials', { method: 'DELETE' });
+    if(res.ok) await socioBnLoadCredsStatus();
+  };
 
   window.socioBnSaveCreds = async function(){
     const apiKey = document.getElementById('socioBnApiKey').value.trim();
