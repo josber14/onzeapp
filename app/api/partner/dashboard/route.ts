@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -104,11 +104,21 @@ function computeFifo(capacities: any[], sales: any[]) {
   };
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session?.tenantId) {
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
+
+  const { searchParams } = new URL(req.url);
+  // Fecha del día a mostrar en la tabla de ventas (no afecta las estadísticas
+  // globales, que siempre son de todo el historial sincronizado).
+  const dateParam = searchParams.get("date") || new Date().toISOString().slice(0, 10);
+  const page = Math.max(1, Number(searchParams.get("page")) || 1);
+  const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit")) || 20));
+
+  const dayStart = new Date(`${dateParam}T00:00:00.000Z`);
+  const dayEnd = new Date(`${dateParam}T23:59:59.999Z`);
 
   const [capacities, sales] = await Promise.all([
     prisma.partnerCapacity.findMany({ where: { tenantId: session.tenantId, label: LABEL } }),
@@ -117,21 +127,30 @@ export async function GET() {
 
   const stats = computeFifo(capacities, sales);
 
+  const salesForDate = sales
+    .filter((s) => s.executedAt >= dayStart && s.executedAt <= dayEnd)
+    .sort((a, b) => b.executedAt.getTime() - a.executedAt.getTime());
+
+  const totalPages = Math.max(1, Math.ceil(salesForDate.length / limit));
+  const pageSafe = Math.min(page, totalPages);
+  const pageSales = salesForDate.slice((pageSafe - 1) * limit, pageSafe * limit);
+
   return NextResponse.json({
     ok: true,
     stats,
     salesCount: sales.length,
     capacitiesCount: capacities.length,
-    recentSales: [...sales]
-      .sort((a, b) => b.executedAt.getTime() - a.executedAt.getTime())
-      .slice(0, 30)
-      .map((s) => ({
-        orderNumber: s.orderNumber,
-        amount: Number(s.amount),
-        totalPrice: Number(s.totalPrice),
-        unitPrice: Number(s.unitPrice),
-        commission: s.commission !== null ? Number(s.commission) : 0,
-        executedAt: s.executedAt.toISOString(),
-      })),
+    date: dateParam,
+    page: pageSafe,
+    totalPages,
+    salesForDateCount: salesForDate.length,
+    recentSales: pageSales.map((s) => ({
+      orderNumber: s.orderNumber,
+      amount: Number(s.amount),
+      totalPrice: Number(s.totalPrice),
+      unitPrice: Number(s.unitPrice),
+      commission: s.commission !== null ? Number(s.commission) : 0,
+      executedAt: s.executedAt.toISOString(),
+    })),
   });
 }

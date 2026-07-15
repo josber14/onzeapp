@@ -24085,8 +24085,12 @@ try{
         </div>
         <div id="socioBnCapacityList" style="margin-top:10px;"></div>
 
-        <h3 class="section-title" style="font-size:14px; margin-top:20px;">Ventas recientes</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; flex-wrap:wrap; gap:8px;">
+          <h3 class="section-title" style="font-size:14px;">Ventas</h3>
+          <input type="date" id="socioBnSalesDate" style="font-size:12px;" onchange="window.socioBnChangeDate(this.value)" />
+        </div>
         <div id="socioBnSalesTable" style="margin-top:10px; overflow-x:auto;"></div>
+        <div id="socioBnSalesPager" style="display:flex; justify-content:center; align-items:center; gap:10px; margin-top:10px; font-size:12px;"></div>
       </section>
     `;
     document.querySelector('main')?.appendChild(section);
@@ -24282,11 +24286,30 @@ try{
     if(res.ok){ await socioBnLoadCapacity(); await socioBnLoadDashboard(); }
   };
 
+  window.__socioBnSalesDate = window.__socioBnSalesDate || new Date().toISOString().slice(0,10);
+  window.__socioBnSalesPage = window.__socioBnSalesPage || 1;
+
+  window.socioBnChangeDate = function(value){
+    window.__socioBnSalesDate = value || new Date().toISOString().slice(0,10);
+    window.__socioBnSalesPage = 1;
+    socioBnLoadDashboard();
+  };
+
+  window.socioBnGoPage = function(page){
+    window.__socioBnSalesPage = page;
+    socioBnLoadDashboard();
+  };
+
   async function socioBnLoadDashboard(){
-    const res = await socioBnFetch('/api/partner/dashboard');
+    const dateInput = document.getElementById('socioBnSalesDate');
+    if(dateInput && !dateInput.value) dateInput.value = window.__socioBnSalesDate;
+    const params = new URLSearchParams({ date: window.__socioBnSalesDate, page: String(window.__socioBnSalesPage), limit: '20' });
+    const res = await socioBnFetch('/api/partner/dashboard?' + params.toString());
     if(!res.ok) return;
+    if(dateInput) dateInput.value = res.date;
     socioBnRenderStats(res.stats);
     socioBnRenderSales(res.recentSales || []);
+    socioBnRenderPager(res);
   }
 
   function socioBnRenderStats(stats){
@@ -24297,7 +24320,7 @@ try{
     }
     grid.innerHTML = [
       card('USDT vendido', socioBnMoney(stats.totalUsdtSold, 2) + ' USDT'),
-      card('Comisión Binance', socioBnMoney(stats.totalCommissionUsdt, 4) + ' USDT'),
+      card('Comisión Binance', socioBnMoney(stats.totalCommissionUsdt, 2) + ' USDT'),
       card('CLP recibido', socioBnMoney(stats.totalClpReceived, 0) + ' CLP'),
       card('Precio prom. venta', stats.avgSalePrice !== null ? socioBnMoney(stats.avgSalePrice, 2) : '—'),
       card('Precio prom. compra', stats.weightedAvgBuyPrice !== null ? socioBnMoney(stats.weightedAvgBuyPrice, 2) : '—'),
@@ -24305,15 +24328,31 @@ try{
       card('Ganancia %', stats.profitPct !== null ? socioBnMoney(stats.profitPct, 2) + '%' : '—'),
     ].join('');
     if(Number(stats.unmatchedUsdt) > 0.01){
-      grid.innerHTML += `<div class="p2p-capacity-mini" style="border-color:rgba(251,191,36,.35);"><span>USDT sin capacity</span><strong style="color:#fbbf24;">${socioBnMoney(stats.unmatchedUsdt,4)}</strong></div>`;
+      grid.innerHTML += `<div class="p2p-capacity-mini" style="border-color:rgba(251,191,36,.35);"><span>USDT sin capacity</span><strong style="color:#fbbf24;">${socioBnMoney(stats.unmatchedUsdt,2)}</strong></div>`;
     }
+  }
+
+  function socioBnRenderPager(res){
+    const pager = document.getElementById('socioBnSalesPager');
+    if(!pager) return;
+    if(!res.salesForDateCount){
+      pager.innerHTML = '';
+      return;
+    }
+    const prevDisabled = res.page <= 1 ? 'disabled style="opacity:.4;"' : '';
+    const nextDisabled = res.page >= res.totalPages ? 'disabled style="opacity:.4;"' : '';
+    pager.innerHTML = `
+      <button class="btn secondary" type="button" style="padding:4px 10px;" ${prevDisabled} onclick="window.socioBnGoPage(${res.page - 1})">← Anterior</button>
+      <span>Página ${res.page} de ${res.totalPages} (${res.salesForDateCount} venta${res.salesForDateCount === 1 ? '' : 's'})</span>
+      <button class="btn secondary" type="button" style="padding:4px 10px;" ${nextDisabled} onclick="window.socioBnGoPage(${res.page + 1})">Siguiente →</button>
+    `;
   }
 
   function socioBnRenderSales(sales){
     const wrap = document.getElementById('socioBnSalesTable');
     if(!wrap) return;
     if(!sales.length){
-      wrap.innerHTML = '<div class="p2p-dashboard-empty">Sin ventas sincronizadas todavía.</div>';
+      wrap.innerHTML = '<div class="p2p-dashboard-empty">Sin ventas en esta fecha.</div>';
       return;
     }
     wrap.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
