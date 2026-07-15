@@ -24074,9 +24074,9 @@ try{
             <input type="date" id="socioBnCapDate" style="flex:1; min-width:140px;" />
           </div>
           <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
-            <input type="number" id="socioBnCapClp" placeholder="Monto CLP" step="0.01" style="flex:1; min-width:140px;" />
-            <input type="number" id="socioBnCapBuyPrice" placeholder="Precio compra (CLP/USDT)" step="0.0001" style="flex:1; min-width:140px;" />
-            <input type="number" id="socioBnCapUsdt" placeholder="USDT" step="0.00000001" style="flex:1; min-width:140px;" />
+            <input type="text" inputmode="numeric" id="socioBnCapClp" placeholder="Monto CLP" style="flex:1; min-width:140px;" oninput="window.socioBnFormatClpInput(this)" />
+            <input type="number" id="socioBnCapBuyPrice" placeholder="Tasa compra (CLP/USDT)" step="0.0001" style="flex:1; min-width:140px;" oninput="window.socioBnRecalcUsdt()" />
+            <input type="text" id="socioBnCapUsdt" placeholder="USDT a recibir" readonly style="flex:1; min-width:140px; opacity:.75;" />
           </div>
           <div style="display:flex; gap:8px; margin-top:10px;">
             <button class="btn" type="button" onclick="window.socioBnSaveCapacity()">Guardar</button>
@@ -24235,7 +24235,7 @@ try{
           <div>
             <div class="p2p-capacity-title">${it.provider || '(sin proveedor)'} · ${it.date || ''}</div>
             <div class="p2p-capacity-meta" style="margin-top:4px;">
-              ${socioBnMoney(it.capacityClp,0)} CLP · ${socioBnMoney(it.usdtAmount,4)} USDT · precio ${socioBnMoney(it.buyPrice,2)}
+              ${socioBnMoney(it.capacityClp,0)} CLP · ${socioBnMoney(it.usdtAmount,4)} USDT · tasa ${socioBnMoney(it.buyPrice,2)}
             </div>
             <div class="p2p-capacity-meta" style="margin-top:2px;">Estado: ${it.status === 'finished' ? 'Finalizado' : 'Activo'}</div>
           </div>
@@ -24249,15 +24249,38 @@ try{
     }).join('');
   }
 
+  function socioBnParseClp(value){
+    const digits = String(value || '').replace(/[^\d]/g, '');
+    return digits ? Number(digits) : 0;
+  }
+
+  window.socioBnFormatClpInput = function(el){
+    const digits = el.value.replace(/[^\d]/g, '');
+    el.value = digits ? Number(digits).toLocaleString('es-CL') : '';
+    window.socioBnRecalcUsdt();
+  };
+
+  // USDT a recibir = monto CLP / tasa de compra — se recalcula solo, nunca
+  // se carga a mano (evita que quede desincronizado con los otros 2 valores).
+  window.socioBnRecalcUsdt = function(){
+    const clpEl = document.getElementById('socioBnCapClp');
+    const priceEl = document.getElementById('socioBnCapBuyPrice');
+    const usdtEl = document.getElementById('socioBnCapUsdt');
+    if(!clpEl || !priceEl || !usdtEl) return;
+    const clp = socioBnParseClp(clpEl.value);
+    const price = Number(priceEl.value) || 0;
+    usdtEl.value = (clp > 0 && price > 0) ? (clp / price).toFixed(8) : '';
+  };
+
   window.socioBnOpenCapacityForm = function(item){
     const form = document.getElementById('socioBnCapacityForm');
     form.style.display = 'block';
     document.getElementById('socioBnCapId').value = item?.id || '';
     document.getElementById('socioBnCapProvider').value = item?.provider || '';
     document.getElementById('socioBnCapDate').value = item?.date || new Date().toISOString().slice(0,10);
-    document.getElementById('socioBnCapClp').value = item?.capacityClp ?? '';
+    document.getElementById('socioBnCapClp').value = item?.capacityClp != null ? Number(item.capacityClp).toLocaleString('es-CL') : '';
     document.getElementById('socioBnCapBuyPrice').value = item?.buyPrice ?? '';
-    document.getElementById('socioBnCapUsdt').value = item?.usdtAmount ?? '';
+    window.socioBnRecalcUsdt();
   };
 
   window.socioBnCloseCapacityForm = function(){
@@ -24276,7 +24299,7 @@ try{
       id: id,
       provider: document.getElementById('socioBnCapProvider').value.trim(),
       date: document.getElementById('socioBnCapDate').value,
-      capacityClp: Number(document.getElementById('socioBnCapClp').value || 0),
+      capacityClp: socioBnParseClp(document.getElementById('socioBnCapClp').value),
       buyPrice: Number(document.getElementById('socioBnCapBuyPrice').value || 0),
       usdtAmount: Number(document.getElementById('socioBnCapUsdt').value || 0),
       status: existing ? existing.status : 'active'
@@ -24340,7 +24363,7 @@ try{
       card('Comisión Binance', socioBnMoney(stats.totalCommissionUsdt, 2) + ' USDT'),
       card('CLP recibido', socioBnMoney(stats.totalClpReceived, 0) + ' CLP'),
       card('Precio prom. venta', stats.avgSalePrice !== null ? socioBnMoney(stats.avgSalePrice, 2) : '—'),
-      card('Precio prom. compra', stats.weightedAvgBuyPrice !== null ? socioBnMoney(stats.weightedAvgBuyPrice, 2) : '—'),
+      card('Tasa prom. compra', stats.weightedAvgBuyPrice !== null ? socioBnMoney(stats.weightedAvgBuyPrice, 2) : '—'),
       card('Ganancia', stats.profitClp !== null ? socioBnMoney(stats.profitClp, 0) + ' CLP' : '—'),
       card('Ganancia %', stats.profitPct !== null ? socioBnMoney(stats.profitPct, 2) + '%' : '—'),
     ].join('');
