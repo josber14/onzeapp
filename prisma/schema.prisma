@@ -606,17 +606,23 @@ model P2PCapacity {
 // ─── Dashboard de cuenta del socio (Binance separado, 100% aislado del bot ONZE/ZINPLE) ───
 
 model PartnerAccount {
-  id           Int       @id @default(autoincrement())
-  tenantId     Int
-  label        String    @default("SOCIO")
-  name         String?
-  apiKey       String
-  secretKey    String
-  isActive     Boolean   @default(true)
-  lastSyncedAt DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                Int       @id @default(autoincrement())
+  tenantId          Int
+  label             String    @default("SOCIO")
+  name              String?
+  apiKey            String
+  secretKey         String
+  isActive          Boolean   @default(true)
+  lastSyncedAt      DateTime?
+  // Las ventas anteriores a esta fecha se ignoran en las estadísticas (aunque
+  // queden guardadas en PartnerSale por si sirven de referencia después) —
+  // permite "arrancar la cuenta" desde una fecha elegida por el usuario, sin
+  // que el historial de 90 días que trae la primera sincronización infle los
+  // números.
+  trackingStartDate DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, label])
   @@index([tenantId])

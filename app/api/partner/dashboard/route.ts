@@ -120,10 +120,18 @@ export async function GET(req: NextRequest) {
   const dayStart = new Date(`${dateParam}T00:00:00.000Z`);
   const dayEnd = new Date(`${dateParam}T23:59:59.999Z`);
 
-  const [capacities, sales] = await Promise.all([
+  const [account, capacities, allSales] = await Promise.all([
+    prisma.partnerAccount.findUnique({ where: { tenantId_label: { tenantId: session.tenantId, label: LABEL } } }),
     prisma.partnerCapacity.findMany({ where: { tenantId: session.tenantId, label: LABEL } }),
     prisma.partnerSale.findMany({ where: { tenantId: session.tenantId, label: LABEL } }),
   ]);
+
+  // Las ventas anteriores a trackingStartDate se ignoran en TODO el cálculo
+  // (estadísticas y tabla) — quedan guardadas en la base de datos por si
+  // sirven de referencia después, pero no cuentan para "la cuenta arrancada
+  // desde hoy" que pidió el usuario.
+  const trackingStart = account?.trackingStartDate ?? null;
+  const sales = trackingStart ? allSales.filter((s) => s.executedAt >= trackingStart) : allSales;
 
   const stats = computeFifo(capacities, sales);
 
@@ -140,6 +148,7 @@ export async function GET(req: NextRequest) {
     stats,
     salesCount: sales.length,
     capacitiesCount: capacities.length,
+    trackingStartDate: trackingStart ? trackingStart.toISOString().slice(0, 10) : null,
     date: dateParam,
     page: pageSafe,
     totalPages,
