@@ -24003,5 +24003,325 @@ try{
 }catch(e){}
 </script>
 
+<script>
+/* ===== ONZE: Cuenta del Socio (Binance separado) =====
+   Sección 100% aislada del bot ONZE/ZINPLE: rutas propias (/api/partner/*),
+   tablas propias (PartnerAccount/PartnerCapacity/PartnerSale), sin
+   localStorage como caché (siempre se recalcula desde el servidor). */
+(function(){
+  if(window.__onzeSocioBnLoaded) return;
+  window.__onzeSocioBnLoaded = true;
+
+  function socioBnMoney(n, decimals){
+    decimals = decimals === undefined ? 0 : decimals;
+    n = Number(n) || 0;
+    return n.toLocaleString('es-CL', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  }
+
+  function socioBnUid(){
+    return 'sbn_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
+  }
+
+  async function socioBnFetch(url, opts){
+    const res = await fetch(url, Object.assign({ credentials: 'include', headers: { 'Content-Type': 'application/json' } }, opts||{}));
+    return res.json();
+  }
+
+  function buildSocioBnView(){
+    if(document.getElementById('view-socio-bn')) return;
+    const section = document.createElement('section');
+    section.className = 'view admin-only-view';
+    section.id = 'view-socio-bn';
+    section.innerHTML = `
+      <section class="section-card">
+        <div class="section-top">
+          <div>
+            <h2 class="section-title" style="font-size:18px;">Cuenta del Socio</h2>
+            <p class="section-text" style="margin-top:2px;font-size:12px;color:#64748b;">Seguimiento de ventas y ganancia de una cuenta Binance separada</p>
+          </div>
+          <button class="btn secondary" type="button" id="socioBnSyncBtn" onclick="window.socioBnSync()">🔄 Sincronizar ventas</button>
+        </div>
+
+        <div id="socioBnCredsForm" style="display:none; margin-top:16px; padding:16px; border-radius:12px; background:rgba(255,255,255,.03); border:1px solid rgba(148,163,184,.15);">
+          <h3 class="section-title" style="font-size:14px;">Conectar cuenta de Binance del socio</h3>
+          <p class="section-text" style="font-size:12px; color:#f59e0b; margin-top:4px;">
+            Importante: usa una API key de <strong>SOLO LECTURA</strong> (sin permisos de trading ni retiro) al generarla en Binance.
+          </p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+            <input type="text" id="socioBnName" placeholder="Nombre (opcional, ej. Socio)" style="flex:1; min-width:160px;" />
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+            <input type="text" id="socioBnApiKey" placeholder="API Key (solo lectura)" style="flex:1; min-width:220px;" autocomplete="off" />
+            <input type="password" id="socioBnSecretKey" placeholder="Secret Key" style="flex:1; min-width:220px;" autocomplete="off" />
+          </div>
+          <button class="btn" type="button" style="margin-top:10px;" onclick="window.socioBnSaveCreds()">Guardar credenciales</button>
+          <div id="socioBnCredsMsg" style="font-size:12px; margin-top:6px;"></div>
+        </div>
+
+        <div id="socioBnConnectedInfo" style="display:none; margin-top:12px; font-size:12px; color:#64748b;"></div>
+
+        <div class="p2p-capacity-mini-grid" id="socioBnStatsGrid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); margin-top:16px;">
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
+          <h3 class="section-title" style="font-size:14px;">Capacity (compras a costo)</h3>
+          <button class="btn secondary" type="button" onclick="window.socioBnOpenCapacityForm()">+ Agregar capacity</button>
+        </div>
+        <div id="socioBnCapacityForm" style="display:none; margin-top:10px; padding:14px; border-radius:12px; background:rgba(255,255,255,.03); border:1px solid rgba(148,163,184,.15);">
+          <input type="hidden" id="socioBnCapId" />
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <input type="text" id="socioBnCapProvider" placeholder="Proveedor" style="flex:1; min-width:140px;" />
+            <input type="date" id="socioBnCapDate" style="flex:1; min-width:140px;" />
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+            <input type="number" id="socioBnCapClp" placeholder="Monto CLP" step="0.01" style="flex:1; min-width:140px;" />
+            <input type="number" id="socioBnCapBuyPrice" placeholder="Precio compra (CLP/USDT)" step="0.0001" style="flex:1; min-width:140px;" />
+            <input type="number" id="socioBnCapUsdt" placeholder="USDT" step="0.00000001" style="flex:1; min-width:140px;" />
+          </div>
+          <div style="display:flex; gap:8px; margin-top:10px;">
+            <button class="btn" type="button" onclick="window.socioBnSaveCapacity()">Guardar</button>
+            <button class="btn secondary" type="button" onclick="window.socioBnCloseCapacityForm()">Cancelar</button>
+          </div>
+        </div>
+        <div id="socioBnCapacityList" style="margin-top:10px;"></div>
+
+        <h3 class="section-title" style="font-size:14px; margin-top:20px;">Ventas recientes</h3>
+        <div id="socioBnSalesTable" style="margin-top:10px; overflow-x:auto;"></div>
+      </section>
+    `;
+    document.querySelector('main')?.appendChild(section);
+  }
+
+  function addSocioBnNavButton(){
+    const btn = document.querySelector('[data-view-target="socio-bn"]')
+      || (() => {
+        const target = document.querySelector('[data-view-target="p2p-bot"]')
+          || document.querySelector('[data-view-target="p2p-dashboard"]');
+        if(!target || !target.parentNode) return null;
+        const b = document.createElement('button');
+        b.className = 'nav-btn admin-only-control';
+        b.type = 'button';
+        b.dataset.viewTarget = 'socio-bn';
+        b.textContent = 'Socio';
+        target.parentNode.insertBefore(b, target.nextSibling);
+        return b;
+      })();
+    if(!btn) return;
+    btn.addEventListener('click', function(){
+      if(typeof switchView === 'function') switchView('socio-bn');
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      window.socioBnRefreshAll();
+    });
+  }
+
+  window.socioBnRefreshAll = async function(){
+    await socioBnLoadCredsStatus();
+    await socioBnLoadCapacity();
+    await socioBnLoadDashboard();
+  };
+
+  async function socioBnLoadCredsStatus(){
+    const res = await socioBnFetch('/api/partner/credentials');
+    const form = document.getElementById('socioBnCredsForm');
+    const info = document.getElementById('socioBnConnectedInfo');
+    if(!res.ok || !form || !info) return;
+    if(res.exists){
+      form.style.display = 'none';
+      info.style.display = 'block';
+      info.textContent = `Conectado${res.name ? ' — ' + res.name : ''}. Última sincronización: ${res.lastSyncedAt ? new Date(res.lastSyncedAt).toLocaleString('es-CL') : 'nunca'}.`;
+    } else {
+      form.style.display = 'block';
+      info.style.display = 'none';
+    }
+  }
+
+  window.socioBnSaveCreds = async function(){
+    const apiKey = document.getElementById('socioBnApiKey').value.trim();
+    const secretKey = document.getElementById('socioBnSecretKey').value.trim();
+    const name = document.getElementById('socioBnName').value.trim();
+    const msg = document.getElementById('socioBnCredsMsg');
+    if(!apiKey || !secretKey){ msg.textContent = 'Falta la API key o el secret key.'; msg.style.color = '#ef4444'; return; }
+    msg.textContent = 'Guardando...'; msg.style.color = '#64748b';
+    const res = await socioBnFetch('/api/partner/credentials', { method: 'POST', body: JSON.stringify({ apiKey, secretKey, name }) });
+    if(res.ok){
+      msg.textContent = 'Guardado ✅'; msg.style.color = '#10b981';
+      document.getElementById('socioBnApiKey').value = '';
+      document.getElementById('socioBnSecretKey').value = '';
+      await socioBnLoadCredsStatus();
+    } else {
+      msg.textContent = res.error || 'Error al guardar'; msg.style.color = '#ef4444';
+    }
+  };
+
+  window.socioBnSync = async function(){
+    const btn = document.getElementById('socioBnSyncBtn');
+    if(btn){ btn.disabled = true; btn.textContent = 'Sincronizando...'; }
+    try{
+      const res = await socioBnFetch('/api/partner/sync', { method: 'POST' });
+      if(res.ok){
+        if(typeof showToast === 'function') showToast(`Sincronizado: ${res.upserted} venta(s) nueva(s)/actualizada(s)`);
+        await socioBnLoadCredsStatus();
+        await socioBnLoadDashboard();
+      } else {
+        if(typeof showToast === 'function') showToast(res.error || 'Error al sincronizar', 'error');
+        else alert(res.error || 'Error al sincronizar');
+      }
+    } finally {
+      if(btn){ btn.disabled = false; btn.textContent = '🔄 Sincronizar ventas'; }
+    }
+  };
+
+  async function socioBnLoadCapacity(){
+    const res = await socioBnFetch('/api/partner/capacity');
+    if(!res.ok) return;
+    window.__socioBnCapacityCache = res.items || [];
+    socioBnRenderCapacityList();
+  }
+
+  function socioBnRenderCapacityList(){
+    const list = document.getElementById('socioBnCapacityList');
+    if(!list) return;
+    const items = window.__socioBnCapacityCache || [];
+    if(!items.length){
+      list.innerHTML = '<div class="p2p-dashboard-empty">Sin capacity registrado todavía.</div>';
+      return;
+    }
+    list.innerHTML = items.map(function(it){
+      return `<div class="p2p-capacity-card" style="margin-top:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+          <div>
+            <div class="p2p-capacity-title">${it.provider || '(sin proveedor)'} · ${it.date || ''}</div>
+            <div class="p2p-capacity-meta" style="margin-top:4px;">
+              ${socioBnMoney(it.capacityClp,0)} CLP · ${socioBnMoney(it.usdtAmount,4)} USDT · precio ${socioBnMoney(it.buyPrice,2)}
+            </div>
+            <div class="p2p-capacity-meta" style="margin-top:2px;">Estado: ${it.status === 'finished' ? 'Finalizado' : 'Activo'}</div>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnEditCapacity('${it.id}')">Editar</button>
+            <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnToggleCapacityStatus('${it.id}')">${it.status === 'finished' ? 'Reactivar' : 'Marcar finalizado'}</button>
+            <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;color:#ef4444;" onclick="window.socioBnDeleteCapacity('${it.id}')">Eliminar</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  window.socioBnOpenCapacityForm = function(item){
+    const form = document.getElementById('socioBnCapacityForm');
+    form.style.display = 'block';
+    document.getElementById('socioBnCapId').value = item?.id || '';
+    document.getElementById('socioBnCapProvider').value = item?.provider || '';
+    document.getElementById('socioBnCapDate').value = item?.date || new Date().toISOString().slice(0,10);
+    document.getElementById('socioBnCapClp').value = item?.capacityClp ?? '';
+    document.getElementById('socioBnCapBuyPrice').value = item?.buyPrice ?? '';
+    document.getElementById('socioBnCapUsdt').value = item?.usdtAmount ?? '';
+  };
+
+  window.socioBnCloseCapacityForm = function(){
+    document.getElementById('socioBnCapacityForm').style.display = 'none';
+  };
+
+  window.socioBnEditCapacity = function(id){
+    const item = (window.__socioBnCapacityCache || []).find(function(it){ return it.id === id; });
+    if(item) window.socioBnOpenCapacityForm(item);
+  };
+
+  window.socioBnSaveCapacity = async function(){
+    const id = document.getElementById('socioBnCapId').value || socioBnUid();
+    const existing = (window.__socioBnCapacityCache || []).find(function(it){ return it.id === id; });
+    const item = {
+      id: id,
+      provider: document.getElementById('socioBnCapProvider').value.trim(),
+      date: document.getElementById('socioBnCapDate').value,
+      capacityClp: Number(document.getElementById('socioBnCapClp').value || 0),
+      buyPrice: Number(document.getElementById('socioBnCapBuyPrice').value || 0),
+      usdtAmount: Number(document.getElementById('socioBnCapUsdt').value || 0),
+      status: existing ? existing.status : 'active'
+    };
+    const res = await socioBnFetch('/api/partner/capacity', { method: 'POST', body: JSON.stringify({ item }) });
+    if(res.ok){
+      window.socioBnCloseCapacityForm();
+      await socioBnLoadCapacity();
+      await socioBnLoadDashboard();
+    } else if(typeof showToast === 'function') showToast(res.error || 'Error al guardar capacity', 'error');
+  };
+
+  window.socioBnToggleCapacityStatus = async function(id){
+    const item = (window.__socioBnCapacityCache || []).find(function(it){ return it.id === id; });
+    if(!item) return;
+    const updated = Object.assign({}, item, { status: item.status === 'finished' ? 'active' : 'finished' });
+    const res = await socioBnFetch('/api/partner/capacity', { method: 'POST', body: JSON.stringify({ item: updated }) });
+    if(res.ok){ await socioBnLoadCapacity(); await socioBnLoadDashboard(); }
+  };
+
+  window.socioBnDeleteCapacity = async function(id){
+    if(!confirm('¿Eliminar esta capacity? Esta acción no se puede deshacer.')) return;
+    const res = await socioBnFetch('/api/partner/capacity?id=' + encodeURIComponent(id) + '&confirm=manual', { method: 'DELETE' });
+    if(res.ok){ await socioBnLoadCapacity(); await socioBnLoadDashboard(); }
+  };
+
+  async function socioBnLoadDashboard(){
+    const res = await socioBnFetch('/api/partner/dashboard');
+    if(!res.ok) return;
+    socioBnRenderStats(res.stats);
+    socioBnRenderSales(res.recentSales || []);
+  }
+
+  function socioBnRenderStats(stats){
+    const grid = document.getElementById('socioBnStatsGrid');
+    if(!grid) return;
+    function card(label, value){
+      return `<div class="p2p-capacity-mini"><span>${label}</span><strong>${value}</strong></div>`;
+    }
+    grid.innerHTML = [
+      card('USDT vendido', socioBnMoney(stats.totalUsdtSold, 2) + ' USDT'),
+      card('CLP recibido', socioBnMoney(stats.totalClpReceived, 0) + ' CLP'),
+      card('Precio prom. venta', stats.avgSalePrice !== null ? socioBnMoney(stats.avgSalePrice, 2) : '—'),
+      card('Precio prom. compra', stats.weightedAvgBuyPrice !== null ? socioBnMoney(stats.weightedAvgBuyPrice, 2) : '—'),
+      card('Ganancia', stats.profitClp !== null ? socioBnMoney(stats.profitClp, 0) + ' CLP' : '—'),
+      card('Ganancia %', stats.profitPct !== null ? socioBnMoney(stats.profitPct, 2) + '%' : '—'),
+    ].join('');
+    if(Number(stats.unmatchedUsdt) > 0.01){
+      grid.innerHTML += `<div class="p2p-capacity-mini" style="border-color:rgba(251,191,36,.35);"><span>USDT sin capacity</span><strong style="color:#fbbf24;">${socioBnMoney(stats.unmatchedUsdt,4)}</strong></div>`;
+    }
+  }
+
+  function socioBnRenderSales(sales){
+    const wrap = document.getElementById('socioBnSalesTable');
+    if(!wrap) return;
+    if(!sales.length){
+      wrap.innerHTML = '<div class="p2p-dashboard-empty">Sin ventas sincronizadas todavía.</div>';
+      return;
+    }
+    wrap.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <thead><tr style="text-align:left; color:#64748b;">
+        <th style="padding:6px;">Orden</th><th style="padding:6px;">Fecha</th><th style="padding:6px;">USDT</th><th style="padding:6px;">CLP</th><th style="padding:6px;">Precio</th>
+      </tr></thead>
+      <tbody>${sales.map(function(s){
+        return `<tr style="border-top:1px solid rgba(148,163,184,.1);">
+          <td style="padding:6px;">${s.orderNumber}</td>
+          <td style="padding:6px;">${new Date(s.executedAt).toLocaleString('es-CL')}</td>
+          <td style="padding:6px;">${socioBnMoney(s.amount,4)}</td>
+          <td style="padding:6px;">${socioBnMoney(s.totalPrice,0)}</td>
+          <td style="padding:6px;">${socioBnMoney(s.unitPrice,2)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  }
+
+  function initSocioBn(){
+    buildSocioBnView();
+    addSocioBnNavButton();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){ setTimeout(initSocioBn, 500); });
+  } else {
+    setTimeout(initSocioBn, 500);
+  }
+})();
+</script>
+
 </body>
 </html>

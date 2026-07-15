@@ -27,50 +27,53 @@ model Plan {
 }
 
 model Tenant {
-  id                   Int                    @id @default(autoincrement())
-  code                 String                 @unique
-  legalName            String?
-  tradeName            String
-  ownerUserId          Int?
-  dataSourceMode       DataSourceMode
-  planId               Int?
-  isOnzeInternal       Boolean                @default(false)
-  active               Boolean                @default(true)
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  auditLogs            AuditLog[]
-  balanceMovements     BalanceMovement[]
-  binanceCredentials   BinanceCredentials[]
-  binanceOrders        BinanceOrder[]
-  bybitCredentials     BybitCredentials[]
-  collaboratorPayments CollaboratorPayment[]
-  dataSources          DataSource[]
-  earningsMovements    EarningsMovement[]
-  expenses             Expense[]
-  initialCapitals      InitialCapital[]
-  internalFundings     InternalFunding[]
-  liquidityAlerts      LiquidityAlert[]
-  OkxCredentials       OkxCredentials[]
-  operations           Operation[]
-  customers            OperatorCustomer[]
-  P2PAccount          P2PAccount[]
-  p2pBotConfig         P2PBotConfig?
-  P2PBotExchangeConfig P2PBotExchangeConfig[]
-  p2pBotLogs           P2PBotLog[]
-  p2pBotOrders         P2PBotOrder[]
-  p2pBotAds            P2PBotAd[]
-  p2pChatStates        P2PChatState[]
+  id                    Int                    @id @default(autoincrement())
+  code                  String                 @unique
+  legalName             String?
+  tradeName             String
+  ownerUserId           Int?
+  dataSourceMode        DataSourceMode
+  planId                Int?
+  isOnzeInternal        Boolean                @default(false)
+  active                Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  auditLogs             AuditLog[]
+  balanceMovements      BalanceMovement[]
+  binanceCredentials    BinanceCredentials[]
+  binanceOrders         BinanceOrder[]
+  bybitCredentials      BybitCredentials[]
+  collaboratorPayments  CollaboratorPayment[]
+  dataSources           DataSource[]
+  earningsMovements     EarningsMovement[]
+  expenses              Expense[]
+  initialCapitals       InitialCapital[]
+  internalFundings      InternalFunding[]
+  liquidityAlerts       LiquidityAlert[]
+  OkxCredentials        OkxCredentials[]
+  operations            Operation[]
+  customers             OperatorCustomer[]
+  P2PAccount            P2PAccount[]
+  p2pBotConfig          P2PBotConfig?
+  P2PBotExchangeConfig  P2PBotExchangeConfig[]
+  p2pBotLogs            P2PBotLog[]
+  p2pBotOrders          P2PBotOrder[]
+  p2pBotAds             P2PBotAd[]
+  p2pChatStates         P2PChatState[]
   p2pBotMarketSnapshots P2PBotMarketSnapshot[]
-  p2pCapacities        P2PCapacity[]
-  p2pCycles            P2PCycle[]
-  rateLists            RateList[]
-  subscriptions        Subscription[]
-  ownerUser            User?                  @relation("TenantOwner", fields: [ownerUserId], references: [id])
-  plan                 Plan?                  @relation(fields: [planId], references: [id])
-  balances             TenantCountryBalance[]
-  pairs                TenantPair[]
-  settings             TenantSettings?
-  users                User[]
+  p2pCapacities         P2PCapacity[]
+  p2pCycles             P2PCycle[]
+  partnerAccounts       PartnerAccount[]
+  partnerCapacities     PartnerCapacity[]
+  partnerSales          PartnerSale[]
+  rateLists             RateList[]
+  subscriptions         Subscription[]
+  ownerUser             User?                  @relation("TenantOwner", fields: [ownerUserId], references: [id])
+  plan                  Plan?                  @relation(fields: [planId], references: [id])
+  balances              TenantCountryBalance[]
+  pairs                 TenantPair[]
+  settings              TenantSettings?
+  users                 User[]
 }
 
 model Subscription {
@@ -600,6 +603,63 @@ model P2PCapacity {
   @@index([status])
 }
 
+// ─── Dashboard de cuenta del socio (Binance separado, 100% aislado del bot ONZE/ZINPLE) ───
+
+model PartnerAccount {
+  id           Int       @id @default(autoincrement())
+  tenantId     Int
+  label        String    @default("SOCIO")
+  name         String?
+  apiKey       String
+  secretKey    String
+  isActive     Boolean   @default(true)
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, label])
+  @@index([tenantId])
+}
+
+model PartnerCapacity {
+  id          String    @id
+  tenantId    Int
+  label       String    @default("SOCIO")
+  provider    String
+  capacityClp Decimal   @db.Decimal(18, 2)
+  buyPrice    Decimal   @db.Decimal(18, 4)
+  usdtAmount  Decimal   @db.Decimal(18, 8)
+  date        String
+  status      String    @default("active")
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, label])
+  @@index([status])
+}
+
+model PartnerSale {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int
+  label       String   @default("SOCIO")
+  orderNumber String
+  amount      Decimal  @db.Decimal(18, 8)
+  totalPrice  Decimal  @db.Decimal(18, 8)
+  unitPrice   Decimal  @db.Decimal(18, 8)
+  commission  Decimal? @db.Decimal(18, 8)
+  fiat        String   @default("CLP")
+  orderStatus String   @default("COMPLETED")
+  executedAt  DateTime
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, label, orderNumber])
+  @@index([tenantId, label])
+}
+
 model RateList {
   id               Int            @id @default(autoincrement())
   tenantId         Int
@@ -735,23 +795,23 @@ model OkxCredentials {
 }
 
 model P2PChatState {
-  id                Int      @id @default(autoincrement())
+  id                Int       @id @default(autoincrement())
   tenantId          Int
   exchange          String
   orderNumber       String
-  state             String   @default("new")
+  state             String    @default("new")
   counterparty      String?
-  isCompany         Boolean  @default(false)
-  isReturning       Boolean  @default(false)
+  isCompany         Boolean   @default(false)
+  isReturning       Boolean   @default(false)
   previousBank      String?
   chosenBank        String?
   chosenAccountIds  Json?
-  erutRequested     Boolean  @default(false)
-  erutReceived      Boolean  @default(false)
-  retryCount        Int      @default(0)
-  transferFailCount Int      @default(0)
-  partialAmount     Decimal? @db.Decimal(18, 8)
-  totalAmount       Decimal? @db.Decimal(18, 8)
+  erutRequested     Boolean   @default(false)
+  erutReceived      Boolean   @default(false)
+  retryCount        Int       @default(0)
+  transferFailCount Int       @default(0)
+  partialAmount     Decimal?  @db.Decimal(18, 8)
+  totalAmount       Decimal?  @db.Decimal(18, 8)
   lastClientMsgAt   DateTime?
   lastBotMsgAt      DateTime?
   lastBotMsg        String?
@@ -760,9 +820,9 @@ model P2PChatState {
   paidAt            DateTime?
   completedAt       DateTime?
   verifiedAt        DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  Tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  Tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, exchange, orderNumber])
   @@index([tenantId, exchange, state])
@@ -817,66 +877,67 @@ model P2PBotExchangeConfig {
 }
 
 model P2PBotAd {
-  id                     Int       @id @default(autoincrement())
-  tenantId               Int
-  label                  String    @default("ONZE")
-  exchange               String
-  adId                   String?
-  tradeType              String    @default("SELL")
-  asset                  String    @default("USDT")
-  fiat                   String    @default("CLP")
-  priceType              String    @default("fixed")
-  price                  Decimal   @db.Decimal(18, 8)
-  amount                 Decimal   @db.Decimal(18, 8)
-  amountType             String    @default("fixed")
-  minAmount              Decimal   @db.Decimal(18, 8)
-  maxAmount              Decimal   @db.Decimal(18, 8)
-  paymentMethods         Json      @default("[]")
-  payTime                Int       @default(15)
-  status                 String    @default("online")
-  isActive               Boolean   @default(true)
-  botManaged             Boolean   @default(false)
-  botEnabled             Boolean   @default(false)
-  botStrategy            String?   @default("top1")
-  botTop1Diff            Decimal?  @db.Decimal(18, 8)
-  botSpreadPct           Decimal?  @db.Decimal(8, 4)
-  botPriceFloorPct       Decimal?  @db.Decimal(8, 4)
-  botPriceSource         String?   @default("capacity")
-  botCommissionPct       Decimal?  @db.Decimal(8, 4)
-  botSafeMarginPct       Decimal?  @db.Decimal(8, 4)
+  id                      Int      @id @default(autoincrement())
+  tenantId                Int
+  label                   String   @default("ONZE")
+  exchange                String
+  adId                    String?
+  tradeType               String   @default("SELL")
+  asset                   String   @default("USDT")
+  fiat                    String   @default("CLP")
+  priceType               String   @default("fixed")
+  price                   Decimal  @db.Decimal(18, 8)
+  amount                  Decimal  @db.Decimal(18, 8)
+  amountType              String   @default("fixed")
+  minAmount               Decimal  @db.Decimal(18, 8)
+  maxAmount               Decimal  @db.Decimal(18, 8)
+  paymentMethods          Json     @default("[]")
+  payTime                 Int      @default(15)
+  status                  String   @default("online")
+  isActive                Boolean  @default(true)
+  botManaged              Boolean  @default(false)
+  botEnabled              Boolean  @default(false)
+  botStrategy             String?  @default("top1")
+  botTop1Diff             Decimal? @db.Decimal(18, 8)
+  botSpreadPct            Decimal? @db.Decimal(8, 4)
+  botPriceFloorPct        Decimal? @db.Decimal(8, 4)
+  botPriceSource          String?  @default("capacity")
+  botCommissionPct        Decimal? @db.Decimal(8, 4)
+  botSafeMarginPct        Decimal? @db.Decimal(8, 4)
   botMinCompetitorCapital Decimal? @db.Decimal(18, 2)
-  botCompetePayTypes     Json?
-  botCycleInterval       Int?
-  botCircuitBreakPct     Decimal? @db.Decimal(8, 4)
-  botDailyVolumeCapUsdt  Decimal? @db.Decimal(18, 8)
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @default(now())
-  Tenant                 Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  botCompetePayTypes      Json?
+  botCycleInterval        Int?
+  botCircuitBreakPct      Decimal? @db.Decimal(8, 4)
+  botDailyVolumeCapUsdt   Decimal? @db.Decimal(18, 8)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @default(now())
+  Tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([exchange])
 }
+
 model P2PCycle {
-  id              Int                  @id @default(autoincrement())
-  tenantId        Int
-  label           String               @default("ONZE")
-  startTime       DateTime             @default(now())
-  endTime         DateTime?
-  status          String               @default("active")
-  totalUsdt       Decimal              @default(0) @db.Decimal(18, 8)
-  totalBinanceClp Decimal              @default(0) @db.Decimal(18, 2)
-  totalManualClp  Decimal              @default(0) @db.Decimal(18, 2)
-  minCloseBalance Decimal?             @db.Decimal(18, 8)
+  id               Int                  @id @default(autoincrement())
+  tenantId         Int
+  label            String               @default("ONZE")
+  startTime        DateTime             @default(now())
+  endTime          DateTime?
+  status           String               @default("active")
+  totalUsdt        Decimal              @default(0) @db.Decimal(18, 8)
+  totalBinanceClp  Decimal              @default(0) @db.Decimal(18, 2)
+  totalManualClp   Decimal              @default(0) @db.Decimal(18, 2)
+  minCloseBalance  Decimal?             @db.Decimal(18, 8)
   firstOrderNumber String?
-  firstOrderClp   Decimal?             @db.Decimal(18, 2)
-  firstOrderTime  DateTime?
-  lastOrderNumber String?
-  lastOrderClp    Decimal?             @db.Decimal(18, 2)
-  lastOrderTime   DateTime?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  manualSales     P2PCycleManualSale[]
-  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  firstOrderClp    Decimal?             @db.Decimal(18, 2)
+  firstOrderTime   DateTime?
+  lastOrderNumber  String?
+  lastOrderClp     Decimal?             @db.Decimal(18, 2)
+  lastOrderTime    DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  manualSales      P2PCycleManualSale[]
+  tenant           Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, label, status])
   @@index([tenantId])
