@@ -24121,7 +24121,6 @@ try{
 
   window.socioBnRefreshAll = async function(){
     await socioBnLoadCredsStatus();
-    await socioBnLoadCapacity();
     await socioBnLoadDashboard();
   };
 
@@ -24214,11 +24213,30 @@ try{
     }
   };
 
-  async function socioBnLoadCapacity(){
-    const res = await socioBnFetch('/api/partner/capacity');
-    if(!res.ok) return;
-    window.__socioBnCapacityCache = res.items || [];
-    socioBnRenderCapacityList();
+  function socioBnCapacityCard(it){
+    const pct = it.capacityClp > 0 ? Math.min(100, (it.clpCovered / it.capacityClp) * 100) : 0;
+    return `<div class="p2p-capacity-card" style="margin-top:8px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+        <div>
+          <div class="p2p-capacity-title">${it.provider || '(sin proveedor)'} · ${it.date || ''}</div>
+          <div class="p2p-capacity-meta" style="margin-top:4px;">
+            ${socioBnMoney(it.capacityClp,0)} CLP · ${socioBnMoney(it.usdtAmount,4)} USDT · tasa ${socioBnMoney(it.buyPrice,2)}
+          </div>
+          <div class="p2p-capacity-meta" style="margin-top:2px;">
+            Cubierto: ${socioBnMoney(it.clpCovered,0)} CLP de ${socioBnMoney(it.capacityClp,0)} CLP (${pct.toFixed(1)}%)${it.clpPending > 0 ? ' · Falta: ' + socioBnMoney(it.clpPending,0) + ' CLP' : ''}
+          </div>
+          <div style="height:4px; border-radius:2px; background:rgba(148,163,184,.15); margin-top:6px; width:100%; max-width:220px; overflow:hidden;">
+            <div style="height:100%; width:${pct}%; background:${it.isCompleted ? '#10b981' : '#3b82f6'};"></div>
+          </div>
+          <div class="p2p-capacity-meta" style="margin-top:4px;">Estado: ${it.status === 'finished' ? 'Completado' : 'Activo'}</div>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnEditCapacity('${it.id}')">Editar</button>
+          <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnToggleCapacityStatus('${it.id}')">${it.status === 'finished' ? 'Reactivar' : 'Marcar completado'}</button>
+          <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;color:#ef4444;" onclick="window.socioBnDeleteCapacity('${it.id}')">Eliminar</button>
+        </div>
+      </div>
+    </div>`;
   }
 
   function socioBnRenderCapacityList(){
@@ -24229,24 +24247,16 @@ try{
       list.innerHTML = '<div class="p2p-dashboard-empty">Sin capacity registrado todavía.</div>';
       return;
     }
-    list.innerHTML = items.map(function(it){
-      return `<div class="p2p-capacity-card" style="margin-top:8px;">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
-          <div>
-            <div class="p2p-capacity-title">${it.provider || '(sin proveedor)'} · ${it.date || ''}</div>
-            <div class="p2p-capacity-meta" style="margin-top:4px;">
-              ${socioBnMoney(it.capacityClp,0)} CLP · ${socioBnMoney(it.usdtAmount,4)} USDT · tasa ${socioBnMoney(it.buyPrice,2)}
-            </div>
-            <div class="p2p-capacity-meta" style="margin-top:2px;">Estado: ${it.status === 'finished' ? 'Finalizado' : 'Activo'}</div>
-          </div>
-          <div style="display:flex; gap:6px; flex-wrap:wrap;">
-            <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnEditCapacity('${it.id}')">Editar</button>
-            <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnToggleCapacityStatus('${it.id}')">${it.status === 'finished' ? 'Reactivar' : 'Marcar finalizado'}</button>
-            <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;color:#ef4444;" onclick="window.socioBnDeleteCapacity('${it.id}')">Eliminar</button>
-          </div>
-        </div>
-      </div>`;
-    }).join('');
+    const activos = items.filter(function(it){ return it.status !== 'finished'; });
+    const completados = items.filter(function(it){ return it.status === 'finished'; });
+    let html = '';
+    html += '<h4 style="font-size:12px; color:#64748b; margin:10px 0 4px;">Activos</h4>';
+    html += activos.length ? activos.map(socioBnCapacityCard).join('') : '<div class="p2p-dashboard-empty">Sin capacity activo.</div>';
+    if(completados.length){
+      html += '<h4 style="font-size:12px; color:#64748b; margin:16px 0 4px;">Completados</h4>';
+      html += completados.map(socioBnCapacityCard).join('');
+    }
+    list.innerHTML = html;
   }
 
   function socioBnParseClp(value){
@@ -24307,23 +24317,26 @@ try{
     const res = await socioBnFetch('/api/partner/capacity', { method: 'POST', body: JSON.stringify({ item }) });
     if(res.ok){
       window.socioBnCloseCapacityForm();
-      await socioBnLoadCapacity();
       await socioBnLoadDashboard();
     } else if(typeof showToast === 'function') showToast(res.error || 'Error al guardar capacity', 'error');
   };
 
+  // Marcar "completado"/"Reactivar" a mano sigue disponible como excepción
+  // manual — el camino normal es automático: cuando el CLP cubierto llega al
+  // 100% de capacityClp, el servidor lo pasa a "finished" solo (ver
+  // isCompleted en /api/partner/dashboard).
   window.socioBnToggleCapacityStatus = async function(id){
     const item = (window.__socioBnCapacityCache || []).find(function(it){ return it.id === id; });
     if(!item) return;
     const updated = Object.assign({}, item, { status: item.status === 'finished' ? 'active' : 'finished' });
     const res = await socioBnFetch('/api/partner/capacity', { method: 'POST', body: JSON.stringify({ item: updated }) });
-    if(res.ok){ await socioBnLoadCapacity(); await socioBnLoadDashboard(); }
+    if(res.ok){ await socioBnLoadDashboard(); }
   };
 
   window.socioBnDeleteCapacity = async function(id){
     if(!confirm('¿Eliminar esta capacity? Esta acción no se puede deshacer.')) return;
     const res = await socioBnFetch('/api/partner/capacity?id=' + encodeURIComponent(id) + '&confirm=manual', { method: 'DELETE' });
-    if(res.ok){ await socioBnLoadCapacity(); await socioBnLoadDashboard(); }
+    if(res.ok){ await socioBnLoadDashboard(); }
   };
 
   window.__socioBnSalesDate = window.__socioBnSalesDate || new Date().toISOString().slice(0,10);
@@ -24348,6 +24361,8 @@ try{
     if(!res.ok) return;
     if(dateInput) dateInput.value = res.date;
     socioBnRenderStats(res.stats);
+    window.__socioBnCapacityCache = res.stats.perCapacityBreakdown || [];
+    socioBnRenderCapacityList();
     socioBnRenderSales(res.recentSales || []);
     socioBnRenderPager(res);
   }

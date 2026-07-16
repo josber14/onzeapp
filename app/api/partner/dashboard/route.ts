@@ -13,18 +13,23 @@ async function getSession() {
   return verifySessionToken(token);
 }
 
-// Cálculo puro FIFO: nunca escribe nada de vuelta a la base de datos.
-// Cada venta consume USDT de la capacity activa/finished más antigua (por
-// createdAt) que todavía tenga saldo, en orden. El status active/finished de
-// una capacity es solo un marcador manual del usuario — no excluye la
-// capacity del cálculo de costo, porque igual representa USDT real comprado
-// que puede haber sido vendido.
+// Cálculo puro FIFO: nunca escribe nada de vuelta a la base de datos (el
+// GET handler decide aparte si hay que persistir una transición a
+// "completado", ver más abajo).
+//
+// Asignación por CLP (igual a como el usuario ya lleva sus capacity a mano):
+// cada venta cubre CLP de la capacity activa más antigua (por createdAt) que
+// todavía tenga saldo pendiente, en orden — cuando una capacity llega a
+// cubrir el 100% de su capacityClp, la siguiente venta pasa a cubrir la
+// próxima capacity. El USDT/comisión de cada venta se prorratea según qué
+// fracción de su CLP quedó cubierta por cada capacity, para poder calcular
+// el costo real (USDT cubierto × tasa de compra de esa capacity).
 function computeFifo(capacities: any[], sales: any[]) {
   const orderedCapacities = [...capacities].sort(
     (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
   );
-  const remaining = new Map<string, number>();
-  for (const c of orderedCapacities) remaining.set(c.id, Number(c.usdtAmount));
+  const clpRemaining = new Map<string, number>();
+  for (const c of orderedCapacities) clpRemaining.set(c.id, Number(c.capacityClp));
 
   const orderedSales = [...sales].sort(
     (a, b) => a.executedAt.getTime() - b.executedAt.getTime()
@@ -35,56 +40,76 @@ function computeFifo(capacities: any[], sales: any[]) {
   let totalUsdtDrawn = 0; // amount + commission: lo que realmente sale de la capacity/wallet
   let totalClpReceived = 0;
   let totalCostClp = 0;
+  let matchedClp = 0;
   let matchedUsdtDrawn = 0;
+  let unmatchedClp = 0;
   let unmatchedUsdt = 0;
+
+  const usdtConsumedByCapacity = new Map<string, number>();
+  const clpCoveredByCapacity = new Map<string, number>();
 
   for (const s of orderedSales) {
     const commission = Number(s.commission || 0);
-    // Binance cobra la comisión en USDT ADEMÁS del monto vendido — el USDT que
-    // realmente sale de la capacity/wallet en cada venta es amount + commission,
-    // no solo amount. Sin esto, el saldo de capacity no cuadra con la realidad.
-    let usdtToAllocate = Number(s.amount) + commission;
+    const usdtDrawnTotal = Number(s.amount) + commission; // USDT real que sale de la capacity/wallet
+    const clpTotal = Number(s.totalPrice);
     totalUsdtSold += Number(s.amount);
     totalCommissionUsdt += commission;
-    totalUsdtDrawn += usdtToAllocate;
-    totalClpReceived += Number(s.totalPrice);
+    totalUsdtDrawn += usdtDrawnTotal;
+    totalClpReceived += clpTotal;
 
+    let clpToAllocate = clpTotal;
     for (const c of orderedCapacities) {
-      if (usdtToAllocate <= 0) break;
-      const avail = remaining.get(c.id) || 0;
+      if (clpToAllocate <= 0) break;
+      const avail = clpRemaining.get(c.id) || 0;
       if (avail <= 0) continue;
-      const take = Math.min(avail, usdtToAllocate);
-      remaining.set(c.id, avail - take);
-      totalCostClp += take * Number(c.buyPrice);
-      matchedUsdtDrawn += take;
-      usdtToAllocate -= take;
+      const takeClp = Math.min(avail, clpToAllocate);
+      const ratio = clpTotal > 0 ? takeClp / clpTotal : 0;
+      const takeUsdt = usdtDrawnTotal * ratio;
+
+      clpRemaining.set(c.id, avail - takeClp);
+      clpCoveredByCapacity.set(c.id, (clpCoveredByCapacity.get(c.id) || 0) + takeClp);
+      usdtConsumedByCapacity.set(c.id, (usdtConsumedByCapacity.get(c.id) || 0) + takeUsdt);
+
+      totalCostClp += takeUsdt * Number(c.buyPrice);
+      matchedClp += takeClp;
+      matchedUsdtDrawn += takeUsdt;
+      clpToAllocate -= takeClp;
     }
-    if (usdtToAllocate > 0) unmatchedUsdt += usdtToAllocate;
+    if (clpToAllocate > 0) {
+      unmatchedClp += clpToAllocate;
+      unmatchedUsdt += clpTotal > 0 ? usdtDrawnTotal * (clpToAllocate / clpTotal) : 0;
+    }
   }
 
   // Ganancia solo se puede afirmar con exactitud sobre la porción con costo conocido.
-  const knownCostRatio = totalUsdtDrawn > 0 ? matchedUsdtDrawn / totalUsdtDrawn : 0;
-  const clpFromMatched = totalUsdtDrawn > 0 ? totalClpReceived * knownCostRatio : 0;
-  const realProfitClp = matchedUsdtDrawn > 0 ? clpFromMatched - totalCostClp : null;
+  const realProfitClp = matchedClp > 0 ? matchedClp - totalCostClp : null;
   const profitPct = totalCostClp > 0 && realProfitClp !== null ? (realProfitClp / totalCostClp) * 100 : null;
 
   const avgSalePrice = totalUsdtSold > 0 ? totalClpReceived / totalUsdtSold : null;
   const weightedAvgBuyPrice = matchedUsdtDrawn > 0 ? totalCostClp / matchedUsdtDrawn : null;
 
+  const CLP_EPSILON = 1; // el CLP no usa decimales — menos de $1 pendiente cuenta como cubierto
+
   const perCapacityBreakdown = orderedCapacities.map((c) => {
+    const capacityClp = Number(c.capacityClp);
+    const clpCovered = clpCoveredByCapacity.get(c.id) || 0;
+    const clpPending = Math.max(capacityClp - clpCovered, 0);
+    const usdtConsumed = usdtConsumedByCapacity.get(c.id) || 0;
     const usdtAmount = Number(c.usdtAmount);
-    const usdtRemaining = remaining.get(c.id) || 0;
-    const usdtConsumed = usdtAmount - usdtRemaining;
     return {
       id: c.id,
       provider: c.provider,
       date: c.date,
       status: c.status,
       buyPrice: Number(c.buyPrice),
+      capacityClp,
       usdtAmount,
+      clpCovered,
+      clpPending,
       usdtConsumed,
-      usdtRemaining,
+      usdtRemaining: Math.max(usdtAmount - usdtConsumed, 0),
       costClp: usdtConsumed * Number(c.buyPrice),
+      isCompleted: clpPending <= CLP_EPSILON,
     };
   });
 
@@ -95,10 +120,12 @@ function computeFifo(capacities: any[], sales: any[]) {
     totalClpReceived,
     avgSalePrice,
     weightedAvgBuyPrice,
-    totalCostClp: matchedUsdtDrawn > 0 ? totalCostClp : null,
+    totalCostClp: matchedClp > 0 ? totalCostClp : null,
     profitClp: realProfitClp,
     profitPct,
+    matchedClp,
     matchedUsdtDrawn,
+    unmatchedClp,
     unmatchedUsdt,
     perCapacityBreakdown,
   };
@@ -134,6 +161,24 @@ export async function GET(req: NextRequest) {
   const sales = trackingStart ? allSales.filter((s) => s.executedAt >= trackingStart) : allSales;
 
   const stats = computeFifo(capacities, sales);
+
+  // Transición automática a "completado": si una capacity quedó con su
+  // capacityClp 100% cubierto y todavía figuraba "active", se pasa a
+  // "finished" — una sola escritura, idempotente (no cambia nada si se
+  // vuelve a calcular). No hay doble fuente de verdad: siempre se recalcula
+  // desde las mismas filas de Neon, nunca desde un caché del cliente.
+  const newlyCompleted = stats.perCapacityBreakdown.filter(
+    (c) => c.isCompleted && c.status === "active"
+  );
+  if (newlyCompleted.length > 0) {
+    await prisma.partnerCapacity.updateMany({
+      where: { id: { in: newlyCompleted.map((c) => c.id) }, tenantId: session.tenantId, label: LABEL },
+      data: { status: "finished", finishedAt: new Date() },
+    });
+    for (const c of stats.perCapacityBreakdown) {
+      if (newlyCompleted.some((n) => n.id === c.id)) c.status = "finished";
+    }
+  }
 
   const salesForDate = sales
     .filter((s) => s.executedAt >= dayStart && s.executedAt <= dayEnd)
