@@ -285,6 +285,16 @@ async function processOrderLocked(
   if (lastClientMsg && cs.state !== "completed" && cs.state !== "closed" && cs.state !== "payment_made") {
     const textContent = lastClientMsg.content?.trim() || "";
     if (!textContent && lastClientMsg.imageUrl) {
+      // Avanzar el cursor SIEMPRE, aunque no actuemos sobre esta imagen todavía.
+      // Bug real confirmado en vivo (jul 2026): si no se avanza acá, el cursor
+      // queda pegado para siempre en esta misma imagen (comprobante enviado
+      // antes de que Binance marque la orden como pagada) — findLastClientMsg
+      // sigue devolviendo esta misma imagen en cada ciclo, y CUALQUIER mensaje
+      // de texto que el comprador mande después (ej. "le hago 2 depósitos?")
+      // queda invisible para el bot indefinidamente.
+      const msgTime = lastClientMsg.createTime > 0 ? new Date(lastClientMsg.createTime) : new Date();
+      await prisma.p2PChatState.update({ where: { id: cs.id }, data: { lastClientMsgAt: msgTime } });
+      cs.lastClientMsgAt = msgTime;
       if (!isPaid) return;
     } else {
       await handleClientResponse(tenantId, exchange, client, cs, order, lastClientMsg.content, activeAds, label);
