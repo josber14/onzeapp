@@ -2189,20 +2189,6 @@
             </div>
             <button id="btn-save-binance-creds" style="padding:10px 20px; background:#007bff; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold; font-size:14px;">Guardar credenciales</button>
           </div>
-          <div style="background:#0d2137; border:1px solid #1a3a5a; border-radius:12px; padding:24px; margin-bottom:24px;">
-            <h3 style="color:#fff; margin-bottom:4px;">🤖 Chat Bot P2P</h3>
-            <p style="color:#aaa; font-size:13px; margin-bottom:16px;">Cookies de Binance para que el bot responda mensajes automáticamente en tus órdenes.</p>
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-              <span style="color:#aaa;font-size:12px;">Cookies (JSON)</span>
-              <span id="botChatCookiesStatus" style="font-size:11px;"></span>
-            </div>
-            <textarea id="botChatCookies" rows="5" style="width:100%;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#e2e8f0;font-size:11px;font-family:monospace;padding:8px;resize:vertical;box-sizing:border-box;" placeholder='[{"name":"cookie_name","value":"cookie_value",...}]'></textarea>
-            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
-              <button class="btn" type="button" onclick="window.botSaveChatCookies()" style="font-size:12px;">Guardar cookies</button>
-              <button class="btn" type="button" onclick="window.botRenewCookies()" style="font-size:12px;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);color:#fbbf24;">🔄 Renovar cookies</button>
-              <span id="botChatCookiesRenewStatus" style="font-size:11px;display:flex;align-items:center;"></span>
-            </div>
-          </div>
         </div>
         <div style="margin-top:18px;text-align:right;border-top:1px solid rgba(148,163,184,.06);padding-top:12px;">
           <span style="color:#5a738e;font-size:11px;cursor:pointer;" onclick="resetP2PFullFreshStart()">🔄 Reset P2P</span>
@@ -4559,10 +4545,6 @@
           decimals = countDecimalsFromText(tasaDetalText || tasaText);
         }
 
-        if(keyFor(origen, destino) === keyFor("Chile","España")){
-          decimals = 4;
-        }
-
         if(keyFor(origen, destino) === keyFor("España","Venezuela")){
           decimals = Math.min(decimals, 4);
         }
@@ -4587,16 +4569,6 @@
 
         let displayValueText = String(tasaText ?? "").trim();
         let displayProviderRateText = String(tasaText ?? "").trim();
-
-        if(keyFor(origen, destino) === keyFor("Chile","España") && Number.isFinite(rateNum)){
-          const fixedChileEspana = Number(rateNum).toLocaleString("es-CL", {
-            minimumFractionDigits: 4,
-            maximumFractionDigits: 4,
-            useGrouping: false
-          });
-          displayValueText = fixedChileEspana;
-          displayProviderRateText = fixedChileEspana;
-        }
 
         if(!tmp[origen]) tmp[origen] = [];
         tmp[origen].push({
@@ -8543,6 +8515,26 @@ function refreshHistoryUI(){
       copyText(`ONZE — ${pais} ( ${ts} )\n` + lines.join("\n"));
     }
 
+    // El CSV lo publica Google Sheets — de vez en cuando esa redirección
+    // (docs.google.com → googleusercontent.com) falla o tarda de forma
+    // pasajera ("Failed to fetch"), sin que sea un error real de nuestro
+    // código. En vez de mostrar el error, reintenta un par de veces antes
+    // de rendirse — el mismo efecto que lograba un refresh manual.
+    async function fetchCsvWithRetry(url, attempts = 3){
+      let lastErr;
+      for(let i = 0; i < attempts; i++){
+        try{
+          const res = await fetch(url + (url.includes("?") ? "&" : "?") + "cacheBust=" + Date.now());
+          if(!res.ok) throw new Error("No se pudo leer el CSV publicado (HTTP " + res.status + ")");
+          return await res.text();
+        }catch(e){
+          lastErr = e;
+          if(i < attempts - 1) await new Promise(r => setTimeout(r, 800));
+        }
+      }
+      throw lastErr;
+    }
+
     async function fetchAndRender(resetCalculators = false){
       const prevSelection = sel.value || "";
       const prevDestination = destSel.value || "";
@@ -8552,9 +8544,7 @@ function refreshHistoryUI(){
         }
 
         errorBox.style.display = "none";
-        const res = await fetch(CSV_URL + (CSV_URL.includes("?") ? "&" : "?") + "cacheBust=" + Date.now());
-        if(!res.ok) throw new Error("No se pudo leer el CSV publicado (HTTP " + res.status + ")");
-        const txt = await res.text();
+        const txt = await fetchCsvWithRetry(CSV_URL);
         const rows = parseCSV(txt);
         if(!rows.length) throw new Error("El CSV está vacío.");
 
@@ -9204,6 +9194,27 @@ if(addProviderBtn){
   // la otra cuenta (si estaba apagada) hacía que el backend respondiera
   // running:false y el timer se detuviera solo, cortando el ciclo real.
   let botCyclingLabel = null;
+  // Cronómetro local del contador "Límite Binance" — el dato real (resetEnMs)
+  // solo llega cada vez que responde /api/p2p/bot/cycle (varios segundos entre
+  // respuestas, no cada 1s), así que mostrarlo directo se ve "pegado" y salta.
+  // Este timer cuenta hacia atrás cada segundo en el navegador, resincronizado
+  // con el servidor en cada respuesta nueva (botRateLimitResetAt).
+  let botRateLimitResetAt = 0;
+  let botRateLimitHidden = false;
+  let botRateLimitTickTimer = null;
+  function botRateLimitTick(){
+    const el = document.getElementById('botKpiRateLimitSub');
+    if(!el) return;
+    if(botRateLimitHidden){
+      el.textContent = '🔒 anuncio oculto (recuperando)';
+      el.style.color = '#ef4444';
+      return;
+    }
+    const resetS = Math.max(0, Math.round((botRateLimitResetAt - Date.now()) / 1000));
+    el.textContent = resetS > 0 ? 'libera cupo en ' + resetS + 's' : 'con cupo libre';
+    el.style.color = '#64748b';
+  }
+  if(!botRateLimitTickTimer) botRateLimitTickTimer = setInterval(botRateLimitTick, 1000);
 
 function addP2PBotStyles(){
   if(document.getElementById("onze-bot-styles")) return;
@@ -9610,6 +9621,7 @@ function addP2PBotStyles(){
           <div class="bot-kpi"><div class="kpi-label">Anuncio propio</div><div class="kpi-value" id="botKpiOurAd" style="font-size:14px;">—</div><div class="kpi-sub" id="botKpiOurAdStatus"></div></div>
           <div class="bot-kpi"><div class="kpi-label">Cambios/hora</div><div class="kpi-value" id="botKpiCambios">0/30</div><div class="kpi-sub" id="botKpiUltimoCambio">—</div></div>
           <div class="bot-kpi"><div class="kpi-label">Weight API</div><div class="kpi-value" id="botKpiWeight">0</div><div class="kpi-sub">/ 4000</div></div>
+          <div class="bot-kpi"><div class="kpi-label">Límite Binance (1 min)</div><div class="kpi-value" id="botKpiRateLimit">0/32</div><div class="kpi-sub" id="botKpiRateLimitSub">—</div></div>
         </div>
 
         <!-- Four cards: Config exchange → Anuncios → Credenciales → Config anuncio -->
@@ -9904,7 +9916,7 @@ function addP2PBotStyles(){
             </div>
             <!-- Tab: Cuentas bancarias -->
             <div id="botPanelAccounts" class="bot-panel-tab-content" style="display:none;">
-              <p class="section-text" style="margin-bottom:10px;">Cuentas bancarias guardadas.</p>
+              <p class="section-text" style="margin-bottom:10px;">Cuentas bancarias guardadas para <b id="botPanelAccountsLabelHint">ONZE</b>. Se guardan por separado para ONZE y ZINPLE — si usas ambas cuentas, agrégalas en cada una.</p>
               <!-- Account form -->
               <div id="botPanelAcctForm" class="bot-panel-form" style="margin-bottom:12px;">
                 <label>Banco <input id="botPanelAcctBank" type="text" placeholder="Ej: Banco Estado"></label>
@@ -10565,6 +10577,24 @@ function addP2PBotStyles(){
             else if(used >= max * 0.8) counterEl.style.color = '#fbbf24';
             else counterEl.style.color = '#34d399';
           }
+          // Autolímite real de Binance (36 llamadas/min por cuenta, confirmado
+          // por soporte jul 2026) — self-throttle propio del bot a 32/min.
+          const rlEl = el('botKpiRateLimit');
+          const rlSubEl = el('botKpiRateLimitSub');
+          if(rlEl){
+            const rlUsed = st.rateLimitUsado || 0;
+            const rlCap = st.rateLimitCap || 32;
+            const rlReserved = st.rateLimitReservado || 4;
+            rlEl.textContent = rlUsed + '/' + rlCap;
+            if(rlUsed >= rlCap) rlEl.style.color = '#ef4444';
+            else if(rlUsed >= rlCap - rlReserved) rlEl.style.color = '#fbbf24';
+            else rlEl.style.color = '#34d399';
+            // Resincroniza el cronómetro local con el dato real del servidor;
+            // el "tick" de cada segundo lo pinta botRateLimitTick() aparte.
+            botRateLimitHidden = !!st.anuncioOculto;
+            botRateLimitResetAt = Date.now() + (st.rateLimitResetEnMs || 0);
+            botRateLimitTick();
+          }
         }
         window.botRefreshExchange(true);
         botCycleRefresh();
@@ -10799,17 +10829,6 @@ function addP2PBotStyles(){
     setField("botCycleInterval", cfg.cycleInterval ?? 10);
     var chatCb = document.getElementById("botChatBotEnabled");
     if(chatCb) chatCb.checked = !!cfg.chatBotEnabled;
-    // Load cookies into textarea
-    var cookiesEl = document.getElementById("botChatCookies");
-    if(cookiesEl){
-      if(cfg.chatCookies && typeof cfg.chatCookies === 'string'){
-        cookiesEl.value = cfg.chatCookies;
-      } else if(cfg.chatCookies && Array.isArray(cfg.chatCookies)){
-        cookiesEl.value = JSON.stringify(cfg.chatCookies, null, 2);
-      } else {
-        cookiesEl.value = '';
-      }
-    }
     // Show/hide strategy-specific fields
     var g = document.getElementById("botExchangeConfigGrid");
     if(g){
@@ -10925,70 +10944,6 @@ function addP2PBotStyles(){
       if(chatCycleTimer) clearTimeout(chatCycleTimer);
       chatCycleTimer = null;
       chatCycleActive = false;
-    }
-  };
-
-  window.botSaveChatCookies = async function(){
-    const ex = botSelectedExchange;
-    const el = document.getElementById("botChatCookies");
-    const statusEl = document.getElementById("botChatCookiesStatus");
-    if(!el || !statusEl) return;
-    const raw = el.value.trim();
-    // Validate JSON
-    if(raw){
-      try{
-        JSON.parse(raw);
-      }catch{
-        statusEl.innerHTML = '<span style="color:#fb7185;">JSON inválido</span>';
-        return;
-      }
-    }
-    var _r = Math.random().toString(36).slice(2);
-    const r = await fetch("/api/p2p/bot/exchange-config?_=" + _r, {
-      method:"PUT", credentials:"include",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ exchange: ex, chatCookies: raw || null })
-    });
-    const d = await r.json();
-    if(d?.ok){
-      statusEl.innerHTML = '<span style="color:#34d399;">Cookies guardadas</span>';
-      setTimeout(() => { statusEl.innerHTML = ''; }, 3000);
-    } else {
-      statusEl.innerHTML = '<span style="color:#fb7185;">Error: ' + (d.error || 'desconocido') + '</span>';
-    }
-  };
-
-  window.botRenewCookies = async function(){
-    const statusEl = document.getElementById("botChatCookiesRenewStatus");
-    if(!statusEl) return;
-    statusEl.innerHTML = '<span style="color:#fbbf24;">⏳ Abriendo Chrome...</span>';
-    try{
-      const r = await fetch("/api/p2p/bot/chat/login", { method:"POST", credentials:"include" });
-      const d = await r.json();
-      if(!d?.ok){
-        statusEl.innerHTML = '<span style="color:#fb7185;">' + (d.error || "Error") + '</span>';
-        return;
-      }
-      statusEl.innerHTML = '<span style="color:#fbbf24;">🔓 Inicia sesión en la ventana de Chrome que se abrió. Esperando...</span>';
-      // Poll status every 2 seconds
-      const poll = setInterval(async function(){
-        try{
-          const r2 = await fetch("/api/p2p/bot/chat/login", { credentials:"include" });
-          const d2 = await r2.json();
-          if(d2?.status === "logged_in"){
-            clearInterval(poll);
-            statusEl.innerHTML = '<span style="color:#34d399;">✅ Cookies renovadas correctamente</span>';
-            setTimeout(function(){ statusEl.innerHTML = ""; }, 4000);
-            // Reload credentials to update the textarea
-            if(window.botRefreshExchange) window.botRefreshExchange();
-          } else if(d2?.status === "timeout" || d2?.status === "error"){
-            clearInterval(poll);
-            statusEl.innerHTML = '<span style="color:#fb7185;">❌ ' + (d2.error || "Error al renovar") + '</span>';
-          }
-        } catch(e){}
-      }, 2000);
-    } catch(e){
-      statusEl.innerHTML = '<span style="color:#fb7185;">❌ Error de conexión</span>';
     }
   };
 
@@ -12251,15 +12206,20 @@ function addP2PBotStyles(){
         container.innerHTML = '<div style="color:#64748b;font-size:12px;grid-column:1/-1;text-align:center;padding:12px;">Error al cargar</div>';
         return;
       }
-      const filtered = d.accounts.filter(a => a.exchange === botSelectedExchange && a.isActive);
+      const acctLabel = botActiveLabel || "ONZE";
+      const hintEl = document.getElementById("botPanelAccountsLabelHint");
+      if(hintEl) hintEl.textContent = acctLabel;
+      const filtered = d.accounts.filter(a => a.exchange === botSelectedExchange && a.label === acctLabel && a.isActive);
       if(!filtered.length){
-        container.innerHTML = '<div style="color:#64748b;font-size:12px;grid-column:1/-1;text-align:center;padding:12px;">Sin cuentas guardadas para ' + botSelectedExchange + '</div>';
+        container.innerHTML = '<div style="color:#64748b;font-size:12px;grid-column:1/-1;text-align:center;padding:12px;">Sin cuentas guardadas para ' + botSelectedExchange + ' (' + escHtml(acctLabel) + ')</div>';
         return;
       }
       container.innerHTML = filtered.map(a => {
         let infoStr = "";
+        let bankTitle = "";
         try{
           const info = typeof a.accountInfo === "string" ? JSON.parse(a.accountInfo) : (a.accountInfo || {});
+          bankTitle = [info.bank, info.holder].filter(Boolean).join(" - ");
           const parts = [];
           if(info.bank) parts.push("Banco: " + info.bank);
           if(info.holder) parts.push("Titular: " + info.holder);
@@ -12271,7 +12231,7 @@ function addP2PBotStyles(){
         }catch(e){}
         return `
         <div class="bot-account-card">
-          <div class="acct-label">${escHtml(a.label)}</div>
+          <div class="acct-label">${escHtml(bankTitle || a.label)}</div>
           <div class="acct-detail">${infoStr || escHtml(a.accountType || '')}</div>
           <div class="acct-actions">
             <button class="btn small ghost" type="button" onclick="window.botPanelEditAccount(${a.id})">Editar</button>
@@ -12784,7 +12744,10 @@ function addP2PBotStyles(){
       return;
     }
 
-    const label = bank + " - " + holder;
+    // label = ONZE/ZINPLE (misma cuenta activa que el resto del panel), no el
+    // nombre del banco — así el chatbot solo ofrece las cuentas de la cuenta
+    // que realmente está corriendo esa orden.
+    const label = botActiveLabel || "ONZE";
     const accountInfo = { bank, holder, rut, accountType, accountNumber, email };
 
     const body = {
@@ -24012,6 +23975,15 @@ try{
   if(window.__onzeSocioBnLoaded) return;
   window.__onzeSocioBnLoaded = true;
 
+  // "Hoy" en hora de Chile, no UTC — Chile va 4h atrás, así que entre las
+  // 00:00 y las 04:00 UTC el día calendario UTC ya es "mañana" mientras en
+  // Chile sigue siendo "hoy". Debe coincidir con chileDateStr() del backend
+  // (app/api/partner/dashboard/route.ts) para que el default no muestre el
+  // día equivocado justo en ese horario.
+  function socioBnChileToday(){
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  }
+
   function socioBnMoney(n, decimals){
     decimals = decimals === undefined ? 0 : decimals;
     n = Number(n) || 0;
@@ -24036,10 +24008,8 @@ try{
       <section class="section-card">
         <div class="section-top">
           <div>
-            <h2 class="section-title" style="font-size:18px;">Cuenta del Socio</h2>
-            <p class="section-text" style="margin-top:2px;font-size:12px;color:#64748b;">Seguimiento de ventas y ganancia de una cuenta Binance separada</p>
+            <h2 class="section-title" style="font-size:18px;">CUENTA AKI TRANSFERS BINANCE</h2>
           </div>
-          <button class="btn secondary" type="button" id="socioBnSyncBtn" onclick="window.socioBnSync()">🔄 Sincronizar ventas</button>
         </div>
 
         <div id="socioBnCredsForm" style="display:none; margin-top:16px; padding:16px; border-radius:12px; background:rgba(255,255,255,.03); border:1px solid rgba(148,163,184,.15);">
@@ -24058,39 +24028,118 @@ try{
           <div id="socioBnCredsMsg" style="font-size:12px; margin-top:6px;"></div>
         </div>
 
-        <div id="socioBnConnectedInfo" style="display:none; margin-top:12px; font-size:12px; color:#64748b;"></div>
-
-        <div class="p2p-capacity-mini-grid" id="socioBnStatsGrid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); margin-top:16px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; flex-wrap:wrap; gap:8px;">
+          <h3 class="section-title" style="font-size:14px;">Hoy</h3>
+          <button class="btn secondary" type="button" title="Ver estadísticas por mes, día o rango" onclick="window.socioBnOpenStatsModal()">📊</button>
+        </div>
+        <div class="p2p-dashboard-grid" id="socioBnStatsGrid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-top:10px;">
         </div>
 
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px;">
-          <h3 class="section-title" style="font-size:14px;">Capacity (compras a costo)</h3>
-          <button class="btn secondary" type="button" onclick="window.socioBnOpenCapacityForm()">+ Agregar capacity</button>
-        </div>
-        <div id="socioBnCapacityForm" style="display:none; margin-top:10px; padding:14px; border-radius:12px; background:rgba(255,255,255,.03); border:1px solid rgba(148,163,184,.15);">
-          <input type="hidden" id="socioBnCapId" />
+        <h3 class="section-title" style="font-size:14px; margin-top:20px;">Capacity</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; flex-wrap:wrap; gap:8px;">
+          <div id="socioBnCapacitySummary" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <input type="text" id="socioBnCapProvider" placeholder="Proveedor" style="flex:1; min-width:140px;" />
-            <input type="date" id="socioBnCapDate" style="flex:1; min-width:140px;" />
-          </div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
-            <input type="text" inputmode="numeric" id="socioBnCapClp" placeholder="Monto CLP" style="flex:1; min-width:140px;" oninput="window.socioBnFormatClpInput(this)" />
-            <input type="number" id="socioBnCapBuyPrice" placeholder="Tasa compra (CLP/USDT)" step="0.0001" style="flex:1; min-width:140px;" oninput="window.socioBnRecalcUsdt()" />
-            <input type="text" id="socioBnCapUsdt" placeholder="USDT a recibir" readonly style="flex:1; min-width:140px; opacity:.75;" />
-          </div>
-          <div style="display:flex; gap:8px; margin-top:10px;">
-            <button class="btn" type="button" onclick="window.socioBnSaveCapacity()">Guardar</button>
-            <button class="btn secondary" type="button" onclick="window.socioBnCloseCapacityForm()">Cancelar</button>
+            <button class="btn secondary" type="button" onclick="window.socioBnOpenCompletedModal()">📋 Completados</button>
+            <button class="btn secondary" type="button" onclick="window.socioBnOpenCapacityForm()">+ Agregar capacity</button>
           </div>
         </div>
         <div id="socioBnCapacityList" style="margin-top:10px;"></div>
 
+        <div id="socioBnCapacityModalBackdrop" class="p2p-capacity-modal-backdrop">
+          <div class="p2p-capacity-modal">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+              <div>
+                <h3 class="section-title" style="margin-bottom:6px;">Registrar capacity del socio</h3>
+                <p class="section-text">Compra de USDT a costo para la cuenta de tu socio.</p>
+              </div>
+              <button class="btn secondary" type="button" onclick="window.socioBnCloseCapacityForm()">Cerrar</button>
+            </div>
+            <form class="p2p-capacity-form" onsubmit="event.preventDefault(); window.socioBnSaveCapacity();">
+              <input type="hidden" id="socioBnCapId" />
+              <label>
+                Proveedor
+                <input type="text" id="socioBnCapProvider" placeholder="Ej: zenna" required>
+              </label>
+              <label>
+                Fecha
+                <input type="date" id="socioBnCapDate" required>
+              </label>
+              <label>
+                Capacity en CLP
+                <input type="text" inputmode="numeric" id="socioBnCapClp" placeholder="Ej: 2.000.000" oninput="window.socioBnFormatClpInput(this)" required>
+              </label>
+              <label>
+                Tasa compra (CLP/USDT)
+                <input type="number" id="socioBnCapBuyPrice" step="0.0001" placeholder="Ej: 927.50" oninput="window.socioBnRecalcUsdt()" required>
+              </label>
+              <label class="full">
+                USDT a recibir
+                <input type="text" id="socioBnCapUsdt" readonly placeholder="Se calcula automático">
+              </label>
+              <div class="full" style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:4px;">
+                <button class="btn secondary" type="button" onclick="window.socioBnCloseCapacityForm()">Cancelar</button>
+                <button class="btn" type="submit">Guardar capacity</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; flex-wrap:wrap; gap:8px;">
-          <h3 class="section-title" style="font-size:14px;">Ventas</h3>
-          <input type="date" id="socioBnSalesDate" style="font-size:12px;" onchange="window.socioBnChangeDate(this.value)" />
+          <h3 class="section-title" style="font-size:14px;">Ventas (todo el historial)</h3>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn secondary" type="button" style="background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25);color:#fbbf24;" onclick="window.socioBnOpenManualSaleModal()">✚ Manual</button>
+            <button class="btn secondary" type="button" id="socioBnSyncBtn" onclick="window.socioBnSync()">🔄 Sincronizar ventas</button>
+          </div>
         </div>
         <div id="socioBnSalesTable" style="margin-top:10px; overflow-x:auto;"></div>
-        <div id="socioBnSalesPager" style="display:flex; justify-content:center; align-items:center; gap:10px; margin-top:10px; font-size:12px;"></div>
+
+        <div id="socioBnManualSaleModalBackdrop" class="p2p-capacity-modal-backdrop">
+          <div class="p2p-capacity-modal" style="max-width:520px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px;">
+              <div>
+                <h3 class="section-title" style="margin-bottom:4px;">Registrar venta manual</h3>
+                <p class="section-text" style="font-size:13px;">Se guarda igual que una venta real de Binance — entra en el reparto de capacity, la ganancia y las estadísticas.</p>
+              </div>
+              <button class="btn secondary" type="button" onclick="window.socioBnCloseManualSaleModal()">Cerrar</button>
+            </div>
+            <form class="p2p-capacity-form" onsubmit="event.preventDefault(); window.socioBnSaveManualSale();">
+              <label class="full">
+                CLP recibido por la venta
+                <input id="socioBnManualClp" inputmode="numeric" placeholder="Ej: 50.000" oninput="window.socioBnFormatClpInput(this); window.socioBnUpdateManualSalePreview();" required>
+              </label>
+              <label>
+                Precio de venta (CLP/USDT)
+                <input id="socioBnManualSellPrice" type="number" step="0.01" placeholder="Ej: 935" oninput="window.socioBnUpdateManualSalePreview()" required>
+              </label>
+              <label>
+                USDT vendidos
+                <input id="socioBnManualUsdt" readonly placeholder="Se calcula automático">
+              </label>
+              <label>
+                Comisión (%)
+                <input id="socioBnManualCommissionPct" type="number" step="0.01" value="0.14" oninput="window.socioBnUpdateManualSalePreview()">
+              </label>
+              <label>
+                Fecha y hora
+                <input id="socioBnManualExecutedAt" type="datetime-local">
+              </label>
+              <label class="full" style="display:flex;flex-direction:column;gap:6px;">
+                <span style="color:#a8b3c7;font-weight:900;font-size:13px;">Resumen</span>
+                <div id="socioBnManualSaleSummary" style="border:1px solid rgba(148,163,184,.13);border-radius:12px;padding:12px;background:rgba(15,23,42,.5);font-size:13px;color:#c4cdd8;line-height:1.6;">
+                  Ingresa CLP recibido y precio de venta para ver el resumen.
+                </div>
+              </label>
+              <div class="full" style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:4px;">
+                <button class="btn secondary" type="button" onclick="window.socioBnCloseManualSaleModal()">Cancelar</button>
+                <button class="btn" type="submit">Registrar venta</button>
+              </div>
+            </form>
+          </div>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap;">
+          <div id="socioBnSalesPager" style="display:flex; align-items:center; gap:10px; font-size:12px;"></div>
+          <div id="socioBnConnectedInfo" style="display:none; font-size:11px; color:#64748b;"></div>
+        </div>
       </section>
     `;
     document.querySelector('main')?.appendChild(section);
@@ -24106,7 +24155,7 @@ try{
         b.className = 'nav-btn admin-only-control';
         b.type = 'button';
         b.dataset.viewTarget = 'socio-bn';
-        b.textContent = 'Socio';
+        b.textContent = 'AKI TRANSFERS';
         target.parentNode.insertBefore(b, target.nextSibling);
         return b;
       })();
@@ -24140,11 +24189,6 @@ try{
         <span>Conectado${res.name ? ' — ' + res.name : ''}. Última sincronización: ${lastSync}.</span>
         <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnShowCredsForm()">Cambiar credenciales</button>
         <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;color:#ef4444;" onclick="window.socioBnDisconnect()">Desconectar</button>
-        <span style="display:flex; align-items:center; gap:6px;">
-          <span>Cuenta contada desde:</span>
-          <input type="date" id="socioBnTrackingStart" value="${res.trackingStartDate || ''}" style="font-size:12px;" />
-          <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnSaveTrackingStart()">Guardar</button>
-        </span>
       `;
     } else {
       form.style.display = 'block';
@@ -24155,20 +24199,11 @@ try{
   window.socioBnShowCredsForm = function(){
     const form = document.getElementById('socioBnCredsForm');
     const info = document.getElementById('socioBnConnectedInfo');
-    if(form) form.style.display = 'block';
+    if(form){
+      form.style.display = 'block';
+      form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
     if(info) info.style.display = 'none';
-  };
-
-  window.socioBnSaveTrackingStart = async function(){
-    const input = document.getElementById('socioBnTrackingStart');
-    const value = input && input.value;
-    if(!value) return;
-    if(!confirm(`Las ventas anteriores al ${value} van a dejar de contar en las estadísticas (siguen guardadas, no se borran). ¿Confirmar?`)) return;
-    const res = await socioBnFetch('/api/partner/credentials', { method: 'POST', body: JSON.stringify({ trackingStartDateOnly: true, trackingStartDate: value }) });
-    if(res.ok){
-      await socioBnLoadDashboard();
-      if(typeof showToast === 'function') showToast('Fecha de inicio actualizada');
-    } else if(typeof showToast === 'function') showToast(res.error || 'Error al guardar', 'error');
   };
 
   window.socioBnDisconnect = async function(){
@@ -24195,46 +24230,158 @@ try{
     }
   };
 
-  window.socioBnSync = async function(){
+  // silent=true para el auto-sync cada 15s (mismo patrón que syncBinanceSales
+  // del dashboard ONZE) — el botón SÍ se mueve igual que en ONZE (se ve
+  // "clickearse solo" un instante), solo se ocultan el toast/alert de éxito
+  // o error para no interrumpir cada 15s.
+  window.socioBnSync = async function(silent){
     const btn = document.getElementById('socioBnSyncBtn');
     if(btn){ btn.disabled = true; btn.textContent = 'Sincronizando...'; }
     try{
       const res = await socioBnFetch('/api/partner/sync', { method: 'POST' });
       if(res.ok){
-        if(typeof showToast === 'function') showToast(`Sincronizado: ${res.upserted} venta(s) nueva(s)/actualizada(s)`);
+        if(!silent && typeof showToast === 'function') showToast(`Sincronizado: ${res.upserted} venta(s) nueva(s)/actualizada(s)`);
         await socioBnLoadCredsStatus();
         await socioBnLoadDashboard();
-      } else {
+      } else if(!silent){
         if(typeof showToast === 'function') showToast(res.error || 'Error al sincronizar', 'error');
         else alert(res.error || 'Error al sincronizar');
       }
+    } catch(e){
+      // en modo silencioso no interrumpe con un error de red pasajero
     } finally {
       if(btn){ btn.disabled = false; btn.textContent = '🔄 Sincronizar ventas'; }
     }
   };
 
+  // Venta manual — se guarda como PartnerSale igual que una venta real
+  // sincronizada de Binance (mismo modelo, mismo endpoint de dashboard),
+  // así que corre por el mismo FIFO de capacity y las mismas estadísticas
+  // sin ningún camino especial. orderNumber empieza con "manual_" para
+  // poder identificarla y borrarla (nunca choca con un número real).
+  window.socioBnOpenManualSaleModal = function(){
+    const modal = document.getElementById('socioBnManualSaleModalBackdrop');
+    if(!modal) return;
+    document.getElementById('socioBnManualClp').value = '';
+    document.getElementById('socioBnManualSellPrice').value = '';
+    document.getElementById('socioBnManualUsdt').value = '';
+    document.getElementById('socioBnManualCommissionPct').value = '0.14';
+    const now = new Date();
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    document.getElementById('socioBnManualExecutedAt').value = now.toISOString().slice(0, 16);
+    window.socioBnUpdateManualSalePreview();
+    modal.classList.add('open');
+  };
+
+  window.socioBnCloseManualSaleModal = function(){
+    document.getElementById('socioBnManualSaleModalBackdrop')?.classList.remove('open');
+  };
+
+  window.socioBnUpdateManualSalePreview = function(){
+    const clp = socioBnParseClp(document.getElementById('socioBnManualClp')?.value);
+    const sellPrice = Number(document.getElementById('socioBnManualSellPrice')?.value || 0);
+    const commissionPct = Number(document.getElementById('socioBnManualCommissionPct')?.value || 0);
+    const usdtEl = document.getElementById('socioBnManualUsdt');
+    const summaryEl = document.getElementById('socioBnManualSaleSummary');
+    if(!usdtEl || !summaryEl) return;
+    if(clp <= 0 || sellPrice <= 0){
+      usdtEl.value = '';
+      summaryEl.textContent = 'Ingresa CLP recibido y precio de venta para ver el resumen.';
+      return;
+    }
+    const usdt = clp / sellPrice;
+    const commission = usdt * commissionPct / 100;
+    usdtEl.value = socioBnMoney(usdt, 2);
+    summaryEl.innerHTML = `Vendés <strong>${socioBnMoney(usdt, 2)} USDT</strong> a ${socioBnMoney(sellPrice, 2)} CLP/USDT · Comisión: <strong>${socioBnMoney(commission, 4)} USDT</strong> · Recibís: <strong>${socioBnMoney(clp, 0)} CLP</strong>`;
+  };
+
+  window.socioBnSaveManualSale = async function(){
+    const clp = socioBnParseClp(document.getElementById('socioBnManualClp')?.value);
+    const sellPrice = Number(document.getElementById('socioBnManualSellPrice')?.value || 0);
+    const commissionPct = Number(document.getElementById('socioBnManualCommissionPct')?.value || 0);
+    const executedAtLocal = document.getElementById('socioBnManualExecutedAt')?.value;
+    if(clp <= 0){ alert('Ingresa el CLP recibido.'); return; }
+    if(sellPrice <= 0){ alert('Ingresa el precio de venta.'); return; }
+    const executedAt = executedAtLocal ? new Date(executedAtLocal).toISOString() : new Date().toISOString();
+    const res = await socioBnFetch('/api/partner/manual-sale', {
+      method: 'POST',
+      body: JSON.stringify({ clp, sellPrice, commissionPct, executedAt }),
+    });
+    if(res.ok){
+      window.socioBnCloseManualSaleModal();
+      if(typeof showToast === 'function') showToast('Venta manual registrada');
+      await socioBnLoadDashboard();
+    } else if(typeof showToast === 'function') showToast(res.error || 'Error al registrar la venta', 'error');
+    else alert(res.error || 'Error al registrar la venta');
+  };
+
+  window.socioBnDeleteManualSale = async function(orderNumber){
+    if(!confirm('¿Borrar esta venta manual? Se recalculan las capacidades y estadísticas.')) return;
+    const res = await socioBnFetch('/api/partner/manual-sale?orderNumber=' + encodeURIComponent(orderNumber), { method: 'DELETE' });
+    if(res.ok){ await socioBnLoadDashboard(); }
+    else if(typeof showToast === 'function') showToast(res.error || 'Error al borrar', 'error');
+  };
+
+  // Mismo estilo que la tarjeta de capacity de ONZE (título + insignia de
+  // estado + grilla de mini-tarjetas), pero conservando la barra de progreso
+  // propia del Socio (en verde) que muestra cuánto lleva cubierto.
   function socioBnCapacityCard(it){
     const pct = it.capacityClp > 0 ? Math.min(100, (it.clpCovered / it.capacityClp) * 100) : 0;
+    const usdtARecibir = it.buyPrice > 0 ? it.capacityClp / it.buyPrice : 0;
     return `<div class="p2p-capacity-card" style="margin-top:8px;">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
-        <div>
-          <div class="p2p-capacity-title">${it.provider || '(sin proveedor)'} · ${it.date || ''}</div>
-          <div class="p2p-capacity-meta" style="margin-top:4px;">
-            ${socioBnMoney(it.capacityClp,0)} CLP · ${socioBnMoney(it.usdtAmount,4)} USDT · tasa ${socioBnMoney(it.buyPrice,2)}
+      <div class="p2p-capacity-top" style="align-items:flex-start;">
+        <div style="width:100%;">
+          <div style="display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;">
+            <div class="p2p-capacity-title" style="font-size:15px;line-height:1.2;">${it.provider || '(sin proveedor)'}</div>
+            <div class="p2p-capacity-meta" style="font-size:14px;font-weight:950;color:#a8b3c7;">${it.date || ''}</div>
+            <span style="display:inline-flex;justify-content:center;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:950;color:${it.status === 'finished' ? '#94a3b8' : '#34d399'};background:${it.status === 'finished' ? 'rgba(148,163,184,.10)' : 'rgba(52,211,153,.12)'};border:1px solid ${it.status === 'finished' ? 'rgba(148,163,184,.20)' : 'rgba(52,211,153,.26)'};">
+              ${it.status === 'finished' ? 'Completado' : 'Activo'}
+            </span>
           </div>
-          <div class="p2p-capacity-meta" style="margin-top:2px;">
-            Cubierto: ${socioBnMoney(it.clpCovered,0)} CLP de ${socioBnMoney(it.capacityClp,0)} CLP (${pct.toFixed(1)}%)${it.clpPending > 0 ? ' · Falta: ' + socioBnMoney(it.clpPending,0) + ' CLP' : ''}
+
+          <div style="margin-top:16px;display:grid;gap:7px;">
+            <div style="color:#a8b3c7;font-weight:900;font-size:15px;line-height:1.25;">
+              Capacity: <span style="color:#f8fafc;font-size:15px;font-weight:950;">${socioBnMoney(it.capacityClp,0)} CLP</span>
+            </div>
+            <div style="color:#a8b3c7;font-weight:900;font-size:15px;line-height:1.25;">
+              Tasa: <span style="color:#f8fafc;font-size:15px;font-weight:950;">${socioBnMoney(it.buyPrice,2)} CLP/USDT</span>
+            </div>
+            <div style="color:#a8b3c7;font-weight:900;font-size:15px;line-height:1.25;">
+              USDT a recibir: <span style="color:#34d399;font-size:15px;font-weight:950;">${socioBnMoney(usdtARecibir,2)}</span>
+            </div>
           </div>
-          <div style="height:4px; border-radius:2px; background:rgba(148,163,184,.15); margin-top:6px; width:100%; max-width:220px; overflow:hidden;">
-            <div style="height:100%; width:${pct}%; background:${it.isCompleted ? '#10b981' : '#3b82f6'};"></div>
+
+          <div style="height:6px; border-radius:3px; background:rgba(148,163,184,.15); margin-top:12px; width:100%; overflow:hidden;">
+            <div style="height:100%; width:${pct}%; background:#34d399;"></div>
           </div>
-          <div class="p2p-capacity-meta" style="margin-top:4px;">Estado: ${it.status === 'finished' ? 'Completado' : 'Activo'}</div>
+          <div class="p2p-capacity-meta" style="margin-top:4px;">Cubierto: ${socioBnMoney(it.clpCovered,0)} CLP de ${socioBnMoney(it.capacityClp,0)} CLP (${pct.toFixed(1)}%)</div>
         </div>
-        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnEditCapacity('${it.id}')">Editar</button>
-          <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnToggleCapacityStatus('${it.id}')">${it.status === 'finished' ? 'Reactivar' : 'Marcar completado'}</button>
-          <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;color:#ef4444;" onclick="window.socioBnDeleteCapacity('${it.id}')">Eliminar</button>
+      </div>
+
+      <div class="p2p-capacity-mini-grid">
+        <div class="p2p-capacity-mini">
+          <span>CLP cubierto</span>
+          <strong>${socioBnMoney(it.clpCovered,0)} CLP</strong>
         </div>
+        <div class="p2p-capacity-mini">
+          <span>Restante</span>
+          <strong>${socioBnMoney(it.usdtRemaining,2)} USDT</strong>
+          <div class="p2p-capacity-meta" style="margin-top:4px;">${socioBnMoney(it.clpPending,0)} CLP</div>
+        </div>
+        <div class="p2p-capacity-mini">
+          <span>USDT consumido</span>
+          <strong>${socioBnMoney(it.usdtConsumed,2)} USDT</strong>
+        </div>
+        <div class="p2p-capacity-mini">
+          <span>Costo usado</span>
+          <strong>${socioBnMoney(it.costClp,0)} CLP</strong>
+        </div>
+      </div>
+
+      <div class="p2p-capacity-actions-row">
+        <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnEditCapacity('${it.id}')">Editar</button>
+        <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnToggleCapacityStatus('${it.id}')">${it.status === 'finished' ? 'Reactivar' : 'Marcar completado'}</button>
+        <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;color:#ef4444;" onclick="window.socioBnDeleteCapacity('${it.id}')">Eliminar</button>
       </div>
     </div>`;
   }
@@ -24243,21 +24390,85 @@ try{
     const list = document.getElementById('socioBnCapacityList');
     if(!list) return;
     const items = window.__socioBnCapacityCache || [];
-    if(!items.length){
-      list.innerHTML = '<div class="p2p-dashboard-empty">Sin capacity registrado todavía.</div>';
-      return;
-    }
     const activos = items.filter(function(it){ return it.status !== 'finished'; });
-    const completados = items.filter(function(it){ return it.status === 'finished'; });
-    let html = '';
-    html += '<h4 style="font-size:12px; color:#64748b; margin:10px 0 4px;">Activos</h4>';
-    html += activos.length ? activos.map(socioBnCapacityCard).join('') : '<div class="p2p-dashboard-empty">Sin capacity activo.</div>';
-    if(completados.length){
-      html += '<h4 style="font-size:12px; color:#64748b; margin:16px 0 4px;">Completados</h4>';
-      html += completados.map(socioBnCapacityCard).join('');
+    list.innerHTML = activos.length ? activos.map(socioBnCapacityCard).join('') : '<div class="p2p-dashboard-empty">Sin capacity activo.</div>';
+
+    // Totales de los capacity ACTIVOS (no cuenta los ya completados) — una
+    // tarjeta de CLP (total arriba, restante abajo) y una de USDT (total
+    // arriba, restante abajo). El restante baja solo a medida que entran
+    // ventas que cubren ese CLP — debe coincidir con el capacity real en la
+    // plataforma del proveedor.
+    const summary = document.getElementById('socioBnCapacitySummary');
+    if(summary){
+      const totalClp = activos.reduce(function(sum, it){ return sum + Number(it.capacityClp || 0); }, 0);
+      const totalUsdt = activos.reduce(function(sum, it){ return sum + Number(it.usdtAmount || 0); }, 0);
+      const totalClpPendiente = activos.reduce(function(sum, it){ return sum + Number(it.clpPending || 0); }, 0);
+      const totalUsdtRestante = activos.reduce(function(sum, it){ return sum + Number(it.usdtRemaining || 0); }, 0);
+      summary.innerHTML = [
+        '<div class="p2p-capacity-mini"><span>Total en capacity</span><strong>' + socioBnMoney(totalClp, 0) + ' CLP</strong>'
+          + '<div class="p2p-capacity-meta" style="margin-top:5px;">Restante: ' + socioBnMoney(totalClpPendiente, 0) + ' CLP</div></div>',
+        '<div class="p2p-capacity-mini"><span>USDT a recibir</span><strong>' + socioBnMoney(totalUsdt, 2) + ' USDT</strong>'
+          + '<div class="p2p-capacity-meta" style="margin-top:5px;">Restante: ' + socioBnMoney(totalUsdtRestante, 2) + ' USDT</div></div>',
+      ].join('');
     }
-    list.innerHTML = html;
   }
+
+  // Modal de capacities completados del socio — mismo patrón que
+  // openCompletedCapacitiesModal() de ONZE, pero leyendo del cálculo FIFO
+  // servido por /api/partner/dashboard (window.__socioBnCapacityCache), no
+  // de finalSaleParts manuales (ese modelo de datos no existe acá a propósito).
+  window.socioBnOpenCompletedModal = function(){
+    const items = (window.__socioBnCapacityCache || []).filter(function(it){ return it.status === 'finished'; });
+
+    let modal = document.getElementById('socioBnCompletedModal');
+    if(modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'socioBnCompletedModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;';
+
+    const cardsHtml = items.length === 0
+      ? '<div style="text-align:center;color:#8aa0ba;padding:40px;">No hay capacities completados todavía.</div>'
+      : items.map(function(it, index){
+          const profitClp = it.clpCovered - it.costClp;
+          const profitUsdt = it.buyPrice > 0 ? profitClp / it.buyPrice : 0;
+          return `
+            <div style="background:#0d2137;border:1px solid #1a3a5a;border-radius:12px;padding:16px;margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+                <div>
+                  <strong style="color:#fff;font-size:15px;">#${index + 1} · ${it.provider || 'Proveedor'}</strong>
+                  <div style="color:#8aa0ba;font-size:12px;margin-top:2px;">${it.date || ''}</div>
+                </div>
+                <span style="background:#1a3a5a;color:#00d4ff;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:bold;">COMPLETADO</span>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;font-size:13px;">
+                <div><span style="color:#8aa0ba;">Capacity:</span><br><strong style="color:#fff;">${socioBnMoney(it.capacityClp,0)} CLP</strong></div>
+                <div><span style="color:#8aa0ba;">Tasa:</span><br><strong style="color:#fff;">${socioBnMoney(it.buyPrice,2)} CLP/USDT</strong></div>
+                <div><span style="color:#8aa0ba;">USDT consumido:</span><br><strong style="color:#fff;">${socioBnMoney(it.usdtConsumed,2)} USDT</strong></div>
+                <div><span style="color:#8aa0ba;">CLP cubierto:</span><br><strong style="color:#fff;">${socioBnMoney(it.clpCovered,0)} CLP</strong></div>
+                <div><span style="color:#8aa0ba;">Ganancia:</span><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};">${profitClp >= 0 ? '+' : ''}${socioBnMoney(profitClp,0)} CLP</strong><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};font-size:12px;">${profitClp >= 0 ? '+' : ''}${socioBnMoney(profitUsdt,2)} USDT</strong></div>
+              </div>
+              <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+                <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnToggleCapacityStatus('${it.id}'); document.getElementById('socioBnCompletedModal').remove();">Reactivar</button>
+                <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;color:#ef4444;" onclick="window.socioBnDeleteCapacity('${it.id}'); document.getElementById('socioBnCompletedModal').remove();">Eliminar</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+    modal.innerHTML = `
+      <div style="background:#071828;border:1px solid #1a3a5a;border-radius:16px;padding:24px;max-width:700px;width:100%;max-height:90vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 style="color:#00d4ff;margin:0;">📋 Capacities completados</h3>
+          <button onclick="document.getElementById('socioBnCompletedModal').remove()"
+            style="padding:8px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cerrar</button>
+        </div>
+        <p style="color:#8aa0ba;font-size:13px;margin-bottom:16px;">Capacities cubiertos al 100% (vendidos completamente).</p>
+        ${cardsHtml}
+      </div>
+    `;
+    document.body.appendChild(modal);
+  };
 
   function socioBnParseClp(value){
     const digits = String(value || '').replace(/[^\d]/g, '');
@@ -24283,18 +24494,17 @@ try{
   };
 
   window.socioBnOpenCapacityForm = function(item){
-    const form = document.getElementById('socioBnCapacityForm');
-    form.style.display = 'block';
     document.getElementById('socioBnCapId').value = item?.id || '';
     document.getElementById('socioBnCapProvider').value = item?.provider || '';
-    document.getElementById('socioBnCapDate').value = item?.date || new Date().toISOString().slice(0,10);
+    document.getElementById('socioBnCapDate').value = item?.date || socioBnChileToday();
     document.getElementById('socioBnCapClp').value = item?.capacityClp != null ? Number(item.capacityClp).toLocaleString('es-CL') : '';
     document.getElementById('socioBnCapBuyPrice').value = item?.buyPrice ?? '';
     window.socioBnRecalcUsdt();
+    document.getElementById('socioBnCapacityModalBackdrop')?.classList.add('open');
   };
 
   window.socioBnCloseCapacityForm = function(){
-    document.getElementById('socioBnCapacityForm').style.display = 'none';
+    document.getElementById('socioBnCapacityModalBackdrop')?.classList.remove('open');
   };
 
   window.socioBnEditCapacity = function(id){
@@ -24339,27 +24549,20 @@ try{
     if(res.ok){ await socioBnLoadDashboard(); }
   };
 
-  window.__socioBnSalesDate = window.__socioBnSalesDate || new Date().toISOString().slice(0,10);
   window.__socioBnSalesPage = window.__socioBnSalesPage || 1;
-
-  window.socioBnChangeDate = function(value){
-    window.__socioBnSalesDate = value || new Date().toISOString().slice(0,10);
-    window.__socioBnSalesPage = 1;
-    socioBnLoadDashboard();
-  };
 
   window.socioBnGoPage = function(page){
     window.__socioBnSalesPage = page;
     socioBnLoadDashboard();
   };
 
+  // La pantalla principal siempre muestra HOY (hora de Chile) — sin selector
+  // de fecha propio. Para ver otros días/rangos/el mes, está el panel de
+  // estadísticas (socioBnOpenStatsModal).
   async function socioBnLoadDashboard(){
-    const dateInput = document.getElementById('socioBnSalesDate');
-    if(dateInput && !dateInput.value) dateInput.value = window.__socioBnSalesDate;
-    const params = new URLSearchParams({ date: window.__socioBnSalesDate, page: String(window.__socioBnSalesPage), limit: '20' });
+    const params = new URLSearchParams({ date: socioBnChileToday(), page: String(window.__socioBnSalesPage), limit: '20' });
     const res = await socioBnFetch('/api/partner/dashboard?' + params.toString());
     if(!res.ok) return;
-    if(dateInput) dateInput.value = res.date;
     socioBnRenderStats(res.stats);
     window.__socioBnCapacityCache = res.stats.perCapacityBreakdown || [];
     socioBnRenderCapacityList();
@@ -24367,23 +24570,43 @@ try{
     socioBnRenderPager(res);
   }
 
+  // Mismo estilo grande y de colores que "Resumen P2P" del dashboard ONZE
+  // (.p2p-dashboard-card/-label/-value/-small) — colores puestos en línea
+  // (no la clase .green) porque esas clases usan una variable CSS que solo
+  // está definida dentro de #view-p2p-dashboard.
+  function socioBnDashCard(label, value, opts){
+    opts = opts || {};
+    const cls = 'p2p-dashboard-card' + (opts.main ? ' main' : '');
+    return `<div class="${cls}">
+      <div class="p2p-dashboard-label">${label}</div>
+      <div class="p2p-dashboard-value" style="color:${opts.color || '#f8fafc'};">${value}</div>
+      ${opts.sub ? `<div class="p2p-dashboard-small" style="${opts.subColor ? 'color:' + opts.subColor + ';' : ''}">${opts.sub}</div>` : ''}
+    </div>`;
+  }
+
   function socioBnRenderStats(stats){
     const grid = document.getElementById('socioBnStatsGrid');
     if(!grid) return;
-    function card(label, value){
-      return `<div class="p2p-capacity-mini"><span>${label}</span><strong>${value}</strong></div>`;
-    }
+    const GREEN = '#34d399', RED = '#fb7185', WHITE = '#f8fafc';
+    const profitUsdt = (stats.profitClp !== null && stats.weightedAvgBuyPrice) ? stats.profitClp / stats.weightedAvgBuyPrice : null;
+    const profitColor = stats.profitClp === null ? WHITE : (stats.profitClp >= 0 ? GREEN : RED);
+    const profitSign = stats.profitClp !== null && stats.profitClp >= 0 ? '+' : '';
+
     grid.innerHTML = [
-      card('USDT vendido', socioBnMoney(stats.totalUsdtSold, 2) + ' USDT'),
-      card('Comisión Binance', socioBnMoney(stats.totalCommissionUsdt, 2) + ' USDT'),
-      card('CLP recibido', socioBnMoney(stats.totalClpReceived, 0) + ' CLP'),
-      card('Precio prom. venta', stats.avgSalePrice !== null ? socioBnMoney(stats.avgSalePrice, 2) : '—'),
-      card('Tasa prom. compra', stats.weightedAvgBuyPrice !== null ? socioBnMoney(stats.weightedAvgBuyPrice, 2) : '—'),
-      card('Ganancia', stats.profitClp !== null ? socioBnMoney(stats.profitClp, 0) + ' CLP' : '—'),
-      card('Ganancia %', stats.profitPct !== null ? socioBnMoney(stats.profitPct, 2) + '%' : '—'),
+      socioBnDashCard('CLP recibido', socioBnMoney(stats.totalClpReceived, 0) + ' CLP', { main: true, color: GREEN }),
+      socioBnDashCard('USDT vendido', socioBnMoney(stats.totalUsdtSold, 2) + ' USDT', { color: GREEN }),
+      socioBnDashCard(
+        'Ganancia',
+        stats.profitClp !== null ? profitSign + socioBnMoney(stats.profitClp, 0) + ' CLP' : '—',
+        { color: profitColor, sub: profitUsdt !== null ? profitSign + socioBnMoney(profitUsdt, 2) + ' USDT' : '', subColor: profitColor }
+      ),
+      socioBnDashCard('Ganancia %', stats.profitPct !== null ? socioBnMoney(stats.profitPct, 2) + '%' : '—', { color: profitColor }),
+      socioBnDashCard('Precio prom. venta', stats.avgSalePrice !== null ? socioBnMoney(stats.avgSalePrice, 2) + ' CLP' : '—', { color: WHITE }),
+      socioBnDashCard('Tasa prom. compra', stats.weightedAvgBuyPrice !== null ? socioBnMoney(stats.weightedAvgBuyPrice, 2) + ' CLP' : '—', { color: WHITE }),
+      socioBnDashCard('Comisión Binance', socioBnMoney(stats.totalCommissionUsdt, 2) + ' USDT', { color: WHITE }),
     ].join('');
     if(Number(stats.unmatchedUsdt) > 0.01){
-      grid.innerHTML += `<div class="p2p-capacity-mini" style="border-color:rgba(251,191,36,.35);"><span>USDT sin capacity</span><strong style="color:#fbbf24;">${socioBnMoney(stats.unmatchedUsdt,2)}</strong></div>`;
+      grid.innerHTML += socioBnDashCard('USDT sin capacity', socioBnMoney(stats.unmatchedUsdt, 2) + ' USDT', { color: '#fbbf24' });
     }
   }
 
@@ -24397,39 +24620,178 @@ try{
     const prevDisabled = res.page <= 1 ? 'disabled style="opacity:.4;"' : '';
     const nextDisabled = res.page >= res.totalPages ? 'disabled style="opacity:.4;"' : '';
     pager.innerHTML = `
-      <button class="btn secondary" type="button" style="padding:4px 10px;" ${prevDisabled} onclick="window.socioBnGoPage(${res.page - 1})">← Anterior</button>
+      <button class="btn secondary" type="button" style="padding:4px 10px;" ${prevDisabled} onclick="window.socioBnGoPage(${res.page - 1})">←</button>
       <span>Página ${res.page} de ${res.totalPages} (${res.salesForDateCount} venta${res.salesForDateCount === 1 ? '' : 's'})</span>
-      <button class="btn secondary" type="button" style="padding:4px 10px;" ${nextDisabled} onclick="window.socioBnGoPage(${res.page + 1})">Siguiente →</button>
+      <button class="btn secondary" type="button" style="padding:4px 10px;" ${nextDisabled} onclick="window.socioBnGoPage(${res.page + 1})">→</button>
     `;
   }
 
+  // Mismo estilo de "tarjeta por venta" que ya se usa en Ventas Binance del
+  // panel ONZE (renderP2PDashboardFromBinance) — orden/fecha/comisión a la
+  // izquierda, precio/total a la derecha — en vez de una tabla plana.
   function socioBnRenderSales(sales){
     const wrap = document.getElementById('socioBnSalesTable');
     if(!wrap) return;
     if(!sales.length){
-      wrap.innerHTML = '<div class="p2p-dashboard-empty">Sin ventas en esta fecha.</div>';
+      wrap.innerHTML = '<div class="p2p-dashboard-empty">Sin ventas sincronizadas todavía.</div>';
       return;
     }
-    wrap.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
-      <thead><tr style="text-align:left; color:#64748b;">
-        <th style="padding:6px;">Orden</th><th style="padding:6px;">Fecha</th><th style="padding:6px;">USDT</th><th style="padding:6px;">Comisión</th><th style="padding:6px;">CLP</th><th style="padding:6px;">Precio</th>
-      </tr></thead>
-      <tbody>${sales.map(function(s){
-        return `<tr style="border-top:1px solid rgba(148,163,184,.1);">
-          <td style="padding:6px;">${s.orderNumber}</td>
-          <td style="padding:6px;">${new Date(s.executedAt).toLocaleString('es-CL')}</td>
-          <td style="padding:6px;">${socioBnMoney(s.amount,4)}</td>
-          <td style="padding:6px;">${socioBnMoney(s.commission,4)}</td>
-          <td style="padding:6px;">${socioBnMoney(s.totalPrice,0)}</td>
-          <td style="padding:6px;">${socioBnMoney(s.unitPrice,2)}</td>
-        </tr>`;
-      }).join('')}</tbody>
-    </table>`;
+    wrap.innerHTML = sales.map(function(s){
+      const date = s.executedAt ? new Date(s.executedAt).toLocaleString('es-CL', {
+        timeZone: 'America/Santiago', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      }) : '';
+      const statusLabel = s.orderStatus === 'COMPLETED' ? 'Completada' : (s.orderStatus || '');
+      const isManual = String(s.orderNumber || '').startsWith('manual_');
+      return `
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid rgba(148,163,184,.12);text-align:left;">
+          <div>
+            <strong style="color:#f8fafc;">Venta ${socioBnMoney(s.amount, 2)} USDT</strong>${isManual ? ' <span style="color:#fbbf24;font-size:11px;font-weight:900;">MANUAL</span>' : ''}
+            <div style="color:#00d4ff;font-size:11px;margin-top:3px;font-family:monospace;word-break:break-all;">Orden: ${s.orderNumber || ''}</div>
+            <div style="color:#8aa0ba;font-size:12px;margin-top:3px;">${date} · ${s.paymentMethod || 'Banco no disponible'}</div>
+            <div style="color:#8aa0ba;font-size:12px;margin-top:3px;">Comisión: ${socioBnMoney(s.commission, 2)} USDT</div>
+          </div>
+          <div style="text-align:right;">
+            <strong style="color:#34d399;">${socioBnMoney(s.unitPrice, 2)} CLP</strong>
+            <div style="color:#f8fafc;font-size:12px;margin-top:3px;">${socioBnMoney(s.totalPrice, 0)} CLP</div>
+            <div style="color:#34d399;font-size:12px;margin-top:3px;">${statusLabel}</div>
+            ${isManual ? `<button class="btn small danger" type="button" style="margin-top:4px;padding:2px 6px;font-size:12px;line-height:1;" onclick="window.socioBnDeleteManualSale('${s.orderNumber}')" title="Borrar venta manual">🗑️</button>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Panel de estadísticas — pantalla aparte (modal) para consultar cualquier
+  // día, rango de fechas, o el mes completo (default), sin afectar las
+  // tarjetas "Hoy" de la pantalla principal. Usa /api/partner/dashboard con
+  // from/to en vez de date.
+  window.socioBnOpenStatsModal = function(){
+    let modal = document.getElementById('socioBnStatsModal');
+    if(modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'socioBnStatsModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;';
+
+    const today = socioBnChileToday();
+    const monthStart = today.slice(0, 7) + '-01';
+
+    modal.innerHTML = `
+      <div style="background:#071828;border:1px solid #1a3a5a;border-radius:16px;padding:24px;max-width:700px;width:100%;max-height:90vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 style="color:#00d4ff;margin:0;">📊 Estadísticas</h3>
+          <button onclick="document.getElementById('socioBnStatsModal').remove()"
+            style="padding:8px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cerrar</button>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+          <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnStatsQuick('month')">Este mes</button>
+          <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnStatsQuick('today')">Hoy</button>
+          <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnStatsQuick('yesterday')">Ayer</button>
+          <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnStatsQuick('7d')">Últimos 7 días</button>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
+          <label style="font-size:12px;color:#8aa0ba;display:flex;align-items:center;gap:4px;">Desde <input type="date" id="socioBnStatsFrom" value="${monthStart}" style="font-size:12px;" /></label>
+          <label style="font-size:12px;color:#8aa0ba;display:flex;align-items:center;gap:4px;">Hasta <input type="date" id="socioBnStatsTo" value="${today}" style="font-size:12px;" /></label>
+          <button class="btn" type="button" style="padding:5px 14px;font-size:12px;" onclick="window.socioBnStatsRefresh()">Ver</button>
+        </div>
+        <div class="p2p-dashboard-grid" id="socioBnStatsModalGrid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));"></div>
+        <h4 style="font-size:12px;color:#64748b;margin:16px 0 4px;">Por día</h4>
+        <div id="socioBnStatsDaily"></div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    window.socioBnStatsRefresh();
+  };
+
+  window.socioBnStatsQuick = function(kind){
+    const fromEl = document.getElementById('socioBnStatsFrom');
+    const toEl = document.getElementById('socioBnStatsTo');
+    if(!fromEl || !toEl) return;
+    const today = socioBnChileToday();
+    if(kind === 'month'){
+      fromEl.value = today.slice(0, 7) + '-01';
+      toEl.value = today;
+    } else if(kind === 'today'){
+      fromEl.value = today;
+      toEl.value = today;
+    } else if(kind === 'yesterday'){
+      const y = new Date(today + 'T12:00:00');
+      y.setDate(y.getDate() - 1);
+      const ys = y.toISOString().slice(0, 10);
+      fromEl.value = ys;
+      toEl.value = ys;
+    } else if(kind === '7d'){
+      const d = new Date(today + 'T12:00:00');
+      d.setDate(d.getDate() - 6);
+      fromEl.value = d.toISOString().slice(0, 10);
+      toEl.value = today;
+    }
+    window.socioBnStatsRefresh();
+  };
+
+  window.socioBnStatsRefresh = async function(){
+    const fromEl = document.getElementById('socioBnStatsFrom');
+    const toEl = document.getElementById('socioBnStatsTo');
+    if(!fromEl || !toEl) return;
+    const params = new URLSearchParams({ from: fromEl.value, to: toEl.value || fromEl.value });
+    const res = await socioBnFetch('/api/partner/dashboard?' + params.toString());
+    if(!res.ok) return;
+
+    const grid = document.getElementById('socioBnStatsModalGrid');
+    if(grid){
+      const s = res.rangeStats;
+      const GREEN = '#34d399', RED = '#fb7185', WHITE = '#f8fafc';
+      const profitUsdt = (s.profitClp !== null && s.weightedAvgBuyPrice) ? s.profitClp / s.weightedAvgBuyPrice : null;
+      const profitColor = s.profitClp === null ? WHITE : (s.profitClp >= 0 ? GREEN : RED);
+      const profitSign = s.profitClp !== null && s.profitClp >= 0 ? '+' : '';
+      grid.innerHTML = [
+        socioBnDashCard('CLP recibido', socioBnMoney(s.totalClpReceived, 0) + ' CLP', { main: true, color: GREEN }),
+        socioBnDashCard('USDT vendido', socioBnMoney(s.totalUsdtSold, 2) + ' USDT', { color: GREEN }),
+        socioBnDashCard(
+          'Ganancia (ya con comisión descontada)',
+          s.profitClp !== null ? profitSign + socioBnMoney(s.profitClp, 0) + ' CLP' : '—',
+          { color: profitColor, sub: profitUsdt !== null ? profitSign + socioBnMoney(profitUsdt, 2) + ' USDT' : '', subColor: profitColor }
+        ),
+        socioBnDashCard('Ganancia %', s.profitPct !== null ? socioBnMoney(s.profitPct, 2) + '%' : '—', { color: profitColor }),
+        socioBnDashCard('Comisión Binance', socioBnMoney(s.totalCommissionUsdt, 2) + ' USDT', { color: WHITE }),
+        socioBnDashCard('Precio prom. venta', s.avgSalePrice !== null ? socioBnMoney(s.avgSalePrice, 2) + ' CLP' : '—', { color: WHITE }),
+        socioBnDashCard('Tasa prom. compra', s.weightedAvgBuyPrice !== null ? socioBnMoney(s.weightedAvgBuyPrice, 2) + ' CLP' : '—', { color: WHITE }),
+      ].join('');
+    }
+
+    const daily = document.getElementById('socioBnStatsDaily');
+    if(daily){
+      const rows = res.dailyBreakdown || [];
+      daily.innerHTML = rows.length ? rows.map(function(d){
+        const profit = d.profitClp;
+        const profitUsdtDay = (profit !== null && d.weightedAvgBuyPrice) ? profit / d.weightedAvgBuyPrice : null;
+        const profitColor = profit === null ? '#8aa0ba' : (profit >= 0 ? '#34d399' : '#fb7185');
+        const sign = profit !== null && profit >= 0 ? '+' : '';
+        return `<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid rgba(148,163,184,.1);font-size:13px;">
+          <span style="color:#f8fafc;">${d.date}</span>
+          <span style="color:#8aa0ba;">${socioBnMoney(d.totalClpReceived,0)} CLP</span>
+          <span style="color:${profitColor};text-align:right;">${profit !== null ? sign + socioBnMoney(profit,0) + ' CLP' : '—'}${profitUsdtDay !== null ? '<br><span style="font-size:11px;">' + sign + socioBnMoney(profitUsdtDay,2) + ' USDT</span>' : ''}</span>
+        </div>`;
+      }).join('') : '<div class="p2p-dashboard-empty">Sin ventas en este rango.</div>';
+    }
+  };
+
+  // Auto-sync cada 15s — mismo patrón que initBinanceSalesSync() del
+  // dashboard ONZE (setInterval + resync al volver a la pestaña). Corre
+  // siempre en segundo plano, no depende de estar parado en la vista Socio.
+  function initSocioBnAutoSync(){
+    if(window.__socioBnAutoSyncStarted) return;
+    window.__socioBnAutoSyncStarted = true;
+    setInterval(function(){ window.socioBnSync(true); }, 15000);
+    document.addEventListener('visibilitychange', function(){
+      if(document.visibilityState === 'visible') window.socioBnSync(true);
+    });
   }
 
   function initSocioBn(){
     buildSocioBnView();
     addSocioBnNavButton();
+    initSocioBnAutoSync();
   }
 
   if(document.readyState === 'loading'){

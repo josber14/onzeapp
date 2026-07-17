@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { BybitP2PClient, bybitOrderGroup, bybitOrderStatusLabel } from "./bybit-adapter";
 import { BinanceP2PClient } from "./binance-adapter";
+import { canCallPriority, canCallNonUrgent, recordCall, getUsage } from "./rate-limiter";
 import { computeCycleOrderStats } from "./cycle-stats";
 import { processChats } from "./chat-agent";
-import { initBrowser } from "./chat-playwright";
 import type {
   P2PBotConfigData,
   P2PBotExchangeConfigData,
@@ -30,6 +30,13 @@ interface AdState {
   priceUpTimestamps: number[];
   lastQty: number;
   qtySyncCooldownUntil: number;
+  // Autolímite 36/min: cuando una corrección de precio empieza a fallar y no
+  // se logra resolver en unos segundos, el anuncio se oculta como freno de
+  // emergencia (ver rate-limiter.ts) en vez de quedar expuesto a un precio
+  // desactualizado. correctionFailSince=0 → sin problema. hiddenAt>0 → oculto.
+  correctionFailSince: number;
+  hiddenAt: number;
+  lastRetryAttemptAt: number;
 }
 interface BinanceState {
   lastCompetitorFetch: number;
@@ -72,13 +79,16 @@ function getAdState(bs: BinanceState, adId: string): AdState {
       priceUpTimestamps: [],
       lastQty: 0,
       qtySyncCooldownUntil: 0,
+      correctionFailSince: 0,
+      hiddenAt: 0,
+      lastRetryAttemptAt: 0,
     };
     bs.adStates.set(adId, as);
   }
   return as;
 }
 
-function buildBinanceState(bs: BinanceState): any {
+function buildBinanceState(bs: BinanceState, rateLimitKey?: string): any {
   const now = Date.now();
   const oneHourAgo = now - 3600000;
   const allTimestamps: number[] = [];
@@ -86,6 +96,7 @@ function buildBinanceState(bs: BinanceState): any {
   let minLastUpdate = 0;
   let anyCooldown = 0;
   let maxWeight = 0;
+  let anyHidden = false;
   for (const as of bs.adStates.values()) {
     allTimestamps.push(...as.updateTimestamps.filter(t => t > oneHourAgo));
     allPriceUpTimestamps.push(...as.priceUpTimestamps.filter(t => t > oneHourAgo));
@@ -93,6 +104,7 @@ function buildBinanceState(bs: BinanceState): any {
     const backoff = as.rateLimitBackoffMs || 60000;
     if (as.lastRateLimitError > 0 && as.lastRateLimitError + backoff > anyCooldown) anyCooldown = as.lastRateLimitError + backoff;
     if (as.currentWeight > maxWeight) maxWeight = as.currentWeight;
+    if (as.hiddenAt > 0) anyHidden = true;
   }
   const active = allTimestamps;
   const activeUp = allPriceUpTimestamps;
@@ -102,6 +114,7 @@ function buildBinanceState(bs: BinanceState): any {
     && (now - minLastUpdate >= 5000 || minLastUpdate === 0)
     && maxWeight < 4000
     && now >= anyCooldown;
+  const rateLimit = rateLimitKey ? getUsage(rateLimitKey) : { used: 0, cap: 32, reserved: 4, resetInMs: 0 };
   return {
     cambiosEstaHora: active.length,
     cambiosMax: 30,
@@ -113,6 +126,12 @@ function buildBinanceState(bs: BinanceState): any {
     proximoFetchEn,
     competidores: bs.lastCompetitorCount || 0,
     puedeActualizar,
+    // Autolímite real de Binance (36/min por cuenta, confirmado por soporte jul 2026)
+    rateLimitUsado: rateLimit.used,
+    rateLimitCap: rateLimit.cap,
+    rateLimitReservado: rateLimit.reserved,
+    rateLimitResetEnMs: rateLimit.resetInMs,
+    anuncioOculto: anyHidden,
   };
 }
 
@@ -446,7 +465,7 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
 
       if (isDisabled && !chatEnabled && !force) {
         await l( "info", exchange, `Bot ${exchange} deshabilitado en su sesión`);
-        if (exchange === "binance") cycleState.binance = buildBinanceState(getBinanceState(tenantId));
+        if (exchange === "binance") cycleState.binance = buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
         continue;
       }
 
@@ -456,7 +475,7 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
         });
         if (!creds) {
           await l("warn", "binance", "Sin credenciales Binance configuradas");
-          cycleState.binance = buildBinanceState(getBinanceState(tenantId));
+          cycleState.binance = buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
           continue;
         }
 
@@ -467,13 +486,13 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
           binancePromises.push((async () => {
             try {
               const result = await runBinanceCycle(tenantId, activeConfig, creds.apiKey, creds.secretKey, label);
-              cycleState.binance = buildBinanceState(getBinanceState(tenantId));
+              cycleState.binance = buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
               if (result.actions.length > 0) {
                 actions.push(...result.actions);
                 await l( "info", "binance", `${result.actions.length} acción(es) ejecutada(s)`, { actions: result.actions });
               }
             } catch (e: any) {
-              cycleState.binance = buildBinanceState(getBinanceState(tenantId));
+              cycleState.binance = buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
               await l( "error", "binance", `Error en ciclo Binance: ${e.message}`);
             }
           })());
@@ -484,9 +503,17 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
           binancePromises.push((async () => {
             await l( "info", "binance", "Iniciando processChats...");
             try {
-              await initBrowser(tenantId);
               const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
-              await processChats(tenantId, "binance", async () => ({ client }), []);
+              // Anuncios reales de ESTA cuenta (ONZE o ZINPLE) para que el chat
+              // sepa a qué anuncio pertenece cada orden (advNo) y use su
+              // paymentPeriod real, no el default de 15 min.
+              let chatActiveAds: any[] = [];
+              try {
+                chatActiveAds = await fetchMyBinanceAds(client);
+              } catch (e: any) {
+                await l( "warn", "binance", `Chat: error al leer anuncios para matchear orden: ${e.message}`);
+              }
+              await processChats(tenantId, "binance", async () => ({ client }), chatActiveAds, label);
             } catch (e: any) {
               await l( "warn", "binance", `Chat process: ${e.message}`);
             }
@@ -494,7 +521,7 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
         }
 
         if (binancePromises.length > 0) await Promise.all(binancePromises);
-        if (cycleState.binance === undefined) cycleState.binance = buildBinanceState(getBinanceState(tenantId));
+        if (cycleState.binance === undefined) cycleState.binance = buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
       } else if (exchange === "bybit") {
         const creds = await prisma.bybitCredentials.findFirst({
           where: { tenantId, isActive: true, label },
@@ -526,7 +553,7 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
           bybitPromises.push((async () => {
             try {
               const client = new BybitP2PClient(creds.apiKey, creds.secretKey);
-              await processChats(tenantId, "bybit", async () => ({ client }), []);
+              await processChats(tenantId, "bybit", async () => ({ client }), [], label);
             } catch (e: any) {
               await l( "warn", "bybit", `Chat process: ${e.message}`);
             }
@@ -652,6 +679,19 @@ async function autoFinishCapacities(prisma: any, tenantId: number) {
   }
 }
 
+async function fetchMyBinanceAds(client: BinanceP2PClient): Promise<any[]> {
+  const myAdsRes = await client.getMyAds(1, 50);
+  let raw: any[] = [];
+  if (Array.isArray(myAdsRes?.data)) raw = myAdsRes.data;
+  else if (myAdsRes?.data?.items && Array.isArray(myAdsRes.data.items)) raw = myAdsRes.data.items;
+  else if (myAdsRes?.data?.list && Array.isArray(myAdsRes.data.list)) raw = myAdsRes.data.list;
+  else if (myAdsRes?.data?.records && Array.isArray(myAdsRes.data.records)) raw = myAdsRes.data.records;
+  else if (myAdsRes?.data?.result && Array.isArray(myAdsRes.data.result)) raw = myAdsRes.data.result;
+  else if (myAdsRes?.result && Array.isArray(myAdsRes.result)) raw = myAdsRes.result;
+  else if (myAdsRes?.list && Array.isArray(myAdsRes.list)) raw = myAdsRes.list;
+  return raw.map(normalizeBinanceAd);
+}
+
 async function runBinanceCycle(
   tenantId: number,
   config: P2PBotConfigData | P2PBotExchangeConfigData,
@@ -662,6 +702,7 @@ async function runBinanceCycle(
   const actions: BotAction[] = [];
   const client = new BinanceP2PClient(apiKey, secretKey);
   const bs = getBinanceState(tenantId);
+  const rateLimitKey = `${tenantId}:${label}`;
   const log = (level: string, exchange: string | null, message: string, details?: any): Promise<void> =>
     logBot(tenantId, level, exchange, message, details, label);
 
@@ -669,19 +710,10 @@ async function runBinanceCycle(
     // 1. Get our current ads from Binance
     let myAds: any[] = [];
     try {
-      const myAdsRes = await client.getMyAds(1, 50);
-      let raw: any[] = [];
-      if (Array.isArray(myAdsRes?.data)) raw = myAdsRes.data;
-      else if (myAdsRes?.data?.items && Array.isArray(myAdsRes.data.items)) raw = myAdsRes.data.items;
-      else if (myAdsRes?.data?.list && Array.isArray(myAdsRes.data.list)) raw = myAdsRes.data.list;
-      else if (myAdsRes?.data?.records && Array.isArray(myAdsRes.data.records)) raw = myAdsRes.data.records;
-      else if (myAdsRes?.data?.result && Array.isArray(myAdsRes.data.result)) raw = myAdsRes.data.result;
-      else if (myAdsRes?.result && Array.isArray(myAdsRes.result)) raw = myAdsRes.result;
-      else if (myAdsRes?.list && Array.isArray(myAdsRes.list)) raw = myAdsRes.list;
-      myAds = raw.map(normalizeBinanceAd);
+      myAds = await fetchMyBinanceAds(client);
       bs.cachedMyAds = myAds;
       if (myAds.length === 0) {
-        await log( "debug", "binance", `Respuesta getMyAds: ${JSON.stringify(myAdsRes).slice(0, 500)}`);
+        await log( "debug", "binance", `Respuesta getMyAds vacía`);
       }
     } catch (e: any) {
       await log( "error", "binance", `Error getMyAds: ${e.message}`);
@@ -740,6 +772,14 @@ async function runBinanceCycle(
               await log( "info", "binance", `Ad ${ma.adId}: sync de cantidad en cooldown (${remainingS}s más) tras 187049 — saltando`);
               continue;
             }
+            // Autolímite propio (36/min real de Binance por cuenta, confirmado
+            // por soporte jul 2026) — el sync de cantidad es prioritario (no es
+            // una "persecución" de precio hacia abajo), así que solo se frena si
+            // de verdad no queda ningún cupo.
+            if (!canCallPriority(rateLimitKey)) {
+              await log( "info", "binance", `Ad ${ma.adId}: sync de cantidad esperando cupo (autolímite ${getUsage(rateLimitKey).used}/${getUsage(rateLimitKey).cap} por minuto) — saltando este ciclo`);
+              continue;
+            }
             // 5s de separación entre intentos de sync de cantidad de distintos
             // anuncios en el mismo ciclo (igual que ya existe para precio) —
             // evita mandar varias llamadas de escritura a Binance en ráfaga
@@ -751,6 +791,7 @@ async function runBinanceCycle(
               await new Promise(r => setTimeout(r, 5000));
             }
             try {
+              recordCall(rateLimitKey);
               await client.updateAdQuantity(ma.adId, balance);
               as.qtySyncCooldownUntil = 0;
               await log( "info", "binance", `Ad ${ma.adId}: quantity sync → surplusAmount=${balance} (wallet balance, antes ${currQty})`);
@@ -1078,11 +1119,6 @@ async function runBinanceCycle(
           await log( "warn", "binance", `Ad ${adId}: weight ${as.currentWeight} ≥ 4000, pausando subida`);
           continue;
         }
-        if (as.lastRateLimitError > 0 && Date.now() - as.lastRateLimitError < as.rateLimitBackoffMs) {
-          const remainingS = Math.round((as.rateLimitBackoffMs - (Date.now() - as.lastRateLimitError)) / 1000);
-          await log( "warn", "binance", `Ad ${adId}: cooldown activo (${remainingS}s más), saltando subida`);
-          continue;
-        }
         if (as.priceUpTimestamps.length >= 80) {
           await log( "warn", "binance", `Ad ${adId}: límite 80 subidas/hora alcanzado, saltando`);
           continue;
@@ -1108,11 +1144,26 @@ async function runBinanceCycle(
           await log( "warn", "binance", `Ad ${adId}: weight ${as.currentWeight} ≥ 4000, pausando`);
           continue;
         }
-        if (as.lastRateLimitError > 0 && Date.now() - as.lastRateLimitError < as.rateLimitBackoffMs) {
-          const remainingS = Math.round((as.rateLimitBackoffMs - (Date.now() - as.lastRateLimitError)) / 1000);
-          await log( "warn", "binance", `Ad ${adId}: cooldown rate-limit (${remainingS}s más), saltando`);
-          continue;
-        }
+      }
+
+      // ── Autolímite propio: 36 llamadas/min reales de Binance por cuenta
+      // (confirmado por soporte jul 2026), self-throttle a 32 con margen.
+      // Subir precio (o recuperar un anuncio oculto) es prioritario — casi
+      // siempre tiene cupo. Bajar persiguiendo competencia es "no urgente":
+      // se reservan 4 cupos exclusivos para las prioritarias, así que una
+      // bajada se salta antes de tocar ese margen (vuelve a intentar el
+      // próximo ciclo, no pasa nada por esperar un poco para bajar).
+      const rateOk = isPriceUp ? canCallPriority(rateLimitKey) : canCallNonUrgent(rateLimitKey);
+      if (!rateOk) {
+        const u = getUsage(rateLimitKey);
+        await log( "info", "binance",
+          `Ad ${adId}: autolímite (${u.used}/${u.cap} por minuto) — ${isPriceUp ? "esperando cupo para subir" : "bajada no urgente, se salta este ciclo"}`);
+        continue;
+      }
+      // Espacio mínimo entre reintentos del MISMO anuncio tras un fallo
+      // reciente, para no martillar en el mismo ciclo/timer.
+      if (as.lastRetryAttemptAt > 0 && Date.now() - as.lastRetryAttemptAt < 8000) {
+        continue;
       }
 
       // ── Execute price-only update ──
@@ -1120,11 +1171,19 @@ async function runBinanceCycle(
       // for price — required so Binance's full-config validation doesn't 187049.
       try {
         const payload: any = { adId, price: targetPrice.toFixed(2) };
+        if (as.hiddenAt > 0) payload.visible = 1; // restaurar visibilidad junto con el precio corregido
+        recordCall(rateLimitKey);
+        as.lastRetryAttemptAt = Date.now();
         await log( "info", "binance",
-          `Ad ${adId}: price update → price=${targetPrice.toFixed(2)}`);
+          `Ad ${adId}: price update → price=${targetPrice.toFixed(2)}${as.hiddenAt > 0 ? " (restaurando visibilidad)" : ""}`);
         await client.updateAd(payload);
         as.lastUpdateAt = Date.now();
-        as.rateLimitBackoffMs = 0;
+        as.correctionFailSince = 0;
+        if (as.hiddenAt > 0) {
+          const hiddenForS = Math.round((Date.now() - as.hiddenAt) / 1000);
+          await log( "info", "binance", `Ad ${adId}: reactivado — estuvo oculto ${hiddenForS}s`);
+          as.hiddenAt = 0;
+        }
         if (isPriceUp) {
           as.priceUpTimestamps.push(Date.now());
           as.lastPriceUpAt = Date.now();
@@ -1139,29 +1198,24 @@ async function runBinanceCycle(
         }
       } catch (e: any) {
         if (e.message?.includes("187049") || e.message?.includes("187040")) {
+          if (as.correctionFailSince === 0) as.correctionFailSince = Date.now();
+          const failingForMs = Date.now() - as.correctionFailSince;
           await log( "warn", "binance",
-            `Ad ${adId}: error 187049 en price-only update — esperando 10s y reintentando una vez...`);
-          await new Promise(r => setTimeout(r, 10000));
-          try {
-            const retryPayload: any = { adId, price: targetPrice.toFixed(2) };
-            await log( "info", "binance",
-              `Ad ${adId}: retry tras 10s → price=${targetPrice.toFixed(2)}`);
-            await client.updateAd(retryPayload);
-            as.lastUpdateAt = Date.now();
-            as.rateLimitBackoffMs = 0;
-            if (isPriceUp) {
-              as.priceUpTimestamps.push(Date.now());
-              as.lastPriceUpAt = Date.now();
-            } else {
-              as.updateTimestamps.push(Date.now());
+            `Ad ${adId}: 187049/187040 (autolímite en ${getUsage(rateLimitKey).used}/${getUsage(rateLimitKey).cap}/min) — lleva ${Math.round(failingForMs / 1000)}s sin poder corregir, reintenta el próximo ciclo`);
+          // Freno de emergencia: si no se logra corregir el precio en 25s
+          // seguidos, ocultar el anuncio (sin borrarlo) para que no siga
+          // tomando órdenes a un precio desactualizado — se reactiva solo
+          // apenas haya cupo (ver bloque de éxito arriba).
+          if (failingForMs > 25000 && as.hiddenAt === 0 && canCallPriority(rateLimitKey)) {
+            try {
+              recordCall(rateLimitKey);
+              await client.updateAd({ adId, visible: 0 });
+              as.hiddenAt = Date.now();
+              await log( "warn", "binance",
+                `🔒 Ad ${adId}: oculto automáticamente tras ${Math.round(failingForMs / 1000)}s sin poder corregir el precio — se reactivará solo en cuanto haya cupo`);
+            } catch (e3: any) {
+              await log( "warn", "binance", `Ad ${adId}: intento de ocultar también falló: ${e3.message}`);
             }
-            actions.push({ action: "update_price", exchange: "binance", adId, currentPrice, suggestedPrice: targetPrice, reason: `187049→retry: ${currentPrice} → ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
-            await log( "info", "binance", `Ad ${adId}: retry OK — ${currentPrice} → ${targetPrice.toFixed(2)}`);
-          } catch (e2: any) {
-            as.lastRateLimitError = Date.now();
-            as.rateLimitBackoffMs = 5 * 60 * 1000;
-            await log( "warn", "binance",
-              `Ad ${adId}: retry tras 10s también falló: ${e2.message} — en cooldown 5 min antes de reintentar`);
           }
         } else if (e.message?.includes("187055")) {
           const rangeMatch = e.message.match(/\[([\d.]+)\s*-\s*([\d.]+)\]/);

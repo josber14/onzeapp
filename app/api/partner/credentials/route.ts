@@ -7,6 +7,15 @@ export const dynamic = "force-dynamic";
 
 const LABEL = "SOCIO";
 
+// Medianoche de Chile (no UTC) para un día YYYY-MM-DD — Chile va 4h atrás de
+// UTC (America/Santiago, sin horario de verano desde 2016). Mismo criterio
+// que app/api/partner/dashboard/route.ts (chileDateStr) — si se usara
+// medianoche UTC acá, quedaría una franja de ~4h del día anterior (hora
+// Chile) mezclada adentro del "día 1" de seguimiento.
+function chileMidnightUtc(dateStr: string): Date {
+  return new Date(`${dateStr}T04:00:00.000Z`);
+}
+
 async function getSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get("onze_session")?.value || null;
@@ -55,7 +64,7 @@ export async function POST(req: NextRequest) {
     }
     await prisma.partnerAccount.update({
       where: { id: existing.id },
-      data: { trackingStartDate: new Date(`${dateStr}T00:00:00.000Z`) },
+      data: { trackingStartDate: chileMidnightUtc(dateStr) },
     });
     return NextResponse.json({ ok: true });
   }
@@ -66,9 +75,11 @@ export async function POST(req: NextRequest) {
   if (!apiKey || !secretKey) {
     return NextResponse.json({ ok: false, error: "Falta apiKey o secretKey" }, { status: 400 });
   }
-  // Al conectar por primera vez, arranca el seguimiento desde hoy — el
-  // historial que trae la sincronización no infla las estadísticas.
-  const startOfToday = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00.000Z");
+  // Al conectar por primera vez, arranca el seguimiento desde hoy (medianoche
+  // de Chile) — el historial que trae la sincronización no infla las
+  // estadísticas, y no queda una franja de horas del día anterior mezclada.
+  const chileTodayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const startOfToday = chileMidnightUtc(chileTodayStr);
   await prisma.partnerAccount.upsert({
     where: { tenantId_label: { tenantId: session.tenantId, label: LABEL } },
     update: { apiKey, secretKey, name, isActive: true },

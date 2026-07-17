@@ -1,7 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import type { ChatState, ChatMessage } from "./types";
-import { sendChatViaBAPI, getStoredCookies } from "./chat-browser";
-import { sendChatMessage as sendViaPlaywright } from "./chat-playwright";
 
 const MAX_RETRIES = 3;
 
@@ -11,7 +9,8 @@ export async function processChats(
   tenantId: number,
   exchange: "binance" | "bybit",
   getClient: () => Promise<{ client: any }>,
-  activeAds: any[]
+  activeAds: any[],
+  label = "ONZE"
 ) {
   const { client } = await getClient();
 
@@ -47,7 +46,7 @@ export async function processChats(
     if (order.group === "cancelled") continue;
 
     try {
-      await processOrder(tenantId, exchange, client, order, activeAds);
+      await processOrder(tenantId, exchange, client, order, activeAds, label);
     } catch (e: any) {
       await logMsg(tenantId, exchange, `Chat error ${orderNo}: ${e.message}`);
     }
@@ -77,7 +76,7 @@ export async function processChats(
         const rawOrder = allOrders.find((o: any) => (o.orderNumber ?? o.orderNo ?? o.id) === ps.orderNumber);
         if (rawOrder) {
           const order = normalizeOrder(rawOrder, "binance");
-          await processOrder(tenantId, exchange, client, order, activeAds);
+          await processOrder(tenantId, exchange, client, order, activeAds, label);
           continue;
         }
       } catch {}
@@ -98,7 +97,7 @@ export async function processChats(
         unitPrice: 0,
         totalPrice: 0,
         verified: true,
-      }, activeAds);
+      }, activeAds, label);
     }
   } catch (e: any) {
     await logMsg(tenantId, exchange, `[Chat] error estados pendientes: ${e.message}`);
@@ -112,9 +111,20 @@ async function processOrder(
   exchange: "binance" | "bybit",
   client: any,
   order: any,
-  activeAds: any[]
+  activeAds: any[],
+  label = "ONZE"
 ) {
   const orderNo = order.orderNumber;
+
+  // Tiempo real de pago del anuncio (para el aviso de "por vencer") — Binance
+  // no lo manda en la orden, así que se toma del anuncio real que generó esta
+  // orden (matcheado por advNo, ver findMatchingAd). Si no se encuentra el
+  // anuncio, se mantiene el default de 15 min de normalizeOrder.
+  const matchedAd = findMatchingAd(activeAds, order);
+  if (matchedAd?.paymentPeriod) {
+    order.payTime = matchedAd.paymentPeriod;
+  }
+
   const isCompleted = order.group === "completed";
   const isCancelled = order.group === "cancelled" && order.status !== "pending";
   const isPaid = order.status === "paid" || order.group === "paid";
@@ -196,7 +206,7 @@ async function processOrder(
 
   if (cs.state === "awaiting_verification") {
     if (order.verified) {
-      await handleVerified(tenantId, exchange, client, cs, order, activeAds);
+      await handleVerified(tenantId, exchange, client, cs, order, activeAds, label);
     }
     return;
   }
@@ -204,16 +214,12 @@ async function processOrder(
   // Handle paid status BEFORE processing client messages
   if (isPaid) {
     if (cs.state === "account_sent") {
-      await sendAndTrack(client, exchange, orderNo, cs,
-        "Recibimos tu aviso de pago ✅ Vamos a verificar la información."
-      );
+      await sendAndTrack(client, exchange, orderNo, cs, paymentAckMessage());
       await updateState(cs.id, "payment_made", { paidAt: new Date() });
       return;
     }
     if (!["account_sent", "payment_made", "awaiting_comprobant", "completed", "closed", "awaiting_verification"].includes(cs.state)) {
-      await sendAndTrack(client, exchange, orderNo, cs,
-        "Recibimos tu aviso de pago ✅ Vamos a verificar la información."
-      );
+      await sendAndTrack(client, exchange, orderNo, cs, paymentAckMessage());
       await updateState(cs.id, "payment_made", { paidAt: new Date() });
       return;
     }
@@ -225,7 +231,7 @@ async function processOrder(
     if (!textContent && lastClientMsg.imageUrl) {
       if (!isPaid) return;
     } else {
-      await handleClientResponse(tenantId, exchange, client, cs, order, lastClientMsg.content, activeAds);
+      await handleClientResponse(tenantId, exchange, client, cs, order, lastClientMsg.content, activeAds, label);
       if (lastClientMsg.content || lastClientMsg.imageUrl) {
         const msgTime = lastClientMsg.createTime > 0 ? new Date(lastClientMsg.createTime) : new Date();
         await prisma.p2PChatState.update({
@@ -288,7 +294,8 @@ export async function handleVerified(
   client: any,
   cs: any,
   order: any,
-  activeAds: any[]
+  activeAds: any[],
+  label = "ONZE"
 ) {
   const createdAtTs = order.createdAt ? new Date(order.createdAt).getTime() : undefined;
 
@@ -297,11 +304,15 @@ export async function handleVerified(
 
   await logMsg(tenantId, exchange, `[Chat] handleVerified: iniciando para ${order.orderNumber}`);
 
+  const history = order.counterparty ? await getBuyerHistory(tenantId, exchange, order.counterparty) : null;
+  const isReturning = !!history;
+  const greeting = buildInitialGreeting(isReturning, order.counterparty);
+
   const sent = await sendAndTrack(client, exchange, order.orderNumber, cs,
-    "Hola, ¿transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.",
+    greeting,
     createdAtTs
   );
-  if (sent) await updateState(cs.id, "awaiting_account_type", { isCompany: false });
+  if (sent) await updateState(cs.id, "awaiting_account_type", { isCompany: false, isReturning });
 }
 
 /* ─── Handle client response ──────────────────────────────────── */
@@ -313,7 +324,8 @@ async function handleClientResponse(
   cs: any,
   order: any,
   text: string,
-  activeAds: any[]
+  activeAds: any[],
+  label = "ONZE"
 ) {
   const textLower = text.toLowerCase().trim();
   let retryCount = cs.retryCount || 0;
@@ -324,7 +336,7 @@ async function handleClientResponse(
       if (opt === 2 || textLower.includes("empresa") || matchERUT(textLower)) {
         // Company flow
         const ad = findMatchingAd(activeAds, order);
-        const accounts = await getAccountsForAd(tenantId, exchange, ad);
+        const accounts = await getAccountsForAd(tenantId, exchange, ad, label);
         const erutNote = "Al realizar el pago, por favor adjunta el ERUT junto con el comprobante para emitir la factura.";
 
         // Check if returning customer
@@ -352,7 +364,7 @@ async function handleClientResponse(
       } else if (opt === 1 || textLower.includes("personal")) {
         // Personal flow
         const ad = findMatchingAd(activeAds, order);
-        const accounts = await getAccountsForAd(tenantId, exchange, ad);
+        const accounts = await getAccountsForAd(tenantId, exchange, ad, label);
 
         // Check if returning customer
         const history = cs.counterparty ? await getBuyerHistory(tenantId, exchange, cs.counterparty) : null;
@@ -398,7 +410,7 @@ async function handleClientResponse(
       if (opt === 1) {
         // Send account again
         const ad = findMatchingAd(activeAds, order);
-        const accounts = await getAccountsForAd(tenantId, exchange, ad);
+        const accounts = await getAccountsForAd(tenantId, exchange, ad, label);
         const acct = accounts.find((a: any) => a.id === (cs.chosenAccountIds?.[0] || 0)) || accounts[0];
         await sendAccountWithErutNote(tenantId, exchange, client, order, cs, acct);
         await updateState(cs.id, "account_sent", { chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
@@ -450,7 +462,7 @@ async function handleClientResponse(
         break;
       }
       const ad = findMatchingAd(activeAds, order);
-      const accounts = await getAccountsForAd(tenantId, exchange, ad);
+      const accounts = await getAccountsForAd(tenantId, exchange, ad, label);
       const opt = matchOption(textLower, accounts.length);
       const chosen = opt ? accounts[opt - 1] : matchBank(textLower, accounts);
 
@@ -494,13 +506,13 @@ async function handleClientResponse(
       } else {
         const words = textLower.split(/\s+/);
         const ad = findMatchingAd(activeAds, order);
-        const accounts = await getAccountsForAd(tenantId, exchange, ad);
+        const accounts = await getAccountsForAd(tenantId, exchange, ad, label);
         const chosen = matchBank(textLower, accounts);
         if (chosen) {
           await sendAccountWithErutNote(tenantId, exchange, client, order, cs, chosen);
           await updateState(cs.id, "account_sent", { chosenBank: chosen.bank, chosenAccountIds: [chosen.id], retryCount: 0 });
         } else if (words.some(w => ["error", "falla", "falló", "problema", "rechazó", "rechazado", "rechazo", "permite", "deja", "permite"].includes(w)) || textLower.includes("no me")) {
-          await handleTransferFails(tenantId, exchange, client, order, cs, activeAds, textLower);
+          await handleTransferFails(tenantId, exchange, client, order, cs, activeAds, textLower, label);
         }
       }
       break;
@@ -593,7 +605,7 @@ async function handleClientResponse(
       const amount = extractAmount(textLower);
       if (amount > 0 && cs.totalAmount) {
         const total = Number(cs.totalAmount);
-        const accounts = await getAvailableAccounts(tenantId, exchange);
+        const accounts = await getAvailableAccounts(tenantId, exchange, label);
         const chunks = distributeAmount(accounts, amount, total);
         if (chunks.length > 0) {
           const msg = ["Entendido. Vamos a dividir el pago. Aquí tienes todas las cuentas disponibles:\n"];
@@ -638,7 +650,8 @@ async function handleTransferFails(
   order: any,
   cs: any,
   activeAds: any[],
-  _text: string
+  _text: string,
+  label = "ONZE"
 ) {
   const fails = (cs.transferFailCount || 0) + 1;
 
@@ -651,7 +664,7 @@ async function handleTransferFails(
   }
 
   const ad = findMatchingAd(activeAds, order);
-  const accounts = await getAccountsForAd(tenantId, exchange as any, ad);
+  const accounts = await getAccountsForAd(tenantId, exchange as any, ad, label);
   const alreadySentIds = new Set((cs.chosenAccountIds as number[]) || []);
   const remaining = accounts.filter((a: any) => !alreadySentIds.has(a.id));
 
@@ -734,6 +747,7 @@ export function normalizeOrder(raw: any, exchange: string) {
 
   return {
     orderNumber: raw.orderNumber ?? raw.orderNo ?? raw.id ?? raw.orderId ?? "",
+    advNo: raw.advNo ?? raw.advOrderNo ?? "",
     tradeType: raw.tradeType === "BUY" || raw.side === 0 ? "BUY" : "SELL",
     asset: raw.asset ?? raw.tokenId ?? "USDT",
     fiat: raw.fiat ?? raw.currencyId ?? "CLP",
@@ -745,6 +759,10 @@ export function normalizeOrder(raw: any, exchange: string) {
     counterparty: raw.advertiser?.nickName ?? raw.nickName ?? raw.counterPartNickName ?? raw.counterpartyNickName ?? raw.targetNickName ?? "",
     createdAt: raw.createTime ?? raw.createdAt ?? raw.executedAt ?? new Date().toISOString(),
     executedAt: raw.executedAt ?? raw.createTime ?? new Date().toISOString(),
+    // Binance no devuelve el tiempo de pago en la orden (confirmado en vivo,
+    // jul 2026) — este default de 15 solo aplica si no logramos calzar la
+    // orden con uno de nuestros anuncios reales (ver findMatchingAd, que usa
+    // advNo para encontrar el anuncio y tomar su paymentPeriod real).
     payTime: Number(raw.payTime ?? raw.paymentTime ?? raw.payWindow ?? 15),
     verified,
   };
@@ -790,38 +808,33 @@ function hasComprobant(msgs: ChatMessage[], since: Date | string | null): boolea
   return msgs.some(m => !m.self && m.createTime > sinceTime && (m.imageUrl || m.content.toLowerCase().includes("comprobant")));
 }
 
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// Delay antes de contestar para que no se sienta como una respuesta
+// instantánea de máquina — una persona real tarda en leer y escribir.
+async function humanDelay(): Promise<void> {
+  const ms = 2000 + Math.floor(Math.random() * 3000); // 2-5s
+  await new Promise(r => setTimeout(r, ms));
+}
+
 async function sendAndTrack(client: any, exchange: string, orderNo: string, cs: any, msg: string, createdAt?: number): Promise<boolean> {
   try {
+    await humanDelay();
     let sent = false;
     if (exchange === "binance") {
-      const cookies = await getStoredCookies(cs.tenantId);
-
+      // Envío por WebSocket oficial (API Key, sin cookies ni navegador) —
+      // confirmado funcionando con soporte de Binance jul 2026, ver
+      // binance-adapter.ts sendChatMessageWS(). Reemplaza Playwright/BAPI.
       try {
-        const pwRes = await sendViaPlaywright(orderNo, msg, cookies ?? undefined, createdAt, cs.tenantId);
-        sent = pwRes.ok;
-        if (pwRes.ok) {
-          await logMsg(cs.tenantId, exchange, `Playwright ok`);
-        } else if (pwRes.error === 'Orden_no_encontrada' || pwRes.error === 'Redirigido_a_marketplace') {
-          await logMsg(cs.tenantId, exchange, `Playwright: orden no encontrada, marcando como finalizada`);
-          await prisma.p2PChatState.update({ where: { id: cs.id }, data: { state: "completed", updatedAt: new Date() } });
-          return false;
-        } else {
-          await logMsg(cs.tenantId, exchange, `Playwright falló: ${pwRes.error}`);
+        const wsRes = await client.sendChatMessageWS(orderNo, msg);
+        sent = wsRes.ok;
+        if (!sent) {
+          await logMsg(cs.tenantId, exchange, `WS chat falló: ${wsRes.error}`);
         }
-      } catch (pwErr: any) {
-        await logMsg(cs.tenantId, exchange, `Playwright err: ${pwErr.message}`);
-      }
-
-      if (!sent && cookies) {
-        try {
-          const bapiRes = await sendChatViaBAPI(orderNo, msg, cookies);
-          sent = bapiRes.ok;
-          if (!bapiRes.ok) {
-            await logMsg(cs.tenantId, exchange, `BAPI fallback: ${bapiRes.error}`);
-          }
-        } catch (bapiErr: any) {
-          await logMsg(cs.tenantId, exchange, `BAPI err: ${bapiErr.message}`);
-        }
+      } catch (wsErr: any) {
+        await logMsg(cs.tenantId, exchange, `WS chat err: ${wsErr.message}`);
       }
     } else {
       await client.sendChatMessage(orderNo, msg);
@@ -854,10 +867,42 @@ function matchOption(text: string, max: number): number | null {
   return null;
 }
 
+const ACCOUNT_TYPE_KEYWORDS = ["vista", "corriente", "ahorro", "rut"];
+
+// Reconoce cuando el comprador pregunta por una cuenta específica en texto
+// libre en vez de responder con el número del menú — ej: "¿te puedo
+// transferir a la cuenta vista que ya tengo agregada?" o "¿a la que termina
+// en 8502?". Solo devuelve una cuenta cuando el match es inequívoco (una
+// sola cuenta califica); si hay ambigüedad, devuelve null y se deja que la
+// conversación siga por el camino normal (listar opciones) en vez de
+// arriesgarse a mandar los datos de la cuenta equivocada.
 function matchBank(text: string, accounts: any[]): any | null {
   for (const a of accounts) {
     if (text.includes(a.bank.toLowerCase())) return a;
   }
+
+  // "termina en 8502" / "últimos 8502" / "acaba en 02"
+  const tailMatch = text.match(/(?:termina(?:n)?\s*(?:en)?|acaba(?:n)?\s*(?:en)?|[uú]ltimos?)\s*(\d{2,})/);
+  if (tailMatch) {
+    const digits = tailMatch[1];
+    const matches = accounts.filter(a => String(a.accountNumber || "").endsWith(digits));
+    if (matches.length === 1) return matches[0];
+  }
+  // Número suelto de 4+ dígitos sin la frase "termina en" (ej: "¿la 8502?")
+  const looseDigits = text.match(/\b\d{4,}\b/g) || [];
+  for (const digits of looseDigits) {
+    const matches = accounts.filter(a => String(a.accountNumber || "").endsWith(digits));
+    if (matches.length === 1) return matches[0];
+  }
+
+  // "la cuenta vista" / "la corriente" / "cuenta rut"
+  for (const kw of ACCOUNT_TYPE_KEYWORDS) {
+    if (text.includes(kw)) {
+      const matches = accounts.filter(a => String(a.accountType || "").toLowerCase() === kw);
+      if (matches.length === 1) return matches[0];
+    }
+  }
+
   return null;
 }
 
@@ -890,10 +935,16 @@ function extractAmount(text: string): number {
 }
 
 function findMatchingAd(activeAds: any[], order: any): any {
-  return activeAds?.find((a: any) => {
-    const pms = a.paymentMethods || a.payments || [];
-    return pms.length > 0;
-  }) || activeAds?.[0] || null;
+  if (!activeAds || activeAds.length === 0) return null;
+  // Match real: cada orden trae el número del anuncio del que salió (advNo).
+  // Antes esto "adivinaba" (el primer anuncio con métodos de pago), lo que
+  // hacía que con 2+ anuncios gestionados se tomara el paymentPeriod y las
+  // cuentas bancarias del anuncio equivocado.
+  if (order?.advNo) {
+    const exact = activeAds.find((a: any) => String(a.id) === String(order.advNo));
+    if (exact) return exact;
+  }
+  return activeAds.find((a: any) => (a.paymentMethods || a.payments || []).length > 0) || activeAds[0] || null;
 }
 
 function isSingleBankAd(ad: any): boolean {
@@ -901,9 +952,9 @@ function isSingleBankAd(ad: any): boolean {
   return pms.length <= 1;
 }
 
-async function getAccountsForAd(tenantId: number, exchange: string, ad: any): Promise<any[]> {
+async function getAccountsForAd(tenantId: number, exchange: string, ad: any, label = "ONZE"): Promise<any[]> {
   const all = await prisma.p2PAccount.findMany({
-    where: { tenantId, exchange, isActive: true },
+    where: { tenantId, exchange, label, isActive: true },
     orderBy: { sortOrder: "asc" },
   });
   if (!ad) return all.map(parseAccountInfo);
@@ -933,16 +984,16 @@ async function getBuyerHistory(tenantId: number, exchange: string, counterparty:
   return { bank: prev.chosenBank, accountId: ((prev.chosenAccountIds as number[]) || [])[0] || 0 };
 }
 
-async function getAvailableAccounts(tenantId: number, exchange: string): Promise<any[]> {
+async function getAvailableAccounts(tenantId: number, exchange: string, label = "ONZE"): Promise<any[]> {
   const all = await prisma.p2PAccount.findMany({
-    where: { tenantId, exchange, isActive: true },
+    where: { tenantId, exchange, label, isActive: true },
     orderBy: { sortOrder: "asc" },
   });
   return all.map(parseAccountInfo);
 }
 
-async function buildBankChoices(tenantId: number, exchange: string, ad: any): Promise<string> {
-  const accounts = await getAccountsForAd(tenantId, exchange, ad);
+async function buildBankChoices(tenantId: number, exchange: string, ad: any, label = "ONZE"): Promise<string> {
+  const accounts = await getAccountsForAd(tenantId, exchange, ad, label);
   const lines = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`);
   return "Elige el banco para tu depósito:\n" + lines.join("\n");
 }
@@ -986,10 +1037,56 @@ function getTimeGreeting(): string {
   return "Buen día";
 }
 
+// Nick de Binance usable como nombre en un saludo — descarta apodos que se
+// vean claramente como usuario random (solo números, o muy largo/corto) para
+// no sonar raro al "saludar por nombre".
+function greetableName(nick?: string | null): string | null {
+  const n = (nick || "").trim();
+  if (!n || n.length < 2 || n.length > 24) return null;
+  if (/^\d+$/.test(n)) return null;
+  return n;
+}
+
+function buildInitialGreeting(isReturning: boolean, nick?: string | null): string {
+  const ask = "¿Transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.";
+  const name = greetableName(nick);
+
+  if (isReturning && name) {
+    return pick([
+      `¡Hola ${name}! Bienvenido/a de nuevo 👋 ${ask}`,
+      `Hola ${name}, un gusto verte otra vez 🙌 ${ask}`,
+      `${getTimeGreeting()}, ${name} 👋 ${ask}`,
+    ]);
+  }
+  if (isReturning) {
+    return pick([
+      `¡Hola de nuevo! 👋 ${ask}`,
+      `Hola, un gusto verte otra vez 🙌 ${ask}`,
+    ]);
+  }
+  return pick([
+    `${getTimeGreeting()} 👋 ${ask}`,
+    `Hola, bienvenido/a 🙌 ${ask}`,
+    `¡Hola! Antes de continuar, cuéntame: ${ask}`,
+  ]);
+}
+
+function paymentAckMessage(): string {
+  return pick([
+    "Recibimos tu aviso de pago ✅ Vamos a verificar la información.",
+    "Listo, vimos tu aviso de pago ✅ Ya estamos validando.",
+    "Perfecto, aviso de pago recibido ✅ Un momento mientras confirmamos.",
+  ]);
+}
+
 async function buildCompletionMessage(cs: any, tenantId: number, exchange: string): Promise<string> {
   const greeting = getTimeGreeting();
   const isNew = cs.counterparty ? !(cs.isReturning || await getBuyerHistory(tenantId, exchange, cs.counterparty)) : true;
-  let msg = `✨ Listo, tus USDT están disponibles. Gracias por tu preferencia, esperamos verte pronto.`;
+  let msg = pick([
+    "✨ Listo, tus USDT están disponibles. Gracias por tu preferencia, esperamos verte pronto.",
+    "✨ Todo listo, tus USDT ya están en tu cuenta. Gracias por confiar en nosotros.",
+    "✨ Confirmado, ya tienes tus USDT disponibles. ¡Gracias por la compra!",
+  ]);
   if (isNew) msg += `\n\n⭐ Si todo estuvo bien, agradecemos una calificación positiva.`;
   msg += `\n\n🤗 ¡${greeting}!`;
   return msg;

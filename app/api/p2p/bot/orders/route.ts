@@ -210,27 +210,13 @@ export async function POST(req: NextRequest) {
         if (!message) {
           return Response.json({ ok: false, error: "Mensaje requerido" }, { status: 400 });
         }
-        const { sendChatMessage: sendViaPlaywright } = await import("@/lib/p2p-bot/chat-playwright");
-        const { sendChatViaBAPI, getStoredCookies } = await import("@/lib/p2p-bot/chat-browser");
-        const cookies = await getStoredCookies(tenantId, label);
-        if (!cookies) {
-          return Response.json({ ok: false, error: "No hay cookies guardadas. Configura las cookies de Binance en el panel." }, { status: 400 });
-        }
-
-        const pwRes = await sendViaPlaywright(orderNumber, message, cookies, undefined, tenantId);
-        if (pwRes.ok) {
+        const { BinanceP2PClient } = await import("@/lib/p2p-bot/binance-adapter");
+        const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
+        const wsRes = await client.sendChatMessageWS(orderNumber, message);
+        if (wsRes.ok) {
           return Response.json({ ok: true, action, result: "Mensaje enviado" });
         }
-        const pwErr = pwRes.error || "Playwright falló sin mensaje";
-
-        // BAPI fallback (Binance Web API, uses cookies)
-        const bapiRes = await sendChatViaBAPI(orderNumber, message, cookies);
-        if (bapiRes.ok) {
-          return Response.json({ ok: true, action, result: "Mensaje enviado (BAPI)" });
-        }
-        const bapiErr = bapiRes.error || "BAPI falló sin mensaje";
-
-        return Response.json({ ok: false, error: `Playwright: ${pwErr} | BAPI: ${bapiErr}` }, { status: 500 });
+        return Response.json({ ok: false, error: wsRes.error || "Error al enviar el mensaje" }, { status: 500 });
       }
 
       return Response.json({ ok: false, error: `Acción no soportada para Binance: ${action}` }, { status: 400 });

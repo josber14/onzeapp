@@ -104,6 +104,8 @@ export default async function DashboardPage() {
             {isAdmin && (
               <a
                 href="/admin"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="rounded-lg px-4 py-2 text-sm font-semibold transition" style={{background: "rgba(0,212,255,0.1)", border: "1px solid rgba(0,212,255,0.3)", color: "#00d4ff"}}
               >
                 Ir a admin

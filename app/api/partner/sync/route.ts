@@ -71,6 +71,7 @@ export async function POST() {
         commission: o.commission !== undefined ? Number(o.commission) : null,
         fiat: String(o.fiat || "CLP"),
         orderStatus: String(o.orderStatus || "COMPLETED"),
+        paymentMethod: o.payMethodName ? String(o.payMethodName) : null,
         executedAt: new Date(Number(o.createTime) || now),
       },
       create: {
@@ -83,6 +84,7 @@ export async function POST() {
         commission: o.commission !== undefined ? Number(o.commission) : null,
         fiat: String(o.fiat || "CLP"),
         orderStatus: String(o.orderStatus || "COMPLETED"),
+        paymentMethod: o.payMethodName ? String(o.payMethodName) : null,
         executedAt: new Date(Number(o.createTime) || now),
       },
     });

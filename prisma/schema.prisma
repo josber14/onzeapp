@@ -648,19 +648,20 @@ model PartnerCapacity {
 }
 
 model PartnerSale {
-  id          Int      @id @default(autoincrement())
-  tenantId    Int
-  label       String   @default("SOCIO")
-  orderNumber String
-  amount      Decimal  @db.Decimal(18, 8)
-  totalPrice  Decimal  @db.Decimal(18, 8)
-  unitPrice   Decimal  @db.Decimal(18, 8)
-  commission  Decimal? @db.Decimal(18, 8)
-  fiat        String   @default("CLP")
-  orderStatus String   @default("COMPLETED")
-  executedAt  DateTime
-  createdAt   DateTime @default(now())
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id            Int      @id @default(autoincrement())
+  tenantId      Int
+  label         String   @default("SOCIO")
+  orderNumber   String
+  amount        Decimal  @db.Decimal(18, 8)
+  totalPrice    Decimal  @db.Decimal(18, 8)
+  unitPrice     Decimal  @db.Decimal(18, 8)
+  commission    Decimal? @db.Decimal(18, 8)
+  fiat          String   @default("CLP")
+  orderStatus   String   @default("COMPLETED")
+  paymentMethod String?
+  executedAt    DateTime
+  createdAt     DateTime @default(now())
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, label, orderNumber])
   @@index([tenantId, label])

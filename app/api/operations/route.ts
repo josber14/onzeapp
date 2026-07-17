@@ -315,7 +315,12 @@ export async function POST(req: NextRequest) {
     ) {
       const originUsdt = amountOriginNum / buyOriginValueNum;
       const destUsdt = amountDestinationNum / sellDestinationValueNum;
-      const onzeUsdtValue = originUsdt - destUsdt;
+      const totalProfitUsdt = originUsdt - destUsdt;
+      // Modo "socio" reparte la ganancia total 50/50 con el operador — la
+      // ganancia real del dueño es la mitad, no el total (antes se guardaba
+      // el total completo acá, duplicando la mitad del socio en el dashboard
+      // del dueño).
+      const onzeUsdtValue = operatorMode === "socio" ? totalProfitUsdt / 2 : totalProfitUsdt;
 
       onzeProfitUsdt = String(onzeUsdtValue);
       onzeProfitOriginAmount = String(onzeUsdtValue * buyOriginValueNum);

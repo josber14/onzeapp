@@ -167,8 +167,12 @@ export class BinanceP2PClient {
   // del request real de la app (32 campos) — no lista negra, no forward-all.
   // Cada campo con el tipo/valor EXACTO de getAdDetail (números como números,
   // sin String()). Cambia SOLO price.
+  // `visible` opcional: 1 = normal (default), 0 = ocultar el anuncio a
+  // compradores sin borrarlo — usado como freno de emergencia cuando el bot
+  // no puede corregir el precio por el límite de velocidad de Binance, para
+  // no dejarlo expuesto tomando órdenes a un precio desactualizado.
   async updateAd(params: Record<string, any>) {
-    const { adId, price } = params;
+    const { adId, price, visible } = params;
     const detailRes = await this.getAdDetail(String(adId));
     const detail = detailRes?.data;
     if (!detail) throw new Error(`No se pudo leer el detalle del anuncio ${adId} antes de actualizar`);
@@ -196,7 +200,7 @@ export class BinanceP2PClient {
       onlineDelayTime: 0,
       onlineNow: true,
       payTimeLimit: detail.payTimeLimit,
-      price: String(price), // único cambio intencional
+      price: price != null ? String(price) : detail.price, // único cambio intencional (o sin cambio si no se pasa)
       priceFloatingRatio: detail.priceFloatingRatio,
       priceScale: detail.priceScale,
       priceType: detail.priceType,
@@ -204,7 +208,7 @@ export class BinanceP2PClient {
       takerAdditionalKycRequired: detail.takerAdditionalKycRequired,
       tradeMethods: detail.tradeMethods,
       tradeType: detail.tradeType,
-      visible: 1,
+      visible: visible != null ? visible : 1,
       voucherTemplateNo: "",
     };
 
@@ -381,9 +385,101 @@ export class BinanceP2PClient {
   }
 
   // ─── Chat ──────────────────────────────────────────────────────
+  // Leer siempre fue oficial (GET firmado). Enviar NO tiene endpoint HTTP —
+  // confirmado por soporte de Binance (jul 2026) — el envío es exclusivamente
+  // por WebSocket. getChatCredential()/sendChatMessageWS() reemplazan el
+  // envío por Playwright/cookies que se usaba antes (ver AGENTS.md).
 
-  async sendChatMessage(orderNumber: string, message: string) {
-    return this.privateRequest("/sapi/v1/c2c/chat/sendMessage", {}, { orderNumber, message }, true);
+  // GET /sapi/v1/c2c/chat/retrieveChatCredential — el header "clientType: web"
+  // es obligatorio, sin él Binance devuelve {"code":-31002,"msg":"illegal
+  // parameter"} (confirmado por soporte y reproducido en pruebas propias).
+  async getChatCredential(): Promise<{ chatWssUrl: string; listenKey: string; listenToken: string }> {
+    const params: any = { timestamp: Date.now() };
+    const queryStr = this.buildQueryString(params);
+    const sig = this.sign(queryStr);
+    const url = `https://api.binance.com/sapi/v1/c2c/chat/retrieveChatCredential?${queryStr}&signature=${encodeURIComponent(sig)}`;
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { "X-MBX-APIKEY": this.apiKey, "clientType": "web", "Content-Type": "application/json" },
+    });
+    const text = await res.text();
+    if (!text) throw new Error(`Binance empty response (HTTP ${res.status}) para retrieveChatCredential`);
+    const data = JSON.parse(text);
+    if (data?.code && data.code !== "000000") {
+      throw new Error(`Binance error: ${data.message || data.msg || "unknown"} (code: ${data.code})`);
+    }
+    if (!data?.data?.chatWssUrl || !data?.data?.listenKey || !data?.data?.listenToken) {
+      throw new Error(`retrieveChatCredential: respuesta sin wssUrl/listenKey/listenToken: ${text.slice(0, 200)}`);
+    }
+    return data.data;
+  }
+
+  // Abre una conexión WS cortita solo para este mensaje (conectar → mandar →
+  // esperar un instante por si Binance devuelve un error → cerrar). No se
+  // mantiene una conexión persistente entre ciclos — más simple y no
+  // depende de nada corriendo todo el tiempo en el servidor.
+  async sendChatMessageWS(orderNumber: string, message: string): Promise<{ ok: boolean; error?: string }> {
+    const { chatWssUrl, listenKey, listenToken } = await this.getChatCredential();
+    const wsUrl = `${chatWssUrl}/${listenKey}?token=${listenToken}&clientType=web`;
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (result: { ok: boolean; error?: string }) => {
+        if (settled) return;
+        settled = true;
+        try { ws.close(); } catch {}
+        resolve(result);
+      };
+
+      const openTimeout = setTimeout(() => finish({ ok: false, error: "Timeout al conectar al WebSocket del chat" }), 8000);
+
+      const ws = new WebSocket(wsUrl);
+
+      ws.addEventListener("open", () => {
+        clearTimeout(openTimeout);
+        const payload = {
+          type: "text",
+          uuid: Date.now().toString(36) + Math.random().toString(36).slice(2),
+          orderNo: orderNumber,
+          content: message,
+          self: true,
+          clientType: "web",
+          createTime: Date.now(),
+        };
+        try {
+          ws.send(JSON.stringify(payload));
+        } catch (e: any) {
+          finish({ ok: false, error: `Error al enviar por WS: ${e.message}` });
+          return;
+        }
+        // Binance no siempre manda un ack explícito de éxito — si no llega
+        // ningún error en esta ventana, se considera enviado. Confirmado en
+        // pruebas reales: el mensaje queda guardado y le llega de verdad al
+        // comprador.
+        setTimeout(() => finish({ ok: true }), 1500);
+      });
+
+      ws.addEventListener("message", (ev: any) => {
+        const raw = String(ev.data ?? "");
+        let isError = false;
+        try {
+          const parsed = JSON.parse(raw);
+          isError = parsed?.type === "error" || String(parsed?.content || "").toUpperCase().includes("ILLEGAL");
+        } catch {
+          isError = raw.toUpperCase().includes("ERROR") || raw.toUpperCase().includes("ILLEGAL");
+        }
+        if (isError) finish({ ok: false, error: raw.slice(0, 300) });
+      });
+
+      ws.addEventListener("error", () => {
+        finish({ ok: false, error: "Error de conexión al WebSocket del chat" });
+      });
+
+      ws.addEventListener("close", (ev: any) => {
+        // Un cierre inesperado ANTES de terminar de mandar es un fallo real.
+        if (!settled) finish({ ok: false, error: `WS cerrado antes de confirmar (code ${ev.code})` });
+      });
+    });
   }
 
   async getChatMessages(orderNumber: string, page = 1, rows = 50) {

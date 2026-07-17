@@ -18,7 +18,7 @@ type UserItem = {
   role: "super_admin_global" | "super_admin_cliente" | "operador";
   status: "pendiente" | "activo" | "suspendido" | "rechazado";
   tenantId?: number | null;
-  operatorMode?: "porcentaje" | "libre" | "socio" | "proveedor" | "manual" | null;
+  operatorMode?: "porcentaje" | "libre" | "socio" | "manual" | null;
   dataSourceMode?: "base_onze" | "base_propia" | null;
   percentageRate?: string | number | null;
   partnerSharePercent?: string | number | null;
@@ -131,7 +131,7 @@ export default function AdminPage() {
       role?: "super_admin_global" | "super_admin_cliente" | "operador";
       status?: "pendiente" | "activo" | "suspendido" | "rechazado";
       tenantId?: string | number | null;
-      operatorMode?: "porcentaje" | "libre" | "socio" | "proveedor" | "manual" | null;
+      operatorMode?: "porcentaje" | "libre" | "socio" | "manual" | null;
       dataSourceMode?: "base_onze" | "base_propia" | null;
       percentageRate?: string | number | null;
       partnerSharePercent?: string | number | null;
@@ -523,7 +523,6 @@ export default function AdminPage() {
                                 <option value="porcentaje">porcentaje</option>
                                 <option value="libre">libre</option>
                                 <option value="socio">socio</option>
-                                <option value="proveedor">proveedor</option>
                                 <option value="manual">manual</option>
                               </select>
                             </div>
