@@ -411,15 +411,21 @@ export async function handleVerified(
 
   await logMsg(tenantId, exchange, `[Chat] handleVerified: iniciando para ${order.orderNumber}`);
 
-  const history = order.counterparty ? await getBuyerHistory(tenantId, exchange, order.counterparty) : null;
-  const isReturning = !!history;
-  const greeting = buildInitialGreeting(isReturning, order.counterparty);
+  const knownRealName = order.counterparty ? await findKnownRealName(tenantId, exchange, label, order.counterparty) : null;
+  const isReturning = !!knownRealName;
+  const greeting = buildInitialGreeting(isReturning, firstNameFrom(knownRealName));
 
   const sent = await sendAndTrack(client, exchange, order.orderNumber, cs,
     greeting,
     createdAtTs
   );
-  if (sent) await updateState(cs.id, "awaiting_account_type", { isCompany: false, isReturning });
+  if (sent) {
+    await updateState(cs.id, "awaiting_account_type", {
+      isCompany: false,
+      isReturning,
+      ...(knownRealName ? { realName: knownRealName } : {}),
+    });
+  }
 }
 
 /* ─── Handle client response ──────────────────────────────────── */
@@ -1192,12 +1198,39 @@ async function getAccountsForAd(tenantId: number, exchange: string, ad: any, lab
 // compradores claramente distintos. Como "counterparty" es ese apodo
 // enmascarado, usarlo para reconocer "es la misma persona de la vez pasada"
 // producía falsos positivos reales (le ofreció a un comprador nuevo la
-// cuenta de otro comprador anterior). Hasta que capturemos un identificador
-// confiable (el evento de chat "seller_payed" trae el apodo REAL sin
-// enmascarar y hasta el nombre legal — ver chat-agent.ts fetchMessages), esta
-// función no debe volver a activarse solo cambiando este `return null`.
+// cuenta de otro comprador anterior). Ahora capturamos un identificador
+// confiable (P2PBuyerIdentity, ver extractSellerPayed/findKnownRealName más
+// abajo) pero solo para el SALUDO por nombre, que es de bajo riesgo si falla
+// (en el peor caso, no saluda por nombre a alguien que sí es recurrente).
+// Ofrecer la CUENTA de la vez pasada es más delicado (dinero real yendo a la
+// cuenta equivocada si el match es ambiguo) — sigue desactivado hasta migrar
+// esta función al mismo identificador confiable con la misma guarda de
+// ambigüedad que ya usa findKnownRealName.
 async function getBuyerHistory(tenantId: number, exchange: string, counterparty: string): Promise<{ bank: string; accountId: number } | null> {
   return null;
+}
+
+// El apodo enmascarado que se ve ANTES del pago (order.counterPartNickName,
+// ej. "Use***") es siempre los primeros 3 caracteres del apodo real +
+// "***" (confirmado con varios ejemplos reales). Buscamos en
+// P2PBuyerIdentity todos los apodos reales que empiecen igual — pero SOLO
+// devolvemos un nombre si hay exactamente UNA coincidencia. Con prefijos muy
+// comunes (ej. "Use" de los apodos autogenerados "User-xxxxx" de Binance)
+// puede haber varias personas distintas con el mismo prefijo — en ese caso,
+// mejor no saludar por nombre que arriesgarse a llamar a alguien nuevo por
+// el nombre de otro comprador (el mismo error que ya rompió este feature
+// una vez con el apodo enmascarado completo).
+async function findKnownRealName(tenantId: number, exchange: string, label: string, maskedNick?: string | null): Promise<string | null> {
+  const m = /^(.{1,3})\*+$/.exec((maskedNick || "").trim());
+  if (!m) return null;
+  const prefix = m[1];
+  const candidates = await prisma.p2PBuyerIdentity.findMany({
+    where: { tenantId, exchange, label, nickName: { startsWith: prefix } },
+    select: { realName: true },
+  });
+  const uniqueNames = new Set(candidates.map(c => c.realName));
+  if (uniqueNames.size !== 1) return null;
+  return candidates[0].realName;
 }
 
 async function getAvailableAccounts(tenantId: number, exchange: string, label = "ONZE"): Promise<any[]> {
@@ -1304,19 +1337,8 @@ function getTimeGreeting(): string {
   return "Buen día";
 }
 
-// Nick de Binance usable como nombre en un saludo — descarta apodos que se
-// vean claramente como usuario random (solo números, o muy largo/corto) para
-// no sonar raro al "saludar por nombre".
-function greetableName(nick?: string | null): string | null {
-  const n = (nick || "").trim();
-  if (!n || n.length < 2 || n.length > 24) return null;
-  if (/^\d+$/.test(n)) return null;
-  return n;
-}
-
-function buildInitialGreeting(isReturning: boolean, nick?: string | null): string {
+function buildInitialGreeting(isReturning: boolean, name?: string | null): string {
   const ask = "¿Transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.";
-  const name = greetableName(nick);
 
   if (isReturning && name) {
     return pick([
