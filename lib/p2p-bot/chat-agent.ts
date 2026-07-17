@@ -125,13 +125,38 @@ async function processOrder(
   label = "ONZE"
 ) {
   const lockKey = `${tenantId}:${exchange}:${order.orderNumber}`;
-  const gotLock = await acquireChatLock(lockKey);
+  let gotLock: boolean;
+  try {
+    // Mismo salvavidas que abajo, pero para el propio intento de adquirir
+    // el lock (una llamada a la base de datos que en teoría también podría
+    // colgarse, ej. si el pool de conexiones está agotado).
+    gotLock = await Promise.race([
+      acquireChatLock(lockKey),
+      new Promise<boolean>((_, reject) => setTimeout(() => reject(new Error("TIMEOUT: acquireChatLock no terminó en 10s")), 10000)),
+    ]);
+  } catch (e: any) {
+    await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: error/timeout adquiriendo el lock: ${e.message}`);
+    return;
+  }
   if (!gotLock) {
     await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: otra instancia ya la está procesando, se salta este tick`);
     return;
   }
+  // Checkpoint de diagnóstico: si esto no aparece en los logs pero tampoco
+  // hay ningún error después, el problema está ANTES de acá (adquirir el
+  // lock). Si aparece pero nunca se ve "processOrder {orden}" (el próximo
+  // checkpoint dentro de processOrderLocked), el problema está adentro.
+  await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: lock adquirido, empezando a procesar`);
   try {
-    await processOrderLocked(tenantId, exchange, client, order, activeAds, label);
+    // Salvavidas: si processOrderLocked se cuelga (nunca resuelve ni
+    // rechaza — confirmado en vivo jul 2026, una orden real se quedó sin
+    // ningún mensaje del bot por 5+ minutos sin ningún error en los logs),
+    // esto evita que el lock quede atascado para siempre y deja un rastro
+    // claro en vez de silencio total.
+    await Promise.race([
+      processOrderLocked(tenantId, exchange, client, order, activeAds, label),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT: processOrderLocked no terminó en 20s")), 20000)),
+    ]);
   } finally {
     await releaseChatLock(lockKey);
   }
