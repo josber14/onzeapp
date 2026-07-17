@@ -24012,9 +24012,6 @@ try{
           </div>
         </div>
 
-        <div class="p2p-dashboard-grid" id="socioBnCapitalGrid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-top:16px;">
-        </div>
-
         <div id="socioBnCapitalModalBackdrop" class="p2p-capacity-modal-backdrop">
           <div class="p2p-capacity-modal" style="max-width:420px;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px;">
@@ -24584,56 +24581,39 @@ try{
   // La pantalla principal siempre muestra HOY (hora de Chile) — sin selector
   // de fecha propio. Para ver otros días/rangos/el mes, está el panel de
   // estadísticas (socioBnOpenStatsModal).
+  // Carga atómica: día (stats de "Hoy") + capital inicial + mes en curso (para
+  // la tarjeta Capital P2P), las tres en paralelo, y UN solo render del grid
+  // — evita que dos renders separados del mismo grid (uno síncrono, uno tras
+  // un fetch más lento) se pisen y hagan parpadear o perder una tarjeta.
   async function socioBnLoadDashboard(){
-    const params = new URLSearchParams({ date: socioBnChileToday(), page: String(window.__socioBnSalesPage), limit: '20' });
-    const res = await socioBnFetch('/api/partner/dashboard?' + params.toString());
+    const today = socioBnChileToday();
+    const monthStart = today.slice(0, 7) + '-01';
+    const params = new URLSearchParams({ date: today, page: String(window.__socioBnSalesPage), limit: '20' });
+    const [res, capRes, monthRes] = await Promise.all([
+      socioBnFetch('/api/partner/dashboard?' + params.toString()),
+      socioBnFetch('/api/partner/initial-capital'),
+      socioBnFetch('/api/partner/dashboard?' + new URLSearchParams({ from: monthStart, to: today }).toString()),
+    ]);
     if(!res.ok) return;
-    socioBnRenderStats(res.stats);
+
+    // ── Capital P2P — mismo cálculo que la tarjeta "Capital P2P" del
+    // dashboard ONZE (updateP2PCapitalCard): capital inicial (editable) +
+    // ganancia del mes en curso (hora Chile) expresada en USDT. La ganancia
+    // del mes se convierte a USDT dividiendo el CLP ganado por el precio de
+    // venta PROMEDIO del mes (no por la tasa de compra) — misma fórmula que
+    // usa getP2PRangeStatsFromCapacity en ONZE (profitClp / avgSellPrice).
+    const initial = capRes.ok ? Number(capRes.value || 0) : 0;
+    const monthStats = monthRes.ok ? monthRes.rangeStats : null;
+    const avgSell = monthStats && monthStats.avgSalePrice ? Number(monthStats.avgSalePrice) : 0;
+    const monthProfitClp = monthStats && monthStats.profitClp !== null ? Number(monthStats.profitClp) : 0;
+    const monthProfitUsdt = avgSell > 0 ? monthProfitClp / avgSell : 0;
+    window.__socioBnInitialCapital = initial;
+
+    socioBnRenderStats(res.stats, { initial, monthProfitUsdt });
     window.__socioBnCapacityCache = res.stats.perCapacityBreakdown || [];
     socioBnRenderCapacityList();
     socioBnRenderSales(res.recentSales || []);
     socioBnRenderPager(res);
-    socioBnLoadCapitalCard();
-  }
-
-  // ── Capital P2P — mismo cálculo que la tarjeta "Capital P2P" del dashboard
-  // ONZE (updateP2PCapitalCard): capital inicial (editable) + ganancia del
-  // mes en curso (hora Chile) expresada en USDT. La ganancia del mes se
-  // convierte a USDT dividiendo el CLP ganado por el precio de venta
-  // PROMEDIO del mes (no por la tasa de compra) — misma fórmula que usa
-  // getP2PRangeStatsFromCapacity en ONZE (profitClp / avgSellPrice).
-  async function socioBnLoadCapitalCard(){
-    try{
-      const today = socioBnChileToday();
-      const monthStart = today.slice(0, 7) + '-01';
-      const [capRes, monthRes] = await Promise.all([
-        socioBnFetch('/api/partner/initial-capital'),
-        socioBnFetch('/api/partner/dashboard?' + new URLSearchParams({ from: monthStart, to: today }).toString()),
-      ]);
-      const initial = capRes.ok ? Number(capRes.value || 0) : 0;
-      const monthStats = monthRes.ok ? monthRes.rangeStats : null;
-      const avgSell = monthStats && monthStats.avgSalePrice ? Number(monthStats.avgSalePrice) : 0;
-      const monthProfitClp = monthStats && monthStats.profitClp !== null ? Number(monthStats.profitClp) : 0;
-      const monthProfitUsdt = avgSell > 0 ? monthProfitClp / avgSell : 0;
-      window.__socioBnInitialCapital = initial;
-      socioBnRenderCapitalCard(initial, monthProfitUsdt);
-    }catch(e){
-      console.warn('[AKI TRANSFERS] error cargando Capital P2P:', e);
-    }
-  }
-
-  function socioBnRenderCapitalCard(initial, monthProfitUsdt){
-    const grid = document.getElementById('socioBnCapitalGrid');
-    if(!grid) return;
-    const total = initial + monthProfitUsdt;
-    const sign = monthProfitUsdt >= 0 ? '+' : '-';
-    grid.innerHTML = `
-      <div class="p2p-dashboard-card main" style="cursor:pointer;" onclick="window.socioBnOpenCapitalModal()" title="Click para definir el capital inicial">
-        <div class="p2p-dashboard-label">Capital P2P</div>
-        <div class="p2p-dashboard-value" style="color:#34d399;">${socioBnMoney(total, 2)} USDT</div>
-        <div class="p2p-dashboard-small">Inicial: <strong>${socioBnMoney(initial, 2)} USDT</strong> · Este mes: ${sign}${socioBnMoney(Math.abs(monthProfitUsdt), 2)} USDT</div>
-      </div>
-    `;
   }
 
   window.socioBnOpenCapitalModal = function(){
@@ -24657,7 +24637,7 @@ try{
     const res = await socioBnFetch('/api/partner/initial-capital', { method: 'POST', body: JSON.stringify({ value }) });
     if(res.ok){
       window.socioBnCloseCapitalModal();
-      await socioBnLoadCapitalCard();
+      await socioBnLoadDashboard();
     } else if(typeof showToast === 'function'){
       showToast(res.error || 'Error al guardar', 'error');
     }
@@ -24670,14 +24650,15 @@ try{
   function socioBnDashCard(label, value, opts){
     opts = opts || {};
     const cls = 'p2p-dashboard-card' + (opts.main ? ' main' : '');
-    return `<div class="${cls}">
+    const clickAttrs = opts.onClick ? ` style="cursor:pointer;" onclick="${opts.onClick}" title="${opts.title || ''}"` : '';
+    return `<div class="${cls}"${clickAttrs}>
       <div class="p2p-dashboard-label">${label}</div>
       <div class="p2p-dashboard-value" style="color:${opts.color || '#f8fafc'};">${value}</div>
       ${opts.sub ? `<div class="p2p-dashboard-small" style="${opts.subColor ? 'color:' + opts.subColor + ';' : ''}">${opts.sub}</div>` : ''}
     </div>`;
   }
 
-  function socioBnRenderStats(stats){
+  function socioBnRenderStats(stats, capital){
     const grid = document.getElementById('socioBnStatsGrid');
     if(!grid) return;
     const GREEN = '#34d399', RED = '#fb7185', WHITE = '#f8fafc';
@@ -24685,8 +24666,22 @@ try{
     const profitColor = stats.profitClp === null ? WHITE : (stats.profitClp >= 0 ? GREEN : RED);
     const profitSign = stats.profitClp !== null && stats.profitClp >= 0 ? '+' : '';
 
-    grid.innerHTML = [
-      socioBnDashCard('CLP recibido', socioBnMoney(stats.totalClpReceived, 0) + ' CLP', { main: true, color: GREEN }),
+    const cards = [];
+    if(capital){
+      const capTotal = capital.initial + capital.monthProfitUsdt;
+      const capSign = capital.monthProfitUsdt >= 0 ? '+' : '-';
+      cards.push(socioBnDashCard(
+        'Capital P2P',
+        socioBnMoney(capTotal, 2) + ' USDT',
+        {
+          main: true, color: GREEN,
+          sub: `Inicial: <strong>${socioBnMoney(capital.initial, 2)} USDT</strong> · Este mes: ${capSign}${socioBnMoney(Math.abs(capital.monthProfitUsdt), 2)} USDT`,
+          onClick: 'window.socioBnOpenCapitalModal()', title: 'Click para definir el capital inicial',
+        }
+      ));
+    }
+    cards.push(
+      socioBnDashCard('CLP recibido', socioBnMoney(stats.totalClpReceived, 0) + ' CLP', { color: GREEN }),
       socioBnDashCard('USDT vendido', socioBnMoney(stats.totalUsdtSold, 2) + ' USDT', { color: GREEN }),
       socioBnDashCard(
         'Ganancia',
@@ -24696,8 +24691,9 @@ try{
       socioBnDashCard('Ganancia %', stats.profitPct !== null ? socioBnMoney(stats.profitPct, 2) + '%' : '—', { color: profitColor }),
       socioBnDashCard('Precio prom. venta', stats.avgSalePrice !== null ? socioBnMoney(stats.avgSalePrice, 2) + ' CLP' : '—', { color: WHITE }),
       socioBnDashCard('Tasa prom. compra', stats.weightedAvgBuyPrice !== null ? socioBnMoney(stats.weightedAvgBuyPrice, 2) + ' CLP' : '—', { color: WHITE }),
-      socioBnDashCard('Comisión Binance', socioBnMoney(stats.totalCommissionUsdt, 2) + ' USDT', { color: WHITE }),
-    ].join('');
+      socioBnDashCard('Comisión Binance', socioBnMoney(stats.totalCommissionUsdt, 2) + ' USDT', { color: WHITE })
+    );
+    grid.innerHTML = cards.join('');
     if(Number(stats.unmatchedUsdt) > 0.01){
       grid.innerHTML += socioBnDashCard('USDT sin capacity', socioBnMoney(stats.unmatchedUsdt, 2) + ' USDT', { color: '#fbbf24' });
     }
