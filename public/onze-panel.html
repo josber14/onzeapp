@@ -19077,6 +19077,13 @@ function addP2PBotStyles(){
     if(range === "today") return p2pChileDayKey(raw) === p2pChileDayKey(new Date());
     if(range === "week") return isP2PInCurrentWeek(raw);
     if(range === "month") return p2pChileMonthKey(raw) === p2pChileMonthKey(new Date());
+    if(range === "custom"){
+      const day = p2pChileDayKey(raw);
+      if(!day) return false;
+      const from = window.__p2pCustomFrom || "0000-01-01";
+      const to = window.__p2pCustomTo || "9999-12-31";
+      return day >= from && day <= to;
+    }
     return p2pChileDayKey(raw) === p2pChileDayKey(new Date());
   }
 
@@ -19085,8 +19092,30 @@ function addP2PBotStyles(){
     if(range === "week") return "Semana";
     if(range === "month") return "Mes";
     if(range === "total") return "Total";
+    if(range === "custom") return "Personalizado";
     return "Hoy";
   }
+
+  // Aplica el filtro "Desde/Hasta" del modal de Métricas P2P — guarda el rango
+  // elegido y vuelve a pintar el contenido con range="custom" (mismo patrón
+  // que los botones fijos Hoy/Semana/Mes/Total, ver isP2PInRange).
+  window.applyP2PCustomRange = function applyP2PCustomRange(){
+    const fromEl = document.getElementById("p2pCustomFrom");
+    const toEl = document.getElementById("p2pCustomTo");
+    const from = fromEl?.value || "";
+    const to = toEl?.value || "";
+    if(!from || !to){
+      if(typeof showToast === "function") showToast("Elige ambas fechas", "error");
+      return;
+    }
+    if(from > to){
+      if(typeof showToast === "function") showToast("\"Desde\" no puede ser después de \"Hasta\"", "error");
+      return;
+    }
+    window.__p2pCustomFrom = from;
+    window.__p2pCustomTo = to;
+    renderP2PRangeDetailContent("custom");
+  };
 
   function getP2PRangeStatsFromCapacity(stats, range){
     const result = {
@@ -19284,6 +19313,28 @@ function addP2PBotStyles(){
           ${p2pDetailFilterButton("week", range)}
           ${p2pDetailFilterButton("month", range)}
           ${p2pDetailFilterButton("total", range)}
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <label style="font-size:12px;color:#94a3b8;display:flex;align-items:center;gap:4px;">
+            Desde
+            <input type="date" id="p2pCustomFrom" value="${window.__p2pCustomFrom || ""}" style="
+              background:rgba(15,23,42,.85);border:1px solid rgba(148,163,184,.22);border-radius:8px;
+              color:#e2e8f0;font-size:12px;padding:5px 8px;
+            ">
+          </label>
+          <label style="font-size:12px;color:#94a3b8;display:flex;align-items:center;gap:4px;">
+            Hasta
+            <input type="date" id="p2pCustomTo" value="${window.__p2pCustomTo || ""}" style="
+              background:rgba(15,23,42,.85);border:1px solid rgba(148,163,184,.22);border-radius:8px;
+              color:#e2e8f0;font-size:12px;padding:5px 8px;
+            ">
+          </label>
+          <button type="button" onclick="window.applyP2PCustomRange()" style="
+            border:1px solid ${range === "custom" ? "rgba(52,211,153,.65)" : "rgba(148,163,184,.22)"};
+            background:${range === "custom" ? "rgba(52,211,153,.16)" : "rgba(15,23,42,.82)"};
+            color:${range === "custom" ? "#34d399" : "#cbd5e1"};
+            border-radius:999px;padding:6px 14px;font-size:12px;font-weight:950;cursor:pointer;
+          ">Aplicar</button>
         </div>
       </div>
 
