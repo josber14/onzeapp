@@ -606,8 +606,7 @@ async function handleClientResponse(
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
-          await sendAndTrack(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.");
-          await updateState(cs.id, "closed", { retryCount });
+          await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
             "No entendí. ¿Transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2."
@@ -639,8 +638,7 @@ async function handleClientResponse(
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
-          await sendAndTrack(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.");
-          await updateState(cs.id, "closed", { retryCount });
+          await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
             `No entendí. ¿Quieres que te envíe la cuenta de ${cs.previousBank || "Banco Estado"} de nuevo, o vas a transferir a la misma cuenta donde ya pagaste antes?\n  1) Envíame la cuenta\n  2) Voy a transferir a la misma cuenta\n\nResponde 1 o 2.`
@@ -655,8 +653,7 @@ async function handleClientResponse(
       // Legacy — should not be reached with new flow, but keep for safety
       retryCount++;
       if (retryCount >= MAX_RETRIES) {
-        await sendAndTrack(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.");
-        await updateState(cs.id, "closed", { retryCount });
+        await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
       } else {
         await sendAndTrack(client, exchange, order.orderNumber, cs,
           "No entendí. ¿Transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa"
@@ -690,8 +687,7 @@ async function handleClientResponse(
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
-          await sendAndTrack(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.");
-          await updateState(cs.id, "closed", { retryCount });
+          await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
           const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
           await sendAndTrack(client, exchange, order.orderNumber, cs,
@@ -772,8 +768,7 @@ async function handleClientResponse(
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
-          await sendAndTrack(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.");
-          await updateState(cs.id, "closed", { retryCount });
+          await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
             "No entendí. ¿La transferencia es desde cuenta empresa o personal?\n  1) Empresa\n  2) Personal\n\nResponde 1 o 2."
@@ -799,8 +794,7 @@ async function handleClientResponse(
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
-          await sendAndTrack(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.");
-          await updateState(cs.id, "closed", { retryCount });
+          await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
             "No entendí. ¿Necesitas más tiempo o estás teniendo problemas?\n  1) Más tiempo\n  2) Problemas\n\nResponde 1 o 2."
@@ -819,15 +813,13 @@ async function handleClientResponse(
         );
         await updateState(cs.id, "awaiting_limit_amount", { retryCount: 0 });
       } else if (opt === 2 || textLower.includes("no funciona") || textLower.includes("no me funciona") || textLower.includes("banco")) {
-        await sendAndTrack(client, exchange, order.orderNumber, cs,
+        await sendThenClose(client, exchange, order.orderNumber, cs,
           "Lamentamos el problema con tu banco. Cuando soluciones y estés listo, vuelve a tomar la orden. ¡Te esperamos! 👍🏻"
         );
-        await updateState(cs.id, "closed");
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
-          await sendAndTrack(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.");
-          await updateState(cs.id, "closed", { retryCount });
+          await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
             "No entendí. ¿Qué tipo de problema?\n  1) Límite diario\n  2) No me funciona el banco\n\nResponde 1 o 2."
@@ -845,8 +837,7 @@ async function handleClientResponse(
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
-          await sendAndTrack(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor.");
-          await updateState(cs.id, "closed", { retryCount });
+          await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor.", { retryCount });
         } else {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
             "No entendí el monto. ¿Cuánto te permite transferir tu banco? (ej: 150000)"
@@ -877,10 +868,10 @@ async function handleTransferFails(
   const fails = (cs.transferFailCount || 0) + 1;
 
   if (fails >= 3) {
-    await sendAndTrack(client, exchange, order.orderNumber, cs,
-      "Puede ser un problema con tu banco. Lamentablemente no podemos extender más el tiempo. Intenta más tarde cuando se resuelva.\n\nQuedamos atentos para la próxima."
+    await sendThenClose(client, exchange, order.orderNumber, cs,
+      "Puede ser un problema con tu banco. Lamentablemente no podemos extender más el tiempo. Intenta más tarde cuando se resuelva.\n\nQuedamos atentos para la próxima.",
+      { transferFailCount: 0 }
     );
-    await updateState(cs.id, "closed", { transferFailCount: 0 });
     return;
   }
 
@@ -903,10 +894,10 @@ async function handleTransferFails(
       transferFailCount: fails,
     });
   } else {
-    await sendAndTrack(client, exchange, order.orderNumber, cs,
-      "Puede ser un problema con tu banco. Lamentablemente no podemos extender más el tiempo. Intenta más tarde cuando se resuelva.\n\nQuedamos atentos para la próxima."
+    await sendThenClose(client, exchange, order.orderNumber, cs,
+      "Puede ser un problema con tu banco. Lamentablemente no podemos extender más el tiempo. Intenta más tarde cuando se resuelva.\n\nQuedamos atentos para la próxima.",
+      { transferFailCount: 0 }
     );
-    await updateState(cs.id, "closed", { transferFailCount: 0 });
   }
 }
 
@@ -1084,10 +1075,10 @@ async function sendAndTrack(client: any, exchange: string, orderNo: string, cs: 
         const wsRes = await client.sendChatMessageWS(orderNo, msg);
         sent = wsRes.ok;
         if (!sent) {
-          await logMsg(cs.tenantId, exchange, `WS chat falló: ${wsRes.error}`);
+          await logMsg(cs.tenantId, exchange, `WS chat falló ${orderNo}: ${wsRes.error}`);
         }
       } catch (wsErr: any) {
-        await logMsg(cs.tenantId, exchange, `WS chat err: ${wsErr.message}`);
+        await logMsg(cs.tenantId, exchange, `WS chat err ${orderNo}: ${wsErr.message}`);
       }
     } else {
       await client.sendChatMessage(orderNo, msg);
@@ -1108,6 +1099,21 @@ async function sendAndTrack(client: any, exchange: string, orderNo: string, cs: 
 
 async function updateState(id: number, state: ChatState, extra: Record<string, any> = {}) {
   await prisma.p2PChatState.update({ where: { id }, data: { state, ...extra, updatedAt: new Date() } });
+}
+
+// Cierra la conversación SOLO si el mensaje de despedida realmente se envió.
+// Bug real confirmado en vivo (jul 2026): el envío por WS falló con
+// "ILLEGAL_PARAM" (falla de Binance, no del contenido del mensaje — ya se
+// había mandado ese mismo texto con éxito en otras órdenes) justo en el
+// mensaje de cierre, pero el código cerraba igual — el comprador se quedó
+// con 4 preguntas reales sin ninguna respuesta, viendo silencio total. Si el
+// envío falla, NO cerramos — se reintenta en el próximo ciclo.
+async function sendThenClose(client: any, exchange: string, orderNo: string, cs: any, msg: string, extra: Record<string, any> = {}): Promise<boolean> {
+  const sent = await sendAndTrack(client, exchange, orderNo, cs, msg);
+  if (sent) {
+    await updateState(cs.id, "closed", extra);
+  }
+  return sent;
 }
 
 function matchOption(text: string, max: number): number | null {
