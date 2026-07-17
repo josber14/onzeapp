@@ -4,6 +4,18 @@ import type { ChatState, ChatMessage } from "./types";
 
 const MAX_RETRIES = 3;
 
+// Confirmado en vivo (jul 2026): el listado de órdenes de Binance a veces
+// reporta "CANCELLED_BY_SYSTEM" de forma transitoria por varios minutos y
+// después vuelve a "TRADING" solo, sin que nada real haya cambiado (mismo
+// tipo de inconsistencia eventual entre endpoints ya documentada en
+// AGENTS.md). Si cerráramos la conversación en la primera lectura de
+// "cancelada", un comprador con una orden REAL y activa se quedaría sin
+// respuesta del bot para siempre (el estado "closed" excluye procesar sus
+// mensajes). Por eso exigimos ver "cancelada" de forma sostenida antes de
+// cerrar — ver isCancelled más abajo.
+const cancelledSeenAt = new Map<string, number>();
+const CANCEL_CONFIRM_MS = 60_000;
+
 /* ─── Public entry point ─────────────────────────────────────── */
 
 export async function processChats(
@@ -242,10 +254,22 @@ async function processOrderLocked(
     return;
   }
 
-  // If order is cancelled while in mid-conversation, close it
+  // If order is cancelled while in mid-conversation, close it — pero solo
+  // tras verla cancelada de forma sostenida (CANCEL_CONFIRM_MS), no en la
+  // primera lectura, por la inconsistencia eventual de Binance descrita arriba.
+  const debounceKey = `${tenantId}:${exchange}:${orderNo}`;
   if (isCancelled && cs.state !== "completed" && cs.state !== "closed" && cs.state !== "awaiting_verification") {
-    await updateState(cs.id, "closed");
-    return;
+    const firstSeen = cancelledSeenAt.get(debounceKey);
+    if (!firstSeen) {
+      cancelledSeenAt.set(debounceKey, Date.now());
+    } else if (Date.now() - firstSeen >= CANCEL_CONFIRM_MS) {
+      await updateState(cs.id, "closed");
+      cancelledSeenAt.delete(debounceKey);
+      return;
+    }
+  } else if (cancelledSeenAt.has(debounceKey)) {
+    // Se vio activa de nuevo — era el glitch, no una cancelación real.
+    cancelledSeenAt.delete(debounceKey);
   }
 
   // If order is appealed, notify and close
