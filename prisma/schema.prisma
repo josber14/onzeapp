@@ -620,6 +620,11 @@ model PartnerAccount {
   // que el historial de 90 días que trae la primera sincronización infle los
   // números.
   trackingStartDate DateTime?
+  // Capital inicial en USDT (tarjeta "Capital P2P", mismo concepto que el
+  // dashboard ONZE) — se suma a la ganancia del mes en curso para mostrar el
+  // capital total. Editable desde el panel, null hasta que el usuario lo
+  // defina la primera vez.
+  initialCapitalUsdt Decimal? @db.Decimal(18, 8)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)

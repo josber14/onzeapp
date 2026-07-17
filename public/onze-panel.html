@@ -24012,6 +24012,31 @@ try{
           </div>
         </div>
 
+        <div class="p2p-dashboard-grid" id="socioBnCapitalGrid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); margin-top:16px;">
+        </div>
+
+        <div id="socioBnCapitalModalBackdrop" class="p2p-capacity-modal-backdrop">
+          <div class="p2p-capacity-modal" style="max-width:420px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px;">
+              <div>
+                <h3 class="section-title" style="margin-bottom:4px;">Capital P2P inicial</h3>
+                <p class="section-text" style="font-size:13px;">Se suma a la ganancia acumulada del mes en curso para mostrar el capital total — mismo cálculo que "Capital P2P" del dashboard ONZE.</p>
+              </div>
+              <button class="btn secondary" type="button" onclick="window.socioBnCloseCapitalModal()">Cerrar</button>
+            </div>
+            <form class="p2p-capacity-form" onsubmit="event.preventDefault(); window.socioBnSaveInitialCapital();">
+              <label class="full">
+                Capital inicial (USDT)
+                <input id="socioBnCapitalInput" type="number" step="0.01" min="0" placeholder="Ej: 1000">
+              </label>
+              <div class="full" style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;margin-top:4px;">
+                <button class="btn secondary" type="button" onclick="window.socioBnCloseCapitalModal()">Cancelar</button>
+                <button class="btn" type="submit">Guardar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
         <div id="socioBnCredsForm" style="display:none; margin-top:16px; padding:16px; border-radius:12px; background:rgba(255,255,255,.03); border:1px solid rgba(148,163,184,.15);">
           <h3 class="section-title" style="font-size:14px;">Conectar cuenta de Binance del socio</h3>
           <p class="section-text" style="font-size:12px; color:#f59e0b; margin-top:4px;">
@@ -24568,7 +24593,75 @@ try{
     socioBnRenderCapacityList();
     socioBnRenderSales(res.recentSales || []);
     socioBnRenderPager(res);
+    socioBnLoadCapitalCard();
   }
+
+  // ── Capital P2P — mismo cálculo que la tarjeta "Capital P2P" del dashboard
+  // ONZE (updateP2PCapitalCard): capital inicial (editable) + ganancia del
+  // mes en curso (hora Chile) expresada en USDT. La ganancia del mes se
+  // convierte a USDT dividiendo el CLP ganado por el precio de venta
+  // PROMEDIO del mes (no por la tasa de compra) — misma fórmula que usa
+  // getP2PRangeStatsFromCapacity en ONZE (profitClp / avgSellPrice).
+  async function socioBnLoadCapitalCard(){
+    try{
+      const today = socioBnChileToday();
+      const monthStart = today.slice(0, 7) + '-01';
+      const [capRes, monthRes] = await Promise.all([
+        socioBnFetch('/api/partner/initial-capital'),
+        socioBnFetch('/api/partner/dashboard?' + new URLSearchParams({ from: monthStart, to: today }).toString()),
+      ]);
+      const initial = capRes.ok ? Number(capRes.value || 0) : 0;
+      const monthStats = monthRes.ok ? monthRes.rangeStats : null;
+      const avgSell = monthStats && monthStats.avgSalePrice ? Number(monthStats.avgSalePrice) : 0;
+      const monthProfitClp = monthStats && monthStats.profitClp !== null ? Number(monthStats.profitClp) : 0;
+      const monthProfitUsdt = avgSell > 0 ? monthProfitClp / avgSell : 0;
+      window.__socioBnInitialCapital = initial;
+      socioBnRenderCapitalCard(initial, monthProfitUsdt);
+    }catch(e){
+      console.warn('[AKI TRANSFERS] error cargando Capital P2P:', e);
+    }
+  }
+
+  function socioBnRenderCapitalCard(initial, monthProfitUsdt){
+    const grid = document.getElementById('socioBnCapitalGrid');
+    if(!grid) return;
+    const total = initial + monthProfitUsdt;
+    const sign = monthProfitUsdt >= 0 ? '+' : '-';
+    grid.innerHTML = `
+      <div class="p2p-dashboard-card main" style="cursor:pointer;" onclick="window.socioBnOpenCapitalModal()" title="Click para definir el capital inicial">
+        <div class="p2p-dashboard-label">Capital P2P</div>
+        <div class="p2p-dashboard-value" style="color:#34d399;">${socioBnMoney(total, 2)} USDT</div>
+        <div class="p2p-dashboard-small">Inicial: <strong>${socioBnMoney(initial, 2)} USDT</strong> · Este mes: ${sign}${socioBnMoney(Math.abs(monthProfitUsdt), 2)} USDT</div>
+      </div>
+    `;
+  }
+
+  window.socioBnOpenCapitalModal = function(){
+    const modal = document.getElementById('socioBnCapitalModalBackdrop');
+    if(!modal) return;
+    document.getElementById('socioBnCapitalInput').value = window.__socioBnInitialCapital || '';
+    modal.classList.add('open');
+  };
+
+  window.socioBnCloseCapitalModal = function(){
+    document.getElementById('socioBnCapitalModalBackdrop')?.classList.remove('open');
+  };
+
+  window.socioBnSaveInitialCapital = async function(){
+    const raw = document.getElementById('socioBnCapitalInput')?.value;
+    const value = Number(raw);
+    if(!isFinite(value) || value < 0){
+      if(typeof showToast === 'function') showToast('Ingresa un monto válido', 'error');
+      return;
+    }
+    const res = await socioBnFetch('/api/partner/initial-capital', { method: 'POST', body: JSON.stringify({ value }) });
+    if(res.ok){
+      window.socioBnCloseCapitalModal();
+      await socioBnLoadCapitalCard();
+    } else if(typeof showToast === 'function'){
+      showToast(res.error || 'Error al guardar', 'error');
+    }
+  };
 
   // Mismo estilo grande y de colores que "Resumen P2P" del dashboard ONZE
   // (.p2p-dashboard-card/-label/-value/-small) — colores puestos en línea
