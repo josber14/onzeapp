@@ -60,6 +60,7 @@ model Tenant {
   p2pBotOrders          P2PBotOrder[]
   p2pBotAds             P2PBotAd[]
   p2pChatStates         P2PChatState[]
+  p2pBuyerIdentities    P2PBuyerIdentity[]
   p2pBotMarketSnapshots P2PBotMarketSnapshot[]
   p2pCapacities         P2PCapacity[]
   p2pCycles             P2PCycle[]
@@ -824,6 +825,7 @@ model P2PChatState {
   transferFailCount Int       @default(0)
   partialAmount     Decimal?  @db.Decimal(18, 8)
   totalAmount       Decimal?  @db.Decimal(18, 8)
+  realName          String?
   lastClientMsgAt   DateTime?
   lastBotMsgAt      DateTime?
   lastBotMsg        String?
@@ -838,6 +840,29 @@ model P2PChatState {
 
   @@unique([tenantId, exchange, orderNumber])
   @@index([tenantId, exchange, state])
+}
+
+// El apodo de Binance que se ve ANTES del pago (order.counterPartNickName)
+// viene enmascarado a 3 letras + asteriscos y colisiona entre compradores
+// distintos (confirmado en vivo jul 2026, ver comentario de getBuyerHistory
+// en chat-agent.ts) — no sirve para reconocer "es la misma persona de antes".
+// El evento de chat "seller_payed" (dispara cuando el comprador marca
+// "Pagado") sí trae el apodo REAL sin enmascarar y el nombre legal completo.
+// Esta tabla guarda esa asociación la primera vez que se ve, para poder
+// reconocer a un comprador recurrente en un pedido FUTURO — nunca en el
+// saludo inicial del MISMO pedido, porque ese evento todavía no ocurrió.
+model P2PBuyerIdentity {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int
+  exchange   String
+  label      String   @default("ONZE")
+  nickName   String
+  realName   String
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  Tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, exchange, label, nickName])
 }
 
 // Bloqueo real (no en memoria) contra procesamiento concurrente del chat.

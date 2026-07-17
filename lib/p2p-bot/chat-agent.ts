@@ -258,9 +258,42 @@ async function processOrderLocked(
   const sinceTime = cs.lastClientMsgAt ? new Date(cs.lastClientMsgAt).getTime() : null;
   const lastClientMsg = findLastClientMsg(msgs, sinceTime);
 
+  // Binance revela el nombre real (sin enmascarar) recién cuando el comprador
+  // marca "Pagado" — llega en un mensaje de sistema "seller_payed", nunca
+  // antes. Se captura acá (una sola vez por orden) y se guarda también en
+  // P2PBuyerIdentity para poder reconocer a este comprador en un pedido
+  // FUTURO (el apodo que se ve ANTES del pago viene enmascarado a 3 letras y
+  // colisiona entre personas distintas — no sirve para esto).
+  if (!cs.realName) {
+    const payed = extractSellerPayed(msgs);
+    if (payed?.realName) {
+      await prisma.p2PChatState.update({ where: { id: cs.id }, data: { realName: payed.realName } });
+      cs.realName = payed.realName;
+      if (payed.nickName) {
+        await prisma.p2PBuyerIdentity.upsert({
+          where: { tenantId_exchange_label_nickName: { tenantId, exchange, label, nickName: payed.nickName } },
+          update: { realName: payed.realName },
+          create: { tenantId, exchange, label, nickName: payed.nickName, realName: payed.realName },
+        }).catch(() => {});
+      }
+    }
+  }
+
   await logMsg(tenantId, exchange, `[Chat] processOrder ${orderNo} state=${cs.state} pending=${isPending} paid=${isPaid} msgs=${msgs.length} lastClientMsg=${lastClientMsg?.content?.slice(0, 30)?.replace(/\n/g,'|') || 'null'}`);
 
   if (cs.state === "awaiting_verification") {
+    // El comprador puede escribir algo (ej. "Atento") ANTES de que Binance
+    // confirme la verificación KYC. Ese mensaje no es respuesta a ninguna
+    // pregunta nuestra todavía — avanzar el cursor igual, si no se "reproduce"
+    // como respuesta a la primera pregunta real (personal/empresa) apenas se
+    // verifica la orden. Bug real confirmado en vivo (jul 2026): un comprador
+    // respondió "1" y el bot contestó "No entendí" — en realidad estaba
+    // respondiendo tarde a este "Atento" viejo, no al "1".
+    if (lastClientMsg) {
+      const msgTime = lastClientMsg.createTime > 0 ? new Date(lastClientMsg.createTime) : new Date();
+      await prisma.p2PChatState.update({ where: { id: cs.id }, data: { lastClientMsgAt: msgTime } });
+      cs.lastClientMsgAt = msgTime;
+    }
     if (order.verified) {
       await handleVerified(tenantId, exchange, client, cs, order, activeAds, label);
     }
@@ -270,12 +303,12 @@ async function processOrderLocked(
   // Handle paid status BEFORE processing client messages
   if (isPaid) {
     if (cs.state === "account_sent") {
-      await sendAndTrack(client, exchange, orderNo, cs, paymentAckMessage());
+      await sendAndTrack(client, exchange, orderNo, cs, paymentAckMessage(firstNameFrom(cs.realName)));
       await updateState(cs.id, "payment_made", { paidAt: new Date() });
       return;
     }
     if (!["account_sent", "payment_made", "awaiting_comprobant", "completed", "closed", "awaiting_verification"].includes(cs.state)) {
-      await sendAndTrack(client, exchange, orderNo, cs, paymentAckMessage());
+      await sendAndTrack(client, exchange, orderNo, cs, paymentAckMessage(firstNameFrom(cs.realName)));
       await updateState(cs.id, "payment_made", { paidAt: new Date() });
       return;
     }
@@ -342,8 +375,9 @@ async function processOrderLocked(
       if (cs.isCompany && !cs.erutReceived) {
         extra = "\n\nRecuerda que al ser cuenta empresa también necesitamos el ERUT para validar la titularidad y emitir la factura.";
       }
+      const name = firstNameFrom(cs.realName);
       await sendAndTrack(client, exchange, orderNo, cs,
-        "Hola, ¿nos puedes enviar el comprobante del pago para agilizar la validación?" + extra
+        (name ? `Hola ${name}, ¿nos puedes` : "Hola, ¿nos puedes") + " enviar el comprobante del pago para agilizar la validación?" + extra
       );
       await updateState(cs.id, "awaiting_comprobant");
     }
@@ -886,6 +920,38 @@ function findLastClientMsg(msgs: ChatMessage[], sinceTime?: number | null): Chat
   return null;
 }
 
+// Busca el mensaje de sistema "seller_payed" (se dispara cuando el comprador
+// marca "Pagado") — es el único punto donde Binance manda el apodo SIN
+// enmascarar junto con el nombre legal completo, ej:
+// {"nickName":"MarcoMoye","realName":"MOYE ORELLANA MARCO ANTONIO","type":"seller_payed"}
+function extractSellerPayed(msgs: ChatMessage[]): { nickName: string | null; realName: string | null } | null {
+  for (const m of msgs) {
+    if (m.type !== "system") continue;
+    try {
+      const parsed = JSON.parse(m.content);
+      if (parsed?.type === "seller_payed" && parsed?.realName) {
+        return { nickName: parsed.nickName ?? null, realName: parsed.realName };
+      }
+    } catch {
+      // no era JSON, ignorar
+    }
+  }
+  return null;
+}
+
+// El nombre legal viene "APELLIDO1 APELLIDO2 NOMBRE1 [NOMBRE2]" (formato de
+// cédula latinoamericano — confirmado con varios ejemplos reales en jul
+// 2026). Heurística: con 3+ palabras, el primer nombre de pila es la 3ra;
+// con 2 palabras, es la 1ra. Si falla, mejor no usar nombre que usar uno mal.
+function firstNameFrom(realName?: string | null): string | null {
+  if (!realName) return null;
+  const parts = realName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return null;
+  const raw = parts.length >= 3 ? parts[2] : parts[0];
+  if (!raw || raw.length < 2) return null;
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
 function hasComprobant(msgs: ChatMessage[], since: Date | string | null): boolean {
   const sinceTime = since ? new Date(since).getTime() : 0;
   return msgs.some(m => !m.self && m.createTime > sinceTime && (m.imageUrl || m.content.toLowerCase().includes("comprobant")));
@@ -1272,22 +1338,25 @@ function buildInitialGreeting(isReturning: boolean, nick?: string | null): strin
   ]);
 }
 
-function paymentAckMessage(): string {
-  return pick([
+function paymentAckMessage(name?: string | null): string {
+  const msg = pick([
     "Recibimos tu aviso de pago ✅ Vamos a verificar la información.",
     "Listo, vimos tu aviso de pago ✅ Ya estamos validando.",
     "Perfecto, aviso de pago recibido ✅ Un momento mientras confirmamos.",
   ]);
+  return name ? `${name}, ${msg}` : msg;
 }
 
 async function buildCompletionMessage(cs: any, tenantId: number, exchange: string): Promise<string> {
   const greeting = getTimeGreeting();
   const isNew = cs.counterparty ? !(cs.isReturning || await getBuyerHistory(tenantId, exchange, cs.counterparty)) : true;
+  const name = firstNameFrom(cs.realName);
   let msg = pick([
     "✨ Listo, tus USDT están disponibles. Gracias por tu preferencia, esperamos verte pronto.",
     "✨ Todo listo, tus USDT ya están en tu cuenta. Gracias por confiar en nosotros.",
     "✨ Confirmado, ya tienes tus USDT disponibles. ¡Gracias por la compra!",
   ]);
+  if (name) msg = `${name}, ` + msg;
   if (isNew) msg += `\n\n⭐ Si todo estuvo bien, agradecemos una calificación positiva.`;
   msg += `\n\n🤗 ¡${greeting}!`;
   return msg;
