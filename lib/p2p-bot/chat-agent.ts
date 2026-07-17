@@ -424,39 +424,22 @@ export async function handleVerified(
   const isReturning = !!knownRealName;
 
   // Camino rápido: si lo primero que escribió (antes de verificar) ya pedía
-  // la cuenta directamente, saltamos la pregunta de personal/empresa entera
-  // — ver matchWantsAccount. Si en ese mismo mensaje ya mencionó
-  // empresa/erut/factura se respeta eso; si no dijo nada, isCompany queda en
-  // false por defecto y el caso "account_sent" lo detecta después de forma
-  // reactiva si hace falta (igual que siempre).
+  // la cuenta directamente, reconocemos el pedido en el mismo saludo — pero
+  // seguimos preguntando personal/empresa (regla del negocio: siempre hay
+  // que saberlo, nunca se salta). pendingFirstMsg queda guardado a propósito
+  // (no se limpia acá) para que awaiting_account_type lo lea de nuevo y
+  // mande la(s) cuenta(s) apenas responda, sin un paso extra de "¿qué
+  // banco?" si ya se puede resolver.
   const firstMsg = (cs.pendingFirstMsg || "").toLowerCase();
+  const name = firstNameFrom(knownRealName);
+  const hello = isReturning && name ? `¡Hola ${name}!` : "¡Hola!";
+  let greeting: string;
   if (firstMsg && matchWantsAccount(firstMsg)) {
-    const asCompany = matchERUT(firstMsg) || firstMsg.includes("empresa");
-    const ad = findMatchingAd(activeAds, order);
-    const target = await resolveFastTrackAccount(tenantId, exchange, ad, label, firstMsg);
-    if (target) {
-      await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: asCompany }, target);
-      await updateState(cs.id, "account_sent", { isCompany: asCompany, erutRequested: asCompany, isReturning, chosenBank: target.bank, chosenAccountIds: [target.id], pendingFirstMsg: null });
-      await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: camino rápido — pidió la cuenta directo, se mandó sin preguntar personal/empresa`);
-      return;
-    }
-    const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
-    const accounts = pickDefaultAccountsPerBank(allAccounts);
-    if (accounts.length > 1) {
-      const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
-      const sentMenu = await sendAndTrack(client, exchange, order.orderNumber, cs,
-        `¡Hola! Claro, ¿a qué banco necesitas los datos?\n${choices}\n\nTambién puedes escribir el nombre del banco.`,
-        createdAtTs
-      );
-      if (sentMenu) {
-        await updateState(cs.id, "awaiting_bank_choice", { isCompany: asCompany, erutRequested: asCompany, isReturning, pendingFirstMsg: null });
-        await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: camino rápido — pidió la cuenta directo, banco ambiguo, se preguntó cuál sin pasar por personal/empresa`);
-      }
-      return;
-    }
+    const wantsMultiple = matchWantsMultipleAccounts(firstMsg);
+    greeting = `${hello} Ya te paso ${wantsMultiple ? "las cuentas que necesites" : "la cuenta"} — antes dime: ¿transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.`;
+  } else {
+    greeting = buildInitialGreeting(isReturning, name);
   }
-
-  const greeting = buildInitialGreeting(isReturning, firstNameFrom(knownRealName));
 
   const sent = await sendAndTrack(client, exchange, order.orderNumber, cs,
     greeting,
@@ -466,7 +449,6 @@ export async function handleVerified(
     await updateState(cs.id, "awaiting_account_type", {
       isCompany: false,
       isReturning,
-      pendingFirstMsg: null,
       ...(knownRealName ? { realName: knownRealName } : {}),
     });
   }
@@ -514,10 +496,23 @@ async function handleClientResponse(
           await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
           await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
         } else {
-          const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
-          const msg = erutNote + "\n\n¿A qué cuenta deseas transferir?\n" + choices;
-          await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
-          await updateState(cs.id, "awaiting_bank_choice", { isCompany: true, erutRequested: true, retryCount: 0 });
+          const pending = (cs.pendingFirstMsg || "").toLowerCase();
+          const named = pending ? matchBank(pending, allAccounts) : null;
+          if (pending && matchWantsMultipleAccounts(pending)) {
+            const msg = erutNote + "\n\nEstas son nuestras cuentas disponibles:\n\n" +
+              accounts.map((a: any, i: number) => `--- Cuenta ${i + 1} ---\n${formatSingleAccount(a)}`).join("\n\n") +
+              "\n\nCuando realices cada pago:\n- Marca \"Pagado\" en la orden\n- Envía los comprobantes aquí en el chat";
+            await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
+            await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, chosenBank: accounts.map((a: any) => a.bank).join(", "), chosenAccountIds: accounts.map((a: any) => a.id), retryCount: 0, pendingFirstMsg: null });
+          } else if (named) {
+            await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: true }, named);
+            await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, chosenBank: named.bank, chosenAccountIds: [named.id], retryCount: 0, pendingFirstMsg: null });
+          } else {
+            const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
+            const msg = erutNote + "\n\n¿A qué cuenta deseas transferir?\n" + choices;
+            await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
+            await updateState(cs.id, "awaiting_bank_choice", { isCompany: true, erutRequested: true, retryCount: 0 });
+          }
         }
       } else if (opt === 1 || textLower.includes("personal")) {
         // Personal flow
@@ -542,31 +537,40 @@ async function handleClientResponse(
           await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
           await updateState(cs.id, "account_sent", { chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
         } else {
-          // New customer, multiple accounts: ask
-          const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
-          await sendAndTrack(client, exchange, order.orderNumber, cs,
-            `¿A qué cuenta deseas transferir?\n${choices}\n\nTambién puedes escribir el nombre del banco.`
-          );
-          await updateState(cs.id, "awaiting_bank_choice", { isCompany: false, retryCount: 0 });
+          // Camino rápido: si en el primer mensaje ya pidió varias cuentas o
+          // nombró un banco puntual, resolvemos directo en vez de preguntar
+          // de nuevo — pero la pregunta personal/empresa de arriba nunca se
+          // saltó, solo se evita un paso extra AHORA que ya la respondió.
+          const pending = (cs.pendingFirstMsg || "").toLowerCase();
+          const named = pending ? matchBank(pending, allAccounts) : null;
+          if (pending && matchWantsMultipleAccounts(pending)) {
+            const msg = "Estas son nuestras cuentas disponibles:\n\n" +
+              accounts.map((a: any, i: number) => `--- Cuenta ${i + 1} ---\n${formatSingleAccount(a)}`).join("\n\n") +
+              "\n\nCuando realices cada pago:\n- Marca \"Pagado\" en la orden\n- Envía los comprobantes aquí en el chat";
+            await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
+            await updateState(cs.id, "account_sent", { chosenBank: accounts.map((a: any) => a.bank).join(", "), chosenAccountIds: accounts.map((a: any) => a.id), retryCount: 0, pendingFirstMsg: null });
+          } else if (named) {
+            await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: false }, named);
+            await updateState(cs.id, "account_sent", { chosenBank: named.bank, chosenAccountIds: [named.id], retryCount: 0, pendingFirstMsg: null });
+          } else {
+            // New customer, multiple accounts: ask
+            const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
+            await sendAndTrack(client, exchange, order.orderNumber, cs,
+              `¿A qué cuenta deseas transferir?\n${choices}\n\nTambién puedes escribir el nombre del banco.`
+            );
+            await updateState(cs.id, "awaiting_bank_choice", { isCompany: false, retryCount: 0 });
+          }
         }
       } else if (matchWantsAccount(textLower)) {
-        // Camino rápido: ignoró el menú personal/empresa y pidió la cuenta
-        // directo (ej. "la cuenta porfa", "cuenta banco estado") — se manda
-        // sin insistir con el número, mismo criterio que en handleVerified.
-        const ad = findMatchingAd(activeAds, order);
-        const target = await resolveFastTrackAccount(tenantId, exchange, ad, label, textLower);
-        if (target) {
-          await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: false }, target);
-          await updateState(cs.id, "account_sent", { isCompany: false, chosenBank: target.bank, chosenAccountIds: [target.id], retryCount: 0 });
-        } else {
-          const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
-          const accounts = pickDefaultAccountsPerBank(allAccounts);
-          const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
-          await sendAndTrack(client, exchange, order.orderNumber, cs,
-            `Claro, ¿a qué banco necesitas los datos?\n${choices}\n\nTambién puedes escribir el nombre del banco.`
-          );
-          await updateState(cs.id, "awaiting_bank_choice", { isCompany: false, retryCount: 0 });
-        }
+        // Pidió la cuenta pero no dijo personal/empresa — esa pregunta NUNCA
+        // se salta. Se reconoce el pedido en el mismo mensaje y se guarda
+        // (pendingFirstMsg) para resolver directo apenas responda 1 o 2,
+        // sin otro paso intermedio de "¿qué banco?".
+        const wantsMultiple = matchWantsMultipleAccounts(textLower);
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          `Claro, ya te paso ${wantsMultiple ? "las cuentas que necesites" : "la cuenta"} — antes dime: ¿transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.`
+        );
+        await updateState(cs.id, "awaiting_account_type", { pendingFirstMsg: textLower, retryCount: 0 });
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
@@ -1143,30 +1147,20 @@ function matchProblemType(text: string): string | null {
 }
 
 // Compradores que van directo al grano: "hola la cuenta porfa", "cuenta banco
-// estado", "tendrás 3 cuentas?", "los datos porfa". No preguntan personal o
-// empresa, no esperan menú con números — solo quieren el dato para pagar.
-// Confirmado en vivo (jul 2026): forzarlos a pasar por personal/empresa +
-// elegir banco por número hizo que un comprador cancelara la orden ("Chao
-// mucha vuelta"). Si se puede resolver la cuenta sin ambigüedad, se le manda
-// directo — el tipo de cuenta (personal/empresa) se sigue detectando después
-// de forma reactiva si el comprador menciona "empresa"/"erut"/"factura" (ver
-// caso "account_sent" más abajo, ya existía para esto).
+// estado", "tendrás 3 cuentas?", "los datos porfa". Confirmado en vivo (jul
+// 2026): forzarlos a pasar por el saludo genérico y DESPUÉS por un menú de
+// banco por número (dos pasos separados) hizo que un comprador cancelara la
+// orden ("Chao mucha vuelta"). La pregunta personal/empresa NUNCA se salta
+// (regla del negocio) — lo que se evita es el paso EXTRA de "¿qué banco?"
+// cuando ya se puede resolver sin ambigüedad a partir de lo que escribió.
 function matchWantsAccount(text: string): boolean {
   return /\bcuentas?\b/.test(text) || text.includes("los datos") || text.includes("donde deposito") || text.includes("donde transfiero") || text.includes("dónde deposito") || text.includes("dónde transfiero");
 }
 
-// Intenta resolver a UNA cuenta sin ambigüedad para el camino rápido de
-// matchWantsAccount: si el mensaje ya nombra un banco (matchBank) se usa ese;
-// si no lo nombra pero solo hay una cuenta por defecto disponible, se usa esa.
-// Con 2+ bancos y ninguno mencionado, devuelve null — ahí sí hay que
-// preguntar cuál (no hay forma de adivinar sin arriesgar mandar el banco
-// equivocado).
-async function resolveFastTrackAccount(tenantId: number, exchange: string, ad: any, label: string, text: string): Promise<any | null> {
-  const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
-  const named = matchBank(text, allAccounts);
-  if (named) return named;
-  const accounts = pickDefaultAccountsPerBank(allAccounts);
-  return accounts.length === 1 ? accounts[0] : null;
+// "tendrás 3 cuentas?", "varias cuentas", "más de una cuenta" — quiere la
+// LISTA completa para repartir el pago él mismo, no una cuenta puntual.
+function matchWantsMultipleAccounts(text: string): boolean {
+  return /\b[2-9]\s*cuentas\b/.test(text) || text.includes("varias cuentas") || text.includes("distintas cuentas") || text.includes("otras cuentas") || text.includes("más de una cuenta") || text.includes("mas de una cuenta");
 }
 
 function matchThirdParty(text: string): boolean {
