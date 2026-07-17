@@ -50,7 +50,15 @@ export async function processChats(
 
     const order = normalizeOrder(rawOrder, exchange);
     await logMsg(tenantId, exchange, `[Chat] raw ${orderNo} status=${order.status} group=${order.group} rawStatus=${(rawOrder.orderStatus ?? rawOrder.status ?? '?')} tradeType=${rawOrder.tradeType || '?'} verified=${order.verified} rawVerify=${rawOrder.additionalKycVerify}`);
-    if (order.group === "cancelled") return;
+    // Antes esto saltaba órdenes canceladas ANTES de llegar a processOrder —
+    // pero el cierre real (cs.state -> "closed") vive DENTRO de
+    // processOrderLocked, así que nunca se ejecutaba: una orden cancelada
+    // por Binance (vencimiento) se quedaba congelada para siempre en el
+    // último estado que tenía (ej. "account_sent"). Confirmado en vivo (jul
+    // 2026): una orden llevaba 6+ horas así. processOrderLocked ya maneja
+    // bien tanto "sin chat state" (no hace nada) como "con chat state"
+    // (la cierra, barato, antes de tocar la API de mensajes de Binance) —
+    // así que no hace falta filtrar acá.
 
     try {
       await processOrder(tenantId, exchange, client, order, activeAds, label);
