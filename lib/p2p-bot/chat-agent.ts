@@ -504,14 +504,31 @@ async function handleClientResponse(
           await updateState(cs.id, "awaiting_company_type", { retryCount: 0 });
         }
       } else {
-        const words = textLower.split(/\s+/);
         const ad = findMatchingAd(activeAds, order);
         const accounts = await getAccountsForAd(tenantId, exchange, ad, label);
         const chosen = matchBank(textLower, accounts);
+        const problemType = matchProblemType(textLower);
         if (chosen) {
           await sendAccountWithErutNote(tenantId, exchange, client, order, cs, chosen);
           await updateState(cs.id, "account_sent", { chosenBank: chosen.bank, chosenAccountIds: [chosen.id], retryCount: 0 });
-        } else if (words.some(w => ["error", "falla", "falló", "problema", "rechazó", "rechazado", "rechazo", "permite", "deja", "permite"].includes(w)) || textLower.includes("no me")) {
+        } else if (problemType === "limit") {
+          // Pregunta proactiva por el límite de su banco (ej: "solo me deja
+          // 500mil, ¿puedo hacer 2 pagos?") — NO es un reclamo de que la
+          // transferencia falló, así que no debe caer en handleTransferFails
+          // (eso solo ofrece OTRA cuenta, no responde la pregunta real).
+          const amount = extractAmount(textLower);
+          if (amount > 0 && cs.totalAmount) {
+            await offerSplitPayment(tenantId, exchange, client, order, cs, amount, label);
+          } else {
+            await sendAndTrack(client, exchange, order.orderNumber, cs,
+              pick([
+                "Sí, puedes hacer el pago en 2 partes sin problema. ¿Cuánto te permite transferir tu banco por vez?",
+                "Claro, no hay problema en dividirlo en 2 pagos. ¿Cuál es el máximo que te deja transferir tu banco?",
+              ])
+            );
+            await updateState(cs.id, "awaiting_limit_amount", { retryCount: 0 });
+          }
+        } else if (problemType === "not_working" || textLower.includes("no me")) {
           await handleTransferFails(tenantId, exchange, client, order, cs, activeAds, textLower, label);
         }
       }
@@ -604,23 +621,7 @@ async function handleClientResponse(
     case "awaiting_limit_amount": {
       const amount = extractAmount(textLower);
       if (amount > 0 && cs.totalAmount) {
-        const total = Number(cs.totalAmount);
-        const accounts = await getAvailableAccounts(tenantId, exchange, label);
-        const chunks = distributeAmount(accounts, amount, total);
-        if (chunks.length > 0) {
-          const msg = ["Entendido. Vamos a dividir el pago. Aquí tienes todas las cuentas disponibles:\n"];
-          chunks.forEach((c: any, i: number) => {
-            msg.push(`--- Cuenta ${i + 1} ---\n${formatSingleAccount(c)}Monto: $${formatCLP(c.assignedAmount)}\n`);
-          });
-          msg.push("Ve realizando las transferencias y enviando los comprobantes de cada una. Quedo atento.");
-          await sendAndTrack(client, exchange, order.orderNumber, cs, msg.join("\n"));
-          await updateState(cs.id, "account_sent", { partialAmount: amount, chosenAccountIds: chunks.map((c: any) => c.id), retryCount: 0 });
-        } else {
-          await sendAndTrack(client, exchange, order.orderNumber, cs,
-            "Entendido, con ese monto no podemos dividir el pago. ¿Puedes intentar con otra cuenta?"
-          );
-          await updateState(cs.id, "account_sent", { retryCount: 0 });
-        }
+        await offerSplitPayment(tenantId, exchange, client, order, cs, amount, label);
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
@@ -880,6 +881,12 @@ function matchBank(text: string, accounts: any[]): any | null {
   for (const a of accounts) {
     if (text.includes(a.bank.toLowerCase())) return a;
   }
+  // Coincidencia por palabra clave del banco sin el prefijo "Banco" (ej: el
+  // comprador escribe "bci" solo, y la cuenta está guardada como "BANCO BCI").
+  for (const a of accounts) {
+    const tokens = bankCoreTokens(a.bank);
+    if (tokens.some(t => new RegExp(`\\b${t}\\b`, "i").test(text))) return a;
+  }
 
   // "termina en 8502" / "últimos 8502" / "acaba en 02"
   const tailMatch = text.match(/(?:termina(?:n)?\s*(?:en)?|acaba(?:n)?\s*(?:en)?|[uú]ltimos?)\s*(\d{2,})/);
@@ -952,6 +959,33 @@ function isSingleBankAd(ad: any): boolean {
   return pms.length <= 1;
 }
 
+function normalizeBankName(name: string): string {
+  return (name || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+}
+
+const BANK_FILLER_WORDS = new Set(["banco", "de", "chile", "sa", "spa", "cl"]);
+
+// Palabras "de verdad" de un nombre de banco, sin gen\u00e9ricos como "banco" o
+// "chile" \u2014 permite reconocer que "BANCO BCI" (como lo guardaste) y "BCI
+// Chile" (como lo llama Binance en el anuncio) son el mismo banco, aunque el
+// orden de las palabras sea distinto y ninguno sea substring del otro.
+function bankCoreTokens(name: string): string[] {
+  return normalizeBankName(name)
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(w => w.length >= 2 && !BANK_FILLER_WORDS.has(w));
+}
+
+function bankNamesMatch(nameA: string, nameB: string): boolean {
+  const a = normalizeBankName(nameA);
+  const b = normalizeBankName(nameB);
+  if (!a || !b) return false;
+  if (a.includes(b) || b.includes(a)) return true;
+  const tokensA = bankCoreTokens(nameA);
+  const tokensB = bankCoreTokens(nameB);
+  return tokensA.length > 0 && tokensB.length > 0 && tokensA.some(t => tokensB.includes(t));
+}
+
 async function getAccountsForAd(tenantId: number, exchange: string, ad: any, label = "ONZE"): Promise<any[]> {
   const all = await prisma.p2PAccount.findMany({
     where: { tenantId, exchange, label, isActive: true },
@@ -960,16 +994,15 @@ async function getAccountsForAd(tenantId: number, exchange: string, ad: any, lab
   if (!ad) return all.map(parseAccountInfo);
 
   const adBanks = (ad.paymentMethods || ad.payments || []).map((p: any) => {
-    if (typeof p === "string") return p.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-    return (p.name || p.tradeMethodName || p.paymentMethodName || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    if (typeof p === "string") return p;
+    return p.name || p.tradeMethodName || p.paymentMethodName || "";
   });
 
   if (adBanks.length === 0) return all.map(parseAccountInfo);
 
   const filtered = all.filter(a => {
     const info = parseAccountInfo(a);
-    const bankNorm = (info.bank || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-    return adBanks.some((ab: string) => bankNorm.includes(ab) || ab.includes(bankNorm));
+    return adBanks.some((ab: string) => bankNamesMatch(info.bank, ab));
   });
 
   return filtered.length > 0 ? filtered.map(parseAccountInfo) : all.map(parseAccountInfo);
@@ -1013,11 +1046,27 @@ function parseAccountInfo(a: any): any {
   return { id: a.id, bank: info.bank || "", holder: info.holder || "", rut: info.rut || "", accountType: info.accountType || "", accountNumber: info.accountNumber || "", email: info.email || "" };
 }
 
+// Nuestras propias cuentas receptoras deberían ser todas del mismo titular
+// hoy (ZINPLE SPA) — esto es solo una red de seguridad extra para que, si
+// algún día se agrega una cuenta receptora de otro titular, nunca se mezcle
+// con otra en un mismo split. La regla real del negocio (jul 2026) es otra:
+// cuando el COMPRADOR divide su pago en 2+ transferencias, todas deben salir
+// de cuentas a NOMBRE DEL COMPRADOR (misma persona en ambas) — no puede pagar
+// una parte desde su cuenta y otra desde la de un tercero. Esa regla no se
+// puede validar por código (no vemos las cuentas de origen del comprador),
+// así que se le advierte explícitamente en el mensaje (ver offerSplitPayment).
+function sameHolderAccounts(accounts: any[]): any[] {
+  if (accounts.length === 0) return accounts;
+  const primaryHolder = accounts[0].holder;
+  return accounts.filter(a => a.holder === primaryHolder);
+}
+
 function distributeAmount(accounts: any[], perTransfer: number, total: number): any[] {
   if (perTransfer <= 0 || total <= 0) return [];
+  const sameHolder = sameHolderAccounts(accounts);
   const result: any[] = [];
   let remaining = total;
-  for (const acct of accounts) {
+  for (const acct of sameHolder) {
     if (remaining <= 0) break;
     const assign = Math.min(perTransfer, remaining);
     result.push({ ...acct, assignedAmount: assign });
@@ -1025,6 +1074,39 @@ function distributeAmount(accounts: any[], perTransfer: number, total: number): 
   }
   if (remaining > 0) return [];
   return result;
+}
+
+// Mensaje + reparto de cuentas cuando el comprador dice que su banco tiene un
+// límite por transferencia menor al monto total — usado tanto si lo pregunta
+// de entrada (ej. "mi banco me deja 500mil, puedo hacer 2 pagos?") como si
+// llega acá tras la pregunta de "¿cuánto te permite tu banco?".
+async function offerSplitPayment(
+  tenantId: number,
+  exchange: string,
+  client: any,
+  order: any,
+  cs: any,
+  amount: number,
+  label = "ONZE"
+): Promise<void> {
+  const total = Number(cs.totalAmount) || 0;
+  const accounts = await getAvailableAccounts(tenantId, exchange, label);
+  const chunks = distributeAmount(accounts, amount, total);
+  if (chunks.length > 0) {
+    const msg = ["Sin problema, vamos a dividir el pago. Aquí tienes las cuentas:\n"];
+    chunks.forEach((c: any, i: number) => {
+      msg.push(`--- Cuenta ${i + 1} ---\n${formatSingleAccount(c)}Monto: $${formatCLP(c.assignedAmount)}\n`);
+    });
+    msg.push("Importante: ambas transferencias deben salir de cuentas a tu nombre (el titular de la orden) — no aceptamos que una parte la pague otra persona.");
+    msg.push("Ve realizando las transferencias y enviando los comprobantes de cada una. Quedo atento.");
+    await sendAndTrack(client, exchange, order.orderNumber, cs, msg.join("\n"));
+    await updateState(cs.id, "account_sent", { partialAmount: amount, chosenAccountIds: chunks.map((c: any) => c.id), retryCount: 0 });
+  } else {
+    await sendAndTrack(client, exchange, order.orderNumber, cs,
+      "Entendido, con ese monto no podemos dividir el pago. ¿Puedes intentar con otra cuenta?"
+    );
+    await updateState(cs.id, "account_sent", { retryCount: 0 });
+  }
 }
 
 function formatCLP(n: number): string {
