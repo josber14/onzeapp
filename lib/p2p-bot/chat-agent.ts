@@ -260,11 +260,17 @@ async function processOrder(
     return;
   }
 
-  // Monitor payment_made: ask for receipt after 1 minute
+  // Monitor payment_made: ask for receipt after 1 minute.
+  // Se compara contra cs.paidAt (cuándo detectamos el pago), NO contra
+  // cs.lastBotMsgAt — el comprobante casi siempre llega unos segundos ANTES
+  // de que el bot alcance a mandar el "recibimos tu aviso de pago", así que
+  // comparar contra el propio mensaje del bot lo dejaba invisible y el bot
+  // terminaba pidiendo de nuevo un comprobante que ya tenía (confirmado en
+  // vivo, jul 2026).
   if (cs.state === "payment_made") {
-    const paidAt = cs.paidAt ? new Date(cs.paidAt).getTime() : 0;
-    const oneMinAfter = paidAt + 60 * 1000;
-    if (Date.now() >= oneMinAfter && !hasComprobant(msgs, cs.lastBotMsgAt)) {
+    const paidAtMs = cs.paidAt ? new Date(cs.paidAt).getTime() : 0;
+    const oneMinAfter = paidAtMs + 60 * 1000;
+    if (Date.now() >= oneMinAfter && !hasComprobant(msgs, cs.paidAt)) {
       let extra = "";
       if (cs.isCompany && !cs.erutReceived) {
         extra = "\n\nRecuerda que al ser cuenta empresa también necesitamos el ERUT para validar la titularidad y emitir la factura.";
@@ -279,7 +285,7 @@ async function processOrder(
 
   // Check if receipt was sent while in awaiting_comprobant
   if (cs.state === "awaiting_comprobant" && isPaid) {
-    if (hasComprobant(msgs, cs.lastBotMsgAt)) {
+    if (hasComprobant(msgs, cs.paidAt)) {
       await updateState(cs.id, "payment_made");
     }
     return;
@@ -336,12 +342,13 @@ async function handleClientResponse(
       if (opt === 2 || textLower.includes("empresa") || matchERUT(textLower)) {
         // Company flow
         const ad = findMatchingAd(activeAds, order);
-        const accounts = await getAccountsForAd(tenantId, exchange, ad, label);
+        const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
+        const accounts = pickDefaultAccountsPerBank(allAccounts);
         const erutNote = "Al realizar el pago, por favor adjunta el ERUT junto con el comprobante para emitir la factura.";
 
         // Check if returning customer
         const history = cs.counterparty ? await getBuyerHistory(tenantId, exchange, cs.counterparty) : null;
-        const previousAccountStillAvailable = history && accounts.some((a: any) => a.id === history.accountId);
+        const previousAccountStillAvailable = history && allAccounts.some((a: any) => a.id === history.accountId);
 
         if (previousAccountStillAvailable) {
           const msg = erutNote + "\n\n" +
@@ -364,11 +371,12 @@ async function handleClientResponse(
       } else if (opt === 1 || textLower.includes("personal")) {
         // Personal flow
         const ad = findMatchingAd(activeAds, order);
-        const accounts = await getAccountsForAd(tenantId, exchange, ad, label);
+        const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
+        const accounts = pickDefaultAccountsPerBank(allAccounts);
 
         // Check if returning customer
         const history = cs.counterparty ? await getBuyerHistory(tenantId, exchange, cs.counterparty) : null;
-        const previousAccountStillAvailable = history && accounts.some((a: any) => a.id === history.accountId);
+        const previousAccountStillAvailable = history && allAccounts.some((a: any) => a.id === history.accountId);
 
         if (previousAccountStillAvailable) {
           const msg = `¿Quieres que te envíe la cuenta de ${history.bank} de nuevo, o vas a transferir a la misma cuenta donde ya pagaste antes?\n  1) Envíame la cuenta\n  2) Voy a transferir a la misma cuenta\n\nResponde 1 o 2.`;
@@ -408,9 +416,10 @@ async function handleClientResponse(
     case "awaiting_previous_account": {
       const opt = matchOption(textLower, 2);
       if (opt === 1) {
-        // Send account again
+        // Send account again — puede ser la cuenta oculta (vista) si esa fue
+        // la elegida antes, por eso incluye ocultas.
         const ad = findMatchingAd(activeAds, order);
-        const accounts = await getAccountsForAd(tenantId, exchange, ad, label);
+        const accounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
         const acct = accounts.find((a: any) => a.id === (cs.chosenAccountIds?.[0] || 0)) || accounts[0];
         await sendAccountWithErutNote(tenantId, exchange, client, order, cs, acct);
         await updateState(cs.id, "account_sent", { chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
@@ -462,9 +471,13 @@ async function handleClientResponse(
         break;
       }
       const ad = findMatchingAd(activeAds, order);
-      const accounts = await getAccountsForAd(tenantId, exchange, ad, label);
+      const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
+      const accounts = pickDefaultAccountsPerBank(allAccounts);
       const opt = matchOption(textLower, accounts.length);
-      const chosen = opt ? accounts[opt - 1] : matchBank(textLower, accounts);
+      // El número del menú solo elige entre las cuentas por defecto (nunca la
+      // vista); pero si escribe texto libre, matchBank sí puede reconocer una
+      // cuenta oculta (ej. "vista", o los últimos dígitos) si la pide directo.
+      const chosen = opt ? accounts[opt - 1] : matchBank(textLower, allAccounts);
 
       if (chosen) {
         await sendAccountWithErutNote(tenantId, exchange, client, order, cs, chosen);
@@ -504,8 +517,10 @@ async function handleClientResponse(
           await updateState(cs.id, "awaiting_company_type", { retryCount: 0 });
         }
       } else {
+        // Acá es exactamente el caso "el comprador pregunta directo por una
+        // cuenta específica" — incluye las ocultas (vista) a propósito.
         const ad = findMatchingAd(activeAds, order);
-        const accounts = await getAccountsForAd(tenantId, exchange, ad, label);
+        const accounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
         const chosen = matchBank(textLower, accounts);
         const problemType = matchProblemType(textLower);
         if (chosen) {
@@ -986,35 +1001,70 @@ function bankNamesMatch(nameA: string, nameB: string): boolean {
   return tokensA.length > 0 && tokensB.length > 0 && tokensA.some(t => tokensB.includes(t));
 }
 
-async function getAccountsForAd(tenantId: number, exchange: string, ad: any, label = "ONZE"): Promise<any[]> {
+// Cuando un banco tiene más de una cuenta guardada (ej: Banco Estado
+// Corriente + Vista), solo UNA se ofrece por defecto (numerada, o enviada
+// directo si es la única del banco) — se prefiere "corriente". Las demás
+// (ej. la vista) quedan ocultas: solo se entregan si el comprador la pide
+// explícitamente en texto libre (ver matchBank), nunca proactivamente.
+// Regla confirmada por el usuario jul 2026: "la cuenta vista es para
+// aquellas personas que preguntan si pueden transferir a esa cuenta".
+function pickDefaultAccountsPerBank(accounts: any[]): any[] {
+  const byBank = new Map<string, any[]>();
+  for (const a of accounts) {
+    const key = normalizeBankName(a.bank);
+    if (!byBank.has(key)) byBank.set(key, []);
+    byBank.get(key)!.push(a);
+  }
+  const result: any[] = [];
+  for (const group of byBank.values()) {
+    if (group.length === 1) { result.push(group[0]); continue; }
+    const corriente = group.find(a => String(a.accountType || "").toLowerCase() === "corriente");
+    result.push(corriente || group[0]);
+  }
+  return result;
+}
+
+async function getAccountsForAd(tenantId: number, exchange: string, ad: any, label = "ONZE", opts: { includeHidden?: boolean } = {}): Promise<any[]> {
   const all = await prisma.p2PAccount.findMany({
     where: { tenantId, exchange, label, isActive: true },
     orderBy: { sortOrder: "asc" },
   });
-  if (!ad) return all.map(parseAccountInfo);
 
-  const adBanks = (ad.paymentMethods || ad.payments || []).map((p: any) => {
-    if (typeof p === "string") return p;
-    return p.name || p.tradeMethodName || p.paymentMethodName || "";
-  });
+  let result: any[];
+  if (!ad) {
+    result = all.map(parseAccountInfo);
+  } else {
+    const adBanks = (ad.paymentMethods || ad.payments || []).map((p: any) => {
+      if (typeof p === "string") return p;
+      return p.name || p.tradeMethodName || p.paymentMethodName || "";
+    });
 
-  if (adBanks.length === 0) return all.map(parseAccountInfo);
+    if (adBanks.length === 0) {
+      result = all.map(parseAccountInfo);
+    } else {
+      const filtered = all.filter(a => {
+        const info = parseAccountInfo(a);
+        return adBanks.some((ab: string) => bankNamesMatch(info.bank, ab));
+      });
+      result = (filtered.length > 0 ? filtered : all).map(parseAccountInfo);
+    }
+  }
 
-  const filtered = all.filter(a => {
-    const info = parseAccountInfo(a);
-    return adBanks.some((ab: string) => bankNamesMatch(info.bank, ab));
-  });
-
-  return filtered.length > 0 ? filtered.map(parseAccountInfo) : all.map(parseAccountInfo);
+  return opts.includeHidden ? result : pickDefaultAccountsPerBank(result);
 }
 
+// DESHABILITADO (jul 2026) — Binance enmascara el apodo del comprador a solo
+// 3 caracteres + asteriscos (ej: "Use***", "And***"). Confirmado en vivo:
+// revisando 10 órdenes reales, "Use***" y "And***" aparecían repetidos para
+// compradores claramente distintos. Como "counterparty" es ese apodo
+// enmascarado, usarlo para reconocer "es la misma persona de la vez pasada"
+// producía falsos positivos reales (le ofreció a un comprador nuevo la
+// cuenta de otro comprador anterior). Hasta que capturemos un identificador
+// confiable (el evento de chat "seller_payed" trae el apodo REAL sin
+// enmascarar y hasta el nombre legal — ver chat-agent.ts fetchMessages), esta
+// función no debe volver a activarse solo cambiando este `return null`.
 async function getBuyerHistory(tenantId: number, exchange: string, counterparty: string): Promise<{ bank: string; accountId: number } | null> {
-  const prev = await prisma.p2PChatState.findFirst({
-    where: { tenantId, exchange, counterparty, state: "completed", chosenBank: { not: null } },
-    orderBy: { updatedAt: "desc" },
-  });
-  if (!prev?.chosenBank) return null;
-  return { bank: prev.chosenBank, accountId: ((prev.chosenAccountIds as number[]) || [])[0] || 0 };
+  return null;
 }
 
 async function getAvailableAccounts(tenantId: number, exchange: string, label = "ONZE"): Promise<any[]> {
@@ -1022,7 +1072,9 @@ async function getAvailableAccounts(tenantId: number, exchange: string, label = 
     where: { tenantId, exchange, label, isActive: true },
     orderBy: { sortOrder: "asc" },
   });
-  return all.map(parseAccountInfo);
+  // Mismo criterio que getAccountsForAd: al repartir un pago entre varias
+  // cuentas, las ocultas (vista) no se ofrecen proactivamente.
+  return pickDefaultAccountsPerBank(all.map(parseAccountInfo));
 }
 
 async function buildBankChoices(tenantId: number, exchange: string, ad: any, label = "ONZE"): Promise<string> {
