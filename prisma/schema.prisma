@@ -826,6 +826,7 @@ model P2PChatState {
   partialAmount     Decimal?  @db.Decimal(18, 8)
   totalAmount       Decimal?  @db.Decimal(18, 8)
   realName          String?
+  pendingFirstMsg   String?
   lastClientMsgAt   DateTime?
   lastBotMsgAt      DateTime?
   lastBotMsg        String?

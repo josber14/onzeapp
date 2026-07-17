@@ -291,7 +291,16 @@ async function processOrderLocked(
     // respondiendo tarde a este "Atento" viejo, no al "1".
     if (lastClientMsg) {
       const msgTime = lastClientMsg.createTime > 0 ? new Date(lastClientMsg.createTime) : new Date();
-      await prisma.p2PChatState.update({ where: { id: cs.id }, data: { lastClientMsgAt: msgTime } });
+      const extra: Record<string, any> = { lastClientMsgAt: msgTime };
+      // Guardamos el PRIMER mensaje que escribe antes de verificar (ej. "hola
+      // la cuenta porfa", "tendrás 3 cuentas?") para que handleVerified pueda
+      // ir directo al grano en el saludo en vez de ignorarlo con la pregunta
+      // genérica de personal/empresa — ver matchWantsAccount más abajo.
+      if (!cs.pendingFirstMsg && lastClientMsg.content) {
+        extra.pendingFirstMsg = lastClientMsg.content;
+        cs.pendingFirstMsg = lastClientMsg.content;
+      }
+      await prisma.p2PChatState.update({ where: { id: cs.id }, data: extra });
       cs.lastClientMsgAt = msgTime;
     }
     if (order.verified) {
@@ -413,6 +422,40 @@ export async function handleVerified(
 
   const knownRealName = order.counterparty ? await findKnownRealName(tenantId, exchange, label, order.counterparty) : null;
   const isReturning = !!knownRealName;
+
+  // Camino rápido: si lo primero que escribió (antes de verificar) ya pedía
+  // la cuenta directamente, saltamos la pregunta de personal/empresa entera
+  // — ver matchWantsAccount. Si en ese mismo mensaje ya mencionó
+  // empresa/erut/factura se respeta eso; si no dijo nada, isCompany queda en
+  // false por defecto y el caso "account_sent" lo detecta después de forma
+  // reactiva si hace falta (igual que siempre).
+  const firstMsg = (cs.pendingFirstMsg || "").toLowerCase();
+  if (firstMsg && matchWantsAccount(firstMsg)) {
+    const asCompany = matchERUT(firstMsg) || firstMsg.includes("empresa");
+    const ad = findMatchingAd(activeAds, order);
+    const target = await resolveFastTrackAccount(tenantId, exchange, ad, label, firstMsg);
+    if (target) {
+      await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: asCompany }, target);
+      await updateState(cs.id, "account_sent", { isCompany: asCompany, erutRequested: asCompany, isReturning, chosenBank: target.bank, chosenAccountIds: [target.id], pendingFirstMsg: null });
+      await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: camino rápido — pidió la cuenta directo, se mandó sin preguntar personal/empresa`);
+      return;
+    }
+    const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
+    const accounts = pickDefaultAccountsPerBank(allAccounts);
+    if (accounts.length > 1) {
+      const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
+      const sentMenu = await sendAndTrack(client, exchange, order.orderNumber, cs,
+        `¡Hola! Claro, ¿a qué banco necesitas los datos?\n${choices}\n\nTambién puedes escribir el nombre del banco.`,
+        createdAtTs
+      );
+      if (sentMenu) {
+        await updateState(cs.id, "awaiting_bank_choice", { isCompany: asCompany, erutRequested: asCompany, isReturning, pendingFirstMsg: null });
+        await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: camino rápido — pidió la cuenta directo, banco ambiguo, se preguntó cuál sin pasar por personal/empresa`);
+      }
+      return;
+    }
+  }
+
   const greeting = buildInitialGreeting(isReturning, firstNameFrom(knownRealName));
 
   const sent = await sendAndTrack(client, exchange, order.orderNumber, cs,
@@ -423,6 +466,7 @@ export async function handleVerified(
     await updateState(cs.id, "awaiting_account_type", {
       isCompany: false,
       isReturning,
+      pendingFirstMsg: null,
       ...(knownRealName ? { realName: knownRealName } : {}),
     });
   }
@@ -502,6 +546,24 @@ async function handleClientResponse(
           const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
           await sendAndTrack(client, exchange, order.orderNumber, cs,
             `¿A qué cuenta deseas transferir?\n${choices}\n\nTambién puedes escribir el nombre del banco.`
+          );
+          await updateState(cs.id, "awaiting_bank_choice", { isCompany: false, retryCount: 0 });
+        }
+      } else if (matchWantsAccount(textLower)) {
+        // Camino rápido: ignoró el menú personal/empresa y pidió la cuenta
+        // directo (ej. "la cuenta porfa", "cuenta banco estado") — se manda
+        // sin insistir con el número, mismo criterio que en handleVerified.
+        const ad = findMatchingAd(activeAds, order);
+        const target = await resolveFastTrackAccount(tenantId, exchange, ad, label, textLower);
+        if (target) {
+          await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: false }, target);
+          await updateState(cs.id, "account_sent", { isCompany: false, chosenBank: target.bank, chosenAccountIds: [target.id], retryCount: 0 });
+        } else {
+          const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
+          const accounts = pickDefaultAccountsPerBank(allAccounts);
+          const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
+          await sendAndTrack(client, exchange, order.orderNumber, cs,
+            `Claro, ¿a qué banco necesitas los datos?\n${choices}\n\nTambién puedes escribir el nombre del banco.`
           );
           await updateState(cs.id, "awaiting_bank_choice", { isCompany: false, retryCount: 0 });
         }
@@ -1078,6 +1140,33 @@ function matchProblemType(text: string): string | null {
   if (text.includes("diario") || text.includes("dia")) return "limit_daily";
   if (text.includes("concreta") || text.includes("funciona") || text.includes("error") || text.includes("falla") || text.includes("rechaz") || text.includes("pudo") || text.includes("puedo") || text.includes("bloque") || text.includes("no me")) return "not_working";
   return null;
+}
+
+// Compradores que van directo al grano: "hola la cuenta porfa", "cuenta banco
+// estado", "tendrás 3 cuentas?", "los datos porfa". No preguntan personal o
+// empresa, no esperan menú con números — solo quieren el dato para pagar.
+// Confirmado en vivo (jul 2026): forzarlos a pasar por personal/empresa +
+// elegir banco por número hizo que un comprador cancelara la orden ("Chao
+// mucha vuelta"). Si se puede resolver la cuenta sin ambigüedad, se le manda
+// directo — el tipo de cuenta (personal/empresa) se sigue detectando después
+// de forma reactiva si el comprador menciona "empresa"/"erut"/"factura" (ver
+// caso "account_sent" más abajo, ya existía para esto).
+function matchWantsAccount(text: string): boolean {
+  return /\bcuentas?\b/.test(text) || text.includes("los datos") || text.includes("donde deposito") || text.includes("donde transfiero") || text.includes("dónde deposito") || text.includes("dónde transfiero");
+}
+
+// Intenta resolver a UNA cuenta sin ambigüedad para el camino rápido de
+// matchWantsAccount: si el mensaje ya nombra un banco (matchBank) se usa ese;
+// si no lo nombra pero solo hay una cuenta por defecto disponible, se usa esa.
+// Con 2+ bancos y ninguno mencionado, devuelve null — ahí sí hay que
+// preguntar cuál (no hay forma de adivinar sin arriesgar mandar el banco
+// equivocado).
+async function resolveFastTrackAccount(tenantId: number, exchange: string, ad: any, label: string, text: string): Promise<any | null> {
+  const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
+  const named = matchBank(text, allAccounts);
+  if (named) return named;
+  const accounts = pickDefaultAccountsPerBank(allAccounts);
+  return accounts.length === 1 ? accounts[0] : null;
 }
 
 function matchThirdParty(text: string): boolean {
