@@ -840,6 +840,18 @@ model P2PChatState {
   @@index([tenantId, exchange, state])
 }
 
+// Bloqueo real (no en memoria) contra procesamiento concurrente del chat.
+// Necesario porque Vercel puede levantar varias instancias del mismo
+// servidor en paralelo para atender /api/p2p/bot/cycle (llamado cada
+// ~300ms) — un bloqueo en memoria de una instancia no lo ve otra instancia
+// distinta. `id` = `${tenantId}:${label}:${exchange}`. Confirmado en vivo
+// jul 2026: incluso con el bloqueo en memoria, el mismo mensaje del
+// comprador seguía generando respuestas contradictorias.
+model ChatProcessingLock {
+  id       String   @id
+  lockedAt DateTime @default(now())
+}
+
 model P2PAccount {
   id          Int      @id @default(autoincrement())
   tenantId    Int

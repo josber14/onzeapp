@@ -261,16 +261,17 @@ async function processOrder(
   }
 
   // Monitor payment_made: ask for receipt after 1 minute.
-  // Se compara contra cs.paidAt (cuándo detectamos el pago), NO contra
-  // cs.lastBotMsgAt — el comprobante casi siempre llega unos segundos ANTES
-  // de que el bot alcance a mandar el "recibimos tu aviso de pago", así que
-  // comparar contra el propio mensaje del bot lo dejaba invisible y el bot
-  // terminaba pidiendo de nuevo un comprobante que ya tenía (confirmado en
-  // vivo, jul 2026).
+  // hasComprobant revisa TODA la conversación de esta orden (sin filtro de
+  // tiempo) — se probó comparar contra cs.paidAt, pero ni siquiera eso
+  // alcanza: el comprador manda la imagen, marca "pagado" y todo pasa casi
+  // junto, y nuestro propio cs.paidAt (que sale de sondear el estado de la
+  // orden vía API) puede quedar registrado DESPUÉS de que la imagen ya había
+  // llegado. Como cada orden tiene su propio chat, no hay riesgo real de que
+  // una imagen "vieja" de otra transacción se confunda con esta.
   if (cs.state === "payment_made") {
     const paidAtMs = cs.paidAt ? new Date(cs.paidAt).getTime() : 0;
     const oneMinAfter = paidAtMs + 60 * 1000;
-    if (Date.now() >= oneMinAfter && !hasComprobant(msgs, cs.paidAt)) {
+    if (Date.now() >= oneMinAfter && !hasComprobant(msgs, null)) {
       let extra = "";
       if (cs.isCompany && !cs.erutReceived) {
         extra = "\n\nRecuerda que al ser cuenta empresa también necesitamos el ERUT para validar la titularidad y emitir la factura.";
@@ -285,7 +286,7 @@ async function processOrder(
 
   // Check if receipt was sent while in awaiting_comprobant
   if (cs.state === "awaiting_comprobant" && isPaid) {
-    if (hasComprobant(msgs, cs.paidAt)) {
+    if (hasComprobant(msgs, null)) {
       await updateState(cs.id, "payment_made");
     }
     return;

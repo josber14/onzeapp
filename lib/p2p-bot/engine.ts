@@ -58,7 +58,34 @@ const binanceStates = new Map<number, BinanceState>();
 // respuestas contradictorias al mismo mensaje. Confirmado en vivo jul 2026:
 // un comprador escribió "1" una sola vez y el bot le contestó primero "No
 // entendí" y 41s después la respuesta correcta al mismo "1".
-const chatProcessingLocks = new Set<string>();
+//
+// IMPORTANTE: el bloqueo tiene que vivir en la base de datos, no en memoria
+// (Set) — Vercel puede levantar varias instancias del mismo servidor en
+// paralelo para atender llamadas tan seguidas, y cada instancia tiene su
+// propia memoria aislada; un Set en memoria de una instancia no lo ve otra.
+// Confirmado en vivo (jul 2026): con el bloqueo en memoria solo, el mismo
+// mensaje ("1", "bci") seguía generando respuestas contradictorias.
+const CHAT_LOCK_TTL_MS = 15000; // si una instancia se cae a mitad de proceso, el lock se autolibera solo tras 15s
+
+async function acquireChatLock(key: string): Promise<boolean> {
+  const now = new Date();
+  const expiredBefore = new Date(now.getTime() - CHAT_LOCK_TTL_MS);
+  try {
+    // Libera locks vencidos (instancia que se cayó sin liberar) antes de intentar tomar el propio.
+    await prisma.chatProcessingLock.deleteMany({ where: { id: key, lockedAt: { lt: expiredBefore } } });
+    // INSERT puro: si otra instancia ya tiene el lock vigente, esto choca con
+    // la primary key y Postgres lo rechaza — es atómico entre instancias,
+    // a diferencia de un Set en memoria.
+    await prisma.chatProcessingLock.create({ data: { id: key, lockedAt: now } });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function releaseChatLock(key: string): Promise<void> {
+  await prisma.chatProcessingLock.delete({ where: { id: key } }).catch(() => {});
+}
 
 function getBinanceState(tenantId: number): BinanceState {
   let s = binanceStates.get(tenantId);
@@ -513,31 +540,31 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
         // Run chat processing if enabled (even when main bot is disabled)
         if (chatEnabled) {
           const chatLockKey = `${tenantId}:${label}:binance`;
-          if (chatProcessingLocks.has(chatLockKey)) {
-            await l("debug", "binance", "Chat: ciclo anterior todavía procesando, se salta este tick");
-          } else {
-            binancePromises.push((async () => {
-              chatProcessingLocks.add(chatLockKey);
-              await l( "info", "binance", "Iniciando processChats...");
+          binancePromises.push((async () => {
+            const gotLock = await acquireChatLock(chatLockKey);
+            if (!gotLock) {
+              await l("debug", "binance", "Chat: otra instancia ya está procesando este chat, se salta este tick");
+              return;
+            }
+            await l( "info", "binance", "Iniciando processChats...");
+            try {
+              const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
+              // Anuncios reales de ESTA cuenta (ONZE o ZINPLE) para que el chat
+              // sepa a qué anuncio pertenece cada orden (advNo) y use su
+              // paymentPeriod real, no el default de 15 min.
+              let chatActiveAds: any[] = [];
               try {
-                const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
-                // Anuncios reales de ESTA cuenta (ONZE o ZINPLE) para que el chat
-                // sepa a qué anuncio pertenece cada orden (advNo) y use su
-                // paymentPeriod real, no el default de 15 min.
-                let chatActiveAds: any[] = [];
-                try {
-                  chatActiveAds = await fetchMyBinanceAds(client);
-                } catch (e: any) {
-                  await l( "warn", "binance", `Chat: error al leer anuncios para matchear orden: ${e.message}`);
-                }
-                await processChats(tenantId, "binance", async () => ({ client }), chatActiveAds, label);
+                chatActiveAds = await fetchMyBinanceAds(client);
               } catch (e: any) {
-                await l( "warn", "binance", `Chat process: ${e.message}`);
-              } finally {
-                chatProcessingLocks.delete(chatLockKey);
+                await l( "warn", "binance", `Chat: error al leer anuncios para matchear orden: ${e.message}`);
               }
-            })());
-          }
+              await processChats(tenantId, "binance", async () => ({ client }), chatActiveAds, label);
+            } catch (e: any) {
+              await l( "warn", "binance", `Chat process: ${e.message}`);
+            } finally {
+              await releaseChatLock(chatLockKey);
+            }
+          })());
         }
 
         if (binancePromises.length > 0) await Promise.all(binancePromises);
@@ -571,21 +598,21 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
         // Run chat processing if enabled (even when main bot is disabled)
         if (chatEnabled) {
           const chatLockKey = `${tenantId}:${label}:bybit`;
-          if (chatProcessingLocks.has(chatLockKey)) {
-            await l("debug", "bybit", "Chat: ciclo anterior todavía procesando, se salta este tick");
-          } else {
-            bybitPromises.push((async () => {
-              chatProcessingLocks.add(chatLockKey);
-              try {
-                const client = new BybitP2PClient(creds.apiKey, creds.secretKey);
-                await processChats(tenantId, "bybit", async () => ({ client }), [], label);
-              } catch (e: any) {
-                await l( "warn", "bybit", `Chat process: ${e.message}`);
-              } finally {
-                chatProcessingLocks.delete(chatLockKey);
-              }
-            })());
-          }
+          bybitPromises.push((async () => {
+            const gotLock = await acquireChatLock(chatLockKey);
+            if (!gotLock) {
+              await l("debug", "bybit", "Chat: otra instancia ya está procesando este chat, se salta este tick");
+              return;
+            }
+            try {
+              const client = new BybitP2PClient(creds.apiKey, creds.secretKey);
+              await processChats(tenantId, "bybit", async () => ({ client }), [], label);
+            } catch (e: any) {
+              await l( "warn", "bybit", `Chat process: ${e.message}`);
+            } finally {
+              await releaseChatLock(chatLockKey);
+            }
+          })());
         }
 
         if (bybitPromises.length > 0) await Promise.all(bybitPromises);
