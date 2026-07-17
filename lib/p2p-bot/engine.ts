@@ -48,44 +48,13 @@ interface BinanceState {
 }
 const binanceStates = new Map<number, BinanceState>();
 
-// Evita que el mismo chat se procese dos veces en paralelo. El ciclo de
-// PRECIO (cada ~300ms) y el ciclo de CHAT (cada ~2s) llaman al mismo
-// /api/p2p/bot/cycle, y ambos disparan processChats si el chat está
-// habilitado — sin este bloqueo, mientras una respuesta tarda en enviarse
-// (2-5s de delay humano + el envío real por WS), pueden entrar 5-10 ciclos
-// más que leen el MISMO mensaje del comprador (todavía no marcado como
-// procesado en la base de datos) y lo responden por separado, generando
-// respuestas contradictorias al mismo mensaje. Confirmado en vivo jul 2026:
-// un comprador escribió "1" una sola vez y el bot le contestó primero "No
-// entendí" y 41s después la respuesta correcta al mismo "1".
-//
-// IMPORTANTE: el bloqueo tiene que vivir en la base de datos, no en memoria
-// (Set) — Vercel puede levantar varias instancias del mismo servidor en
-// paralelo para atender llamadas tan seguidas, y cada instancia tiene su
-// propia memoria aislada; un Set en memoria de una instancia no lo ve otra.
-// Confirmado en vivo (jul 2026): con el bloqueo en memoria solo, el mismo
-// mensaje ("1", "bci") seguía generando respuestas contradictorias.
-const CHAT_LOCK_TTL_MS = 15000; // si una instancia se cae a mitad de proceso, el lock se autolibera solo tras 15s
-
-async function acquireChatLock(key: string): Promise<boolean> {
-  const now = new Date();
-  const expiredBefore = new Date(now.getTime() - CHAT_LOCK_TTL_MS);
-  try {
-    // Libera locks vencidos (instancia que se cayó sin liberar) antes de intentar tomar el propio.
-    await prisma.chatProcessingLock.deleteMany({ where: { id: key, lockedAt: { lt: expiredBefore } } });
-    // INSERT puro: si otra instancia ya tiene el lock vigente, esto choca con
-    // la primary key y Postgres lo rechaza — es atómico entre instancias,
-    // a diferencia de un Set en memoria.
-    await prisma.chatProcessingLock.create({ data: { id: key, lockedAt: now } });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function releaseChatLock(key: string): Promise<void> {
-  await prisma.chatProcessingLock.delete({ where: { id: key } }).catch(() => {});
-}
+// El bloqueo contra procesamiento concurrente del chat vive DENTRO de
+// processChats (chat-agent.ts), a nivel de cada ORDEN individual, no acá a
+// nivel de cuenta completa — un lock por cuenta completa causaba que, con
+// varias conversaciones activas a la vez, todo el mundo esperara en fila
+// detrás de quien se estuviera atendiendo en ese momento (confirmado en vivo
+// jul 2026: un comprador esperó ~2 min por su respuesta con solo 5
+// conversaciones activas). Ver chat-lock.ts para el mecanismo del lock.
 
 function getBinanceState(tenantId: number): BinanceState {
   let s = binanceStates.get(tenantId);
@@ -539,13 +508,7 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
 
         // Run chat processing if enabled (even when main bot is disabled)
         if (chatEnabled) {
-          const chatLockKey = `${tenantId}:${label}:binance`;
           binancePromises.push((async () => {
-            const gotLock = await acquireChatLock(chatLockKey);
-            if (!gotLock) {
-              await l("debug", "binance", "Chat: otra instancia ya está procesando este chat, se salta este tick");
-              return;
-            }
             await l( "info", "binance", "Iniciando processChats...");
             try {
               const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
@@ -561,8 +524,6 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
               await processChats(tenantId, "binance", async () => ({ client }), chatActiveAds, label);
             } catch (e: any) {
               await l( "warn", "binance", `Chat process: ${e.message}`);
-            } finally {
-              await releaseChatLock(chatLockKey);
             }
           })());
         }
@@ -597,20 +558,12 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
 
         // Run chat processing if enabled (even when main bot is disabled)
         if (chatEnabled) {
-          const chatLockKey = `${tenantId}:${label}:bybit`;
           bybitPromises.push((async () => {
-            const gotLock = await acquireChatLock(chatLockKey);
-            if (!gotLock) {
-              await l("debug", "bybit", "Chat: otra instancia ya está procesando este chat, se salta este tick");
-              return;
-            }
             try {
               const client = new BybitP2PClient(creds.apiKey, creds.secretKey);
               await processChats(tenantId, "bybit", async () => ({ client }), [], label);
             } catch (e: any) {
               await l( "warn", "bybit", `Chat process: ${e.message}`);
-            } finally {
-              await releaseChatLock(chatLockKey);
             }
           })());
         }

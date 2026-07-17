@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { acquireChatLock, releaseChatLock } from "./chat-lock";
 import type { ChatState, ChatMessage } from "./types";
 
 const MAX_RETRIES = 3;
@@ -35,22 +36,28 @@ export async function processChats(
 
   const seenOrders = new Set<string>();
 
-  for (const rawOrder of liveOrders) {
+  // Cada orden se procesa en paralelo (no una por una) — cada una tiene su
+  // propio candado (ver processOrder), así que atender varias conversaciones
+  // a la vez es seguro y evita que todo el mundo espere en fila detrás de
+  // quien se esté atendiendo en ese momento (confirmado en vivo jul 2026: con
+  // el procesamiento secuencial + el delay humano de cada respuesta, un
+  // comprador esperó ~2 min con solo 5 conversaciones activas).
+  await Promise.all(liveOrders.map(async (rawOrder: any) => {
     const orderNo = rawOrder.orderNumber ?? rawOrder.orderNo ?? rawOrder.id ?? "";
-    if (!orderNo) continue;
-    if (seenOrders.has(orderNo)) continue;
+    if (!orderNo) return;
+    if (seenOrders.has(orderNo)) return;
     seenOrders.add(orderNo);
 
     const order = normalizeOrder(rawOrder, exchange);
     await logMsg(tenantId, exchange, `[Chat] raw ${orderNo} status=${order.status} group=${order.group} rawStatus=${(rawOrder.orderStatus ?? rawOrder.status ?? '?')} tradeType=${rawOrder.tradeType || '?'} verified=${order.verified} rawVerify=${rawOrder.additionalKycVerify}`);
-    if (order.group === "cancelled") continue;
+    if (order.group === "cancelled") return;
 
     try {
       await processOrder(tenantId, exchange, client, order, activeAds, label);
     } catch (e: any) {
       await logMsg(tenantId, exchange, `Chat error ${orderNo}: ${e.message}`);
     }
-  }
+  }));
 
   // Process chat states that might not be in the live API results
   try {
@@ -106,7 +113,31 @@ export async function processChats(
 
 /* ─── Process a single order ──────────────────────────────────── */
 
+// Candado por ORDEN (no por cuenta completa) — dos instancias del servidor
+// (o dos ciclos superpuestos) nunca procesan la MISMA orden a la vez, pero
+// distintas órdenes sí se pueden atender en paralelo sin esperar en fila.
 async function processOrder(
+  tenantId: number,
+  exchange: "binance" | "bybit",
+  client: any,
+  order: any,
+  activeAds: any[],
+  label = "ONZE"
+) {
+  const lockKey = `${tenantId}:${exchange}:${order.orderNumber}`;
+  const gotLock = await acquireChatLock(lockKey);
+  if (!gotLock) {
+    await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: otra instancia ya la está procesando, se salta este tick`);
+    return;
+  }
+  try {
+    await processOrderLocked(tenantId, exchange, client, order, activeAds, label);
+  } finally {
+    await releaseChatLock(lockKey);
+  }
+}
+
+async function processOrderLocked(
   tenantId: number,
   exchange: "binance" | "bybit",
   client: any,
