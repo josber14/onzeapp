@@ -582,10 +582,15 @@ async function handleClientResponse(
           validIntents: ["personal", "empresa", "wants_account", "reports_problem", "unclear"],
           context: "El bot ya le preguntó al comprador si transfiere desde cuenta personal o empresa, con un menú 1) Personal 2) Empresa.",
         });
-        if (ai && ai.intent !== "unclear") {
-          resolvedIntent = ai.intent as any;
+        if (ai) {
+          // followUpText se guarda SIEMPRE (incluso si intent es "unclear")
+          // para poder responder algo natural en vez de "No entendí" si
+          // ninguna rama de abajo termina resolviendo nada.
           aiFollowUp = ai.followUpText;
-          await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+          if (ai.intent !== "unclear") {
+            resolvedIntent = ai.intent as any;
+            await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+          }
         }
       }
 
@@ -700,8 +705,12 @@ async function handleClientResponse(
         if (retryCount >= MAX_RETRIES) {
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
+          // Pedido explícito del usuario: el bot nunca debe sonar robótico
+          // con "No entendí" — si la IA redactó una respuesta natural, se
+          // usa esa (reconoce lo que dijo y retoma la pregunta); el texto
+          // fijo queda solo como último respaldo si la IA no respondió.
           await sendThenTransition(client, exchange, order.orderNumber, cs,
-            "No entendí. ¿Transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.",
+            aiFollowUp || "No entendí. ¿Transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.",
             "awaiting_account_type", { retryCount }
           );
         }
@@ -732,6 +741,7 @@ async function handleClientResponse(
       else if (wantsDifferent) resolved = "different_menu";
       else if (confirmsSame) resolved = "confirm_no_resend";
 
+      let aiFollowUp: string | undefined;
       if (!resolved) {
         const ai = await classifyIntent({
           state: "awaiting_previous_account",
@@ -739,9 +749,12 @@ async function handleClientResponse(
           validIntents: ["resend", "confirm_no_resend", "different_menu", "unclear"],
           context: `Se le preguntó al comprador si va a transferir a la misma cuenta que usó la vez pasada (${cs.previousBank || "una cuenta anterior"}), avisándole que puede pedir que se la reenvíen o pedir otra cuenta distinta.`,
         });
-        if (ai && ai.intent !== "unclear") {
-          resolved = ai.intent as any;
-          await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+        if (ai) {
+          aiFollowUp = ai.followUpText;
+          if (ai.intent !== "unclear") {
+            resolved = ai.intent as any;
+            await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+          }
         }
       }
 
@@ -774,7 +787,7 @@ async function handleClientResponse(
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
           await sendThenTransition(client, exchange, order.orderNumber, cs,
-            `No entendí. ¿Vas a transferir a la misma cuenta de la última vez (${cs.previousBank || "la anterior"}), o prefieres otra cuenta?`,
+            aiFollowUp || `No entendí. ¿Vas a transferir a la misma cuenta de la última vez (${cs.previousBank || "la anterior"}), o prefieres otra cuenta?`,
             "awaiting_previous_account", { retryCount }
           );
         }
@@ -823,6 +836,7 @@ async function handleClientResponse(
       // canceló. matchProblemType YA reconoce esto como "limit" (revisa
       // "permite"/"deja"/etc.) — solo faltaba consultarlo acá.
       let resolvedProblem: "limit" | "not_working" | null = null;
+      let aiFollowUp: string | undefined;
       if (!chosen && !wantsAll) {
         const problemType = matchProblemType(textLower);
         resolvedProblem = problemType === "limit" ? "limit" : problemType === "not_working" ? "not_working" : null;
@@ -841,12 +855,15 @@ async function handleClientResponse(
             validIntents: ["wants_all_accounts", "limit", "not_working", "unclear"],
             context: `Se le pidió al comprador que elija un banco de esta lista para transferir: ${accounts.map((a: any) => a.bank).join(", ")}.`,
           });
-          if (ai?.intent === "wants_all_accounts") {
-            wantsAll = true;
-            await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "wants_all_accounts"`);
-          } else if (ai?.intent === "limit" || ai?.intent === "not_working") {
-            resolvedProblem = ai.intent;
-            await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+          if (ai) {
+            aiFollowUp = ai.followUpText;
+            if (ai.intent === "wants_all_accounts") {
+              wantsAll = true;
+              await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "wants_all_accounts"`);
+            } else if (ai.intent === "limit" || ai.intent === "not_working") {
+              resolvedProblem = ai.intent;
+              await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+            }
           }
         }
       }
@@ -897,7 +914,7 @@ async function handleClientResponse(
         } else {
           const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
           await sendThenTransition(client, exchange, order.orderNumber, cs,
-            `No entendí. Por favor elige el banco para tu depósito:\n${choices}\n\nResponde el número o escribe el nombre del banco.`,
+            aiFollowUp || `No entendí. Por favor elige el banco para tu depósito:\n${choices}\n\nResponde el número o escribe el nombre del banco.`,
             "awaiting_bank_choice", { retryCount }
           );
         }
@@ -944,6 +961,7 @@ async function handleClientResponse(
         // Si no se pudo reconocer un banco ni un problema por palabras clave,
         // se consulta a la IA como respaldo antes de quedarse en silencio
         // (antes de este cambio, este caso simplemente no respondía nada).
+        let aiFollowUp: string | undefined;
         if (!chosen && !resolvedProblem) {
           const ai = await classifyIntent({
             state: "account_sent",
@@ -951,9 +969,12 @@ async function handleClientResponse(
             validIntents: ["limit", "not_working", "unclear"],
             context: "Ya se le mandaron los datos de una cuenta bancaria al comprador para que pague. Está escribiendo algo relacionado con ese pago.",
           });
-          if (ai && ai.intent !== "unclear") {
-            resolvedProblem = ai.intent as any;
-            await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+          if (ai) {
+            aiFollowUp = ai.followUpText;
+            if (ai.intent !== "unclear") {
+              resolvedProblem = ai.intent as any;
+              await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+            }
           }
         }
 
@@ -979,6 +1000,12 @@ async function handleClientResponse(
           }
         } else if (resolvedProblem === "not_working") {
           await handleTransferFails(tenantId, exchange, client, order, cs, activeAds, textLower, label);
+        } else if (aiFollowUp) {
+          // Antes de este fix, un mensaje que no era ni banco ni problema
+          // (ej. un comentario aparte) se quedaba sin ninguna respuesta —
+          // pedido explícito del usuario: el bot siempre debe dar
+          // continuidad natural, nunca dejar un mensaje en silencio.
+          await sendAndTrack(client, exchange, order.orderNumber, cs, aiFollowUp);
         }
       }
       break;
@@ -988,6 +1015,25 @@ async function handleClientResponse(
       const opt = matchOption(textLower, 2);
       let companyType = opt === 1 ? true : opt === 2 ? false : null;
       if (companyType === null) companyType = matchCompanyType(textLower);
+
+      let aiFollowUp: string | undefined;
+      if (companyType === null) {
+        const ai = await classifyIntent({
+          state: "awaiting_company_type",
+          text,
+          validIntents: ["empresa", "personal", "unclear"],
+          context: "Se le preguntó al comprador si la transferencia es desde cuenta empresa o personal, con un menú 1) Empresa 2) Personal.",
+        });
+        if (ai) {
+          aiFollowUp = ai.followUpText;
+          if (ai.intent === "empresa") companyType = true;
+          else if (ai.intent === "personal") companyType = false;
+          if (ai.intent !== "unclear") {
+            await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+          }
+        }
+      }
+
       if (companyType === true) {
         await sendThenTransition(client, exchange, order.orderNumber, cs,
           "Entendido. Por favor adjunta el ERUT de la empresa para validar la información y emitir la factura.\n\nLos datos de la cuenta ya están disponibles más arriba.",
@@ -1004,7 +1050,7 @@ async function handleClientResponse(
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
           await sendThenTransition(client, exchange, order.orderNumber, cs,
-            "No entendí. ¿La transferencia es desde cuenta empresa o personal?\n  1) Empresa\n  2) Personal\n\nResponde 1 o 2.",
+            aiFollowUp || "No entendí. ¿La transferencia es desde cuenta empresa o personal?\n  1) Empresa\n  2) Personal\n\nResponde 1 o 2.",
             "awaiting_company_type", { retryCount }
           );
         }
@@ -1014,12 +1060,31 @@ async function handleClientResponse(
 
     case "awaiting_problem": {
       const opt = matchOption(textLower, 2);
-      if (opt === 1) {
+      let aiFollowUp: string | undefined;
+      let resolved: "more_time" | "has_problem" | null =
+        opt === 1 ? "more_time" : (opt === 2 || matchProblemType(textLower) !== null) ? "has_problem" : null;
+      if (!resolved) {
+        const ai = await classifyIntent({
+          state: "awaiting_problem",
+          text,
+          validIntents: ["more_time", "has_problem", "unclear"],
+          context: "Se le preguntó al comprador si necesita más tiempo para pagar o está teniendo problemas, con un menú 1) Más tiempo 2) Problemas.",
+        });
+        if (ai) {
+          aiFollowUp = ai.followUpText;
+          if (ai.intent !== "unclear") {
+            resolved = ai.intent as any;
+            await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+          }
+        }
+      }
+
+      if (resolved === "more_time") {
         await sendThenTransition(client, exchange, order.orderNumber, cs,
           "Perfecto, solicitaré una extensión de tiempo. Cuando realices el pago marca \"Pagado\" y envíanos el comprobante.",
           "account_sent", { retryCount: 0 }
         );
-      } else if (opt === 2 || matchProblemType(textLower) !== null) {
+      } else if (resolved === "has_problem") {
         await sendThenTransition(client, exchange, order.orderNumber, cs,
           "¿Qué tipo de problema?\n  1) Límite diario\n  2) No me funciona el banco\n\nResponde 1 o 2.",
           "awaiting_problem_type", { retryCount: 0 }
@@ -1030,7 +1095,7 @@ async function handleClientResponse(
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
           await sendThenTransition(client, exchange, order.orderNumber, cs,
-            "No entendí. ¿Necesitas más tiempo o estás teniendo problemas?\n  1) Más tiempo\n  2) Problemas\n\nResponde 1 o 2.",
+            aiFollowUp || "No entendí. ¿Necesitas más tiempo o estás teniendo problemas?\n  1) Más tiempo\n  2) Problemas\n\nResponde 1 o 2.",
             "awaiting_problem", { retryCount }
           );
         }
@@ -1040,12 +1105,33 @@ async function handleClientResponse(
 
     case "awaiting_problem_type": {
       const opt = matchOption(textLower, 2);
-      if (opt === 1 || textLower.includes("límite") || textLower.includes("limite")) {
+      let aiFollowUp: string | undefined;
+      let resolved: "limit" | "not_working" | null =
+        (opt === 1 || textLower.includes("límite") || textLower.includes("limite")) ? "limit"
+        : (opt === 2 || textLower.includes("no funciona") || textLower.includes("no me funciona") || textLower.includes("banco")) ? "not_working"
+        : null;
+      if (!resolved) {
+        const ai = await classifyIntent({
+          state: "awaiting_problem_type",
+          text,
+          validIntents: ["limit", "not_working", "unclear"],
+          context: "Se le preguntó al comprador qué tipo de problema tiene, con un menú 1) Límite diario 2) No me funciona el banco.",
+        });
+        if (ai) {
+          aiFollowUp = ai.followUpText;
+          if (ai.intent !== "unclear") {
+            resolved = ai.intent as any;
+            await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+          }
+        }
+      }
+
+      if (resolved === "limit") {
         await sendThenTransition(client, exchange, order.orderNumber, cs,
           "¿Cuál es el límite diario de tu banco para transferencias?",
           "awaiting_limit_amount", { retryCount: 0 }
         );
-      } else if (opt === 2 || textLower.includes("no funciona") || textLower.includes("no me funciona") || textLower.includes("banco")) {
+      } else if (resolved === "not_working") {
         await sendThenClose(client, exchange, order.orderNumber, cs,
           "Lamentamos el problema con tu banco. Cuando soluciones y estés listo, vuelve a tomar la orden. ¡Te esperamos! 👍🏻"
         );
@@ -1055,7 +1141,7 @@ async function handleClientResponse(
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
           await sendThenTransition(client, exchange, order.orderNumber, cs,
-            "No entendí. ¿Qué tipo de problema?\n  1) Límite diario\n  2) No me funciona el banco\n\nResponde 1 o 2.",
+            aiFollowUp || "No entendí. ¿Qué tipo de problema?\n  1) Límite diario\n  2) No me funciona el banco\n\nResponde 1 o 2.",
             "awaiting_problem_type", { retryCount }
           );
         }
@@ -1064,7 +1150,29 @@ async function handleClientResponse(
     }
 
     case "awaiting_limit_amount": {
-      const amount = extractAmount(textLower);
+      let amount = extractAmount(textLower);
+      let aiFollowUp: string | undefined;
+      if (!(amount > 0)) {
+        // Si no hay un monto reconocible por regex, se consulta a la IA solo
+        // para EXTRAER el número que el comprador haya mencionado en texto
+        // libre (ej. "como 200 lucas") — la IA nunca decide qué hacer con
+        // ese monto, solo lo extrae; offerSplitPayment (código fijo) es
+        // quien sigue decidiendo el reparto real.
+        const ai = await classifyIntent({
+          state: "awaiting_limit_amount",
+          text,
+          validIntents: ["gives_amount", "unclear"],
+          context: "Se le preguntó al comprador cuál es el monto máximo que su banco le permite transferir.",
+        });
+        if (ai) {
+          aiFollowUp = ai.followUpText;
+          if (ai.intent === "gives_amount" && ai.extractedAmountClp && ai.extractedAmountClp > 0) {
+            amount = ai.extractedAmountClp;
+            await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA extrajo monto ${amount} de "${textLower.slice(0, 60)}"`);
+          }
+        }
+      }
+
       if (amount > 0 && cs.totalAmount) {
         await offerSplitPayment(tenantId, exchange, client, order, cs, amount, label);
       } else {
@@ -1073,7 +1181,7 @@ async function handleClientResponse(
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor.", { retryCount });
         } else {
           await sendThenTransition(client, exchange, order.orderNumber, cs,
-            "No entendí el monto. ¿Cuánto te permite transferir tu banco? (ej: 150000)",
+            aiFollowUp || "No entendí el monto. ¿Cuánto te permite transferir tu banco? (ej: 150000)",
             "awaiting_limit_amount", { retryCount }
           );
         }
@@ -1120,11 +1228,17 @@ async function handleClientResponse(
           validIntents: ["issue_uploading", "mentions_bank", "gives_op_number", "unclear"],
           context: "Se le pidió al comprador el comprobante de pago y todavía no lo ha enviado.",
         });
-        if (ai && ai.intent !== "unclear") {
+        if (ai?.intent && ai.intent !== "unclear") {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
             "Entendido, sin problema. ¿A qué banco realizaste el pago? Con eso y el número de operación podemos validarlo aunque no puedas enviar el comprobante."
           );
           await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+        } else if (ai?.followUpText) {
+          // Antes de este fix, un mensaje que no calzaba con nada acá se
+          // quedaba en silencio total (bug ya documentado antes) — pedido
+          // explícito del usuario: el bot nunca deja un mensaje sin
+          // respuesta, aunque sea solo un comentario aparte.
+          await sendAndTrack(client, exchange, order.orderNumber, cs, ai.followUpText);
         }
       }
       break;
