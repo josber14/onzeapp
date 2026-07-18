@@ -648,9 +648,27 @@ model PartnerCapacity {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payments    PartnerCapacityPayment[]
 
   @@index([tenantId, label])
   @@index([status])
+}
+
+// Pago manual aparte de las ventas sincronizadas de Binance — ej: el socio
+// pagó directo al proveedor con plata propia (no proveniente de una venta).
+// Se guarda como registro propio (no se resta directo de capacityClp) para
+// mantener trazabilidad de cada ajuste, y porque NUNCA debe afectar el
+// cálculo de costo/ganancia (que sale solo de PartnerSale vía FIFO en
+// computeFifo) — solo reduce el saldo pendiente que se le muestra al socio.
+model PartnerCapacityPayment {
+  id         Int             @id @default(autoincrement())
+  capacityId String
+  amountClp  Decimal         @db.Decimal(18, 2)
+  note       String?
+  createdAt  DateTime        @default(now())
+  capacity   PartnerCapacity @relation(fields: [capacityId], references: [id], onDelete: Cascade)
+
+  @@index([capacityId])
 }
 
 model PartnerSale {

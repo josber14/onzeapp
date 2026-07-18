@@ -24440,6 +24440,7 @@ try{
           <span>Restante</span>
           <strong>${socioBnMoney(it.usdtRemaining,2)} USDT</strong>
           <div class="p2p-capacity-meta" style="margin-top:4px;">${socioBnMoney(it.clpPending,0)} CLP</div>
+          ${Number(it.manualPaymentClp || 0) > 0 ? `<div class="p2p-capacity-meta" style="margin-top:2px;color:#00d4ff;">Pago manual: ${socioBnMoney(it.manualPaymentClp,0)} CLP</div>` : ''}
         </div>
         <div class="p2p-capacity-mini">
           <span>USDT consumido</span>
@@ -24453,6 +24454,7 @@ try{
 
       <div class="p2p-capacity-actions-row">
         <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnEditCapacity('${it.id}')">Editar</button>
+        ${it.status !== 'finished' ? `<button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnOpenCompleteCapacity('${it.id}')" title="Registrar un pago manual (ej: le pagaste al proveedor con plata propia) que no viene de una venta">Completar saldo</button>` : ''}
         <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnToggleCapacityStatus('${it.id}')">${it.status === 'finished' ? 'Reactivar' : 'Marcar completado'}</button>
         <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;color:#ef4444;" onclick="window.socioBnDeleteCapacity('${it.id}')">Eliminar</button>
       </div>
@@ -24620,6 +24622,75 @@ try{
     if(!confirm('¿Eliminar esta capacity? Esta acción no se puede deshacer.')) return;
     const res = await socioBnFetch('/api/partner/capacity?id=' + encodeURIComponent(id) + '&confirm=manual', { method: 'DELETE' });
     if(res.ok){ await socioBnLoadDashboard(); }
+  };
+
+  // "Completar saldo" — pago manual aparte de las ventas (ej: pagaste al
+  // proveedor con plata propia). Se guarda en PartnerCapacityPayment, NUNCA
+  // toca capacityClp directo ni las métricas de costo/ganancia — solo resta
+  // del saldo pendiente (ver computeFifo en /api/partner/dashboard). Todo se
+  // recalcula fresco del servidor al cerrar, como el resto de esta sección.
+  window.socioBnOpenCompleteCapacity = function(id){
+    const item = (window.__socioBnCapacityCache || []).find(function(it){ return it.id === id; });
+    if(!item) { if(typeof showToast === 'function') showToast('Capacity no encontrado', 'error'); return; }
+
+    const pending = Number(item.clpPending || 0);
+    let modal = document.getElementById('socioBnCompleteCapacityModal');
+    if(modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'socioBnCompleteCapacityModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;';
+    modal.innerHTML = `
+      <div style="background:#0d2137;border:1px solid #2a4a6a;border-radius:16px;padding:24px;max-width:420px;width:90%;">
+        <h3 style="color:#00d4ff;margin-bottom:8px;">Completar saldo (pago manual)</h3>
+        <p style="color:#aaa;font-size:13px;margin-bottom:12px;">
+          Proveedor: <strong style="color:#fff;">${item.provider || ''}</strong><br>
+          Pendiente hoy: <strong style="color:#00ff88;">${socioBnMoney(pending,0)} CLP</strong>
+        </p>
+        <p style="color:#aaa;font-size:12px;margin-bottom:8px;">
+          Usa esto SOLO para pagos que le hiciste al proveedor por fuera de una venta
+          (ej: con plata propia). No afecta el costo ni la ganancia calculados —
+          solo reduce el saldo pendiente que se muestra acá.
+        </p>
+        <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">Monto en CLP pagado</label>
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <input id="socioBnCompleteAmount" type="text" inputmode="decimal" placeholder="Ej: 200.000"
+            oninput="this.value=this.value.replace(/[^0-9]/g,'').replace(/\\B(?=(\\d{3})+(?!\\d))/g,'.');"
+            style="flex:1;padding:10px;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#fff;">
+          <button type="button" onclick="document.getElementById('socioBnCompleteAmount').value = Math.round(${pending}).toLocaleString('es-CL')"
+            style="padding:10px 16px;background:#1a3a5a;color:#00d4ff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">MAX</button>
+        </div>
+        <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">Nota (opcional)</label>
+        <input id="socioBnCompleteNote" type="text" placeholder="Ej: pago directo al proveedor 18/07"
+          style="width:100%;padding:10px;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#fff;margin-bottom:16px;box-sizing:border-box;">
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button type="button" onclick="document.getElementById('socioBnCompleteCapacityModal').remove()"
+            style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
+          <button type="button" onclick="window.socioBnConfirmCompleteCapacity('${id}')"
+            style="padding:10px 16px;background:#00ff88;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Confirmar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  };
+
+  window.socioBnConfirmCompleteCapacity = async function(capacityId){
+    const input = document.getElementById('socioBnCompleteAmount');
+    const amountClp = Number((input?.value || '').replace(/[^0-9]/g, ''));
+    if(!amountClp || amountClp <= 0){
+      if(typeof showToast === 'function') showToast('Ingresa un monto válido', 'error');
+      return;
+    }
+    const note = document.getElementById('socioBnCompleteNote')?.value?.trim() || null;
+    const res = await socioBnFetch('/api/partner/capacity/payment', {
+      method: 'POST',
+      body: JSON.stringify({ capacityId, amountClp, note }),
+    });
+    if(res.ok){
+      document.getElementById('socioBnCompleteCapacityModal')?.remove();
+      await socioBnLoadDashboard();
+      if(typeof showToast === 'function') showToast('✅ Pago manual registrado');
+    } else if(typeof showToast === 'function') showToast(res.error || 'Error al registrar el pago', 'error');
   };
 
   window.__socioBnSalesPage = window.__socioBnSalesPage || 1;

@@ -32,7 +32,7 @@ function chileDateStr(d: Date): string {
 // próxima capacity. El USDT/comisión de cada venta se prorratea según qué
 // fracción de su CLP quedó cubierta por cada capacity, para poder calcular
 // el costo real (USDT cubierto × tasa de compra de esa capacity).
-function computeFifo(capacities: any[], sales: any[]) {
+function computeFifo(capacities: any[], sales: any[], manualPaymentsByCapacity?: Map<string, number>) {
   const orderedCapacities = [...capacities].sort(
     (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
   );
@@ -123,7 +123,12 @@ function computeFifo(capacities: any[], sales: any[]) {
   const perCapacityBreakdown = orderedCapacities.map((c) => {
     const capacityClp = Number(c.capacityClp);
     const clpCovered = clpCoveredByCapacity.get(c.id) || 0;
-    const clpPending = Math.max(capacityClp - clpCovered, 0);
+    // Pagos manuales (ej: el socio le pagó al proveedor con plata propia,
+    // fuera de una venta) — solo restan del saldo pendiente que se muestra.
+    // NUNCA entran a clpCovered/usdtConsumed/costClp, así que jamás afectan
+    // el cálculo de costo o ganancia (eso sale solo de ventas reales, arriba).
+    const manualPaymentClp = manualPaymentsByCapacity?.get(c.id) || 0;
+    const clpPending = Math.max(capacityClp - clpCovered - manualPaymentClp, 0);
     const usdtConsumed = usdtConsumedByCapacity.get(c.id) || 0;
     const usdtAmount = Number(c.usdtAmount);
     return {
@@ -135,6 +140,7 @@ function computeFifo(capacities: any[], sales: any[]) {
       capacityClp,
       usdtAmount,
       clpCovered,
+      manualPaymentClp,
       clpPending,
       usdtConsumed,
       usdtRemaining: Math.max(usdtAmount - usdtConsumed, 0),
@@ -241,10 +247,11 @@ export async function GET(req: NextRequest) {
   const page = Math.max(1, Number(searchParams.get("page")) || 1);
   const limit = Math.min(100, Math.max(1, Number(searchParams.get("limit")) || 20));
 
-  const [account, capacities, allSales] = await Promise.all([
+  const [account, capacities, allSales, manualPayments] = await Promise.all([
     prisma.partnerAccount.findUnique({ where: { tenantId_label: { tenantId: session.tenantId, label: LABEL } } }),
     prisma.partnerCapacity.findMany({ where: { tenantId: session.tenantId, label: LABEL } }),
     prisma.partnerSale.findMany({ where: { tenantId: session.tenantId, label: LABEL } }),
+    prisma.partnerCapacityPayment.findMany({ where: { capacity: { tenantId: session.tenantId, label: LABEL } } }),
   ]);
 
   // Las ventas anteriores a trackingStartDate se ignoran en TODO el cálculo
@@ -254,7 +261,12 @@ export async function GET(req: NextRequest) {
   const trackingStart = account?.trackingStartDate ?? null;
   const sales = trackingStart ? allSales.filter((s) => s.executedAt >= trackingStart) : allSales;
 
-  const stats = computeFifo(capacities, sales);
+  const manualPaymentsByCapacity = new Map<string, number>();
+  for (const p of manualPayments) {
+    manualPaymentsByCapacity.set(p.capacityId, (manualPaymentsByCapacity.get(p.capacityId) || 0) + Number(p.amountClp));
+  }
+
+  const stats = computeFifo(capacities, sales, manualPaymentsByCapacity);
 
   // Modo "panel de estadísticas": rango de fechas (por ej. el mes completo)
   // en vez del día fijo de la pantalla principal — se pide con from/to.
