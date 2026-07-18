@@ -24399,7 +24399,12 @@ try{
   // estado + grilla de mini-tarjetas), pero conservando la barra de progreso
   // propia del Socio (en verde) que muestra cuánto lleva cubierto.
   function socioBnCapacityCard(it){
-    const pct = it.capacityClp > 0 ? Math.min(100, (it.clpCovered / it.capacityClp) * 100) : 0;
+    // clpCoveredDisplay suma el pago manual SOLO para lo que se ve en
+    // pantalla (barra de progreso, "Cubierto", mini-tarjeta) — el costo y la
+    // ganancia calculados por el servidor siguen usando nada más que las
+    // ventas reales (it.clpCovered original), esto no los toca.
+    const clpCoveredDisplay = Number(it.clpCovered || 0) + Number(it.manualPaymentClp || 0);
+    const pct = it.capacityClp > 0 ? Math.min(100, (clpCoveredDisplay / it.capacityClp) * 100) : 0;
     const usdtARecibir = it.buyPrice > 0 ? it.capacityClp / it.buyPrice : 0;
     return `<div class="p2p-capacity-card" style="margin-top:8px;">
       <div class="p2p-capacity-top" style="align-items:flex-start;">
@@ -24427,14 +24432,14 @@ try{
           <div style="height:6px; border-radius:3px; background:rgba(148,163,184,.15); margin-top:12px; width:100%; overflow:hidden;">
             <div style="height:100%; width:${pct}%; background:#34d399;"></div>
           </div>
-          <div class="p2p-capacity-meta" style="margin-top:4px;">Cubierto: ${socioBnMoney(it.clpCovered,0)} CLP de ${socioBnMoney(it.capacityClp,0)} CLP (${pct.toFixed(1)}%)</div>
+          <div class="p2p-capacity-meta" style="margin-top:4px;">Cubierto: ${socioBnMoney(clpCoveredDisplay,0)} CLP de ${socioBnMoney(it.capacityClp,0)} CLP (${pct.toFixed(1)}%)</div>
         </div>
       </div>
 
       <div class="p2p-capacity-mini-grid">
         <div class="p2p-capacity-mini">
           <span>CLP cubierto</span>
-          <strong>${socioBnMoney(it.clpCovered,0)} CLP</strong>
+          <strong>${socioBnMoney(clpCoveredDisplay,0)} CLP</strong>
         </div>
         <div class="p2p-capacity-mini">
           <span>Restante</span>
