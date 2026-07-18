@@ -62,7 +62,10 @@ export async function GET(req: NextRequest) {
       amount: o.amount,
       clpTotal: o.clpTotal,
       clpTaken: o.clpTaken,
-      usdtTaken: o.usdtTaken,
+      // Neto (sin la comisión de Binance) — es lo que se muestra en el
+      // detalle. El costo/ganancia del capacity siguen calculándose con el
+      // bruto (usdtDrawnTotal) en computeFifo, esto es solo para mostrar.
+      usdtTaken: o.usdtTakenNet,
       paymentMethod: o.paymentMethod,
     }));
 

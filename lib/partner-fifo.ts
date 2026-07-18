@@ -8,7 +8,8 @@ export interface CapacityOrderDetail {
   amount: number; // USDT total de esa orden (no solo lo tomado por este capacity)
   clpTotal: number; // CLP total de esa orden
   clpTaken: number; // CLP de esa orden que se le atribuyó a ESTE capacity
-  usdtTaken: number; // USDT de esa orden que se le atribuyó a ESTE capacity
+  usdtTaken: number; // USDT bruto (amount + comisión Binance) que se le atribuyó a ESTE capacity
+  usdtTakenNet: number; // USDT neto (sin la comisión de Binance) que se le atribuyó a ESTE capacity
   paymentMethod: string | null;
 }
 
@@ -95,6 +96,7 @@ export function computeFifo(
           clpTotal,
           clpTaken: takeClp,
           usdtTaken: takeUsdt,
+          usdtTakenNet: Number(s.amount) * ratio, // sin la comisión de Binance
           paymentMethod: s.paymentMethod ?? null,
         });
         ordersByCapacity.set(c.id, list);
