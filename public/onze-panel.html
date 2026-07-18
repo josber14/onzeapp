@@ -24789,7 +24789,7 @@ try{
           <div>
             <div style="color:#fff;font-weight:bold;font-size:13px;">Orden ${r.data.orderNumber}</div>
             <div style="color:#8aa0ba;font-size:11px;margin-top:2px;">${dateStr}${r.data.paymentMethod ? ' · ' + r.data.paymentMethod : ''}</div>
-            <div style="color:${profitColor};font-size:11px;margin-top:2px;">Ganancia: ${profitClp >= 0 ? '+' : '-'}${socioBnMoney(Math.abs(profitClp),0)} CLP (${profitUsdt >= 0 ? '+' : '-'}${socioBnMoney(Math.abs(profitUsdt),4)} USDT)</div>
+            <div style="color:${profitColor};font-size:11px;margin-top:2px;">Ganancia: ${profitClp >= 0 ? '+' : '-'}${socioBnMoney(Math.abs(profitClp),0)} CLP (${profitUsdt >= 0 ? '+' : '-'}${socioBnMoney(Math.abs(profitUsdt),2)} USDT)</div>
           </div>
           <div style="text-align:right;">
             <div style="color:#34d399;font-weight:bold;font-size:13px;">${socioBnMoney(r.data.clpTaken,0)} CLP</div>
