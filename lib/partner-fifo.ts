@@ -10,6 +10,7 @@ export interface CapacityOrderDetail {
   clpTaken: number; // CLP de esa orden que se le atribuyó a ESTE capacity
   usdtTaken: number; // USDT bruto (amount + comisión Binance) que se le atribuyó a ESTE capacity
   usdtTakenNet: number; // USDT neto (sin la comisión de Binance) que se le atribuyó a ESTE capacity
+  costTaken: number; // costo en CLP de la porción de esta orden (usdtTaken bruto × buyPrice del capacity)
   paymentMethod: string | null;
 }
 
@@ -87,6 +88,8 @@ export function computeFifo(
       clpCoveredByCapacity.set(c.id, (clpCoveredByCapacity.get(c.id) || 0) + takeClp);
       usdtConsumedByCapacity.set(c.id, (usdtConsumedByCapacity.get(c.id) || 0) + takeUsdt);
 
+      const costForThisCapacity = takeUsdt * Number(c.buyPrice);
+
       if (ordersByCapacity) {
         const list = ordersByCapacity.get(c.id) || [];
         list.push({
@@ -97,12 +100,12 @@ export function computeFifo(
           clpTaken: takeClp,
           usdtTaken: takeUsdt,
           usdtTakenNet: Number(s.amount) * ratio, // sin la comisión de Binance
+          costTaken: costForThisCapacity,
           paymentMethod: s.paymentMethod ?? null,
         });
         ordersByCapacity.set(c.id, list);
       }
 
-      const costForThisCapacity = takeUsdt * Number(c.buyPrice);
       totalCostClp += costForThisCapacity;
       saleCostClp += costForThisCapacity;
       matchedClp += takeClp;

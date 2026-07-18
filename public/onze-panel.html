@@ -24406,6 +24406,15 @@ try{
     const clpCoveredDisplay = Number(it.clpCovered || 0) + Number(it.manualPaymentClp || 0);
     const pct = it.capacityClp > 0 ? Math.min(100, (clpCoveredDisplay / it.capacityClp) * 100) : 0;
     const usdtARecibir = it.buyPrice > 0 ? it.capacityClp / it.buyPrice : 0;
+    // Ganancia sale SOLO de ventas reales (clpCovered/costClp) — nunca del
+    // pago manual, mismo criterio que ya usa socioBnOpenCompletedModal.
+    const profitClp = Number(it.clpCovered || 0) - Number(it.costClp || 0);
+    const profitUsdt = it.buyPrice > 0 ? profitClp / it.buyPrice : 0;
+    // Mín. venta: precio de compra ya ajustado por la comisión de Binance
+    // (~0.14%) — es el piso real bajo el cual se vendería con pérdida.
+    // Misma fórmula que usan las tarjetas de capacity de ONZE.
+    const minSellPct = 0.0014;
+    const minSellPrice = it.buyPrice > 0 ? it.buyPrice / (1 - minSellPct) : 0;
     return `<div class="p2p-capacity-card" style="margin-top:8px;">
       <div class="p2p-capacity-top" style="align-items:flex-start;">
         <div style="width:100%;">
@@ -24454,6 +24463,15 @@ try{
         <div class="p2p-capacity-mini">
           <span>Costo usado</span>
           <strong>${socioBnMoney(it.costClp,0)} CLP</strong>
+        </div>
+        <div class="p2p-capacity-mini">
+          <span>Mín. venta</span>
+          <strong style="color:#facc15;">${socioBnMoney(minSellPrice,2)} CLP</strong>
+        </div>
+        <div class="p2p-capacity-mini">
+          <span>Ganancia</span>
+          <strong style="color:${profitUsdt >= 0 ? '#34d399' : '#fb7185'};">${profitUsdt >= 0 ? '+' : '-'}${socioBnMoney(Math.abs(profitUsdt),2)} USDT</strong>
+          <div class="p2p-capacity-meta" style="margin-top:4px;">${profitClp >= 0 ? '+' : '-'}${socioBnMoney(Math.abs(profitClp),0)} CLP</div>
         </div>
       </div>
 
@@ -24513,6 +24531,7 @@ try{
       : items.map(function(it, index){
           const profitClp = it.clpCovered - it.costClp;
           const profitUsdt = it.buyPrice > 0 ? profitClp / it.buyPrice : 0;
+          const minSellPrice = it.buyPrice > 0 ? it.buyPrice / (1 - 0.0014) : 0;
           return `
             <div style="background:#0d2137;border:1px solid #1a3a5a;border-radius:12px;padding:16px;margin-bottom:12px;">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
@@ -24527,6 +24546,7 @@ try{
                 <div><span style="color:#8aa0ba;">Tasa:</span><br><strong style="color:#fff;">${socioBnMoney(it.buyPrice,2)} CLP/USDT</strong></div>
                 <div><span style="color:#8aa0ba;">USDT consumido:</span><br><strong style="color:#fff;">${socioBnMoney(it.usdtConsumed,2)} USDT</strong></div>
                 <div><span style="color:#8aa0ba;">CLP cubierto:</span><br><strong style="color:#fff;">${socioBnMoney(it.clpCovered,0)} CLP</strong></div>
+                <div><span style="color:#8aa0ba;">Mín. venta:</span><br><strong style="color:#facc15;">${socioBnMoney(minSellPrice,2)} CLP</strong></div>
                 <div><span style="color:#8aa0ba;">Ganancia:</span><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};">${profitClp >= 0 ? '+' : ''}${socioBnMoney(profitClp,0)} CLP</strong><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};font-size:12px;">${profitClp >= 0 ? '+' : ''}${socioBnMoney(profitUsdt,2)} USDT</strong></div>
               </div>
               <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
@@ -24761,11 +24781,15 @@ try{
           </div>
         `;
       }
+      const profitClp = Number(r.data.profitClp || 0);
+      const profitUsdt = Number(r.data.profitUsdt || 0);
+      const profitColor = profitClp >= 0 ? '#34d399' : '#fb7185';
       return `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #1a3a5a;">
           <div>
             <div style="color:#fff;font-weight:bold;font-size:13px;">Orden ${r.data.orderNumber}</div>
             <div style="color:#8aa0ba;font-size:11px;margin-top:2px;">${dateStr}${r.data.paymentMethod ? ' · ' + r.data.paymentMethod : ''}</div>
+            <div style="color:${profitColor};font-size:11px;margin-top:2px;">Ganancia: ${profitClp >= 0 ? '+' : '-'}${socioBnMoney(Math.abs(profitClp),0)} CLP (${profitUsdt >= 0 ? '+' : '-'}${socioBnMoney(Math.abs(profitUsdt),2)} USDT)</div>
           </div>
           <div style="text-align:right;">
             <div style="color:#34d399;font-weight:bold;font-size:13px;">${socioBnMoney(r.data.clpTaken,0)} CLP</div>

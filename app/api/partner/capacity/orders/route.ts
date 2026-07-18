@@ -56,18 +56,28 @@ export async function GET(req: NextRequest) {
   const orders = (breakdown?.orders || [])
     .slice()
     .sort((a, b) => b.executedAt.getTime() - a.executedAt.getTime())
-    .map((o) => ({
-      orderNumber: o.orderNumber,
-      executedAt: o.executedAt.toISOString(),
-      amount: o.amount,
-      clpTotal: o.clpTotal,
-      clpTaken: o.clpTaken,
-      // Neto (sin la comisión de Binance) — es lo que se muestra en el
-      // detalle. El costo/ganancia del capacity siguen calculándose con el
-      // bruto (usdtDrawnTotal) en computeFifo, esto es solo para mostrar.
-      usdtTaken: o.usdtTakenNet,
-      paymentMethod: o.paymentMethod,
-    }));
+    .map((o) => {
+      // Ganancia de la porción de esta orden: CLP tomado menos el costo real
+      // (usdtTaken BRUTO, con comisión incluida, × tasa de compra) — misma
+      // fórmula que ya usa el desglose del capacity (clpCovered - costClp).
+      const profitClp = o.clpTaken - o.costTaken;
+      const buyPrice = Number(target.buyPrice);
+      const profitUsdt = buyPrice > 0 ? profitClp / buyPrice : 0;
+      return {
+        orderNumber: o.orderNumber,
+        executedAt: o.executedAt.toISOString(),
+        amount: o.amount,
+        clpTotal: o.clpTotal,
+        clpTaken: o.clpTaken,
+        // Neto (sin la comisión de Binance) — es lo que se muestra en el
+        // detalle. El costo/ganancia del capacity siguen calculándose con el
+        // bruto (usdtDrawnTotal) en computeFifo, esto es solo para mostrar.
+        usdtTaken: o.usdtTakenNet,
+        profitClp,
+        profitUsdt,
+        paymentMethod: o.paymentMethod,
+      };
+    });
 
   const manualPaymentsForThis = manualPayments
     .filter((p) => p.capacityId === capacityId)
@@ -85,6 +95,7 @@ export async function GET(req: NextRequest) {
       id: target.id,
       provider: target.provider,
       capacityClp: Number(target.capacityClp),
+      buyPrice: Number(target.buyPrice),
       status: target.status,
     },
     clpCovered: breakdown?.clpCovered || 0,
