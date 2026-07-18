@@ -1020,6 +1020,55 @@ async function handleClientResponse(
       break;
     }
 
+    // Antes de este fix, este estado no tenía NINGÚN caso — si el comprador
+    // escribía algo mientras esperábamos el comprobante, el bot se quedaba
+    // callado. Caso real confirmado en vivo: pagó, avisó "por problemas de
+    // señal no me carga el comprobante, pagué a Banco de Chile" — el
+    // operador tuvo que responder a mano. Nota: prioriza SIEMPRE el banco
+    // que la persona menciona en el mensaje sobre el que habíamos guardado
+    // (chosenBank) — puede haber elegido un banco y transferido a otro.
+    case "awaiting_comprobant": {
+      const ad = findMatchingAd(activeAds, order);
+      const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
+      const namedBank = matchBank(textLower, allAccounts);
+      const opNumberMatch = textLower.match(/\b\d{6,}\b/);
+      const mentionsUploadIssue = matchProblemType(textLower) === "not_working" ||
+        ["no carga", "no me carga", "no sube", "no puedo subir", "no puedo enviar", "no puedo mandar", "no puedo cargar", "señal", "error al subir"].some(k => textLower.includes(k));
+      const knownBank = cs.chosenBank && !String(cs.chosenBank).includes(",") ? cs.chosenBank : null;
+      const bankRef = namedBank?.bank || (mentionsUploadIssue ? knownBank : null);
+
+      if (bankRef) {
+        const msg = `Entendido, vamos a validar tu pago por ${bankRef}. ¿Nos puedes dar el número de operación de la transferencia para agilizar la validación?`;
+        if (namedBank) {
+          await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "awaiting_comprobant", { chosenBank: namedBank.bank });
+        } else {
+          await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
+        }
+      } else if (mentionsUploadIssue) {
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          "No hay problema. ¿A qué banco realizaste el pago? Así podemos validarlo aunque no puedas enviar el comprobante."
+        );
+      } else if (opNumberMatch) {
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          "Gracias, quedó registrado el número de operación. Vamos a validar tu pago."
+        );
+      } else {
+        const ai = await classifyIntent({
+          state: "awaiting_comprobant",
+          text,
+          validIntents: ["issue_uploading", "mentions_bank", "gives_op_number", "unclear"],
+          context: "Se le pidió al comprador el comprobante de pago y todavía no lo ha enviado.",
+        });
+        if (ai && ai.intent !== "unclear") {
+          await sendAndTrack(client, exchange, order.orderNumber, cs,
+            "Entendido, sin problema. ¿A qué banco realizaste el pago? Con eso y el número de operación podemos validarlo aunque no puedas enviar el comprobante."
+          );
+          await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+        }
+      }
+      break;
+    }
+
     default:
       break;
   }
