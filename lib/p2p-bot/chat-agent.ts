@@ -815,22 +815,39 @@ async function handleClientResponse(
       const chosen = opt ? accounts[opt - 1] : matchBank(textLower, allAccounts);
 
       let wantsAll = matchWantsMultipleAccounts(textLower);
+      // Bug real confirmado en vivo (jul 2026): un comprador dijo "no me
+      // permite hacer la transferencia" justo en este punto (antes de elegir
+      // banco) y el bot respondió "No entendí" — nunca intentó entender CUÁL
+      // era el problema, así que agotó los reintentos y cerró con "voy a
+      // comunicarte con un asesor" (que nunca llegó), y el comprador
+      // canceló. matchProblemType YA reconoce esto como "limit" (revisa
+      // "permite"/"deja"/etc.) — solo faltaba consultarlo acá.
+      let resolvedProblem: "limit" | "not_working" | null = null;
       if (!chosen && !wantsAll) {
+        const problemType = matchProblemType(textLower);
+        resolvedProblem = problemType === "limit" ? "limit" : problemType === "not_working" ? "not_working" : null;
+
         // Bug real confirmado en vivo (jul 2026): a diferencia de
         // awaiting_account_type y account_sent, este estado nunca supo
         // reconocer "mándame las 3 cuentas" — solo entendía UN banco
         // puntual, así que terminaba en "No entendí" y cerraba la
         // conversación con un asesor que nunca llegó. Se agrega el mismo
-        // respaldo de IA que ya tienen los otros dos puntos.
-        const ai = await classifyIntent({
-          state: "awaiting_bank_choice",
-          text,
-          validIntents: ["wants_all_accounts", "unclear"],
-          context: `Se le pidió al comprador que elija un banco de esta lista para transferir: ${accounts.map((a: any) => a.bank).join(", ")}.`,
-        });
-        if (ai?.intent === "wants_all_accounts") {
-          wantsAll = true;
-          await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "wants_all_accounts"`);
+        // respaldo de IA que ya tienen los otros dos puntos (y ahora también
+        // cubre "reporta un problema", no solo "quiere todas las cuentas").
+        if (!resolvedProblem) {
+          const ai = await classifyIntent({
+            state: "awaiting_bank_choice",
+            text,
+            validIntents: ["wants_all_accounts", "limit", "not_working", "unclear"],
+            context: `Se le pidió al comprador que elija un banco de esta lista para transferir: ${accounts.map((a: any) => a.bank).join(", ")}.`,
+          });
+          if (ai?.intent === "wants_all_accounts") {
+            wantsAll = true;
+            await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "wants_all_accounts"`);
+          } else if (ai?.intent === "limit" || ai?.intent === "not_working") {
+            resolvedProblem = ai.intent;
+            await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+          }
         }
       }
 
@@ -843,6 +860,36 @@ async function handleClientResponse(
           accounts.map((a: any, i: number) => `--- Cuenta ${i + 1} ---\n${formatSingleAccount(a)}`).join("\n\n") +
           "\n\nCuando realices cada pago:\n- Marca \"Pagado\" en la orden\n- Envía los comprobantes aquí en el chat";
         await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "account_sent", { chosenBank: accounts.map((a: any) => a.bank).join(", "), chosenAccountIds: accounts.map((a: any) => a.id), retryCount: 0 });
+      } else if (resolvedProblem === "limit") {
+        // Pregunta por límite (ej. "no me permite hacer la transferencia",
+        // "solo me deja 250mil") — se ofrece dividir el pago, igual que en
+        // account_sent. Todavía no eligió cuenta, así que si ya mencionó un
+        // monto se puede repartir directo sin preguntar de nuevo.
+        const amount = extractAmount(textLower);
+        if (amount > 0 && cs.totalAmount) {
+          await offerSplitPayment(tenantId, exchange, client, order, cs, amount, label);
+        } else {
+          await sendThenTransition(client, exchange, order.orderNumber, cs,
+            pick([
+              "Sin problema, podemos dividir el pago en 2 partes. ¿Cuánto te permite transferir tu banco por vez?",
+              "No hay problema, lo dividimos en 2 pagos. ¿Cuál es el máximo que te deja transferir tu banco?",
+            ]),
+            "awaiting_limit_amount", { retryCount: 0 }
+          );
+        }
+      } else if (resolvedProblem === "not_working") {
+        // Todavía no se envió ninguna cuenta en esta orden, así que no hay
+        // "otra cuenta" que ofrecer como en handleTransferFails — se le
+        // manda la primera disponible directo.
+        const next = accounts[0];
+        if (next) {
+          await sendThenTransition(client, exchange, order.orderNumber, cs,
+            "Entiendo. Probemos con esta cuenta:\n\n" + formatSingleAccount(next) + "\n\nIntenta con esta y me avisas.",
+            "account_sent", { chosenBank: next.bank, chosenAccountIds: [next.id], retryCount: 0, transferFailCount: (cs.transferFailCount || 0) + 1 }
+          );
+        } else {
+          await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
+        }
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
