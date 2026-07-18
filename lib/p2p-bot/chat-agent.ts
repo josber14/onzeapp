@@ -250,8 +250,7 @@ async function processOrderLocked(
     const current = await prisma.p2PChatState.findUnique({ where: { id: cs.id }, select: { state: true } });
     if (current?.state === "completed" || current?.state === "closed") return;
     const msg = await buildCompletionMessage(cs, tenantId, exchange);
-    await sendAndTrack(client, exchange, order.orderNumber, cs, msg, order.createdAt ? new Date(order.createdAt).getTime() : undefined);
-    await updateState(cs.id, "completed", { completedAt: new Date() });
+    await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "completed", { completedAt: new Date() }, order.createdAt ? new Date(order.createdAt).getTime() : undefined);
     return;
   }
 
@@ -360,13 +359,11 @@ async function processOrderLocked(
   // Handle paid status BEFORE processing client messages
   if (isPaid) {
     if (cs.state === "account_sent") {
-      await sendAndTrack(client, exchange, orderNo, cs, paymentAckMessage(firstNameFrom(cs.realName)));
-      await updateState(cs.id, "payment_made", { paidAt: new Date() });
+      await sendThenTransition(client, exchange, orderNo, cs, paymentAckMessage(firstNameFrom(cs.realName)), "payment_made", { paidAt: new Date() });
       return;
     }
     if (!["account_sent", "payment_made", "awaiting_comprobant", "completed", "closed", "awaiting_verification"].includes(cs.state)) {
-      await sendAndTrack(client, exchange, orderNo, cs, paymentAckMessage(firstNameFrom(cs.realName)));
-      await updateState(cs.id, "payment_made", { paidAt: new Date() });
+      await sendThenTransition(client, exchange, orderNo, cs, paymentAckMessage(firstNameFrom(cs.realName)), "payment_made", { paidAt: new Date() });
       return;
     }
   }
@@ -408,10 +405,10 @@ async function processOrderLocked(
     const fiveMinBefore = expiresAt - 5 * 60 * 1000;
 
     if (Date.now() >= fiveMinBefore && Date.now() < expiresAt) {
-      await sendAndTrack(client, exchange, orderNo, cs,
-        "Hola, tu orden está por vencer. ¿Necesitas más tiempo para completar el pago o estás teniendo problemas?\n  1) Más tiempo\n  2) Problemas\n\nResponde 1 o 2."
+      await sendThenTransition(client, exchange, orderNo, cs,
+        "Hola, tu orden está por vencer. ¿Necesitas más tiempo para completar el pago o estás teniendo problemas?\n  1) Más tiempo\n  2) Problemas\n\nResponde 1 o 2.",
+        "awaiting_problem"
       );
-      await updateState(cs.id, "awaiting_problem");
     }
     return;
   }
@@ -433,10 +430,10 @@ async function processOrderLocked(
         extra = "\n\nRecuerda que al ser cuenta empresa también necesitamos el ERUT para validar la titularidad y emitir la factura.";
       }
       const name = firstNameFrom(cs.realName);
-      await sendAndTrack(client, exchange, orderNo, cs,
-        (name ? `Hola ${name}, ¿nos puedes` : "Hola, ¿nos puedes") + " enviar el comprobante del pago para agilizar la validación?" + extra
+      await sendThenTransition(client, exchange, orderNo, cs,
+        (name ? `Hola ${name}, ¿nos puedes` : "Hola, ¿nos puedes") + " enviar el comprobante del pago para agilizar la validación?" + extra,
+        "awaiting_comprobant"
       );
-      await updateState(cs.id, "awaiting_comprobant");
     }
     return;
   }
@@ -592,15 +589,13 @@ async function handleClientResponse(
         if (previousAccountStillAvailable) {
           const msg = erutNote + "\n\n" +
             `¿Quieres que te envíe la cuenta de ${history.bank} de nuevo, o vas a transferir a la misma cuenta donde ya pagaste antes?\n  1) Envíame la cuenta\n  2) Voy a transferir a la misma cuenta\n\nResponde 1 o 2.`;
-          await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
-          await updateState(cs.id, "awaiting_previous_account", { isCompany: true, isReturning: true, erutRequested: true, previousBank: history.bank, chosenAccountIds: [history.accountId], retryCount: 0 });
+          await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "awaiting_previous_account", { isCompany: true, isReturning: true, erutRequested: true, previousBank: history.bank, chosenAccountIds: [history.accountId], retryCount: 0 });
         } else if (accounts.length === 1) {
           const acct = accounts[0];
           const msg = erutNote + "\n\nTe envío la cuenta para que procedas con el pago:\n\n" +
             formatSingleAccount(acct) +
             "\n\nCuando realices el pago:\n- Marca \"Pagado\" en la orden\n- Envía el comprobante aquí en el chat";
-          await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
-          await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
+          await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "account_sent", { isCompany: true, erutRequested: true, chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
         } else {
           const pending = (cs.pendingFirstMsg || "").toLowerCase();
           const named = pending ? matchBank(pending, allAccounts) : null;
@@ -608,16 +603,14 @@ async function handleClientResponse(
             const msg = erutNote + "\n\nEstas son nuestras cuentas disponibles:\n\n" +
               accounts.map((a: any, i: number) => `--- Cuenta ${i + 1} ---\n${formatSingleAccount(a)}`).join("\n\n") +
               "\n\nCuando realices cada pago:\n- Marca \"Pagado\" en la orden\n- Envía los comprobantes aquí en el chat";
-            await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
-            await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, chosenBank: accounts.map((a: any) => a.bank).join(", "), chosenAccountIds: accounts.map((a: any) => a.id), retryCount: 0, pendingFirstMsg: null });
+            await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "account_sent", { isCompany: true, erutRequested: true, chosenBank: accounts.map((a: any) => a.bank).join(", "), chosenAccountIds: accounts.map((a: any) => a.id), retryCount: 0, pendingFirstMsg: null });
           } else if (named) {
-            await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: true }, named);
-            await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, chosenBank: named.bank, chosenAccountIds: [named.id], retryCount: 0, pendingFirstMsg: null });
+            const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: true }, named);
+            if (sent) await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, chosenBank: named.bank, chosenAccountIds: [named.id], retryCount: 0, pendingFirstMsg: null });
           } else {
             const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
             const msg = erutNote + "\n\n¿A qué cuenta deseas transferir?\n" + choices;
-            await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
-            await updateState(cs.id, "awaiting_bank_choice", { isCompany: true, erutRequested: true, retryCount: 0 });
+            await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "awaiting_bank_choice", { isCompany: true, erutRequested: true, retryCount: 0 });
           }
         }
       } else if (resolvedIntent === "personal") {
@@ -632,16 +625,14 @@ async function handleClientResponse(
 
         if (previousAccountStillAvailable) {
           const msg = `¿Quieres que te envíe la cuenta de ${history.bank} de nuevo, o vas a transferir a la misma cuenta donde ya pagaste antes?\n  1) Envíame la cuenta\n  2) Voy a transferir a la misma cuenta\n\nResponde 1 o 2.`;
-          await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
-          await updateState(cs.id, "awaiting_previous_account", { isReturning: true, previousBank: history.bank, chosenAccountIds: [history.accountId], retryCount: 0 });
+          await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "awaiting_previous_account", { isReturning: true, previousBank: history.bank, chosenAccountIds: [history.accountId], retryCount: 0 });
         } else if (accounts.length === 1) {
           // New customer, single account: send directly
           const acct = accounts[0];
           const msg = "Te envío la cuenta para que procedas con el pago:\n\n" +
             formatSingleAccount(acct) +
             "\n\nCuando realices el pago:\n- Marca \"Pagado\" en la orden\n- Envía el comprobante aquí en el chat";
-          await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
-          await updateState(cs.id, "account_sent", { chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
+          await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "account_sent", { chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
         } else {
           // Camino rápido: si en el primer mensaje ya pidió varias cuentas o
           // nombró un banco puntual, resolvemos directo en vez de preguntar
@@ -653,18 +644,16 @@ async function handleClientResponse(
             const msg = "Estas son nuestras cuentas disponibles:\n\n" +
               accounts.map((a: any, i: number) => `--- Cuenta ${i + 1} ---\n${formatSingleAccount(a)}`).join("\n\n") +
               "\n\nCuando realices cada pago:\n- Marca \"Pagado\" en la orden\n- Envía los comprobantes aquí en el chat";
-            await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
-            await updateState(cs.id, "account_sent", { chosenBank: accounts.map((a: any) => a.bank).join(", "), chosenAccountIds: accounts.map((a: any) => a.id), retryCount: 0, pendingFirstMsg: null });
+            await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "account_sent", { chosenBank: accounts.map((a: any) => a.bank).join(", "), chosenAccountIds: accounts.map((a: any) => a.id), retryCount: 0, pendingFirstMsg: null });
           } else if (named) {
-            await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: false }, named);
-            await updateState(cs.id, "account_sent", { chosenBank: named.bank, chosenAccountIds: [named.id], retryCount: 0, pendingFirstMsg: null });
+            const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: false }, named);
+            if (sent) await updateState(cs.id, "account_sent", { chosenBank: named.bank, chosenAccountIds: [named.id], retryCount: 0, pendingFirstMsg: null });
           } else {
             // New customer, multiple accounts: ask
-            const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
-            await sendAndTrack(client, exchange, order.orderNumber, cs,
-              `¿A qué cuenta deseas transferir?\n${choices}\n\nTambién puedes escribir el nombre del banco.`
+            await sendThenTransition(client, exchange, order.orderNumber, cs,
+              `¿A qué cuenta deseas transferir?\n${accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n")}\n\nTambién puedes escribir el nombre del banco.`,
+              "awaiting_bank_choice", { isCompany: false, retryCount: 0 }
             );
-            await updateState(cs.id, "awaiting_bank_choice", { isCompany: false, retryCount: 0 });
           }
         }
       } else if (resolvedIntent === "reports_problem") {
@@ -675,32 +664,32 @@ async function handleClientResponse(
         // que nunca hizo. Ahora, en vez de asumir nada, se pregunta qué pasó
         // para entender la causa real y poder ayudar. Si la IA ya redactó
         // una pregunta de seguimiento acorde, se usa esa; si no, una fija.
-        await sendAndTrack(client, exchange, order.orderNumber, cs,
+        await sendThenTransition(client, exchange, order.orderNumber, cs,
           aiFollowUp || pick([
             "Cuéntame, ¿qué problema tuviste? Así te ayudo a resolverlo.",
             "¿Qué pasó exactamente? Cuéntame para ver cómo lo solucionamos.",
-          ])
+          ]),
+          "awaiting_account_type", { retryCount: 0 }
         );
-        await updateState(cs.id, "awaiting_account_type", { retryCount: 0 });
       } else if (resolvedIntent === "wants_account") {
         // Pidió la cuenta pero no dijo personal/empresa — esa pregunta NUNCA
         // se salta. Se reconoce el pedido en el mismo mensaje y se guarda
         // (pendingFirstMsg) para resolver directo apenas responda 1 o 2,
         // sin otro paso intermedio de "¿qué banco?".
         const wantsMultiple = matchWantsMultipleAccounts(textLower);
-        await sendAndTrack(client, exchange, order.orderNumber, cs,
-          `Claro, ya te paso ${wantsMultiple ? "las cuentas que necesites" : "la cuenta"} — antes dime: ¿transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.`
+        await sendThenTransition(client, exchange, order.orderNumber, cs,
+          `Claro, ya te paso ${wantsMultiple ? "las cuentas que necesites" : "la cuenta"} — antes dime: ¿transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.`,
+          "awaiting_account_type", { pendingFirstMsg: textLower, retryCount: 0 }
         );
-        await updateState(cs.id, "awaiting_account_type", { pendingFirstMsg: textLower, retryCount: 0 });
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
-          await sendAndTrack(client, exchange, order.orderNumber, cs,
-            "No entendí. ¿Transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2."
+          await sendThenTransition(client, exchange, order.orderNumber, cs,
+            "No entendí. ¿Transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.",
+            "awaiting_account_type", { retryCount }
           );
-          await updateState(cs.id, "awaiting_account_type", { retryCount });
         }
       }
       break;
@@ -746,33 +735,34 @@ async function handleClientResponse(
         // Ambos casos son la MISMA cuenta que la vez pasada — la única
         // diferencia es si hace falta reenviar los datos o no.
         const acct = allAccounts.find((a: any) => a.id === (cs.chosenAccountIds?.[0] || 0)) || allAccounts[0];
+        let sentPrev: boolean;
         if (resolved === "resend") {
-          await sendAccountWithErutNote(tenantId, exchange, client, order, cs, acct);
+          sentPrev = await sendAccountWithErutNote(tenantId, exchange, client, order, cs, acct);
         } else {
           let msg = "Perfecto, cuando realices el pago marca \"Pagado\" en la orden y envía el comprobante por aquí.";
           if (cs.isCompany) msg += "\n\nRecuerda adjuntar el ERUT junto con el comprobante para emitir la factura.";
-          await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
+          sentPrev = await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
         }
-        await updateState(cs.id, "account_sent", { chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
+        if (sentPrev) await updateState(cs.id, "account_sent", { chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
       } else if (resolved === "different_named") {
-        await sendAccountWithErutNote(tenantId, exchange, client, order, cs, namedDifferentBank);
-        await updateState(cs.id, "account_sent", { chosenBank: namedDifferentBank.bank, chosenAccountIds: [namedDifferentBank.id], retryCount: 0 });
+        const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, cs, namedDifferentBank);
+        if (sent) await updateState(cs.id, "account_sent", { chosenBank: namedDifferentBank.bank, chosenAccountIds: [namedDifferentBank.id], retryCount: 0 });
       } else if (resolved === "different_menu") {
         const accounts = pickDefaultAccountsPerBank(allAccounts);
         const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
-        await sendAndTrack(client, exchange, order.orderNumber, cs,
-          `Claro, ¿a qué banco prefieres transferir esta vez?\n${choices}\n\nTambién puedes escribir el nombre del banco.`
+        await sendThenTransition(client, exchange, order.orderNumber, cs,
+          `Claro, ¿a qué banco prefieres transferir esta vez?\n${choices}\n\nTambién puedes escribir el nombre del banco.`,
+          "awaiting_bank_choice", { retryCount: 0 }
         );
-        await updateState(cs.id, "awaiting_bank_choice", { retryCount: 0 });
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
-          await sendAndTrack(client, exchange, order.orderNumber, cs,
-            `No entendí. ¿Vas a transferir a la misma cuenta de la última vez (${cs.previousBank || "la anterior"}), o prefieres otra cuenta?`
+          await sendThenTransition(client, exchange, order.orderNumber, cs,
+            `No entendí. ¿Vas a transferir a la misma cuenta de la última vez (${cs.previousBank || "la anterior"}), o prefieres otra cuenta?`,
+            "awaiting_previous_account", { retryCount }
           );
-          await updateState(cs.id, "awaiting_previous_account", { retryCount });
         }
       }
       break;
@@ -784,10 +774,10 @@ async function handleClientResponse(
       if (retryCount >= MAX_RETRIES) {
         await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
       } else {
-        await sendAndTrack(client, exchange, order.orderNumber, cs,
-          "No entendí. ¿Transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa"
+        await sendThenTransition(client, exchange, order.orderNumber, cs,
+          "No entendí. ¿Transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa",
+          "awaiting_account_type", { retryCount }
         );
-        await updateState(cs.id, "awaiting_account_type", { retryCount });
       }
       break;
     }
@@ -831,25 +821,24 @@ async function handleClientResponse(
       }
 
       if (chosen) {
-        await sendAccountWithErutNote(tenantId, exchange, client, order, cs, chosen);
-        await updateState(cs.id, "account_sent", { chosenBank: chosen.bank, chosenAccountIds: [chosen.id], retryCount: 0 });
+        const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, cs, chosen);
+        if (sent) await updateState(cs.id, "account_sent", { chosenBank: chosen.bank, chosenAccountIds: [chosen.id], retryCount: 0 });
       } else if (wantsAll) {
         const erutNote = cs.isCompany ? "Al realizar el pago, por favor adjunta el ERUT junto con el comprobante para emitir la factura.\n\n" : "";
         const msg = erutNote + "Estas son nuestras cuentas disponibles:\n\n" +
           accounts.map((a: any, i: number) => `--- Cuenta ${i + 1} ---\n${formatSingleAccount(a)}`).join("\n\n") +
           "\n\nCuando realices cada pago:\n- Marca \"Pagado\" en la orden\n- Envía los comprobantes aquí en el chat";
-        await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
-        await updateState(cs.id, "account_sent", { chosenBank: accounts.map((a: any) => a.bank).join(", "), chosenAccountIds: accounts.map((a: any) => a.id), retryCount: 0 });
+        await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "account_sent", { chosenBank: accounts.map((a: any) => a.bank).join(", "), chosenAccountIds: accounts.map((a: any) => a.id), retryCount: 0 });
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
           const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
-          await sendAndTrack(client, exchange, order.orderNumber, cs,
-            `No entendí. Por favor elige el banco para tu depósito:\n${choices}\n\nResponde el número o escribe el nombre del banco.`
+          await sendThenTransition(client, exchange, order.orderNumber, cs,
+            `No entendí. Por favor elige el banco para tu depósito:\n${choices}\n\nResponde el número o escribe el nombre del banco.`,
+            "awaiting_bank_choice", { retryCount }
           );
-          await updateState(cs.id, "awaiting_bank_choice", { retryCount });
         }
       }
       break;
@@ -870,16 +859,16 @@ async function handleClientResponse(
           // ya le había dicho manualmente al comprador que lo ignorara
           // porque ya lo habían recibido. Ahora solo se pide la primera vez.
           if (!cs.erutRequested) {
-            await sendAndTrack(client, exchange, order.orderNumber, cs,
-              "Entendido, es cuenta empresa. Necesitamos que nos envíes el ERUT para validar la titularidad y emitir la factura correspondiente.\n\n¿Puedes enviarlo por aquí?"
+            await sendThenTransition(client, exchange, order.orderNumber, cs,
+              "Entendido, es cuenta empresa. Necesitamos que nos envíes el ERUT para validar la titularidad y emitir la factura correspondiente.\n\n¿Puedes enviarlo por aquí?",
+              "account_sent", { isCompany: true, erutRequested: true, retryCount: 0 }
             );
-            await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, retryCount: 0 });
           }
         } else {
-          await sendAndTrack(client, exchange, order.orderNumber, cs,
-            "Entendido. Si la transferencia es desde cuenta empresa, necesitamos el ERUT. ¿Es tu caso?\n  1) Sí, es empresa\n  2) No, es personal"
+          await sendThenTransition(client, exchange, order.orderNumber, cs,
+            "Entendido. Si la transferencia es desde cuenta empresa, necesitamos el ERUT. ¿Es tu caso?\n  1) Sí, es empresa\n  2) No, es personal",
+            "awaiting_company_type", { retryCount: 0 }
           );
-          await updateState(cs.id, "awaiting_company_type", { retryCount: 0 });
         }
       } else {
         // Acá es exactamente el caso "el comprador pregunta directo por una
@@ -908,8 +897,8 @@ async function handleClientResponse(
         }
 
         if (chosen) {
-          await sendAccountWithErutNote(tenantId, exchange, client, order, cs, chosen);
-          await updateState(cs.id, "account_sent", { chosenBank: chosen.bank, chosenAccountIds: [chosen.id], retryCount: 0 });
+          const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, cs, chosen);
+          if (sent) await updateState(cs.id, "account_sent", { chosenBank: chosen.bank, chosenAccountIds: [chosen.id], retryCount: 0 });
         } else if (resolvedProblem === "limit") {
           // Pregunta proactiva por el límite de su banco (ej: "solo me deja
           // 500mil, ¿puedo hacer 2 pagos?") — NO es un reclamo de que la
@@ -919,13 +908,13 @@ async function handleClientResponse(
           if (amount > 0 && cs.totalAmount) {
             await offerSplitPayment(tenantId, exchange, client, order, cs, amount, label);
           } else {
-            await sendAndTrack(client, exchange, order.orderNumber, cs,
+            await sendThenTransition(client, exchange, order.orderNumber, cs,
               pick([
                 "Sí, puedes hacer el pago en 2 partes sin problema. ¿Cuánto te permite transferir tu banco por vez?",
                 "Claro, no hay problema en dividirlo en 2 pagos. ¿Cuál es el máximo que te deja transferir tu banco?",
-              ])
+              ]),
+              "awaiting_limit_amount", { retryCount: 0 }
             );
-            await updateState(cs.id, "awaiting_limit_amount", { retryCount: 0 });
           }
         } else if (resolvedProblem === "not_working") {
           await handleTransferFails(tenantId, exchange, client, order, cs, activeAds, textLower, label);
@@ -939,24 +928,24 @@ async function handleClientResponse(
       let companyType = opt === 1 ? true : opt === 2 ? false : null;
       if (companyType === null) companyType = matchCompanyType(textLower);
       if (companyType === true) {
-        await sendAndTrack(client, exchange, order.orderNumber, cs,
-          "Entendido. Por favor adjunta el ERUT de la empresa para validar la información y emitir la factura.\n\nLos datos de la cuenta ya están disponibles más arriba."
+        await sendThenTransition(client, exchange, order.orderNumber, cs,
+          "Entendido. Por favor adjunta el ERUT de la empresa para validar la información y emitir la factura.\n\nLos datos de la cuenta ya están disponibles más arriba.",
+          "account_sent", { isCompany: true, erutRequested: true, retryCount: 0 }
         );
-        await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, retryCount: 0 });
       } else if (companyType === false) {
-        await sendAndTrack(client, exchange, order.orderNumber, cs,
-          "Perfecto, es cuenta personal. Los datos de la cuenta ya están disponibles más arriba."
+        await sendThenTransition(client, exchange, order.orderNumber, cs,
+          "Perfecto, es cuenta personal. Los datos de la cuenta ya están disponibles más arriba.",
+          "account_sent", { isCompany: false, retryCount: 0 }
         );
-        await updateState(cs.id, "account_sent", { isCompany: false, retryCount: 0 });
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
-          await sendAndTrack(client, exchange, order.orderNumber, cs,
-            "No entendí. ¿La transferencia es desde cuenta empresa o personal?\n  1) Empresa\n  2) Personal\n\nResponde 1 o 2."
+          await sendThenTransition(client, exchange, order.orderNumber, cs,
+            "No entendí. ¿La transferencia es desde cuenta empresa o personal?\n  1) Empresa\n  2) Personal\n\nResponde 1 o 2.",
+            "awaiting_company_type", { retryCount }
           );
-          await updateState(cs.id, "awaiting_company_type", { retryCount });
         }
       }
       break;
@@ -965,24 +954,24 @@ async function handleClientResponse(
     case "awaiting_problem": {
       const opt = matchOption(textLower, 2);
       if (opt === 1) {
-        await sendAndTrack(client, exchange, order.orderNumber, cs,
-          "Perfecto, solicitaré una extensión de tiempo. Cuando realices el pago marca \"Pagado\" y envíanos el comprobante."
+        await sendThenTransition(client, exchange, order.orderNumber, cs,
+          "Perfecto, solicitaré una extensión de tiempo. Cuando realices el pago marca \"Pagado\" y envíanos el comprobante.",
+          "account_sent", { retryCount: 0 }
         );
-        await updateState(cs.id, "account_sent", { retryCount: 0 });
       } else if (opt === 2 || matchProblemType(textLower) !== null) {
-        await sendAndTrack(client, exchange, order.orderNumber, cs,
-          "¿Qué tipo de problema?\n  1) Límite diario\n  2) No me funciona el banco\n\nResponde 1 o 2."
+        await sendThenTransition(client, exchange, order.orderNumber, cs,
+          "¿Qué tipo de problema?\n  1) Límite diario\n  2) No me funciona el banco\n\nResponde 1 o 2.",
+          "awaiting_problem_type", { retryCount: 0 }
         );
-        await updateState(cs.id, "awaiting_problem_type", { retryCount: 0 });
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
-          await sendAndTrack(client, exchange, order.orderNumber, cs,
-            "No entendí. ¿Necesitas más tiempo o estás teniendo problemas?\n  1) Más tiempo\n  2) Problemas\n\nResponde 1 o 2."
+          await sendThenTransition(client, exchange, order.orderNumber, cs,
+            "No entendí. ¿Necesitas más tiempo o estás teniendo problemas?\n  1) Más tiempo\n  2) Problemas\n\nResponde 1 o 2.",
+            "awaiting_problem", { retryCount }
           );
-          await updateState(cs.id, "awaiting_problem", { retryCount });
         }
       }
       break;
@@ -991,10 +980,10 @@ async function handleClientResponse(
     case "awaiting_problem_type": {
       const opt = matchOption(textLower, 2);
       if (opt === 1 || textLower.includes("límite") || textLower.includes("limite")) {
-        await sendAndTrack(client, exchange, order.orderNumber, cs,
-          "¿Cuál es el límite diario de tu banco para transferencias?"
+        await sendThenTransition(client, exchange, order.orderNumber, cs,
+          "¿Cuál es el límite diario de tu banco para transferencias?",
+          "awaiting_limit_amount", { retryCount: 0 }
         );
-        await updateState(cs.id, "awaiting_limit_amount", { retryCount: 0 });
       } else if (opt === 2 || textLower.includes("no funciona") || textLower.includes("no me funciona") || textLower.includes("banco")) {
         await sendThenClose(client, exchange, order.orderNumber, cs,
           "Lamentamos el problema con tu banco. Cuando soluciones y estés listo, vuelve a tomar la orden. ¡Te esperamos! 👍🏻"
@@ -1004,10 +993,10 @@ async function handleClientResponse(
         if (retryCount >= MAX_RETRIES) {
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
-          await sendAndTrack(client, exchange, order.orderNumber, cs,
-            "No entendí. ¿Qué tipo de problema?\n  1) Límite diario\n  2) No me funciona el banco\n\nResponde 1 o 2."
+          await sendThenTransition(client, exchange, order.orderNumber, cs,
+            "No entendí. ¿Qué tipo de problema?\n  1) Límite diario\n  2) No me funciona el banco\n\nResponde 1 o 2.",
+            "awaiting_problem_type", { retryCount }
           );
-          await updateState(cs.id, "awaiting_problem_type", { retryCount });
         }
       }
       break;
@@ -1022,10 +1011,10 @@ async function handleClientResponse(
         if (retryCount >= MAX_RETRIES) {
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor.", { retryCount });
         } else {
-          await sendAndTrack(client, exchange, order.orderNumber, cs,
-            "No entendí el monto. ¿Cuánto te permite transferir tu banco? (ej: 150000)"
+          await sendThenTransition(client, exchange, order.orderNumber, cs,
+            "No entendí el monto. ¿Cuánto te permite transferir tu banco? (ej: 150000)",
+            "awaiting_limit_amount", { retryCount }
           );
-          await updateState(cs.id, "awaiting_limit_amount", { retryCount });
         }
       }
       break;
@@ -1065,17 +1054,17 @@ async function handleTransferFails(
 
   if (remaining.length > 0) {
     const next = remaining[0];
-    await sendAndTrack(client, exchange, order.orderNumber, cs,
+    await sendThenTransition(client, exchange, order.orderNumber, cs,
       "Aquí tienes otra cuenta para intentar:\n\n" +
       formatSingleAccount(next) +
-      "\n\nIntenta con esta y me avisas."
+      "\n\nIntenta con esta y me avisas.",
+      "account_sent", {
+        chosenAccountIds: [...alreadySentIds, next.id],
+        chosenBank: next.bank,
+        retryCount: 0,
+        transferFailCount: fails,
+      }
     );
-    await updateState(cs.id, "account_sent", {
-      chosenAccountIds: [...alreadySentIds, next.id],
-      chosenBank: next.bank,
-      retryCount: 0,
-      transferFailCount: fails,
-    });
   } else {
     await sendThenClose(client, exchange, order.orderNumber, cs,
       "Puede ser un problema con tu banco. Lamentablemente no podemos extender más el tiempo. Intenta más tarde cuando se resuelva.\n\nQuedamos atentos para la próxima.",
@@ -1100,12 +1089,11 @@ export async function completeOrderChat(
   const msg = await buildCompletionMessage(cs, tenantId, exchange);
 
   if (exchange === "binance") {
-    await sendAndTrack(client, exchange, orderNumber, cs, msg);
+    await sendThenTransition(client, exchange, orderNumber, cs, msg, "completed", { completedAt: new Date() });
   } else {
     await client.sendChatMessage(orderNumber, msg);
+    await updateState(cs.id, "completed", { completedAt: new Date() });
   }
-
-  await updateState(cs.id, "completed", { completedAt: new Date() });
 }
 
 /* ─── Helpers ─────────────────────────────────────────────────── */
@@ -1117,7 +1105,7 @@ async function sendAccountWithErutNote(
   order: any,
   cs: any,
   acct: any
-) {
+): Promise<boolean> {
   const erutNote = cs.isCompany
     ? "\n\nAl ser cuenta empresa, necesitamos el ERUT para validar la titularidad y emitir la factura. Por favor adjúntalo cuando puedas."
     : "";
@@ -1125,7 +1113,7 @@ async function sendAccountWithErutNote(
     formatSingleAccount(acct) +
     erutNote +
     "\n\nCuando realices el pago:\n- Marca \"Pagado\" en la orden\n- Envía el comprobante aquí en el chat";
-  await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
+  return sendAndTrack(client, exchange, order.orderNumber, cs, msg);
 }
 
 export function normalizeOrder(raw: any, exchange: string) {
@@ -1292,9 +1280,19 @@ async function updateState(id: number, state: ChatState, extra: Record<string, a
 // con 4 preguntas reales sin ninguna respuesta, viendo silencio total. Si el
 // envío falla, NO cerramos — se reintenta en el próximo ciclo.
 async function sendThenClose(client: any, exchange: string, orderNo: string, cs: any, msg: string, extra: Record<string, any> = {}): Promise<boolean> {
-  const sent = await sendAndTrack(client, exchange, orderNo, cs, msg);
+  return sendThenTransition(client, exchange, orderNo, cs, msg, "closed", extra);
+}
+
+// Mismo principio que sendThenClose mas genérico: solo avanza de estado si
+// el mensaje realmente se envió. Bug real confirmado en vivo (jul 2026, otro
+// punto distinto al de sendThenClose): el aviso de pago recibido falló por
+// WS (ILLEGAL_PARAM) pero el estado igual pasaba a "payment_made" — el
+// comprador pagó y preguntó "¿está listo?" sin que el bot nunca confirmara
+// haber recibido el aviso, porque el mensaje real nunca llegó.
+async function sendThenTransition(client: any, exchange: string, orderNo: string, cs: any, msg: string, newState: ChatState, extra: Record<string, any> = {}, createdAt?: number): Promise<boolean> {
+  const sent = await sendAndTrack(client, exchange, orderNo, cs, msg, createdAt);
   if (sent) {
-    await updateState(cs.id, "closed", extra);
+    await updateState(cs.id, newState, extra);
   }
   return sent;
 }
@@ -1674,13 +1672,12 @@ async function offerSplitPayment(
     });
     msg.push("Importante: ambas transferencias deben salir de cuentas a tu nombre (el titular de la orden) — no aceptamos que una parte la pague otra persona.");
     msg.push("Ve realizando las transferencias y enviando los comprobantes de cada una. Quedo atento.");
-    await sendAndTrack(client, exchange, order.orderNumber, cs, msg.join("\n"));
-    await updateState(cs.id, "account_sent", { partialAmount: amount, chosenAccountIds: chunks.map((c: any) => c.id), retryCount: 0 });
+    await sendThenTransition(client, exchange, order.orderNumber, cs, msg.join("\n"), "account_sent", { partialAmount: amount, chosenAccountIds: chunks.map((c: any) => c.id), retryCount: 0 });
   } else {
-    await sendAndTrack(client, exchange, order.orderNumber, cs,
-      "Entendido, con ese monto no podemos dividir el pago. ¿Puedes intentar con otra cuenta?"
+    await sendThenTransition(client, exchange, order.orderNumber, cs,
+      "Entendido, con ese monto no podemos dividir el pago. ¿Puedes intentar con otra cuenta?",
+      "account_sent", { retryCount: 0 }
     );
-    await updateState(cs.id, "account_sent", { retryCount: 0 });
   }
 }
 
