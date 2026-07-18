@@ -305,11 +305,23 @@ async function processOrderLocked(
       if (payed.nickName) {
         // orderCount incrementa acá porque este bloque (if !cs.realName) solo
         // corre UNA vez por orden — cuenta compras reales, no cada vez que se
-        // relee el chat.
+        // relee el chat. Se guarda también qué cuenta/tipo usó esta vez, para
+        // poder ofrecérsela directo la próxima ("¿misma cuenta de la vez
+        // pasada?") en vez de repetirle las mismas preguntas.
+        const lastAccountId = Array.isArray(cs.chosenAccountIds) && cs.chosenAccountIds.length === 1 ? Number(cs.chosenAccountIds[0]) : null;
         await prisma.p2PBuyerIdentity.upsert({
           where: { tenantId_exchange_label_nickName: { tenantId, exchange, label, nickName: payed.nickName } },
-          update: { realName: payed.realName, orderCount: { increment: 1 } },
-          create: { tenantId, exchange, label, nickName: payed.nickName, realName: payed.realName },
+          update: {
+            realName: payed.realName,
+            orderCount: { increment: 1 },
+            ...(lastAccountId ? { lastBank: cs.chosenBank || null, lastAccountId, lastIsCompany: !!cs.isCompany } : {}),
+          },
+          create: {
+            tenantId, exchange, label, nickName: payed.nickName, realName: payed.realName,
+            lastBank: lastAccountId ? (cs.chosenBank || null) : null,
+            lastAccountId,
+            lastIsCompany: !!cs.isCompany,
+          },
         }).catch(() => {});
       }
     }
@@ -474,18 +486,46 @@ export async function handleVerified(
   const firstMsg = (cs.pendingFirstMsg || "").toLowerCase();
   const name = firstNameFrom(known?.realName);
   const hello = isReturning && name ? `¡Hola ${name}!` : "¡Hola!";
-  let greeting: string;
+
+  // Si ya pidió algo puntual antes de verificar (ej. "mándame 3 cuentas"),
+  // eso manda por sobre el ofrecimiento de "misma cuenta de la vez pasada"
+  // — es una instrucción explícita y nueva del comprador.
   if (firstMsg && matchWantsAccount(firstMsg)) {
     const wantsMultiple = matchWantsMultipleAccounts(firstMsg);
-    greeting = `${hello} Ya te paso ${wantsMultiple ? "las cuentas que necesites" : "la cuenta"} — antes dime: ¿transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.`;
-  } else {
-    greeting = buildInitialGreeting(isReturning, name);
+    const greeting = `${hello} Ya te paso ${wantsMultiple ? "las cuentas que necesites" : "la cuenta"} — antes dime: ¿transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.`;
+    const sent = await sendAndTrack(client, exchange, order.orderNumber, cs, greeting, createdAtTs);
+    if (sent) {
+      await updateState(cs.id, "awaiting_account_type", { isCompany: false, isReturning, ...(known ? { realName: known.realName } : {}) });
+    }
+    return;
   }
 
-  const sent = await sendAndTrack(client, exchange, order.orderNumber, cs,
-    greeting,
-    createdAtTs
-  );
+  // Cliente conocido con una cuenta puntual de la vez pasada (no un pago
+  // dividido — ver el "if" en la captura de identidad) — se le ofrece
+  // directo en vez de repetirle personal/empresa desde cero. Pedido
+  // explícito del usuario: "que no sea la misma pregunta siempre".
+  if (known?.lastAccountId) {
+    const ad = findMatchingAd(activeAds, order);
+    const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
+    const prevAccount = allAccounts.find((a: any) => a.id === known.lastAccountId);
+    if (prevAccount) {
+      const greeting = `${hello} ¿Vas a transferir a la misma cuenta de la última vez (${known.lastBank})? Avísame si necesitas que te la reenvíe, o si prefieres usar otra cuenta.`;
+      const sent = await sendAndTrack(client, exchange, order.orderNumber, cs, greeting, createdAtTs);
+      if (sent) {
+        await updateState(cs.id, "awaiting_previous_account", {
+          isCompany: known.lastIsCompany,
+          isReturning,
+          realName: known.realName,
+          previousBank: known.lastBank,
+          chosenAccountIds: [known.lastAccountId],
+        });
+      }
+      return;
+    }
+  }
+
+  const greeting = buildInitialGreeting(isReturning, name);
+  const sent = await sendAndTrack(client, exchange, order.orderNumber, cs, greeting, createdAtTs);
   if (sent) {
     await updateState(cs.id, "awaiting_account_type", {
       isCompany: false,
@@ -667,30 +707,70 @@ async function handleClientResponse(
     }
 
     case "awaiting_previous_account": {
-      const opt = matchOption(textLower, 2);
-      if (opt === 1) {
-        // Send account again — puede ser la cuenta oculta (vista) si esa fue
-        // la elegida antes, por eso incluye ocultas.
-        const ad = findMatchingAd(activeAds, order);
-        const accounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
-        const acct = accounts.find((a: any) => a.id === (cs.chosenAccountIds?.[0] || 0)) || accounts[0];
-        await sendAccountWithErutNote(tenantId, exchange, client, order, cs, acct);
-        await updateState(cs.id, "account_sent", { chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
-      } else if (opt === 2) {
-        // Will pay to the same account
-        let msg = "Perfecto, cuando realices el pago marca \"Pagado\" en la orden y envía el comprobante por aquí.";
-        if (cs.isCompany) {
-          msg += "\n\nRecuerda adjuntar el ERUT junto con el comprobante para emitir la factura.";
+      // Sin menú numerado a propósito — es la conversación natural de
+      // "¿misma cuenta de la última vez?", no otro más de los formularios
+      // rígidos. Se interpreta: 1) pide que se la reenvíe → mandar la cuenta
+      // de nuevo; 2) confirma que sigue siendo esa, sin pedir reenvío →
+      // avisar y esperar el pago; 3) pide otra cuenta → mostrar el menú de
+      // bancos (pedido explícito del usuario). Si nada de esto calza,
+      // respaldo de IA antes de retroceder a "No entendí".
+      const ad = findMatchingAd(activeAds, order);
+      const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
+      const namedDifferentBank = matchBank(textLower, allAccounts);
+      const isSameAccountByName = namedDifferentBank && namedDifferentBank.id === (cs.chosenAccountIds?.[0] || 0);
+
+      const wantsResend = matchWantsAccount(textLower) || textLower.includes("reenv") || textLower.includes("envía") || textLower.includes("mandame") || textLower.includes("mándame");
+      const wantsDifferent = !isSameAccountByName && (namedDifferentBank || textLower.includes("otra") || textLower.includes("distinta") || textLower.includes("cambiar") || textLower.includes("diferente"));
+      const confirmsSame = !wantsDifferent && (matchOption(textLower, 2) === 1 || textLower.includes("misma") || textLower.includes("si") || textLower.includes("sí") || isSameAccountByName);
+
+      let resolved: "resend" | "confirm_no_resend" | "different_named" | "different_menu" | null = null;
+      if (namedDifferentBank && !isSameAccountByName) resolved = "different_named";
+      else if (wantsResend) resolved = "resend";
+      else if (wantsDifferent) resolved = "different_menu";
+      else if (confirmsSame) resolved = "confirm_no_resend";
+
+      if (!resolved) {
+        const ai = await classifyIntent({
+          state: "awaiting_previous_account",
+          text,
+          validIntents: ["resend", "confirm_no_resend", "different_menu", "unclear"],
+          context: `Se le preguntó al comprador si va a transferir a la misma cuenta que usó la vez pasada (${cs.previousBank || "una cuenta anterior"}), avisándole que puede pedir que se la reenvíen o pedir otra cuenta distinta.`,
+        });
+        if (ai && ai.intent !== "unclear") {
+          resolved = ai.intent as any;
+          await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
         }
-        await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
-        await updateState(cs.id, "account_sent", { retryCount: 0 });
+      }
+
+      if (resolved === "resend" || resolved === "confirm_no_resend") {
+        // Ambos casos son la MISMA cuenta que la vez pasada — la única
+        // diferencia es si hace falta reenviar los datos o no.
+        const acct = allAccounts.find((a: any) => a.id === (cs.chosenAccountIds?.[0] || 0)) || allAccounts[0];
+        if (resolved === "resend") {
+          await sendAccountWithErutNote(tenantId, exchange, client, order, cs, acct);
+        } else {
+          let msg = "Perfecto, cuando realices el pago marca \"Pagado\" en la orden y envía el comprobante por aquí.";
+          if (cs.isCompany) msg += "\n\nRecuerda adjuntar el ERUT junto con el comprobante para emitir la factura.";
+          await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
+        }
+        await updateState(cs.id, "account_sent", { chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
+      } else if (resolved === "different_named") {
+        await sendAccountWithErutNote(tenantId, exchange, client, order, cs, namedDifferentBank);
+        await updateState(cs.id, "account_sent", { chosenBank: namedDifferentBank.bank, chosenAccountIds: [namedDifferentBank.id], retryCount: 0 });
+      } else if (resolved === "different_menu") {
+        const accounts = pickDefaultAccountsPerBank(allAccounts);
+        const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          `Claro, ¿a qué banco prefieres transferir esta vez?\n${choices}\n\nTambién puedes escribir el nombre del banco.`
+        );
+        await updateState(cs.id, "awaiting_bank_choice", { retryCount: 0 });
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
-            `No entendí. ¿Quieres que te envíe la cuenta de ${cs.previousBank || "Banco Estado"} de nuevo, o vas a transferir a la misma cuenta donde ya pagaste antes?\n  1) Envíame la cuenta\n  2) Voy a transferir a la misma cuenta\n\nResponde 1 o 2.`
+            `No entendí. ¿Vas a transferir a la misma cuenta de la última vez (${cs.previousBank || "la anterior"}), o prefieres otra cuenta?`
           );
           await updateState(cs.id, "awaiting_previous_account", { retryCount });
         }
@@ -783,10 +863,18 @@ async function handleClientResponse(
         );
       } else if (matchERUT(textLower) || matchCompanyType(textLower) === true) {
         if (cs.isCompany || matchCompanyType(textLower) === true) {
-          await sendAndTrack(client, exchange, order.orderNumber, cs,
-            "Entendido, es cuenta empresa. Necesitamos que nos envíes el ERUT para validar la titularidad y emitir la factura correspondiente.\n\n¿Puedes enviarlo por aquí?"
-          );
-          await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, retryCount: 0 });
+          // Bug real confirmado en vivo (jul 2026): cada vez que el comprador
+          // volvía a mencionar "empresa" en un mensaje distinto (ej. contando
+          // desde qué cuenta iba a transferir), el bot repetía el pedido
+          // completo del ERUT de nuevo — incluso después de que el operador
+          // ya le había dicho manualmente al comprador que lo ignorara
+          // porque ya lo habían recibido. Ahora solo se pide la primera vez.
+          if (!cs.erutRequested) {
+            await sendAndTrack(client, exchange, order.orderNumber, cs,
+              "Entendido, es cuenta empresa. Necesitamos que nos envíes el ERUT para validar la titularidad y emitir la factura correspondiente.\n\n¿Puedes enviarlo por aquí?"
+            );
+            await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, retryCount: 0 });
+          }
         } else {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
             "Entendido. Si la transferencia es desde cuenta empresa, necesitamos el ERUT. ¿Es tu caso?\n  1) Sí, es empresa\n  2) No, es personal"
@@ -1455,18 +1543,37 @@ async function getBuyerHistory(tenantId: number, exchange: string, counterparty:
 // de esta búsqueda, no solo cuando hay colisión visible en nuestra tabla.
 const GENERIC_NICK_PATTERNS = [/^user-/i, /^p2p-/i];
 
-async function findKnownRealName(tenantId: number, exchange: string, label: string, maskedNick?: string | null): Promise<{ realName: string; orderCount: number } | null> {
+interface KnownIdentity {
+  realName: string;
+  orderCount: number;
+  lastBank: string | null;
+  lastAccountId: number | null;
+  lastIsCompany: boolean;
+}
+
+async function findKnownRealName(tenantId: number, exchange: string, label: string, maskedNick?: string | null): Promise<KnownIdentity | null> {
   const m = /^(.{1,3})\*+$/.exec((maskedNick || "").trim());
   if (!m) return null;
   const prefix = m[1];
   const candidates = await prisma.p2PBuyerIdentity.findMany({
     where: { tenantId, exchange, label, nickName: { startsWith: prefix } },
-    select: { nickName: true, realName: true, orderCount: true },
+    orderBy: { updatedAt: "desc" },
+    select: { nickName: true, realName: true, orderCount: true, lastBank: true, lastAccountId: true, lastIsCompany: true },
   });
   const trustworthy = candidates.filter(c => !GENERIC_NICK_PATTERNS.some(re => re.test(c.nickName)));
   const uniqueNames = new Set(trustworthy.map(c => c.realName));
   if (uniqueNames.size !== 1) return null;
-  return { realName: trustworthy[0].realName, orderCount: trustworthy[0].orderCount };
+  // orderBy updatedAt desc — si hay más de una fila con el mismo nombre real
+  // (poco común, ej. dos apodos custom distintos de la misma persona), usa la
+  // cuenta/tipo de la más reciente.
+  const latest = trustworthy[0];
+  return {
+    realName: latest.realName,
+    orderCount: Math.max(...trustworthy.map(c => c.orderCount)),
+    lastBank: latest.lastBank,
+    lastAccountId: latest.lastAccountId,
+    lastIsCompany: latest.lastIsCompany,
+  };
 }
 
 async function getAvailableAccounts(tenantId: number, exchange: string, label = "ONZE"): Promise<any[]> {
@@ -1621,7 +1728,7 @@ function paymentAckMessage(name?: string | null): string {
 
 async function buildCompletionMessage(cs: any, tenantId: number, exchange: string): Promise<string> {
   const greeting = getTimeGreeting();
-  const isNew = cs.counterparty ? !(cs.isReturning || await getBuyerHistory(tenantId, exchange, cs.counterparty)) : true;
+  const isNew = !cs.isReturning;
   const name = firstNameFrom(cs.realName);
   let msg = pick([
     "✨ Listo, tus USDT están disponibles. Gracias por tu preferencia, esperamos verte pronto.",
