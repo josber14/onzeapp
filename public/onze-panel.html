@@ -24458,6 +24458,7 @@ try{
       </div>
 
       <div class="p2p-capacity-actions-row">
+        <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnOpenCapacityOrders('${it.id}')" title="Ver el detalle de las órdenes que cubrieron este capacity">👁 Detalle</button>
         <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnEditCapacity('${it.id}')">Editar</button>
         ${it.status !== 'finished' ? `<button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnOpenCompleteCapacity('${it.id}')" title="Registrar un pago manual (ej: le pagaste al proveedor con plata propia) que no viene de una venta">Completar saldo</button>` : ''}
         <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnToggleCapacityStatus('${it.id}')">${it.status === 'finished' ? 'Reactivar' : 'Marcar completado'}</button>
@@ -24529,6 +24530,7 @@ try{
                 <div><span style="color:#8aa0ba;">Ganancia:</span><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};">${profitClp >= 0 ? '+' : ''}${socioBnMoney(profitClp,0)} CLP</strong><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};font-size:12px;">${profitClp >= 0 ? '+' : ''}${socioBnMoney(profitUsdt,2)} USDT</strong></div>
               </div>
               <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+                <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnOpenCapacityOrders('${it.id}')" title="Ver el detalle de las órdenes que cubrieron este capacity">👁 Detalle</button>
                 <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnToggleCapacityStatus('${it.id}'); document.getElementById('socioBnCompletedModal').remove();">Reactivar</button>
                 <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;color:#ef4444;" onclick="window.socioBnDeleteCapacity('${it.id}'); document.getElementById('socioBnCompletedModal').remove();">Eliminar</button>
               </div>
@@ -24696,6 +24698,84 @@ try{
       await socioBnLoadDashboard();
       if(typeof showToast === 'function') showToast('✅ Pago manual registrado');
     } else if(typeof showToast === 'function') showToast(res.error || 'Error al registrar el pago', 'error');
+  };
+
+  // "👁 Detalle" — qué órdenes (y pagos manuales) cubrieron este capacity.
+  // Se pide fresco al servidor cada vez que se abre (mismo patrón de "Neon
+  // manda siempre" que el resto de esta sección) — nunca se arma con datos
+  // ya cacheados en el navegador.
+  window.socioBnOpenCapacityOrders = async function(capacityId){
+    let modal = document.getElementById('socioBnCapacityOrdersModal');
+    if(modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'socioBnCapacityOrdersModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;';
+    modal.innerHTML = `
+      <div style="background:#0d2137;border:1px solid #2a4a6a;border-radius:16px;padding:24px;max-width:560px;width:100%;max-height:90vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 style="color:#00d4ff;margin:0;">👁 Detalle del capacity</h3>
+          <button onclick="document.getElementById('socioBnCapacityOrdersModal').remove()"
+            style="padding:8px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cerrar</button>
+        </div>
+        <div id="socioBnCapacityOrdersBody" style="color:#8aa0ba;font-size:13px;">Cargando…</div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const res = await socioBnFetch('/api/partner/capacity/orders?capacityId=' + encodeURIComponent(capacityId));
+    const body = document.getElementById('socioBnCapacityOrdersBody');
+    if(!body) return;
+    if(!res.ok){
+      body.innerHTML = '<div style="color:#fb7185;">' + (res.error || 'Error al cargar el detalle') + '</div>';
+      return;
+    }
+
+    const rows = [
+      ...res.orders.map(function(o){ return { kind: 'order', date: o.executedAt, sort: new Date(o.executedAt).getTime(), data: o }; }),
+      ...res.manualPayments.map(function(p){ return { kind: 'manual', date: p.createdAt, sort: new Date(p.createdAt).getTime(), data: p }; }),
+    ].sort(function(a, b){ return b.sort - a.sort; });
+
+    const header = `
+      <div style="margin-bottom:14px;">
+        <strong style="color:#fff;font-size:14px;">${res.capacity.provider || '(sin proveedor)'}</strong>
+        <div style="margin-top:4px;">Cubierto por ventas: <strong style="color:#34d399;">${socioBnMoney(res.clpCovered,0)} CLP</strong> de ${socioBnMoney(res.capacity.capacityClp,0)} CLP</div>
+      </div>
+    `;
+
+    if(rows.length === 0){
+      body.innerHTML = header + '<div style="text-align:center;padding:24px;">Todavía no hay órdenes ni pagos manuales asignados a este capacity.</div>';
+      return;
+    }
+
+    const rowsHtml = rows.map(function(r){
+      const dateStr = new Date(r.date).toLocaleString('es-CL', { timeZone: 'America/Santiago', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      if(r.kind === 'manual'){
+        return `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #1a3a5a;">
+            <div>
+              <div style="color:#00d4ff;font-weight:bold;font-size:13px;">Pago manual${r.data.note ? ' — ' + r.data.note : ''}</div>
+              <div style="color:#8aa0ba;font-size:11px;margin-top:2px;">${dateStr}</div>
+            </div>
+            <div style="text-align:right;color:#00d4ff;font-weight:bold;font-size:13px;">${socioBnMoney(r.data.amountClp,0)} CLP</div>
+          </div>
+        `;
+      }
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #1a3a5a;">
+          <div>
+            <div style="color:#fff;font-weight:bold;font-size:13px;">Orden ${r.data.orderNumber}</div>
+            <div style="color:#8aa0ba;font-size:11px;margin-top:2px;">${dateStr}${r.data.paymentMethod ? ' · ' + r.data.paymentMethod : ''}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="color:#34d399;font-weight:bold;font-size:13px;">${socioBnMoney(r.data.clpTaken,0)} CLP</div>
+            <div style="color:#8aa0ba;font-size:11px;">${socioBnMoney(r.data.usdtTaken,2)} USDT</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    body.innerHTML = header + rowsHtml;
   };
 
   window.__socioBnSalesPage = window.__socioBnSalesPage || 1;
