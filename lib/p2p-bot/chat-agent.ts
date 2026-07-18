@@ -62,6 +62,15 @@ export async function processChats(
     seenOrders.add(orderNo);
 
     const order = normalizeOrder(rawOrder, exchange);
+
+    // Pedido explícito del usuario (jul 2026): el bot solo debe hablar de
+    // operaciones en CLP. Confirmado en vivo: una venta P2P directa hecha
+    // por fuera de los anuncios gestionados (para comprar bs/VES) hizo que
+    // el bot le empezara a chatear con datos bancarios en CLP a alguien que
+    // ni siquiera está en esa moneda. Se ignora por completo cualquier
+    // orden que no sea CLP — nunca se crea ni se toca su P2PChatState.
+    if (order.fiat && order.fiat !== "CLP") return;
+
     await logMsg(tenantId, exchange, `[Chat] raw ${orderNo} status=${order.status} group=${order.group} rawStatus=${(rawOrder.orderStatus ?? rawOrder.status ?? '?')} tradeType=${rawOrder.tradeType || '?'} verified=${order.verified} rawVerify=${rawOrder.additionalKycVerify}`);
     // Antes esto saltaba órdenes canceladas ANTES de llegar a processOrder —
     // pero el cierre real (cs.state -> "closed") vive DENTRO de
