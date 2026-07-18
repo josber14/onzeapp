@@ -593,6 +593,20 @@ async function handleClientResponse(
             await updateState(cs.id, "awaiting_bank_choice", { isCompany: false, retryCount: 0 });
           }
         }
+      } else if (matchProblemType(textLower) === "not_working") {
+        // Reclamo genérico ("no me deja", "no funciona", "no puedo") antes
+        // de responder personal/empresa. Bug real confirmado en vivo (jul
+        // 2026): "No me deja la cuenta" se leía como si hubiera elegido la
+        // opción 2 (Empresa) — el comprador terminó con un pedido de ERUT
+        // que nunca hizo. Ahora, en vez de asumir nada, se pregunta qué pasó
+        // para entender la causa real y poder ayudar.
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          pick([
+            "Cuéntame, ¿qué problema tuviste? Así te ayudo a resolverlo.",
+            "¿Qué pasó exactamente? Cuéntame para ver cómo lo solucionamos.",
+          ])
+        );
+        await updateState(cs.id, "awaiting_account_type", { retryCount: 0 });
       } else if (matchWantsAccount(textLower)) {
         // Pidió la cuenta pero no dijo personal/empresa — esa pregunta NUNCA
         // se salta. Se reconoce el pedido en el mismo mensaje y se guarda
@@ -1120,9 +1134,17 @@ function matchOption(text: string, max: number): number | null {
   const num = parseInt(text);
   if (!isNaN(num) && num >= 1 && num <= max) return num;
   if (/^\d+$/.test(text)) return null;
-  if (text.startsWith("sí") || text.startsWith("si ") || text === "si" || text.startsWith("yes")) return 1;
-  if (text.startsWith("no") || text.startsWith("2")) return 2;
-  if (max >= 3 && (text.startsWith("3") || text.includes("tercer"))) return 3;
+  // Bug real confirmado en vivo (jul 2026): con "text.startsWith" cualquier
+  // reclamo que empezara con "no" (ej. "No me deja la cuenta") se
+  // interpretaba como si hubiera elegido la opción 2 — en un menú
+  // "1) Personal 2) Empresa" eso mandaba al comprador directo al flujo de
+  // factura/ERUT sin que lo hubiera pedido. Ahora sí/no solo cuenta cuando
+  // es TODA la respuesta (nada más, sin texto adicional) — un reclamo largo
+  // nunca debe leerse como un simple "no".
+  const trimmed = text.trim().replace(/[.,!?¡¿]+$/, "");
+  if (trimmed === "sí" || trimmed === "si" || trimmed === "yes") return 1;
+  if (trimmed === "no") return 2;
+  if (max >= 3 && text.includes("tercer")) return 3;
   return null;
 }
 
