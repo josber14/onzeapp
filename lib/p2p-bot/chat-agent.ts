@@ -730,9 +730,36 @@ async function handleClientResponse(
       // cuenta oculta (ej. "vista", o los últimos dígitos) si la pide directo.
       const chosen = opt ? accounts[opt - 1] : matchBank(textLower, allAccounts);
 
+      let wantsAll = matchWantsMultipleAccounts(textLower);
+      if (!chosen && !wantsAll) {
+        // Bug real confirmado en vivo (jul 2026): a diferencia de
+        // awaiting_account_type y account_sent, este estado nunca supo
+        // reconocer "mándame las 3 cuentas" — solo entendía UN banco
+        // puntual, así que terminaba en "No entendí" y cerraba la
+        // conversación con un asesor que nunca llegó. Se agrega el mismo
+        // respaldo de IA que ya tienen los otros dos puntos.
+        const ai = await classifyIntent({
+          state: "awaiting_bank_choice",
+          text,
+          validIntents: ["wants_all_accounts", "unclear"],
+          context: `Se le pidió al comprador que elija un banco de esta lista para transferir: ${accounts.map((a: any) => a.bank).join(", ")}.`,
+        });
+        if (ai?.intent === "wants_all_accounts") {
+          wantsAll = true;
+          await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "wants_all_accounts"`);
+        }
+      }
+
       if (chosen) {
         await sendAccountWithErutNote(tenantId, exchange, client, order, cs, chosen);
         await updateState(cs.id, "account_sent", { chosenBank: chosen.bank, chosenAccountIds: [chosen.id], retryCount: 0 });
+      } else if (wantsAll) {
+        const erutNote = cs.isCompany ? "Al realizar el pago, por favor adjunta el ERUT junto con el comprobante para emitir la factura.\n\n" : "";
+        const msg = erutNote + "Estas son nuestras cuentas disponibles:\n\n" +
+          accounts.map((a: any, i: number) => `--- Cuenta ${i + 1} ---\n${formatSingleAccount(a)}`).join("\n\n") +
+          "\n\nCuando realices cada pago:\n- Marca \"Pagado\" en la orden\n- Envía los comprobantes aquí en el chat";
+        await sendAndTrack(client, exchange, order.orderNumber, cs, msg);
+        await updateState(cs.id, "account_sent", { chosenBank: accounts.map((a: any) => a.bank).join(", "), chosenAccountIds: accounts.map((a: any) => a.id), retryCount: 0 });
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
