@@ -561,6 +561,16 @@ async function handleClientResponse(
   const textLower = text.toLowerCase().trim();
   let retryCount = cs.retryCount || 0;
 
+  // Pedido explícito del usuario (jul 2026): un "ok"/"dale"/"listo" puro es
+  // solo un reconocimiento de lo que YA se dijo, no una pregunta ni una
+  // respuesta a algo pendiente — un operador humano no le contestaría nada.
+  // Confirmado en vivo: el respaldo de IA (que responde a TODO mensaje que
+  // no calza con nada) le devolvía una pregunta nueva cada vez que la
+  // compradora escribía "ok", sonando repetitivo. Se corta ANTES de llegar
+  // a la IA (gratis, sin latencia) — no cuenta como reintento ni cambia el
+  // estado, solo se ignora en silencio.
+  if (isPureAcknowledgment(textLower)) return;
+
   switch (cs.state) {
     case "awaiting_account_type": {
       const opt = matchOption(textLower, 2);
@@ -1588,6 +1598,19 @@ function matchCompanyType(text: string): boolean | null {
   if (text.includes("empresa")) return true;
   if (text.includes("personal")) return false;
   return null;
+}
+
+// Solo detecta un mensaje que es ÚNICAMENTE un reconocimiento vacío (nada
+// más) — "ok, gracias" o "listo, ¿todo bien?" NO califican (traen algo más).
+// A propósito una lista corta y literal, no palabras clave sueltas — un
+// falso positivo acá significa ignorar un mensaje real por accidente.
+const PURE_ACKNOWLEDGMENT_WORDS = new Set([
+  "ok", "oka", "okay", "okey", "dale", "listo", "vale", "va",
+  "bueno", "bien", "entendido", "perfecto", "genial", "de acuerdo",
+]);
+function isPureAcknowledgment(text: string): boolean {
+  const cleaned = text.trim().replace(/[.,!?¡¿👍👌✅🙏😊😁🙌]+/gu, "").trim();
+  return PURE_ACKNOWLEDGMENT_WORDS.has(cleaned);
 }
 
 function matchProblemType(text: string): string | null {
