@@ -1341,17 +1341,29 @@ async function getBuyerHistory(tenantId: number, exchange: string, counterparty:
 // mejor no saludar por nombre que arriesgarse a llamar a alguien nuevo por
 // el nombre de otro comprador (el mismo error que ya rompió este feature
 // una vez con el apodo enmascarado completo).
+// "User-6d6f1", "P2P-803c36nx" — apodos por DEFECTO que Binance asigna solo
+// cuando la persona nunca puso uno propio. Los comparten masivamente
+// compradores sin ninguna relación entre sí (confirmado en vivo jul 2026: el
+// bot terminó llamando "Diego" a varios compradores distintos, porque el
+// primer "User-xxxxx" que capturamos fue justo el de Diego, y al ser el
+// único visto hasta ahora con prefijo "Use" pasaba la prueba de "sin
+// ambigüedad" — pero "Use***"/"P2P***" NUNCA son un identificador único, sin
+// importar cuántos ejemplos hayamos guardado todavía). Se excluyen SIEMPRE
+// de esta búsqueda, no solo cuando hay colisión visible en nuestra tabla.
+const GENERIC_NICK_PATTERNS = [/^user-/i, /^p2p-/i];
+
 async function findKnownRealName(tenantId: number, exchange: string, label: string, maskedNick?: string | null): Promise<string | null> {
   const m = /^(.{1,3})\*+$/.exec((maskedNick || "").trim());
   if (!m) return null;
   const prefix = m[1];
   const candidates = await prisma.p2PBuyerIdentity.findMany({
     where: { tenantId, exchange, label, nickName: { startsWith: prefix } },
-    select: { realName: true },
+    select: { nickName: true, realName: true },
   });
-  const uniqueNames = new Set(candidates.map(c => c.realName));
+  const trustworthy = candidates.filter(c => !GENERIC_NICK_PATTERNS.some(re => re.test(c.nickName)));
+  const uniqueNames = new Set(trustworthy.map(c => c.realName));
   if (uniqueNames.size !== 1) return null;
-  return candidates[0].realName;
+  return trustworthy[0].realName;
 }
 
 async function getAvailableAccounts(tenantId: number, exchange: string, label = "ONZE"): Promise<any[]> {
@@ -1428,13 +1440,27 @@ async function offerSplitPayment(
   amount: number,
   label = "ONZE"
 ): Promise<void> {
-  const total = Number(cs.totalAmount) || 0;
-  const accounts = await getAvailableAccounts(tenantId, exchange, label);
+  // cs.totalAmount está en USDT (ver create de P2PChatState, viene de
+  // order.amount) — usar ese número acá era el bug real confirmado en vivo
+  // (jul 2026): una compra de $225.000 CLP terminó mostrando "Monto: $238"
+  // (el equivalente en USDT, no en CLP) porque se usaba como si fuera CLP.
+  // order.totalPrice es el monto real en CLP, que es lo que hay que repartir.
+  const total = Number(order.totalPrice) || 0;
+  let accounts = await getAvailableAccounts(tenantId, exchange, label);
+  // La primera cuota va al banco que YA se le había mandado antes (lo más
+  // probable es que ya haya empezado a transferir ahí) — el resto de las
+  // cuotas usa bancos DISTINTOS, nunca repite uno ya ofrecido. Antes de este
+  // fix, el reparto ignoraba esto y podía mandar el mismo banco (ej. Banco
+  // Estado) para las dos cuotas, algo que el comprador ya había dicho que no
+  // le funcionaba para el monto completo.
+  if (cs.chosenBank) {
+    accounts = [...accounts.filter((a: any) => a.bank === cs.chosenBank), ...accounts.filter((a: any) => a.bank !== cs.chosenBank)];
+  }
   const chunks = distributeAmount(accounts, amount, total);
   if (chunks.length > 0) {
     const msg = ["Sin problema, vamos a dividir el pago. Aquí tienes las cuentas:\n"];
     chunks.forEach((c: any, i: number) => {
-      msg.push(`--- Cuenta ${i + 1} ---\n${formatSingleAccount(c)}Monto: $${formatCLP(c.assignedAmount)}\n`);
+      msg.push(`--- Cuenta ${i + 1} ---\n${formatSingleAccount(c)}\nMonto: $${formatCLP(c.assignedAmount)}\n`);
     });
     msg.push("Importante: ambas transferencias deben salir de cuentas a tu nombre (el titular de la orden) — no aceptamos que una parte la pague otra persona.");
     msg.push("Ve realizando las transferencias y enviando los comprobantes de cada una. Quedo atento.");
