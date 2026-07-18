@@ -493,6 +493,16 @@ export async function handleVerified(
   const name = firstNameFrom(known?.realName);
   const hello = isReturning && name ? `¡Hola ${name}!` : "¡Hola!";
 
+  // A propósito NO se guarda `realName: known.realName` en cs acá (bug real
+  // confirmado en vivo, jul 2026): eso hacía que `!cs.realName` en
+  // processOrderLocked (el guardia que captura seller_payed UNA vez por
+  // orden) quedara siempre en false para cualquier cliente ya reconocido —
+  // es decir, para un cliente frecuente, orderCount/lastAccountId/lastBank
+  // quedaban CONGELADOS para siempre en el valor de la primera vez que se le
+  // reconoció, porque el saludo aquí "adelantaba" el nombre antes de que el
+  // pago (y el seller_payed real) ocurriera. El saludo usa `known.realName`
+  // directo (variable local, ver arriba) — no necesita cs.realName.
+
   // Si ya pidió algo puntual antes de verificar (ej. "mándame 3 cuentas"),
   // eso manda por sobre el ofrecimiento de "misma cuenta de la vez pasada"
   // — es una instrucción explícita y nueva del comprador.
@@ -501,7 +511,7 @@ export async function handleVerified(
     const greeting = `${hello} Ya te paso ${wantsMultiple ? "las cuentas que necesites" : "la cuenta"} — antes dime: ¿transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.`;
     const sent = await sendAndTrack(client, exchange, order.orderNumber, cs, greeting, createdAtTs);
     if (sent) {
-      await updateState(cs.id, "awaiting_account_type", { isCompany: false, isReturning, ...(known ? { realName: known.realName } : {}) });
+      await updateState(cs.id, "awaiting_account_type", { isCompany: false, isReturning });
     }
     return;
   }
@@ -521,7 +531,6 @@ export async function handleVerified(
         await updateState(cs.id, "awaiting_previous_account", {
           isCompany: known.lastIsCompany,
           isReturning,
-          realName: known.realName,
           previousBank: known.lastBank,
           chosenAccountIds: [known.lastAccountId],
         });
@@ -533,11 +542,7 @@ export async function handleVerified(
   const greeting = buildInitialGreeting(isReturning, name);
   const sent = await sendAndTrack(client, exchange, order.orderNumber, cs, greeting, createdAtTs);
   if (sent) {
-    await updateState(cs.id, "awaiting_account_type", {
-      isCompany: false,
-      isReturning,
-      ...(known ? { realName: known.realName } : {}),
-    });
+    await updateState(cs.id, "awaiting_account_type", { isCompany: false, isReturning });
   }
 }
 
