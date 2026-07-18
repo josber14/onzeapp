@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { acquireChatLock, releaseChatLock } from "./chat-lock";
+import { classifyIntent } from "./chat-brain";
 import type { ChatState, ChatMessage } from "./types";
 
 const MAX_RETRIES = 3;
@@ -302,9 +303,12 @@ async function processOrderLocked(
       await prisma.p2PChatState.update({ where: { id: cs.id }, data: { realName: payed.realName } });
       cs.realName = payed.realName;
       if (payed.nickName) {
+        // orderCount incrementa acá porque este bloque (if !cs.realName) solo
+        // corre UNA vez por orden — cuenta compras reales, no cada vez que se
+        // relee el chat.
         await prisma.p2PBuyerIdentity.upsert({
           where: { tenantId_exchange_label_nickName: { tenantId, exchange, label, nickName: payed.nickName } },
-          update: { realName: payed.realName },
+          update: { realName: payed.realName, orderCount: { increment: 1 } },
           create: { tenantId, exchange, label, nickName: payed.nickName, realName: payed.realName },
         }).catch(() => {});
       }
@@ -452,8 +456,13 @@ export async function handleVerified(
 
   await logMsg(tenantId, exchange, `[Chat] handleVerified: iniciando para ${order.orderNumber}`);
 
-  const knownRealName = order.counterparty ? await findKnownRealName(tenantId, exchange, label, order.counterparty) : null;
-  const isReturning = !!knownRealName;
+  // "known" solo existe si ya vimos a esta persona completar una compra
+  // ANTES (el nombre real se captura recién al completar una orden) — o sea,
+  // si existe, esta orden ya es su 2da compra o más. Coincide exactamente
+  // con la regla confirmada por el usuario: trato de cliente conocido desde
+  // la 2da compra en adelante.
+  const known = order.counterparty ? await findKnownRealName(tenantId, exchange, label, order.counterparty) : null;
+  const isReturning = !!known;
 
   // Camino rápido: si lo primero que escribió (antes de verificar) ya pedía
   // la cuenta directamente, reconocemos el pedido en el mismo saludo — pero
@@ -463,7 +472,7 @@ export async function handleVerified(
   // mande la(s) cuenta(s) apenas responda, sin un paso extra de "¿qué
   // banco?" si ya se puede resolver.
   const firstMsg = (cs.pendingFirstMsg || "").toLowerCase();
-  const name = firstNameFrom(knownRealName);
+  const name = firstNameFrom(known?.realName);
   const hello = isReturning && name ? `¡Hola ${name}!` : "¡Hola!";
   let greeting: string;
   if (firstMsg && matchWantsAccount(firstMsg)) {
@@ -481,7 +490,7 @@ export async function handleVerified(
     await updateState(cs.id, "awaiting_account_type", {
       isCompany: false,
       isReturning,
-      ...(knownRealName ? { realName: knownRealName } : {}),
+      ...(known ? { realName: known.realName } : {}),
     });
   }
 }
@@ -504,7 +513,32 @@ async function handleClientResponse(
   switch (cs.state) {
     case "awaiting_account_type": {
       const opt = matchOption(textLower, 2);
-      if (opt === 2 || textLower.includes("empresa") || matchERUT(textLower)) {
+      // Se resuelve la intención por palabras clave primero (gratis, sin
+      // latencia) — SOLO si eso no da nada claro se consulta a la IA como
+      // respaldo (ver chat-brain.ts). La IA nunca decide qué cuenta o monto
+      // mandar, solo dice cuál de estas mismas ramas usar.
+      let resolvedIntent: "empresa" | "personal" | "reports_problem" | "wants_account" | null = null;
+      if (opt === 2 || textLower.includes("empresa") || matchERUT(textLower)) resolvedIntent = "empresa";
+      else if (opt === 1 || textLower.includes("personal")) resolvedIntent = "personal";
+      else if (matchProblemType(textLower) === "not_working") resolvedIntent = "reports_problem";
+      else if (matchWantsAccount(textLower)) resolvedIntent = "wants_account";
+
+      let aiFollowUp: string | undefined;
+      if (!resolvedIntent) {
+        const ai = await classifyIntent({
+          state: "awaiting_account_type",
+          text: text,
+          validIntents: ["personal", "empresa", "wants_account", "reports_problem", "unclear"],
+          context: "El bot ya le preguntó al comprador si transfiere desde cuenta personal o empresa, con un menú 1) Personal 2) Empresa.",
+        });
+        if (ai && ai.intent !== "unclear") {
+          resolvedIntent = ai.intent as any;
+          aiFollowUp = ai.followUpText;
+          await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+        }
+      }
+
+      if (resolvedIntent === "empresa") {
         // Company flow
         const ad = findMatchingAd(activeAds, order);
         const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
@@ -546,7 +580,7 @@ async function handleClientResponse(
             await updateState(cs.id, "awaiting_bank_choice", { isCompany: true, erutRequested: true, retryCount: 0 });
           }
         }
-      } else if (opt === 1 || textLower.includes("personal")) {
+      } else if (resolvedIntent === "personal") {
         // Personal flow
         const ad = findMatchingAd(activeAds, order);
         const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
@@ -593,21 +627,22 @@ async function handleClientResponse(
             await updateState(cs.id, "awaiting_bank_choice", { isCompany: false, retryCount: 0 });
           }
         }
-      } else if (matchProblemType(textLower) === "not_working") {
+      } else if (resolvedIntent === "reports_problem") {
         // Reclamo genérico ("no me deja", "no funciona", "no puedo") antes
         // de responder personal/empresa. Bug real confirmado en vivo (jul
         // 2026): "No me deja la cuenta" se leía como si hubiera elegido la
         // opción 2 (Empresa) — el comprador terminó con un pedido de ERUT
         // que nunca hizo. Ahora, en vez de asumir nada, se pregunta qué pasó
-        // para entender la causa real y poder ayudar.
+        // para entender la causa real y poder ayudar. Si la IA ya redactó
+        // una pregunta de seguimiento acorde, se usa esa; si no, una fija.
         await sendAndTrack(client, exchange, order.orderNumber, cs,
-          pick([
+          aiFollowUp || pick([
             "Cuéntame, ¿qué problema tuviste? Así te ayudo a resolverlo.",
             "¿Qué pasó exactamente? Cuéntame para ver cómo lo solucionamos.",
           ])
         );
         await updateState(cs.id, "awaiting_account_type", { retryCount: 0 });
-      } else if (matchWantsAccount(textLower)) {
+      } else if (resolvedIntent === "wants_account") {
         // Pidió la cuenta pero no dijo personal/empresa — esa pregunta NUNCA
         // se salta. Se reconoce el pedido en el mismo mensaje y se guarda
         // (pendingFirstMsg) para resolver directo apenas responda 1 o 2,
@@ -738,10 +773,29 @@ async function handleClientResponse(
         const accounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
         const chosen = matchBank(textLower, accounts);
         const problemType = matchProblemType(textLower);
+        let resolvedProblem: "limit" | "not_working" | null =
+          problemType === "limit" ? "limit" : (problemType === "not_working" || textLower.includes("no me")) ? "not_working" : null;
+
+        // Si no se pudo reconocer un banco ni un problema por palabras clave,
+        // se consulta a la IA como respaldo antes de quedarse en silencio
+        // (antes de este cambio, este caso simplemente no respondía nada).
+        if (!chosen && !resolvedProblem) {
+          const ai = await classifyIntent({
+            state: "account_sent",
+            text,
+            validIntents: ["limit", "not_working", "unclear"],
+            context: "Ya se le mandaron los datos de una cuenta bancaria al comprador para que pague. Está escribiendo algo relacionado con ese pago.",
+          });
+          if (ai && ai.intent !== "unclear") {
+            resolvedProblem = ai.intent as any;
+            await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
+          }
+        }
+
         if (chosen) {
           await sendAccountWithErutNote(tenantId, exchange, client, order, cs, chosen);
           await updateState(cs.id, "account_sent", { chosenBank: chosen.bank, chosenAccountIds: [chosen.id], retryCount: 0 });
-        } else if (problemType === "limit") {
+        } else if (resolvedProblem === "limit") {
           // Pregunta proactiva por el límite de su banco (ej: "solo me deja
           // 500mil, ¿puedo hacer 2 pagos?") — NO es un reclamo de que la
           // transferencia falló, así que no debe caer en handleTransferFails
@@ -758,7 +812,7 @@ async function handleClientResponse(
             );
             await updateState(cs.id, "awaiting_limit_amount", { retryCount: 0 });
           }
-        } else if (problemType === "not_working" || textLower.includes("no me")) {
+        } else if (resolvedProblem === "not_working") {
           await handleTransferFails(tenantId, exchange, client, order, cs, activeAds, textLower, label);
         }
       }
@@ -1374,18 +1428,18 @@ async function getBuyerHistory(tenantId: number, exchange: string, counterparty:
 // de esta búsqueda, no solo cuando hay colisión visible en nuestra tabla.
 const GENERIC_NICK_PATTERNS = [/^user-/i, /^p2p-/i];
 
-async function findKnownRealName(tenantId: number, exchange: string, label: string, maskedNick?: string | null): Promise<string | null> {
+async function findKnownRealName(tenantId: number, exchange: string, label: string, maskedNick?: string | null): Promise<{ realName: string; orderCount: number } | null> {
   const m = /^(.{1,3})\*+$/.exec((maskedNick || "").trim());
   if (!m) return null;
   const prefix = m[1];
   const candidates = await prisma.p2PBuyerIdentity.findMany({
     where: { tenantId, exchange, label, nickName: { startsWith: prefix } },
-    select: { nickName: true, realName: true },
+    select: { nickName: true, realName: true, orderCount: true },
   });
   const trustworthy = candidates.filter(c => !GENERIC_NICK_PATTERNS.some(re => re.test(c.nickName)));
   const uniqueNames = new Set(trustworthy.map(c => c.realName));
   if (uniqueNames.size !== 1) return null;
-  return trustworthy[0].realName;
+  return { realName: trustworthy[0].realName, orderCount: trustworthy[0].orderCount };
 }
 
 async function getAvailableAccounts(tenantId: number, exchange: string, label = "ONZE"): Promise<any[]> {

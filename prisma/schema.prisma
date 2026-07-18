@@ -859,6 +859,7 @@ model P2PBuyerIdentity {
   label      String   @default("ONZE")
   nickName   String
   realName   String
+  orderCount Int      @default(1)
   updatedAt  DateTime @updatedAt
   createdAt  DateTime @default(now())
   Tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
