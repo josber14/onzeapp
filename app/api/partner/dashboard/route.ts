@@ -36,8 +36,16 @@ function computeFifo(capacities: any[], sales: any[], manualPaymentsByCapacity?:
   const orderedCapacities = [...capacities].sort(
     (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
   );
+  // Un pago manual ya cubrió esa parte del capacity — el FIFO de ventas solo
+  // debe repartir lo que queda después de descontarlo. Si no se resta acá,
+  // el capacity sigue "absorbiendo" ventas reales hasta su monto TOTAL,
+  // ignorando el pago manual, y el excedente nunca llega al siguiente
+  // capacity activo aunque este ya esté marcado como completado.
   const clpRemaining = new Map<string, number>();
-  for (const c of orderedCapacities) clpRemaining.set(c.id, Number(c.capacityClp));
+  for (const c of orderedCapacities) {
+    const manualPaymentClp = manualPaymentsByCapacity?.get(c.id) || 0;
+    clpRemaining.set(c.id, Math.max(Number(c.capacityClp) - manualPaymentClp, 0));
+  }
 
   const orderedSales = [...sales].sort(
     (a, b) => a.executedAt.getTime() - b.executedAt.getTime()
