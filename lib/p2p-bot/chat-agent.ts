@@ -1391,16 +1391,16 @@ async function sendAccountWithErutNote(
   // en 3 mensajes separados (intro, datos, instrucciones) en vez de un solo
   // bloque largo — se siente más como una persona escribiendo que como un
   // volcado de texto. sendAndTrack ya espacia cada envío con humanDelay().
+  // El mensaje 2 (datos) debe ser SOLO la cuenta, sin ningún otro texto — el
+  // aviso de ERUT (si es empresa) va pegado al mensaje 3, no acá.
   const intro = await sendAndTrack(client, exchange, order.orderNumber, cs,
     "Te envío la cuenta para que copies y pegues en tu banco."
   );
   if (!intro) return false;
-  const details = await sendAndTrack(client, exchange, order.orderNumber, cs,
-    formatSingleAccount(acct) + erutNote
-  );
+  const details = await sendAndTrack(client, exchange, order.orderNumber, cs, formatSingleAccount(acct));
   if (!details) return false;
   return sendAndTrack(client, exchange, order.orderNumber, cs,
-    "Cuando realices el pago:\n- Marca \"Pagado\" en la orden\n- Envía el comprobante aquí en el chat"
+    "Cuando realices el pago:\n- Marca \"Pagado\" en la orden\n- Envía el comprobante aquí en el chat" + erutNote
   );
 }
 
