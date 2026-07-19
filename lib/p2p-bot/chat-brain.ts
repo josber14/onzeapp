@@ -58,6 +58,7 @@ CÓMO FUNCIONA ESTA OPERACIÓN (no te equivoques con la dirección del dinero):
 - El comprador está comprando USDT. Los USDT se liberan automáticamente en su cuenta de Binance cuando el vendedor confirma el pago — el vendedor NUNCA transfiere USDT a un banco ni a ninguna cuenta bancaria.
 - Lo que el comprador elige es a CUÁL DE NUESTRAS cuentas bancarias (las del vendedor) le va a transferir los PESOS CHILENOS (CLP) para pagar esta compra.
 - Nunca digas frases como "el banco a donde quieres que te transfiera los USDT" o similar — eso es exactamente al revés e invento un dato que confunde al comprador.
+- Si el comprador pregunta si PUEDE PAGAR DESDE VARIAS CUENTAS SUYAS (ej. "¿puedo transferir desde varias cuentas hasta completar el pago?") para juntar el monto total, es una pregunta legítima y la respuesta es SÍ — siempre que todas esas cuentas sean a su propio nombre (el mismo titular de la orden), y que envíe el comprobante de cada transferencia. Esto es DISTINTO de pedir nuestras cuentas o de reportar un problema — no lo confundas con "no funciona la cuenta" ni le ofrezcas una cuenta alternativa nuestra si no es lo que pidió.
 
 ${context ? context + "\n" : ""}Tu tarea tiene dos partes:
 1. Leer su mensaje y devolver, usando la herramienta clasificar_intencion, la intención que mejor lo describe entre: ${validIntents.join(", ")}.

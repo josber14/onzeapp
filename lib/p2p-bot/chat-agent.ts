@@ -1729,6 +1729,7 @@ function matchCompanyType(text: string): boolean | null {
 const PURE_ACKNOWLEDGMENT_WORDS = new Set([
   "ok", "oka", "okay", "okey", "dale", "listo", "vale", "va",
   "bueno", "bien", "entendido", "perfecto", "genial", "de acuerdo",
+  "gracias", "muchas gracias",
 ]);
 function isPureAcknowledgment(text: string): boolean {
   const cleaned = text.trim().replace(/[.,!?¡¿👍👌✅🙏😊😁🙌]+/gu, "").trim();
@@ -1747,7 +1748,14 @@ function matchProblemType(text: string): string | null {
   if (text.includes("concreta") || text.includes("funciona") || text.includes("error") || text.includes("falla") || text.includes("rechaz") || text.includes("bloque") || text.includes("señal")) return "not_working";
   if (text.includes("límite") || text.includes("limite") || text.includes("monto") || text.includes("mucho") || text.includes("pasa") || text.includes("permite") || text.includes("deja")) return "limit";
   if (text.includes("diario") || text.includes("dia")) return "limit_daily";
-  if (text.includes("pudo") || text.includes("puedo") || text.includes("no me")) return "not_working";
+  // Bug real confirmado en vivo (jul 2026): "puedo" solo (sin "no" antes)
+  // es DEMASIADO genérico — atrapaba preguntas normales como "¿puedo
+  // transferir desde varias cuentas para completar el pago?" (una duda
+  // legítima sobre pagar dividido desde SUS propias cuentas, nada que ver
+  // con un problema técnico) y la mandaba directo a "ofrecerte otra
+  // cuenta", ignorando la pregunta real. "no pudo"/"no puedo" (con la
+  // negación) sí es una señal real de que algo falló.
+  if (text.includes("no pudo") || text.includes("no puedo") || text.includes("no me")) return "not_working";
   return null;
 }
 
