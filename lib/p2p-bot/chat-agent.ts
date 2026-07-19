@@ -406,23 +406,41 @@ async function processOrderLocked(
     }
   }
 
-  // 5-minute warning for any active state where buyer hasn't paid yet
-  if (isPending && !order.verified && cs.state !== "awaiting_verification" && cs.state !== "completed" && cs.state !== "closed" && !cs.verifiedAt) {
+  // Aviso de "orden por vencer" — pedido explícito del usuario (jul 2026):
+  // debe dispararse en CUALQUIER etapa de la conversación mientras la orden
+  // siga pendiente de pago (antes solo aplicaba ANTES de la verificación
+  // KYC, así que casi nunca se disparaba en la práctica). Se usa nuestro
+  // propio cálculo de tiempo (createdAt + payTime del anuncio) en vez de
+  // depender de detectar el mensaje de sistema exacto que manda Binance —
+  // más confiable. 4:30 restantes, confirmado por el usuario.
+  //
+  // "awaiting_problem" y "payment_made" quedan afuera de la lista de
+  // estados elegibles a propósito: es la forma de asegurar que se mande
+  // UNA sola vez (antes de este fix, nada impedía que se repitiera cada
+  // ~15s durante los 5 minutos restantes, ya que la condición seguía
+  // cumpliéndose después de transicionar a "awaiting_problem").
+  if (
+    isPending &&
+    cs.state !== "awaiting_verification" &&
+    cs.state !== "awaiting_problem" &&
+    cs.state !== "payment_made" &&
+    cs.state !== "completed" &&
+    cs.state !== "closed"
+  ) {
     const payWindow = Number(order.payTime ?? 15) * 60 * 1000;
     const createdAt = new Date(order.createdAt || order.executedAt || Date.now()).getTime();
     const expiresAt = createdAt + payWindow;
-    const fiveMinBefore = expiresAt - 5 * 60 * 1000;
+    const warnAt = expiresAt - 4.5 * 60 * 1000;
 
-    if (Date.now() >= fiveMinBefore && Date.now() < expiresAt) {
-      // Pedido explícito del usuario (jul 2026): "Hola" solo va en el
-      // PRIMER mensaje de la conversación — este aviso llega a mitad de
-      // conversación, nunca debe volver a saludar.
+    if (Date.now() >= warnAt && Date.now() < expiresAt) {
+      // "Hola" solo va en el PRIMER mensaje de la conversación — este aviso
+      // llega a mitad de conversación, nunca debe volver a saludar.
       await sendThenTransition(client, exchange, orderNo, cs,
         "Tu orden está por vencer. ¿Necesitas más tiempo para completar el pago o estás teniendo problemas?\n  1) Más tiempo\n  2) Problemas\n\nResponde 1 o 2.",
         "awaiting_problem"
       );
+      return;
     }
-    return;
   }
 
   // Monitor payment_made: ask for receipt after 1 minute.
