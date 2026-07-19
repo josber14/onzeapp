@@ -183,9 +183,20 @@ async function processOrder(
     // ningún mensaje del bot por 5+ minutos sin ningún error en los logs),
     // esto evita que el lock quede atascado para siempre y deja un rastro
     // claro en vez de silencio total.
+    //
+    // OJO con bajar este número: Promise.race NO cancela la promesa
+    // perdedora — si el timeout gana la carrera, processOrderLocked sigue
+    // corriendo en segundo plano, pero el `finally` de abajo YA liberó el
+    // lock. El siguiente ciclo (~15-18s después) entra a procesar la MISMA
+    // orden en paralelo con la instancia "vieja" que sigue viva, causando
+    // mensajes duplicados y respuestas cruzadas — confirmado en vivo en 2
+    // órdenes reales el mismo día, justo cuando se mandaban los 3 mensajes
+    // de la cuenta (3 envíos reales, cada uno con su propio delay, suman
+    // varios segundos). 35s da margen real para un ciclo legítimo con IA +
+    // 3 envíos, sin dejar de detectar un cuelgue real (que tardó 5+ minutos).
     await Promise.race([
       processOrderLocked(tenantId, exchange, client, order, activeAds, label),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT: processOrderLocked no terminó en 20s")), 20000)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT: processOrderLocked no terminó en 35s")), 35000)),
     ]);
   } finally {
     await releaseChatLock(lockKey);
@@ -1380,23 +1391,35 @@ async function sendAccountWithErutNote(
   // Pedido explícito del usuario (jul 2026): los datos bancarios se mandan
   // en 3 mensajes separados (intro, datos, instrucciones) en vez de un solo
   // bloque largo — se siente más como una persona escribiendo que como un
-  // volcado de texto. sendAndTrack ya espacia cada envío con humanDelay().
-  // El mensaje 2 (datos) debe ser SOLO la cuenta, sin ningún otro texto — el
-  // aviso de ERUT (si es empresa) va pegado al mensaje 3, no acá.
+  // volcado de texto. El mensaje 2 (datos) debe ser SOLO la cuenta, sin
+  // ningún otro texto — el aviso de ERUT (si es empresa) va pegado al
+  // mensaje 3, no acá.
   // opts.skipIntro: para un cliente frecuente que confirma "misma cuenta de
   // la última vez", el mensaje de intro ("te envío la cuenta para que
   // copies y pegues") es puro relleno — ya sabe cómo funciona. Solo se usa
   // acá, nunca para alguien que recibe la cuenta por primera vez en la orden.
+  //
+  // Bug real confirmado en vivo (jul 2026): el mensaje 1 usa humanDelay()
+  // completo (2-5s, es una respuesta nueva al comprador), pero los
+  // mensajes 2 y 3 usan shortDelay() (0.7-1.3s) — son continuación del
+  // mismo mensaji 1, no respuestas nuevas. Con 3× humanDelay completo esta
+  // función se acercaba/superaba el límite de 20s de processOrderLocked
+  // (ver esa constante), y el salvavidas de timeout liberaba el lock de la
+  // orden mientras el envío seguía en curso — el siguiente ciclo (~15s
+  // después) entraba a procesar la MISMA orden en paralelo, causando
+  // mensajes duplicados y respuestas cruzadas de verdad confirmadas en 2
+  // órdenes reales el mismo día.
   if (!opts.skipIntro) {
     const intro = await sendAndTrack(client, exchange, order.orderNumber, cs,
       "Te envío la cuenta para que copies y pegues en tu banco."
     );
     if (!intro) return false;
   }
-  const details = await sendAndTrack(client, exchange, order.orderNumber, cs, formatSingleAccount(acct));
+  const details = await sendAndTrack(client, exchange, order.orderNumber, cs, formatSingleAccount(acct), undefined, shortDelay);
   if (!details) return false;
   return sendAndTrack(client, exchange, order.orderNumber, cs,
-    "Cuando realices el pago:\n- Marca \"Pagado\" en la orden\n- Envía el comprobante aquí en el chat" + erutNote
+    "Cuando realices el pago:\n- Marca \"Pagado\" en la orden\n- Envía el comprobante aquí en el chat" + erutNote,
+    undefined, shortDelay
   );
 }
 
@@ -1540,9 +1563,18 @@ async function humanDelay(): Promise<void> {
   await new Promise(r => setTimeout(r, ms));
 }
 
-async function sendAndTrack(client: any, exchange: string, orderNo: string, cs: any, msg: string, createdAt?: number): Promise<boolean> {
+// Pausa corta entre mensajes de UNA MISMA ráfaga (ej. los 3 mensajes de
+// sendAccountWithErutNote) — una persona real no espera 2-5s completos
+// entre cada parte de algo que ya estaba escribiendo, solo entre una
+// respuesta nueva y el mensaje anterior del comprador.
+async function shortDelay(): Promise<void> {
+  const ms = 700 + Math.floor(Math.random() * 600); // 0.7-1.3s
+  await new Promise(r => setTimeout(r, ms));
+}
+
+async function sendAndTrack(client: any, exchange: string, orderNo: string, cs: any, msg: string, createdAt?: number, delayFn: () => Promise<void> = humanDelay): Promise<boolean> {
   try {
-    await humanDelay();
+    await delayFn();
     let sent = false;
     if (exchange === "binance") {
       // Envío por WebSocket oficial (API Key, sin cookies ni navegador) —
