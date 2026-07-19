@@ -844,6 +844,11 @@ model P2PChatState {
   // reordenamiento manual) entre que se muestra el menú y que el comprador
   // responde, un número ya no correspondería al banco que realmente vio.
   pendingBankMenuIds Json?
+  // El estado en el que estaba la conversación justo antes del aviso de
+  // "orden por vencer" (awaiting_problem) — se usa para volver ahí una vez
+  // resuelto ese aviso puntual, en vez de forzar siempre a "account_sent"
+  // sin importar en qué parte de la conversación se haya interrumpido.
+  preInterruptState  String?
   erutRequested     Boolean   @default(false)
   erutReceived      Boolean   @default(false)
   retryCount        Int       @default(0)

@@ -433,11 +433,15 @@ async function processOrderLocked(
     const warnAt = expiresAt - 4.5 * 60 * 1000;
 
     if (Date.now() >= warnAt && Date.now() < expiresAt) {
-      // "Hola" solo va en el PRIMER mensaje de la conversación — este aviso
-      // llega a mitad de conversación, nunca debe volver a saludar.
+      // Pedido explícito del usuario (jul 2026): pregunta natural de sí/no,
+      // sin menú numerado — "Hola" solo va en el PRIMER mensaje de la
+      // conversación, este aviso llega a mitad de conversación. Se guarda
+      // el estado actual (preInterruptState) para poder volver ahí una vez
+      // resuelto este aviso puntual, sin importar en qué parte de la
+      // conversación se haya interrumpido.
       await sendThenTransition(client, exchange, orderNo, cs,
-        "Tu orden está por vencer. ¿Necesitas más tiempo para completar el pago o estás teniendo problemas?\n  1) Más tiempo\n  2) Problemas\n\nResponde 1 o 2.",
-        "awaiting_problem"
+        "Tu orden está por vencer. ¿Necesitas más tiempo para completar el pago?",
+        "awaiting_problem", { preInterruptState: cs.state }
       );
       return;
     }
@@ -1135,94 +1139,56 @@ async function handleClientResponse(
       break;
     }
 
+    // Rediseñado por pedido explícito del usuario (jul 2026): pregunta
+    // natural de sí/no en vez de menú numerado, y este estado NO tiene
+    // reintentos ni cierre — es un aviso de cortesía, no un paso
+    // bloqueante. Si la respuesta no es clara, simplemente no se hace nada
+    // (se sigue esperando; el aviso ya se mandó una sola vez).
     case "awaiting_problem": {
-      const opt = matchOption(textLower, 2);
-      let aiFollowUp: string | undefined;
-      let resolved: "more_time" | "has_problem" | null =
-        opt === 1 ? "more_time" : (opt === 2 || matchProblemType(textLower) !== null) ? "has_problem" : null;
-      if (!resolved) {
-        const ai = await classifyIntent({
-          state: "awaiting_problem",
-          text,
-          validIntents: ["more_time", "has_problem", "unclear"],
-          context: "Se le preguntó al comprador si necesita más tiempo para pagar o está teniendo problemas, con un menú 1) Más tiempo 2) Problemas.",
-        });
-        if (ai) {
-          aiFollowUp = ai.followUpText;
-          if (ai.intent !== "unclear") {
-            resolved = ai.intent as any;
-            await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
-          }
-        }
-      }
+      const resumeState = (cs.preInterruptState as ChatState) || "account_sent";
+      const problemType = matchProblemType(textLower);
+      // \b no sirve acá para detectar "sí" al inicio: la tilde ("í") no
+      // cuenta como carácter de palabra para \b en JS, así que "sí," o "sí"
+      // solo (fin de texto) nunca hacían boundary — normalizamos tildes y
+      // comparamos la primera palabra completa en vez de un prefijo con \b.
+      const firstWord = textLower
+        .normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .replace(/[.,!?¡¿]/g, " ")
+        .trim()
+        .split(/\s+/)[0] || "";
+      const saysYes = firstWord === "si";
+      const saysNo = firstWord === "no";
 
-      if (resolved === "more_time") {
-        await sendThenTransition(client, exchange, order.orderNumber, cs,
-          "Perfecto, solicitaré una extensión de tiempo. Cuando realices el pago marca \"Pagado\" y envíanos el comprobante.",
-          "account_sent", { retryCount: 0 }
-        );
-      } else if (resolved === "has_problem") {
-        await sendThenTransition(client, exchange, order.orderNumber, cs,
-          "¿Qué tipo de problema?\n  1) Límite diario\n  2) No me funciona el banco\n\nResponde 1 o 2.",
-          "awaiting_problem_type", { retryCount: 0 }
-        );
-      } else {
-        retryCount++;
-        if (retryCount >= MAX_RETRIES) {
-          await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
+      if (problemType === "limit") {
+        // Dijo que sí (implícito) Y describió un problema de límite en el
+        // mismo mensaje (ej. "sí por favor, el banco solo me deja 200") —
+        // se reconoce la extensión Y se avanza directo con el problema
+        // puntual, sin preguntar de nuevo qué tipo de problema es.
+        await sendAndTrack(client, exchange, order.orderNumber, cs, "Entendido, vamos a solicitar la extensión de tiempo.");
+        const amount = extractAmount(textLower);
+        if (amount > 0 && cs.totalAmount) {
+          await offerSplitPayment(tenantId, exchange, client, order, cs, amount, label);
         } else {
           await sendThenTransition(client, exchange, order.orderNumber, cs,
-            aiFollowUp || "No entendí. ¿Necesitas más tiempo o estás teniendo problemas?\n  1) Más tiempo\n  2) Problemas\n\nResponde 1 o 2.",
-            "awaiting_problem", { retryCount }
+            "¿Cuál es el máximo que te permite transferir tu banco?",
+            "awaiting_limit_amount", { retryCount: 0, preInterruptState: null }
           );
         }
-      }
-      break;
-    }
-
-    case "awaiting_problem_type": {
-      const opt = matchOption(textLower, 2);
-      let aiFollowUp: string | undefined;
-      let resolved: "limit" | "not_working" | null =
-        (opt === 1 || textLower.includes("límite") || textLower.includes("limite")) ? "limit"
-        : (opt === 2 || textLower.includes("no funciona") || textLower.includes("no me funciona") || textLower.includes("banco")) ? "not_working"
-        : null;
-      if (!resolved) {
-        const ai = await classifyIntent({
-          state: "awaiting_problem_type",
-          text,
-          validIntents: ["limit", "not_working", "unclear"],
-          context: "Se le preguntó al comprador qué tipo de problema tiene, con un menú 1) Límite diario 2) No me funciona el banco.",
-        });
-        if (ai) {
-          aiFollowUp = ai.followUpText;
-          if (ai.intent !== "unclear") {
-            resolved = ai.intent as any;
-            await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
-          }
-        }
-      }
-
-      if (resolved === "limit") {
+      } else if (problemType === "not_working") {
+        await sendAndTrack(client, exchange, order.orderNumber, cs, "Entendido, vamos a solicitar la extensión de tiempo.");
+        await handleTransferFails(tenantId, exchange, client, order, cs, activeAds, textLower, label);
+      } else if (saysYes) {
         await sendThenTransition(client, exchange, order.orderNumber, cs,
-          "¿Cuál es el límite diario de tu banco para transferencias?",
-          "awaiting_limit_amount", { retryCount: 0 }
+          "Perfecto, vamos a solicitar la extensión de tiempo.",
+          resumeState, { retryCount: 0, preInterruptState: null }
         );
-      } else if (resolved === "not_working") {
-        await sendThenClose(client, exchange, order.orderNumber, cs,
-          "Lamentamos el problema con tu banco. Cuando soluciones y estés listo, vuelve a tomar la orden. ¡Te esperamos! 👍🏻"
-        );
-      } else {
-        retryCount++;
-        if (retryCount >= MAX_RETRIES) {
-          await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
-        } else {
-          await sendThenTransition(client, exchange, order.orderNumber, cs,
-            aiFollowUp || "No entendí. ¿Qué tipo de problema?\n  1) Límite diario\n  2) No me funciona el banco\n\nResponde 1 o 2.",
-            "awaiting_problem_type", { retryCount }
-          );
-        }
+      } else if (saysNo) {
+        // Pedido explícito del usuario: si dice que no, se deja así — sin
+        // mensaje de más, solo se retoma la conversación donde iba.
+        await updateState(cs.id, resumeState, { preInterruptState: null });
       }
+      // Respuesta ambigua (ni sí, ni no, ni describe un problema): no se
+      // hace nada, a propósito — sin reintentos ni cierre.
       break;
     }
 
@@ -1728,7 +1694,7 @@ function matchProblemType(text: string): string | null {
   // límite del banco). "deja"/"permite"/"monto" son ambiguos por sí solos
   // (pueden ser límite O un error genérico), así que ahora se revisan
   // DESPUÉS de las señales técnicas inequívocas.
-  if (text.includes("concreta") || text.includes("funciona") || text.includes("error") || text.includes("falla") || text.includes("rechaz") || text.includes("bloque")) return "not_working";
+  if (text.includes("concreta") || text.includes("funciona") || text.includes("error") || text.includes("falla") || text.includes("rechaz") || text.includes("bloque") || text.includes("señal")) return "not_working";
   if (text.includes("límite") || text.includes("limite") || text.includes("monto") || text.includes("mucho") || text.includes("pasa") || text.includes("permite") || text.includes("deja")) return "limit";
   if (text.includes("diario") || text.includes("dia")) return "limit_daily";
   if (text.includes("pudo") || text.includes("puedo") || text.includes("no me")) return "not_working";

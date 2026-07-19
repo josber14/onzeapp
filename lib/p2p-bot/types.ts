@@ -108,7 +108,6 @@ export type ChatState =
   | "awaiting_bank_choice"
   | "awaiting_company_type"
   | "awaiting_problem"
-  | "awaiting_problem_type"
   | "awaiting_limit_amount"
   | "account_sent"
   | "payment_made"
