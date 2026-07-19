@@ -520,7 +520,20 @@ export async function handleVerified(
   // dividido — ver el "if" en la captura de identidad) — se le ofrece
   // directo en vez de repetirle personal/empresa desde cero. Pedido
   // explícito del usuario: "que no sea la misma pregunta siempre".
-  if (known?.lastAccountId) {
+  //
+  // orderCount >= 2 es a propósito (bug real confirmado en vivo, jul 2026):
+  // el apodo enmascarado que vemos ANTES del pago (ej. "Ron***") solo trae
+  // 3 letras — cualquier nombre chileno común (Ronald, José, María...)
+  // parece "único" la PRIMERA vez que aparece en la tabla, aunque en
+  // realidad muchas personas distintas compartan ese mismo comienzo. Un
+  // comprador nuevo (Carrillo Ramírez Ronald Alejandro) recibió la oferta
+  // de "misma cuenta" de OTRO Ronald (Mamani Arispe) visto horas antes,
+  // porque en ese momento solo había UNA identidad con ese prefijo — nada
+  // ambiguo todavía, pero tampoco confiable. Exigir 2+ compras confirmadas
+  // en esa identidad (no solo 1) reduce ese riesgo — el saludo por nombre
+  // (arriba) se mantiene desde la 1ra, solo esta oferta puntual de cuenta
+  // exige más evidencia.
+  if (known?.lastAccountId && known.orderCount >= 2) {
     const ad = findMatchingAd(activeAds, order);
     const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
     const prevAccount = allAccounts.find((a: any) => a.id === known.lastAccountId);
