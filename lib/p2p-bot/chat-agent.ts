@@ -2031,11 +2031,23 @@ async function buildCompletionMessage(cs: any, tenantId: number, exchange: strin
   const greeting = getTimeGreeting();
   const isNew = !cs.isReturning;
   const name = firstNameFrom(cs.realName);
-  let msg = pick([
-    "✨ Listo, tus USDT están disponibles. Gracias por tu preferencia, esperamos verte pronto.",
-    "✨ Todo listo, tus USDT ya están en tu cuenta. Gracias por confiar en nosotros.",
-    "✨ Confirmado, ya tienes tus USDT disponibles. ¡Gracias por la compra!",
-  ]);
+  // Pedido explícito del usuario: un cliente frecuente no debería recibir el
+  // mismo mensaje final que alguien que compra por primera vez — reconoce
+  // que ya nos conoce en vez de repetirle el mensaje genérico. La
+  // calificación solo se pide una vez (primera compra), nunca en compras
+  // siguientes — pedirla cada vez a alguien que compra varias veces al día
+  // se sentiría repetitivo.
+  let msg = isNew
+    ? pick([
+        "✨ Listo, tus USDT están disponibles. Gracias por tu preferencia, esperamos verte pronto.",
+        "✨ Todo listo, tus USDT ya están en tu cuenta. Gracias por confiar en nosotros.",
+        "✨ Confirmado, ya tienes tus USDT disponibles. ¡Gracias por la compra!",
+      ])
+    : pick([
+        "✨ Listo, tus USDT ya están disponibles. Gracias por volver a confiar en nosotros.",
+        "✨ Todo listo, tus USDT están en tu cuenta. Un gusto tenerte de vuelta.",
+        "✨ Confirmado, tus USDT ya están disponibles. Gracias por seguir eligiéndonos.",
+      ]);
   if (name) msg = `${name}, ` + msg;
   if (isNew) msg += `\n\n⭐ Si todo estuvo bien, agradecemos una calificación positiva.`;
   msg += `\n\n🤗 ¡${greeting}!`;
