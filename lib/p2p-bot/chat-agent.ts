@@ -639,7 +639,7 @@ async function handleClientResponse(
           } else {
             const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
             const msg = erutNote + "\n\n¿A qué cuenta deseas transferir?\n" + choices;
-            await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "awaiting_bank_choice", { isCompany: true, erutRequested: true, retryCount: 0 });
+            await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "awaiting_bank_choice", { isCompany: true, erutRequested: true, retryCount: 0, pendingBankMenuIds: accounts.map((a: any) => a.id) });
           }
         }
       } else if (resolvedIntent === "personal") {
@@ -681,7 +681,7 @@ async function handleClientResponse(
             // New customer, multiple accounts: ask
             await sendThenTransition(client, exchange, order.orderNumber, cs,
               `¿A qué cuenta deseas transferir?\n${accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n")}\n\nTambién puedes escribir el nombre del banco.`,
-              "awaiting_bank_choice", { isCompany: false, retryCount: 0 }
+              "awaiting_bank_choice", { isCompany: false, retryCount: 0, pendingBankMenuIds: accounts.map((a: any) => a.id) }
             );
           }
         }
@@ -789,7 +789,7 @@ async function handleClientResponse(
         const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
         await sendThenTransition(client, exchange, order.orderNumber, cs,
           `Claro, ¿a qué banco prefieres transferir esta vez?\n${choices}\n\nTambién puedes escribir el nombre del banco.`,
-          "awaiting_bank_choice", { retryCount: 0 }
+          "awaiting_bank_choice", { retryCount: 0, pendingBankMenuIds: accounts.map((a: any) => a.id) }
         );
       } else {
         retryCount++;
@@ -830,7 +830,14 @@ async function handleClientResponse(
       }
       const ad = findMatchingAd(activeAds, order);
       const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
-      const accounts = pickDefaultAccountsPerBank(allAccounts);
+      // Bug real confirmado en vivo (jul 2026): el orden de los bancos se
+      // reordenó en la base de datos MIENTRAS un comprador tenía este menú
+      // pendiente de responder — su "2" (pensado para el banco que vio en
+      // pantalla) se interpretó contra el orden NUEVO, resultando en un
+      // banco distinto al que realmente eligió. Si el menú que se le mostró
+      // quedó "fijado" (pendingBankMenuIds), se usa ESE orden exacto para
+      // interpretar el número — nunca se re-deriva fresco de la base de datos.
+      const accounts = resolveMenuAccounts(cs.pendingBankMenuIds, allAccounts) || pickDefaultAccountsPerBank(allAccounts);
       const opt = matchOption(textLower, accounts.length);
       // El número del menú solo elige entre las cuentas por defecto (nunca la
       // vista); pero si escribe texto libre, matchBank sí puede reconocer una
@@ -925,7 +932,7 @@ async function handleClientResponse(
           const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
           await sendThenTransition(client, exchange, order.orderNumber, cs,
             aiFollowUp || `No entendí. Por favor elige el banco para tu depósito:\n${choices}\n\nResponde el número o escribe el nombre del banco.`,
-            "awaiting_bank_choice", { retryCount }
+            "awaiting_bank_choice", { retryCount, pendingBankMenuIds: accounts.map((a: any) => a.id) }
           );
         }
       }
@@ -988,7 +995,20 @@ async function handleClientResponse(
           }
         }
 
-        if (chosen) {
+        // Bug real confirmado en vivo (jul 2026): un comprador mandó "1"
+        // (reforzando su respuesta anterior de "personal") justo cuando el
+        // bot ya había avanzado a pedir el banco — ese "1" se interpretó
+        // como elegir el primer banco del menú, mandando la cuenta. Segundos
+        // después llegó su mensaje real ("banco de chile", el mismo banco
+        // por coincidencia) y como el estado ya era account_sent, se
+        // volvió a mandar la MISMA cuenta de nuevo. Si ya se mandó
+        // exactamente esta cuenta, no se repite todo el bloque de datos.
+        const alreadySentThisAccount = chosen && Array.isArray(cs.chosenAccountIds) && cs.chosenAccountIds.length === 1 && cs.chosenAccountIds[0] === chosen.id;
+        if (alreadySentThisAccount) {
+          await sendAndTrack(client, exchange, order.orderNumber, cs,
+            "Sí, esos son los datos que ya te envié arriba. Cualquier duda, avísame."
+          );
+        } else if (chosen) {
           const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, cs, chosen);
           if (sent) await updateState(cs.id, "account_sent", { chosenBank: chosen.bank, chosenAccountIds: [chosen.id], retryCount: 0 });
         } else if (resolvedProblem === "limit") {
@@ -1704,6 +1724,19 @@ function bankNamesMatch(nameA: string, nameB: string): boolean {
 // explícitamente en texto libre (ver matchBank), nunca proactivamente.
 // Regla confirmada por el usuario jul 2026: "la cuenta vista es para
 // aquellas personas que preguntan si pueden transferir a esa cuenta".
+// Reconstruye el menú EXACTO que se le mostró al comprador ("1) X 2) Y..."),
+// usando los IDs guardados en cs.pendingBankMenuIds — nunca el orden fresco
+// de allAccounts, que puede haber cambiado desde que se armó ese menú (ver
+// bug real documentado en awaiting_bank_choice). Si falta alguna cuenta del
+// pin (ej. se desactivó una), no se confía en el pin — se cae al orden
+// normal en vez de mostrar un menú incompleto o con posiciones corridas.
+function resolveMenuAccounts(pendingBankMenuIds: any, allAccounts: any[]): any[] | null {
+  if (!Array.isArray(pendingBankMenuIds) || pendingBankMenuIds.length === 0) return null;
+  const byId = new Map(allAccounts.map((a: any) => [a.id, a]));
+  const resolved = pendingBankMenuIds.map((id: any) => byId.get(Number(id))).filter(Boolean);
+  return resolved.length === pendingBankMenuIds.length ? resolved : null;
+}
+
 function pickDefaultAccountsPerBank(accounts: any[]): any[] {
   const byBank = new Map<string, any[]>();
   for (const a of accounts) {

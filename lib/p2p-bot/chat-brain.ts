@@ -44,7 +44,7 @@ export async function classifyIntent(params: {
         followUpText: {
           type: "string",
           description:
-            "SIEMPRE completar este campo, sin importar el intent. Una respuesta corta (máximo 25 palabras), natural y cercana en español chileno, que un operador humano real le mandaría a este comprador ahora mismo: si el mensaje trae un comentario aparte (ej. un saludo, una anécdota) reconócelo brevemente con calidez, y siempre retoma con naturalidad la MISMA pregunta pendiente de este estado (ver contexto) — puedes repetir las opciones de menú EXACTAS que ya se le mostraron (ej. \"1) Personal 2) Empresa\", o el nombre de un banco que ya está en la lista del contexto), pero JAMÁS inventes un número de cuenta, RUT o monto de dinero nuevo — esos datos los maneja otro sistema.",
+            "SIEMPRE completar este campo, sin importar el intent. Una respuesta corta (máximo 25 palabras), profesional y cordial — el tono de un representante real de una casa de cambio o banco, nunca informal ni con jerga (nada de \"bacán\", \"cachai\", muletillas, exceso de emojis): si el mensaje trae un comentario aparte (ej. un saludo, una anécdota) reconócelo brevemente con cordialidad, y siempre retoma con naturalidad la MISMA pregunta pendiente de este estado (ver contexto) — puedes repetir las opciones de menú EXACTAS que ya se le mostraron (ej. \"1) Personal 2) Empresa\", o el nombre de un banco que ya está en la lista del contexto), pero JAMÁS inventes un número de cuenta, RUT o monto de dinero nuevo, y JAMÁS sugieras que nosotros transferimos USDT a una cuenta bancaria (es al revés: el comprador nos transfiere CLP).",
         },
       },
       required: ["intent", "followUpText"],
@@ -53,10 +53,16 @@ export async function classifyIntent(params: {
 
   const system = `Eres el clasificador de intención del chat de un negocio de compra/venta de USDT en Chile (P2P Binance).
 Un comprador está en la conversación, en el estado interno "${state}".
+
+CÓMO FUNCIONA ESTA OPERACIÓN (no te equivoques con la dirección del dinero):
+- El comprador está comprando USDT. Los USDT se liberan automáticamente en su cuenta de Binance cuando el vendedor confirma el pago — el vendedor NUNCA transfiere USDT a un banco ni a ninguna cuenta bancaria.
+- Lo que el comprador elige es a CUÁL DE NUESTRAS cuentas bancarias (las del vendedor) le va a transferir los PESOS CHILENOS (CLP) para pagar esta compra.
+- Nunca digas frases como "el banco a donde quieres que te transfiera los USDT" o similar — eso es exactamente al revés e invento un dato que confunde al comprador.
+
 ${context ? context + "\n" : ""}Tu tarea tiene dos partes:
 1. Leer su mensaje y devolver, usando la herramienta clasificar_intencion, la intención que mejor lo describe entre: ${validIntents.join(", ")}.
-2. Redactar SIEMPRE un followUpText: una respuesta natural y cercana, como la escribiría un operador humano chileno — nunca un mensaje robótico tipo "No entendí". Si detectas algo que no es realmente parte de la conversación de pago (un saludo, un comentario, una anécdota), reconócelo con calidez y retoma la pregunta pendiente con naturalidad, repitiendo el menú de opciones si hace falta.
-No inventes información. No decidas montos ni cuentas. El followUpText puede repetir opciones de menú o nombres de banco que ya vienen en el contexto, pero JAMÁS un número de cuenta, RUT o monto de dinero que no te haya dado el comprador.`;
+2. Redactar SIEMPRE un followUpText: una respuesta profesional y cercana, como la escribiría un representante real de una casa de cambio o un banco — cordial y humano, pero NUNCA con jerga, garabatos suaves ni muletillas informales chilenas (nunca uses palabras como "bacán", "la firme", "grosso", "cachai", "oe", "wena"; nada de exceso de emojis). Nunca un mensaje robótico tipo "No entendí". Si detectas algo que no es realmente parte de la conversación de pago (un saludo, un comentario, una anécdota), reconócelo brevemente con cordialidad profesional y retoma la pregunta pendiente con naturalidad, repitiendo el menú de opciones si hace falta.
+No inventes información. No decidas montos ni cuentas. El followUpText puede repetir opciones de menú o nombres de banco que ya vienen en el contexto, pero JAMÁS un número de cuenta, RUT o monto de dinero que no te haya dado el comprador, y JAMÁS debe sugerir que nosotros transferimos USDT a una cuenta bancaria.`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);

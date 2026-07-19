@@ -837,6 +837,13 @@ model P2PChatState {
   previousBank      String?
   chosenBank        String?
   chosenAccountIds  Json?
+  // IDs de cuenta en el MISMO orden exacto mostrado en el último menú
+  // "1) Banco X 2) Banco Y..." — se usa para interpretar un "1"/"2"/"3"
+  // numérico. Nunca se re-deriva el orden fresco de la base de datos al
+  // interpretar la respuesta: si el orden de las cuentas cambia (ej. un
+  // reordenamiento manual) entre que se muestra el menú y que el comprador
+  // responde, un número ya no correspondería al banco que realmente vio.
+  pendingBankMenuIds Json?
   erutRequested     Boolean   @default(false)
   erutReceived      Boolean   @default(false)
   retryCount        Int       @default(0)
