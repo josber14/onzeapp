@@ -1650,6 +1650,24 @@ function matchOption(text: string, max: number): number | null {
   if (trimmed === "sí" || trimmed === "si" || trimmed === "yes") return 1;
   if (trimmed === "no") return 2;
   if (max >= 3 && text.includes("tercer")) return 3;
+
+  // Bug real confirmado en vivo (jul 2026): con varios mensajes seguidos
+  // del comprador combinados en uno solo (ver findLastClientMsg), un "1"
+  // puede llegar en su PROPIA línea al final de un mensaje más largo (ej.
+  // una explicación + "1" aparte) — parseInt(text) de arriba solo mira el
+  // inicio del string completo y nunca encuentra ese "1" perdido más
+  // adelante. Se revisa cada línea por separado antes de rendirse, pero
+  // solo si esa línea es EXACTAMENTE el número/sí/no (nada más), mismo
+  // criterio estricto que arriba.
+  if (text.includes("\n")) {
+    for (const line of text.split("\n")) {
+      const lineTrimmed = line.trim().replace(/[.,!?¡¿]+$/, "");
+      const lineNum = parseInt(lineTrimmed);
+      if (!isNaN(lineNum) && lineNum >= 1 && lineNum <= max && String(lineNum) === lineTrimmed) return lineNum;
+      if (lineTrimmed === "sí" || lineTrimmed === "si" || lineTrimmed === "yes") return 1;
+      if (lineTrimmed === "no") return 2;
+    }
+  }
   return null;
 }
 
