@@ -787,7 +787,7 @@ async function handleClientResponse(
         const acct = allAccounts.find((a: any) => a.id === (cs.chosenAccountIds?.[0] || 0)) || allAccounts[0];
         let sentPrev: boolean;
         if (resolved === "resend") {
-          sentPrev = await sendAccountWithErutNote(tenantId, exchange, client, order, cs, acct);
+          sentPrev = await sendAccountWithErutNote(tenantId, exchange, client, order, cs, acct, { skipIntro: true });
         } else {
           let msg = "Perfecto, cuando realices el pago marca \"Pagado\" en la orden y envía el comprobante por aquí.";
           if (cs.isCompany) msg += "\n\nRecuerda adjuntar el ERUT junto con el comprobante para emitir la factura.";
@@ -1382,7 +1382,8 @@ async function sendAccountWithErutNote(
   client: any,
   order: any,
   cs: any,
-  acct: any
+  acct: any,
+  opts: { skipIntro?: boolean } = {}
 ): Promise<boolean> {
   const erutNote = cs.isCompany
     ? "\n\nAl ser cuenta empresa, necesitamos el ERUT para validar la titularidad y emitir la factura. Por favor adjúntalo cuando puedas."
@@ -1393,10 +1394,16 @@ async function sendAccountWithErutNote(
   // volcado de texto. sendAndTrack ya espacia cada envío con humanDelay().
   // El mensaje 2 (datos) debe ser SOLO la cuenta, sin ningún otro texto — el
   // aviso de ERUT (si es empresa) va pegado al mensaje 3, no acá.
-  const intro = await sendAndTrack(client, exchange, order.orderNumber, cs,
-    "Te envío la cuenta para que copies y pegues en tu banco."
-  );
-  if (!intro) return false;
+  // opts.skipIntro: para un cliente frecuente que confirma "misma cuenta de
+  // la última vez", el mensaje de intro ("te envío la cuenta para que
+  // copies y pegues") es puro relleno — ya sabe cómo funciona. Solo se usa
+  // acá, nunca para alguien que recibe la cuenta por primera vez en la orden.
+  if (!opts.skipIntro) {
+    const intro = await sendAndTrack(client, exchange, order.orderNumber, cs,
+      "Te envío la cuenta para que copies y pegues en tu banco."
+    );
+    if (!intro) return false;
+  }
   const details = await sendAndTrack(client, exchange, order.orderNumber, cs, formatSingleAccount(acct));
   if (!details) return false;
   return sendAndTrack(client, exchange, order.orderNumber, cs,
