@@ -1387,11 +1387,21 @@ async function sendAccountWithErutNote(
   const erutNote = cs.isCompany
     ? "\n\nAl ser cuenta empresa, necesitamos el ERUT para validar la titularidad y emitir la factura. Por favor adjúntalo cuando puedas."
     : "";
-  const msg = "Listo. Estos son los datos para depositar:\n\n" +
-    formatSingleAccount(acct) +
-    erutNote +
-    "\n\nCuando realices el pago:\n- Marca \"Pagado\" en la orden\n- Envía el comprobante aquí en el chat";
-  return sendAndTrack(client, exchange, order.orderNumber, cs, msg);
+  // Pedido explícito del usuario (jul 2026): los datos bancarios se mandan
+  // en 3 mensajes separados (intro, datos, instrucciones) en vez de un solo
+  // bloque largo — se siente más como una persona escribiendo que como un
+  // volcado de texto. sendAndTrack ya espacia cada envío con humanDelay().
+  const intro = await sendAndTrack(client, exchange, order.orderNumber, cs,
+    "Te envío la cuenta para que copies y pegues en tu banco."
+  );
+  if (!intro) return false;
+  const details = await sendAndTrack(client, exchange, order.orderNumber, cs,
+    formatSingleAccount(acct) + erutNote
+  );
+  if (!details) return false;
+  return sendAndTrack(client, exchange, order.orderNumber, cs,
+    "Cuando realices el pago:\n- Marca \"Pagado\" en la orden\n- Envía el comprobante aquí en el chat"
+  );
 }
 
 export function normalizeOrder(raw: any, exchange: string) {
