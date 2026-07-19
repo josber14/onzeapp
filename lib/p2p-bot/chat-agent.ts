@@ -414,8 +414,11 @@ async function processOrderLocked(
     const fiveMinBefore = expiresAt - 5 * 60 * 1000;
 
     if (Date.now() >= fiveMinBefore && Date.now() < expiresAt) {
+      // Pedido explícito del usuario (jul 2026): "Hola" solo va en el
+      // PRIMER mensaje de la conversación — este aviso llega a mitad de
+      // conversación, nunca debe volver a saludar.
       await sendThenTransition(client, exchange, orderNo, cs,
-        "Hola, tu orden está por vencer. ¿Necesitas más tiempo para completar el pago o estás teniendo problemas?\n  1) Más tiempo\n  2) Problemas\n\nResponde 1 o 2.",
+        "Tu orden está por vencer. ¿Necesitas más tiempo para completar el pago o estás teniendo problemas?\n  1) Más tiempo\n  2) Problemas\n\nResponde 1 o 2.",
         "awaiting_problem"
       );
     }
@@ -438,9 +441,11 @@ async function processOrderLocked(
       if (cs.isCompany && !cs.erutReceived) {
         extra = "\n\nRecuerda que al ser cuenta empresa también necesitamos el ERUT para validar la titularidad y emitir la factura.";
       }
+      // "Hola" solo va en el primer mensaje de la conversación — este aviso
+      // llega minutos después del saludo inicial, nunca debe repetirlo.
       const name = firstNameFrom(cs.realName);
       await sendThenTransition(client, exchange, orderNo, cs,
-        (name ? `Hola ${name}, ¿nos puedes` : "Hola, ¿nos puedes") + " enviar el comprobante del pago para agilizar la validación?" + extra,
+        (name ? `${name}, ¿nos puedes` : "¿Nos puedes") + " enviar el comprobante del pago para agilizar la validación?" + extra,
         "awaiting_comprobant"
       );
     }
