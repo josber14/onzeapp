@@ -1453,15 +1453,37 @@ async function fetchMessages(exchange: string, client: any, orderNo: string, _or
   }
 }
 
+// Antes se procesaba SOLO el mensaje más antiguo sin leer aún (uno por
+// ciclo, ~15s cada uno) — un pensamiento partido en 2-3 mensajes seguidos
+// (ej. "falabella me deja 700" / "de una" / "voy a dividir") se respondía
+// fragmento por fragmento, en ciclos DISTINTOS, perdiendo el hilo completo
+// y generando respuestas fuera de contexto a cada parte suelta. Pedido
+// explícito del usuario (jul 2026): agrupar TODOS los mensajes nuevos del
+// comprador desde el último ciclo en uno solo antes de procesar — se lee
+// como una sola idea, no como preguntas separadas.
 function findLastClientMsg(msgs: ChatMessage[], sinceTime?: number | null): ChatMessage | null {
-  // messages are sorted oldest-first; return first one newer than sinceTime
-  for (const m of msgs) {
-    if (m.self || m.type === "system") continue;
-    if (!m.content.trim() && !m.imageUrl) continue;
-    if (sinceTime !== null && sinceTime !== undefined && m.createTime <= sinceTime) continue;
-    return m;
-  }
-  return null;
+  const pending = msgs.filter(m => {
+    if (m.self || m.type === "system") return false;
+    if (!m.content.trim() && !m.imageUrl) return false;
+    if (sinceTime !== null && sinceTime !== undefined && m.createTime <= sinceTime) return false;
+    return true;
+  });
+  if (pending.length === 0) return null;
+  if (pending.length === 1) return pending[0];
+
+  const textParts = pending.map(m => m.content?.trim()).filter(Boolean);
+  const lastImage = [...pending].reverse().find(m => m.imageUrl)?.imageUrl || null;
+  const last = pending[pending.length - 1];
+  return {
+    id: last.id,
+    type: "text",
+    content: textParts.join("\n"),
+    self: false,
+    createTime: last.createTime,
+    // Solo se conserva la imagen si NO hay texto en el lote — si hay texto,
+    // ese es lo accionable (ver el manejo de solo-imagen más abajo).
+    imageUrl: textParts.length === 0 ? lastImage : null,
+  };
 }
 
 // Busca el mensaje de sistema "seller_payed" (se dispara cuando el comprador
@@ -1658,9 +1680,18 @@ function isPureAcknowledgment(text: string): boolean {
 }
 
 function matchProblemType(text: string): string | null {
+  // Bug real confirmado en vivo (jul 2026): "no me deja transferir la cuenta
+  // TIENE COMO ERROR" se categorizaba como "limit" porque "deja" se revisaba
+  // primero — ignorando que "error"/"falla"/"rechaz"/"bloque" son señales
+  // mucho más fuertes y específicas de un problema técnico con ESA cuenta
+  // puntual (lo correcto ahí es ofrecer otra cuenta, no preguntar por el
+  // límite del banco). "deja"/"permite"/"monto" son ambiguos por sí solos
+  // (pueden ser límite O un error genérico), así que ahora se revisan
+  // DESPUÉS de las señales técnicas inequívocas.
+  if (text.includes("concreta") || text.includes("funciona") || text.includes("error") || text.includes("falla") || text.includes("rechaz") || text.includes("bloque")) return "not_working";
   if (text.includes("límite") || text.includes("limite") || text.includes("monto") || text.includes("mucho") || text.includes("pasa") || text.includes("permite") || text.includes("deja")) return "limit";
   if (text.includes("diario") || text.includes("dia")) return "limit_daily";
-  if (text.includes("concreta") || text.includes("funciona") || text.includes("error") || text.includes("falla") || text.includes("rechaz") || text.includes("pudo") || text.includes("puedo") || text.includes("bloque") || text.includes("no me")) return "not_working";
+  if (text.includes("pudo") || text.includes("puedo") || text.includes("no me")) return "not_working";
   return null;
 }
 
@@ -1692,8 +1723,16 @@ function matchERUT(text: string): boolean {
 function extractAmount(text: string): number {
   const nums = text.match(/\d[\d.]*/g);
   if (!nums) return 0;
-  const clean = nums.map(n => Number(n.replace(/\./g, ""))).filter(n => n > 1000);
-  return clean.length > 0 ? Math.min(...clean) : 0;
+  const clean = nums.map(n => Number(n.replace(/\./g, ""))).filter(n => n > 10);
+  if (clean.length === 0) return 0;
+  const smallest = Math.min(...clean);
+  // Bug real confirmado en vivo (jul 2026): "falabella me deja 700" se
+  // interpretaba como 700 CLP literales (un monto sin sentido para
+  // cualquier compra real acá, todas en cientos de miles) — en Chile es
+  // habitual decir el límite de transferencia abreviado en miles ("me deja
+  // 700" = 700.000). Cualquier número bajo 10.000 en este contexto casi
+  // seguro está abreviado así.
+  return smallest < 10000 ? smallest * 1000 : smallest;
 }
 
 function findMatchingAd(activeAds: any[], order: any): any {
