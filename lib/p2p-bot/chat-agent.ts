@@ -954,6 +954,17 @@ async function handleClientResponse(
 
     // Generic account_sent handler: monitor for problems, ERUT, third-party, etc.
     case "account_sent": {
+      // Bug real confirmado en vivo (jul 2026): un comprador mandó "personal"
+      // y, un instante después, "sí" suelto (probablemente reforzando su
+      // respuesta anterior, sin ninguna pregunta de sí/no pendiente en este
+      // estado) — el bot lo tomó como un mensaje nuevo y le preguntó "¿ya
+      // transferiste?" de la nada. A diferencia de otros estados (donde
+      // "sí"/"no" SÍ responden una pregunta real, ej. awaiting_company_type),
+      // account_sent no tiene ninguna pregunta de sí/no pendiente — un
+      // "sí"/"no" suelto acá es siempre solo un reconocimiento vacío.
+      const bareYesNo = ["si", "sí", "no"].includes(textLower.replace(/[.,!?¡¿]+$/g, "").trim());
+      if (bareYesNo) break;
+
       if (matchThirdParty(textLower)) {
         await sendAndTrack(client, exchange, order.orderNumber, cs,
           "Lo siento, la transferencia debe ser desde una cuenta a nombre del titular de la orden. No aceptamos depósitos de terceros.\n\n¿Tienes otra forma de realizar el pago?"
