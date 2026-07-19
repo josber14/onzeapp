@@ -1729,12 +1729,20 @@ function matchCompanyType(text: string): boolean | null {
 const PURE_ACKNOWLEDGMENT_WORDS = new Set([
   "ok", "oka", "okay", "okey", "dale", "listo", "vale", "va",
   "bueno", "bien", "entendido", "perfecto", "genial", "de acuerdo",
-  "gracias", "muchas gracias",
 ]);
 function isPureAcknowledgment(text: string): boolean {
   const cleaned = text.trim().replace(/[.,!?¡¿👍👌✅🙏😊😁🙌]+/gu, "").trim();
   return PURE_ACKNOWLEDGMENT_WORDS.has(cleaned);
 }
+
+// "gracias" es distinto de "ok"/"dale" — pedido explícito del usuario: un
+// agradecimiento SÍ merece una respuesta (de agradecimiento hacia la
+// persona), no silencio. A propósito NO está en PURE_ACKNOWLEDGMENT_WORDS:
+// al no calzar con ningún matcher determinístico, cae sola al respaldo de
+// IA de cada estado (que ya tiene el contexto de qué se le pidió/mandó),
+// para que la respuesta sea cordial y ajustada a POR QUÉ está agradeciendo
+// (ver instrucción específica en chat-brain.ts) en vez de una única frase
+// fija sin importar el motivo.
 
 function matchProblemType(text: string): string | null {
   // Bug real confirmado en vivo (jul 2026): "no me deja transferir la cuenta
