@@ -24912,6 +24912,7 @@ try{
       ));
     }
     cards.push(
+      socioBnDashCard('Ventas completadas', String(stats.salesCount ?? 0), { color: WHITE }),
       socioBnDashCard('CLP recibido', socioBnMoney(stats.totalClpReceived, 0) + ' CLP', { color: GREEN }),
       socioBnDashCard('USDT vendido', socioBnMoney(stats.totalUsdtSold, 2) + ' USDT', { color: GREEN }),
       socioBnDashCard(
