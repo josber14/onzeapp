@@ -1009,6 +1009,10 @@ async function handleClientResponse(
         await sendAndTrack(client, exchange, order.orderNumber, cs,
           "Lo siento, la transferencia debe ser desde una cuenta a nombre del titular de la orden. No aceptamos depósitos de terceros.\n\n¿Tienes otra forma de realizar el pago?"
         );
+      } else if (matchAsksRutAccount(textLower)) {
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          "Al ser cuenta empresa, no manejamos Cuenta RUT — la que te enviamos es nuestra cuenta corriente de Banco Estado. No hay ningún problema: si tú tienes Banco Estado (aunque sea Cuenta RUT), puedes transferir igual a esa cuenta sin inconveniente."
+        );
       } else if (matchERUT(textLower) || matchCompanyType(textLower) === true) {
         if (cs.isCompany || matchCompanyType(textLower) === true) {
           // Bug real confirmado en vivo (jul 2026): cada vez que el comprador
@@ -1792,6 +1796,18 @@ function matchThirdParty(text: string): boolean {
 
 function matchERUT(text: string): boolean {
   return text.includes("empresa") || text.includes("erut") || text.includes("factura") || text.includes("rut empresa");
+}
+
+// "Cuenta RUT" es un producto puntual de Banco Estado (el número de cuenta
+// es el mismo RUT del titular) — distinto de matchERUT (que es sobre el
+// RUT de la EMPRESA para factura). Somos empresa, así que no tenemos una
+// Cuenta RUT propia — pero cualquier persona con Banco Estado (tenga o no
+// Cuenta RUT) puede transferir sin problema a nuestra cuenta corriente ya
+// enviada. Caso real confirmado en vivo (jul 2026): un comprador preguntó
+// por esto y el bot no supo responder, el operador tuvo que intervenir
+// manualmente.
+function matchAsksRutAccount(text: string): boolean {
+  return /cuenta\s*rut/.test(text);
 }
 
 function extractAmount(text: string): number {
