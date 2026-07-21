@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import PasswordInput from "@/components/password-input";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -100,12 +101,11 @@ export default function LoginPage() {
               <label className="mb-2 block text-sm font-medium text-slate-700">
                 Contraseña
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="********"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/15"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 pr-12 text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/15"
                 required
               />
             </div>

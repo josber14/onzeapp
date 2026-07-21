@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import PasswordInput from "@/components/password-input";
 
 const TENANT_ID = 1;
 
@@ -57,9 +58,9 @@ export default function ClienteUsdtLoginPage() {
         </label>
         <label className="mb-4 block text-sm">
           Contraseña
-          <input
-            type="password"
-            className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 outline-none focus:border-emerald-400"
+          <PasswordInput
+            className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 pr-11 outline-none focus:border-emerald-400"
+            iconClassName="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-300"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required

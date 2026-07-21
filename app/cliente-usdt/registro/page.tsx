@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import PasswordInput from "@/components/password-input";
 
 // tenantId fijo por ahora — este producto es para UN solo negocio (el
 // tenant del usuario). Si en el futuro se vende a más negocios, esto pasa
@@ -159,7 +160,14 @@ export default function ClienteUsdtRegistroPage() {
           <input type="email" className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} required />
         </Label>
         <Label>Contraseña
-          <input type="password" className={inputClass} value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
+          <PasswordInput
+            className={`${inputClass} pr-11`}
+            iconClassName="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-300"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            minLength={8}
+            required
+          />
         </Label>
 
         <h2 className={sectionTitleClass}>Sección 1 — Conocimiento del cliente</h2>
