@@ -1051,12 +1051,20 @@ async function handleClientResponse(
       } else if (matchInvalidEmailProblem(textLower)) {
         // Caso real reportado por el usuario (jul 2026): Banco Estado a veces
         // marca "correo inválido" al agregar la cuenta como destinatario —
-        // no es un problema real de la cuenta, es un glitch conocido del
-        // banco. Dos soluciones reales: cerrar y volver a abrir la app del
-        // banco e intentar de nuevo, o poner cualquier correo en ese campo
-        // (incluso el propio del comprador) — no afecta la transferencia.
+        // no es un problema real de la cuenta, es un glitch conocido de ESE
+        // banco puntual. Dos soluciones reales: cerrar y volver a abrir la
+        // app del banco e intentar de nuevo, o poner cualquier correo en ese
+        // campo (incluso el propio del comprador) — no afecta la
+        // transferencia. Pedido explícito del usuario: esto es específico de
+        // Banco Estado — si el comprador transfiere desde OTRO banco, no
+        // asumir que es lo mismo, usar redacción genérica según la cuenta
+        // que realmente se le mandó (cs.chosenBank).
+        const isBancoEstado = /estado/i.test(String(cs.chosenBank || ""));
+        const bankReason = isBancoEstado
+          ? "Eso puede pasar a veces con Banco Estado, es un problema conocido de la app y no de la cuenta."
+          : "Eso puede ser un problema puntual de la app de tu banco, no de la cuenta.";
         await sendAndTrack(client, exchange, order.orderNumber, cs,
-          "Eso puede pasar a veces con Banco Estado, es un problema conocido de la app y no de la cuenta. Puedes probar:\n1) Cerrar la app del banco y volver a intentar la transferencia\n2) Poner cualquier correo en ese campo (puede ser el tuyo propio) — no afecta la transferencia\n\nCualquiera de las dos debería funcionar."
+          `${bankReason} Puedes probar:\n1) Cerrar la app del banco y volver a intentar la transferencia\n2) Poner cualquier correo en ese campo (puede ser el tuyo propio) — no afecta la transferencia\n\nCualquiera de las dos debería funcionar.`
         );
       } else if (matchERUT(textLower) || matchCompanyType(textLower) === true) {
         if (cs.isCompany || matchCompanyType(textLower) === true) {
