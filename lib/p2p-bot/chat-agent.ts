@@ -1993,11 +1993,21 @@ const BANK_FILLER_WORDS = new Set(["banco", "de", "chile", "sa", "spa", "cl"]);
 // "chile" \u2014 permite reconocer que "BANCO BCI" (como lo guardaste) y "BCI
 // Chile" (como lo llama Binance en el anuncio) son el mismo banco, aunque el
 // orden de las palabras sea distinto y ninguno sea substring del otro.
+//
+// Bug real confirmado en vivo (jul 2026): para "BANCO DE CHILE", TODAS las
+// palabras ("banco", "de", "chile") son filler \u2014 el filtro dejaba una lista
+// VAC\u00cdA, as\u00ed que ning\u00fan mensaje lograba reconocer ese banco a menos que el
+// comprador escribiera el nombre completo exacto. Un comprador escribi\u00f3
+// "banco chile" (sin el "de") y, al no calzar nada, el bot termin\u00f3
+// mand\u00e1ndole TODAS las cuentas en vez de solo esa. Si filtrar deja la lista
+// vac\u00eda, se usan las palabras SIN filtrar en vez de perder el banco entero.
 function bankCoreTokens(name: string): string[] {
-  return normalizeBankName(name)
+  const words = normalizeBankName(name)
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter(w => w.length >= 2 && !BANK_FILLER_WORDS.has(w));
+    .filter(w => w.length >= 2);
+  const filtered = words.filter(w => !BANK_FILLER_WORDS.has(w));
+  return filtered.length > 0 ? filtered : words;
 }
 
 function bankNamesMatch(nameA: string, nameB: string): boolean {
