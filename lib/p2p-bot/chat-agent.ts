@@ -1195,14 +1195,36 @@ async function handleClientResponse(
         await sendAndTrack(client, exchange, order.orderNumber, cs, "Entendido, vamos a solicitar la extensión de tiempo.");
         await handleTransferFails(tenantId, exchange, client, order, cs, activeAds, textLower, label);
       } else if (saysYes) {
-        await sendThenTransition(client, exchange, order.orderNumber, cs,
-          "Perfecto, vamos a solicitar la extensión de tiempo.",
-          resumeState, { retryCount: 0, preInterruptState: null }
-        );
+        const sent = await sendAndTrack(client, exchange, order.orderNumber, cs, "Perfecto, vamos a solicitar la extensión de tiempo.");
+        if (sent) {
+          await updateState(cs.id, resumeState, { retryCount: 0, preInterruptState: null });
+          // Bug real confirmado en vivo (jul 2026): si el comprador manda su
+          // "sí" al aviso de vencimiento Y la respuesta real a la pregunta
+          // que había quedado interrumpida en el MISMO lote de mensajes
+          // (ej. "sí por favor" y, segundos después, "1" — llegan juntos al
+          // mismo ciclo, unidos por findLastClientMsg), el "1" se perdía:
+          // este handler solo miraba la primera palabra para el sí/no y
+          // descartaba el resto. Si queda texto después de la primera
+          // línea, se reprocesa YA con el estado retomado, para que esa
+          // respuesta real no se pierda.
+          const remainder = text.split("\n").slice(1).join("\n").trim();
+          if (remainder) {
+            cs.state = resumeState;
+            cs.preInterruptState = null;
+            cs.retryCount = 0;
+            await handleClientResponse(tenantId, exchange, client, cs, order, remainder, activeAds, label);
+          }
+        }
       } else if (saysNo) {
         // Pedido explícito del usuario: si dice que no, se deja así — sin
         // mensaje de más, solo se retoma la conversación donde iba.
         await updateState(cs.id, resumeState, { preInterruptState: null });
+        const remainder = text.split("\n").slice(1).join("\n").trim();
+        if (remainder) {
+          cs.state = resumeState;
+          cs.preInterruptState = null;
+          await handleClientResponse(tenantId, exchange, client, cs, order, remainder, activeAds, label);
+        }
       }
       // Respuesta ambigua (ni sí, ni no, ni describe un problema): no se
       // hace nada, a propósito — sin reintentos ni cierre.
