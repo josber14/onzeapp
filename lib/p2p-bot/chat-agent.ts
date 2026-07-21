@@ -1390,7 +1390,20 @@ async function handleTransferFails(
 ) {
   const fails = (cs.transferFailCount || 0) + 1;
 
-  if (fails >= 3) {
+  // Primera vez que reporta que no puede transferir — pedido explícito del
+  // usuario (jul 2026): la razón casi siempre es el BANCO del comprador, no
+  // la cuenta. Antes de saltar a ofrecer otra cuenta, se sugiere cerrar la
+  // app del banco por completo y volver a intentar. Solo si vuelve a
+  // reportar el mismo problema (fails >= 2) se ofrece una cuenta distinta.
+  if (fails === 1) {
+    await sendThenTransition(client, exchange, order.orderNumber, cs,
+      "Eso suele ser un problema del banco tuyo, no de la cuenta. Prueba cerrando la app de tu banco por completo y vuelve a intentar la transferencia.\n\nSi sigue igual, avísame y probamos con otra cuenta.",
+      "account_sent", { transferFailCount: fails }
+    );
+    return;
+  }
+
+  if (fails >= 4) {
     await sendThenClose(client, exchange, order.orderNumber, cs,
       "Puede ser un problema con tu banco. Lamentablemente no podemos extender más el tiempo. Intenta más tarde cuando se resuelva.\n\nQuedamos atentos para la próxima.",
       { transferFailCount: 0 }
