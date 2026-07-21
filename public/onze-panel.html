@@ -10035,7 +10035,7 @@ function addP2PBotStyles(){
             </div>
             <!-- Tab: Skipo (cotizar/comprar USDT al mayor) -->
             <div id="botPanelSkipo" class="bot-panel-tab-content" style="display:none;">
-              <p class="section-text" style="margin-bottom:14px;">Cotiza y compra USDT directo a Skipo con tu saldo en CLP. La compra es real e irreversible — se confirma con tu clave o huella.</p>
+              <p class="section-text" style="margin-bottom:14px;">Cotiza y compra USDT directo a Skipo con tu saldo en CLP. La compra es real e irreversible.</p>
 
               <div style="display:flex;gap:8px;margin-bottom:14px;">
                 <div style="flex:1;background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.1);border-radius:12px;padding:12px;">
@@ -10048,44 +10048,36 @@ function addP2PBotStyles(){
                 </div>
               </div>
 
-              <div id="skipoPriceCard" onclick="window.skipoOpenBuyModal()" style="cursor:pointer;background:linear-gradient(135deg,rgba(52,211,153,.12),rgba(15,23,42,.4));border:1px solid rgba(52,211,153,.25);border-radius:14px;padding:18px;text-align:center;transition:transform .1s;" onmouseover="this.style.transform='scale(1.01)'" onmouseout="this.style.transform='scale(1)'">
-                <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Precio actual USDT/CLP en Skipo</div>
+              <div id="skipoPriceCard" style="background:linear-gradient(135deg,rgba(52,211,153,.12),rgba(15,23,42,.4));border:1px solid rgba(52,211,153,.25);border-radius:14px;padding:18px;text-align:center;">
+                <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:4px;">
+                  <div style="font-size:11px;color:#94a3b8;">Precio actual USDT/CLP en Skipo</div>
+                  <div id="skipoPriceCountdown" style="font-size:10px;color:#64748b;font-variant-numeric:tabular-nums;border:1px solid rgba(148,163,184,.2);border-radius:20px;padding:1px 7px;">15s</div>
+                </div>
                 <div id="skipoCurrentRate" style="font-size:28px;font-weight:800;color:#34d399;">Cargando...</div>
-                <div style="font-size:11px;color:#64748b;margin-top:6px;">Click para comprar</div>
               </div>
               <div id="skipoPriceMsg" style="font-size:12px;margin-top:8px;color:#fb7185;"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-      </div>
 
-      <div id="skipoBuyModal" class="modal" onclick="if(event.target===this)window.skipoCloseBuyModal()">
-        <div class="modal-dialog">
-          <div class="modal-card" style="max-width:400px;">
-            <div class="modal-head">
-              <h3 class="modal-title">Comprar USDT en Skipo</h3>
-              <button class="close-btn" type="button" onclick="window.skipoCloseBuyModal()">&times;</button>
-            </div>
-            <div class="modal-content">
-              <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:10px;">Monto a pagar (CLP)
-                <input id="skipoBuyClp" type="number" min="500" step="1" placeholder="Ej: 100000" style="display:block;width:100%;padding:10px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:16px;margin-top:4px;">
-              </label>
-              <button id="skipoBuyBtn" class="btn small" type="button" style="width:100%;margin-bottom:14px;" onclick="window.skipoBuy()">Comprar</button>
+              <div style="margin-top:16px;background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.1);border-radius:14px;padding:16px;">
+                <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:10px;">Monto a pagar (CLP)
+                  <input id="skipoBuyClp" type="number" min="500" step="1" placeholder="Ej: 100000" style="display:block;width:100%;padding:10px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:16px;margin-top:4px;">
+                </label>
+                <button id="skipoBuyBtn" class="btn small" type="button" style="width:100%;" onclick="window.skipoBuy()">Comprar</button>
 
-              <div id="skipoQuoteBox" style="display:none;background:linear-gradient(180deg,rgba(52,211,153,.08) 0%,rgba(15,23,42,.5) 100%);border:1px solid rgba(52,211,153,.2);border-radius:14px;padding:18px;margin-bottom:6px;text-align:center;">
-                <div style="font-size:11px;color:#94a3b8;letter-spacing:.04em;text-transform:uppercase;">Estás comprando</div>
-                <div id="skipoQuoteUsdt" style="font-size:30px;font-weight:800;color:#34d399;margin-top:4px;letter-spacing:-.02em;"></div>
-                <div id="skipoQuoteRate" style="font-size:13px;color:#94a3b8;margin-top:6px;"></div>
-                <div style="height:1px;background:rgba(148,163,184,.15);margin:14px 0;"></div>
-                <div style="font-size:11px;color:#94a3b8;">Cotización válida por</div>
-                <div id="skipoQuoteTimer" style="font-size:26px;font-weight:800;color:#fbbf24;margin-top:2px;font-variant-numeric:tabular-nums;">5s</div>
+                <div id="skipoQuoteBox" style="display:none;background:linear-gradient(180deg,rgba(52,211,153,.08) 0%,rgba(15,23,42,.5) 100%);border:1px solid rgba(52,211,153,.2);border-radius:14px;padding:18px;margin-top:14px;text-align:center;">
+                  <div style="font-size:11px;color:#94a3b8;letter-spacing:.04em;text-transform:uppercase;">Estás comprando</div>
+                  <div id="skipoQuoteUsdt" style="font-size:30px;font-weight:800;color:#34d399;margin-top:4px;letter-spacing:-.02em;"></div>
+                  <div id="skipoQuoteRate" style="font-size:13px;color:#94a3b8;margin-top:6px;"></div>
+                  <div style="height:1px;background:rgba(148,163,184,.15);margin:14px 0;"></div>
+                  <div style="font-size:11px;color:#94a3b8;">Cotización válida por</div>
+                  <div id="skipoQuoteTimer" style="font-size:26px;font-weight:800;color:#fbbf24;margin-top:2px;font-variant-numeric:tabular-nums;">5s</div>
+                </div>
+
+                <div id="skipoBuyMsg" style="font-size:12px;margin-top:10px;min-height:16px;text-align:center;"></div>
               </div>
-
-              <div id="skipoBuyMsg" style="font-size:12px;margin-top:10px;min-height:16px;text-align:center;"></div>
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       <div id="releaseAuthModal" class="modal" style="display:none;" onclick="if(event.target===this)window.botCloseReleaseAuthModal()">
@@ -13478,7 +13470,29 @@ function addP2PBotStyles(){
   };
   window.skipoStopRefresh = function(){
     if(skipoRefreshInterval){ clearInterval(skipoRefreshInterval); skipoRefreshInterval = null; }
+    skipoStopPriceCountdown();
   };
+
+  // Cuenta regresiva del precio en pantalla, sincronizada con el refresco
+  // real cada 15s (mismo concepto que el contador de la web de Skipo) —
+  // pedido explícito del usuario. Se reinicia cada vez que el precio se
+  // actualiza de verdad, nunca queda desincronizada del refresco real.
+  var skipoPriceCountdownInterval = null;
+  function skipoStopPriceCountdown(){
+    if(skipoPriceCountdownInterval){ clearInterval(skipoPriceCountdownInterval); skipoPriceCountdownInterval = null; }
+  }
+  function skipoStartPriceCountdown(){
+    skipoStopPriceCountdown();
+    let secondsLeft = 15;
+    const el = document.getElementById("skipoPriceCountdown");
+    if(!el) return;
+    el.textContent = secondsLeft + "s";
+    skipoPriceCountdownInterval = setInterval(function(){
+      secondsLeft--;
+      if(secondsLeft < 0) secondsLeft = 15;
+      el.textContent = secondsLeft + "s";
+    }, 1000);
+  }
 
   window.skipoLoadBalances = async function(){
     try{
@@ -13509,6 +13523,7 @@ function addP2PBotStyles(){
       if(!d.ok){ if(msgEl) msgEl.textContent = d.error || "No se pudo cotizar"; return; }
       if(rateEl) rateEl.textContent = Number(d.quote.rate).toLocaleString("es-CL", {minimumFractionDigits:2, maximumFractionDigits:2}) + " CLP";
       if(msgEl) msgEl.textContent = "";
+      skipoStartPriceCountdown();
     }catch(e){
       if(msgEl) msgEl.textContent = "Error de red";
     }
@@ -13520,18 +13535,19 @@ function addP2PBotStyles(){
     if(skipoQuoteCountdown){ clearInterval(skipoQuoteCountdown); skipoQuoteCountdown = null; }
   }
 
-  window.skipoOpenBuyModal = function(){
-    document.getElementById("skipoBuyClp").value = "";
-    document.getElementById("skipoQuoteBox").style.display = "none";
-    document.getElementById("skipoBuyMsg").textContent = "";
-    document.getElementById("skipoBuyBtn").disabled = false;
+  // Deja el panel inline listo para una nueva compra — ya no hay modal que
+  // cerrar, solo se resetea el formulario.
+  window.skipoResetBuyForm = function(){
     skipoStopCountdown();
+    const clpInput = document.getElementById("skipoBuyClp");
+    const quoteBox = document.getElementById("skipoQuoteBox");
+    const msg = document.getElementById("skipoBuyMsg");
+    const btn = document.getElementById("skipoBuyBtn");
+    if(clpInput) clpInput.value = "";
+    if(quoteBox) quoteBox.style.display = "none";
+    if(msg) msg.textContent = "";
+    if(btn) btn.disabled = false;
     window._skipoLastQuote = null;
-    document.getElementById("skipoBuyModal").classList.add("open");
-  };
-  window.skipoCloseBuyModal = function(){
-    skipoStopCountdown();
-    document.getElementById("skipoBuyModal").classList.remove("open");
   };
 
   // Un solo click: cotiza y confirma de inmediato — pedido explícito del
@@ -13586,7 +13602,7 @@ function addP2PBotStyles(){
 
       msg.textContent = "✅ Compra confirmada"; msg.style.color = "#8df0b2";
       window.skipoLoadBalances();
-      setTimeout(window.skipoCloseBuyModal, 1500);
+      setTimeout(window.skipoResetBuyForm, 1500);
     }catch(e){
       skipoStopCountdown();
       msg.textContent = "Error de red"; msg.style.color = "#fb7185"; btn.disabled = false;
