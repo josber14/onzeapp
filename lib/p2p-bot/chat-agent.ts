@@ -425,13 +425,19 @@ async function processOrderLocked(
   // depender de detectar el mensaje de sistema exacto que manda Binance —
   // más confiable. 4:30 restantes, confirmado por el usuario.
   //
-  // "awaiting_problem" y "payment_made" quedan afuera de la lista de
-  // estados elegibles a propósito: es la forma de asegurar que se mande
-  // UNA sola vez (antes de este fix, nada impedía que se repitiera cada
-  // ~15s durante los 5 minutos restantes, ya que la condición seguía
-  // cumpliéndose después de transicionar a "awaiting_problem").
+  // Bug real confirmado en vivo (jul 2026, causó una orden cancelada):
+  // excluir "awaiting_problem" del estado actual NO alcanza para mandar el
+  // aviso una sola vez, porque la ventana de 4.5 min sigue activa después de
+  // resolver el aviso y volver al estado original (resumeState) — en el
+  // siguiente ciclo (~15s después) la condición se vuelve a cumplir y el
+  // aviso interrumpe DE NUEVO, justo antes de que el comprador alcance a
+  // responder la pregunta original que quedó pendiente. `expiryWarnedAt` se
+  // fija la primera vez y nunca se vuelve a null — así el aviso manda una
+  // única vez de verdad por orden, sin importar cuántas veces la
+  // conversación entre y salga de "awaiting_problem" dentro de la ventana.
   if (
     isPending &&
+    !cs.expiryWarnedAt &&
     cs.state !== "awaiting_verification" &&
     cs.state !== "awaiting_problem" &&
     cs.state !== "payment_made" &&
@@ -452,7 +458,7 @@ async function processOrderLocked(
       // conversación se haya interrumpido.
       await sendThenTransition(client, exchange, orderNo, cs,
         "Tu orden está por vencer. ¿Necesitas más tiempo para completar el pago?",
-        "awaiting_problem", { preInterruptState: cs.state }
+        "awaiting_problem", { preInterruptState: cs.state, expiryWarnedAt: new Date() }
       );
       return;
     }

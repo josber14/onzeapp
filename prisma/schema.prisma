@@ -1006,6 +1006,14 @@ model P2PChatState {
   erutReceived      Boolean   @default(false)
   retryCount        Int       @default(0)
   transferFailCount Int       @default(0)
+  // Se fija la PRIMERA vez que se manda el aviso de "tu orden está por
+  // vencer" — nunca se vuelve a null. Evita que el mismo aviso se repita en
+  // cada ciclo (~15s) durante toda la ventana de 4.5 min, interrumpiendo una
+  // y otra vez la respuesta real del comprador a la pregunta original (bug
+  // real confirmado en vivo, jul 2026: una orden se canceló porque el
+  // comprador nunca alcanzó a responder "personal/empresa" antes de que el
+  // aviso volviera a interrumpir).
+  expiryWarnedAt    DateTime?
   partialAmount     Decimal?  @db.Decimal(18, 8)
   totalAmount       Decimal?  @db.Decimal(18, 8)
   realName          String?
