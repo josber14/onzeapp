@@ -5,6 +5,7 @@ import { getBotOrders } from "@/lib/p2p-bot/engine";
 import { BybitP2PClient, bybitOrderGroup, bybitOrderStatusLabel } from "@/lib/p2p-bot/bybit-adapter";
 import { fetchLiveOrders } from "@/lib/p2p-bot/live";
 import { prisma } from "@/lib/prisma";
+import { consumeReleaseAuthToken } from "@/lib/security-pin";
 
 async function enrichOrdersWithChatData(orders: any[], tenantId: number, exchange: string) {
   if (!orders.length) return;
@@ -162,6 +163,17 @@ export async function POST(req: NextRequest) {
       return Response.json({ ok: false, error: "No autorizado" }, { status: 401 });
     }
 
+    // Liberar una orden mueve USDT real de forma irreversible — exige el
+    // token de un solo uso emitido recién al validar el PIN o la huella
+    // (ver lib/security-pin.ts). Sin token válido, no se libera nada.
+    if (action === "release") {
+      const token = String(body.token || "");
+      const authorized = await consumeReleaseAuthToken(tenantId, orderNumber, token);
+      if (!authorized) {
+        return Response.json({ ok: false, error: "Autorización inválida o expirada. Verifica tu clave o huella de nuevo." }, { status: 401 });
+      }
+    }
+
     if (exchange === "binance") {
 
       const creds = await prisma.binanceCredentials.findFirst({
@@ -217,6 +229,33 @@ export async function POST(req: NextRequest) {
           return Response.json({ ok: true, action, result: "Mensaje enviado" });
         }
         return Response.json({ ok: false, error: wsRes.error || "Error al enviar el mensaje" }, { status: 500 });
+      }
+
+      if (action === "release") {
+        // Credenciales SIEMPRE por label — la contraseña de fondos se guarda
+        // por label (BinanceCredentials.fundPasswordEnc) y debe corresponder
+        // EXACTAMENTE a la cuenta cuyas apiKey/secretKey se usan para llamar
+        // a Binance, o el releaseCoin se firmaría con una cuenta y la
+        // contraseña de fondos sería de otra.
+        const releaseCreds = await prisma.binanceCredentials.findUnique({
+          where: { tenantId_label: { tenantId, label } },
+        });
+        if (!releaseCreds) {
+          return Response.json({ ok: false, error: `Sin credenciales Binance para ${label}` }, { status: 400 });
+        }
+        const { BinanceP2PClient } = await import("@/lib/p2p-bot/binance-adapter");
+        const { getBinanceFundPassword } = await import("@/lib/binance-fund-password");
+        const fundPassword = await getBinanceFundPassword(tenantId, label);
+        if (!fundPassword) {
+          return Response.json({ ok: false, error: `No has configurado tu contraseña de fondos de Binance para ${label} todavía.` }, { status: 400 });
+        }
+        const client = new BinanceP2PClient(releaseCreds.apiKey, releaseCreds.secretKey);
+        try {
+          await client.releaseAssets(orderNumber, fundPassword);
+          return Response.json({ ok: true, action, result: "Activos liberados" });
+        } catch (e: any) {
+          return Response.json({ ok: false, error: e.message || "No se pudo liberar la orden" }, { status: 502 });
+        }
       }
 
       return Response.json({ ok: false, error: `Acción no soportada para Binance: ${action}` }, { status: 400 });

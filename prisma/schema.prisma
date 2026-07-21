@@ -64,6 +64,11 @@ model Tenant {
   p2pBotMarketSnapshots P2PBotMarketSnapshot[]
   p2pCapacities         P2PCapacity[]
   p2pCycles             P2PCycle[]
+  p2pWebAuthnCredentials P2PWebAuthnCredential[]
+  p2pWebAuthnChallenges P2PWebAuthnChallenge[]
+  p2pReleaseAuthTokens  P2PReleaseAuthToken[]
+  usdtClients           UsdtClient[]
+  usdtMarginTiers       UsdtMarginTier[]
   partnerAccounts       PartnerAccount[]
   partnerCapacities     PartnerCapacity[]
   partnerSales          PartnerSale[]
@@ -522,9 +527,150 @@ model TenantSettings {
   allowKyc                        Boolean  @default(false)
   themeOverrides                  Json?
   p2pResetCutoff                  BigInt?
+  // Clave de 4 dígitos para proteger "Liberar" en el panel P2P (jul 2026) —
+  // nunca se guarda en texto plano, solo el hash (bcryptjs, mismo patrón que
+  // el login). El bloqueo temporal es para que no se pueda "adivinar" por
+  // fuerza bruta (4 dígitos = solo 10.000 combinaciones posibles).
+  releasePinHash                  String?
+  releasePinFailedAttempts        Int       @default(0)
+  releasePinLockedUntil           DateTime?
   createdAt                       DateTime @default(now())
   updatedAt                       DateTime @updatedAt
   tenant                          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+// Huella/Face ID registrada para proteger "Liberar" en el panel P2P — el
+// estándar WebAuthn nunca nos da acceso a la huella en sí, solo una llave
+// pública que sirve para VERIFICAR firmas hechas con el sensor del propio
+// dispositivo del usuario.
+model P2PWebAuthnCredential {
+  id           Int      @id @default(autoincrement())
+  tenantId     Int
+  credentialId String   @unique
+  publicKey    Bytes
+  counter      BigInt   @default(0)
+  transports   Json?
+  deviceLabel  String?
+  createdAt    DateTime @default(now())
+  Tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+// Challenge temporal de una ceremonia WebAuthn en curso (registro o
+// autenticación) — se genera, se guarda acá, y se borra/expira apenas se
+// usa. Nunca vive más que unos minutos.
+model P2PWebAuthnChallenge {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int
+  challenge   String
+  purpose     String
+  // Solo se usa cuando purpose="authenticate" para liberar una orden — así
+  // auth-verify sabe a qué orden atar el token que emite al validar la huella.
+  orderNumber String?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  Tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+// Token corto (~2 min) que autoriza UNA liberación puntual de UNA orden
+// específica — se emite recién después de validar el PIN o la huella
+// correctamente, y se consume (marca used=true) al usarlo. Nunca se puede
+// reutilizar para otra orden ni más de una vez.
+model P2PReleaseAuthToken {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int
+  token       String   @unique
+  orderNumber String
+  used        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  Tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, orderNumber])
+}
+
+// ─── Clientes de venta de USDT al mayor (producto nuevo, 100% aislado del
+// panel ONZE — login/sesión propios, ver lib/usdt-client-session.ts) ───
+
+model UsdtClient {
+  id               Int       @id @default(autoincrement())
+  tenantId         Int
+  email            String
+  passwordHash     String
+  fullName         String
+  // pending_kyc: recién registrado, KYC sin revisar. pending_approval: KYC
+  // enviado, esperando aprobación manual del admin. approved: puede comprar.
+  // rejected / suspended: acceso bloqueado.
+  status           String    @default("pending_kyc")
+  // Tope de compra por operación/período para este cliente — protege contra
+  // que alguien cierre un precio con el proveedor y no pague. Null = sin
+  // límite propio (usa el default general, si existe).
+  purchaseLimitClp Decimal?  @db.Decimal(18, 2)
+  // Margen fijo para ESTE cliente puntual — si está definido, se usa siempre
+  // en vez de los tramos generales por monto (UsdtMarginTier). Null = sin
+  // override, usa los tramos configurados.
+  fixedMarginPct   Decimal?  @db.Decimal(6, 3)
+  // 2FA (TOTP) propio del cliente — requerido para retirar. Cifrado
+  // reversible porque hace falta el valor real para verificar cada código
+  // (no es un hash). totpEnabled queda en false hasta que el cliente
+  // confirme un código real durante la configuración.
+  totpSecretEnc    String?
+  totpEnabled      Boolean   @default(false)
+  // Dirección y red donde el cliente quiere recibir sus retiros de USDT —
+  // configurable por el propio cliente en su perfil, se usa como default en
+  // la pantalla de Retirar.
+  walletAddress    String?
+  withdrawalNetwork String?  // "TRC20" | "ERC20" | "BEP20"
+  // Datos del formulario de KYC tal como los captura el formulario propio del
+  // usuario — guardado como JSON en vez de columnas fijas porque el formulario
+  // real todavía no fue confirmado (evita inventar nombres de campo).
+  kycData          Json?
+  approvedAt       DateTime?
+  approvedByUserId Int?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contacts         UsdtClientContact[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([status])
+}
+
+// Libreta de direcciones propia del cliente — contactos externos guardados
+// para no tener que escribir la dirección cada vez que retira/envía a la
+// misma persona. Vive en nuestra base, no tiene relación con los "contacts"
+// de la API de Skipo (esos son de la cuenta del admin, no del cliente).
+model UsdtClientContact {
+  id        Int      @id @default(autoincrement())
+  clientId  Int
+  alias     String
+  currency  String   @default("USDT")
+  network   String   // "TRC20" | "ERC20" | "BEP20"
+  address   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  client    UsdtClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+}
+
+// Tramos de margen configurables por monto (CLP) — ej: 10.000-99.999 un %,
+// 100.000-499.999 otro %, etc. maxClp null = tramo más alto, sin techo.
+model UsdtMarginTier {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int
+  minClp    Decimal  @db.Decimal(18, 2)
+  maxClp    Decimal? @db.Decimal(18, 2)
+  marginPct Decimal  @db.Decimal(6, 3)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
 }
 
 model PasswordResetCode {
@@ -548,6 +694,13 @@ model BinanceCredentials {
   isActive     Boolean   @default(true)
   lastTestedAt DateTime?
   testStatus   String?
+  // Contraseña de fondos de Binance (Fund Password) — DISTINTA de apiKey/secretKey
+  // y de la clave de login. Binance la exige (cifrada con su llave RSA pública,
+  // ver lib/p2p-bot/binance-adapter.ts releaseAssets) en cada liberación de
+  // orden C2C. Cifrada acá con AES-256-GCM (reversible, no hash) porque hace
+  // falta el valor real para cifrarla de nuevo con la llave RSA de Binance en
+  // cada llamada — nunca se expone en ninguna respuesta de API.
+  fundPasswordEnc String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)

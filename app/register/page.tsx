@@ -4,6 +4,11 @@ import Link from "next/link";
 import { useState } from "react";
 
 export default function RegisterPage() {
+  // Antes de mostrar el formulario de operador (sin tocar nada de ese
+  // flujo), se pregunta qué tipo de cuenta quiere la persona — "mayorista"
+  // se manda al registro/KYC separado de clientes USDT, "operador" sigue
+  // exactamente el mismo formulario de siempre.
+  const [accountKind, setAccountKind] = useState<"" | "operador" | "mayorista">("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -81,6 +86,43 @@ export default function RegisterPage() {
         </div>
 
         <div className="rounded-[32px] border border-white/10 bg-white/95 p-6 shadow-[0_20px_80px_rgba(0,0,0,0.28)] backdrop-blur md:p-8">
+          {accountKind === "" ? (
+            <div>
+              <div className="mb-6 text-center">
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
+                  Crear cuenta
+                </h1>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  ¿Qué tipo de cuenta quieres crear?
+                </p>
+              </div>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setAccountKind("operador")}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-emerald-500 hover:bg-emerald-50"
+                >
+                  <div className="font-semibold text-slate-900">Operador</div>
+                  <div className="text-sm text-slate-500">Trabajas con nosotros operando la plataforma.</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { window.location.href = "/cliente-usdt/registro"; }}
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-emerald-500 hover:bg-emerald-50"
+                >
+                  <div className="font-semibold text-slate-900">Mayorista</div>
+                  <div className="text-sm text-slate-500">Quieres comprar USDT directo, con precio en vivo.</div>
+                </button>
+              </div>
+              <p className="mt-6 text-center text-sm text-slate-600">
+                ¿Ya tienes cuenta?{" "}
+                <Link href="/login" className="font-semibold text-emerald-700 transition hover:text-emerald-800">
+                  Inicia sesión
+                </Link>
+              </p>
+            </div>
+          ) : (
+          <>
           <div className="mb-6 text-center">
             <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
               Crear cuenta
@@ -200,6 +242,8 @@ export default function RegisterPage() {
               Inicia sesión
             </Link>
           </p>
+          </>
+          )}
         </div>
       </div>
     </main>

@@ -68,3 +68,6 @@ prisma/schema.prisma.backup
 prisma/dev.db
 .p2p-browser-data/
 .p2p-chrome-profile
+/keys/
+bot-monitor.log
+monitor-bot.js

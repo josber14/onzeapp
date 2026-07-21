@@ -1,5 +1,20 @@
 import { prisma } from "@/lib/prisma";
-import { createHmac } from "crypto";
+import { createHmac, publicEncrypt, constants } from "crypto";
+
+// RSA/ECB/OAEPWITHSHA-256ANDMGF1PADDING (fórmula Java que dio soporte de
+// Binance) — Node equivalente: RSA_PKCS1_OAEP_PADDING + oaepHash sha256.
+// Binance devuelve la llave pública como base64 crudo (sin envoltura PEM),
+// así que se envuelve acá si hace falta.
+function encryptForBinanceRsa(content: string, publicKeyRaw: string): string {
+  const pem = publicKeyRaw.includes("BEGIN PUBLIC KEY")
+    ? publicKeyRaw
+    : `-----BEGIN PUBLIC KEY-----\n${(publicKeyRaw.match(/.{1,64}/g) || [publicKeyRaw]).join("\n")}\n-----END PUBLIC KEY-----`;
+  const encrypted = publicEncrypt(
+    { key: pem, padding: constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha256" },
+    Buffer.from(content, "utf8")
+  );
+  return encrypted.toString("base64");
+}
 
 export async function getBinanceCredentials(tenantId: number, label = "ONZE") {
   return prisma.binanceCredentials.findUnique({ where: { tenantId_label: { tenantId, label } } });
@@ -37,6 +52,8 @@ export class BinanceP2PClient {
   private apiBase = "https://api.binance.com";
   private p2pBase = "https://p2p.binance.com";
   public latestWeight: number = 0;
+  // Límite confirmado por soporte de Binance (jul 2026) — ver comentario en releaseAssets.
+  private FUND_PWD_MAX_USD = 500;
 
   constructor(apiKey: string, secretKey: string) {
     this.apiKey = apiKey;
@@ -60,7 +77,7 @@ export class BinanceP2PClient {
       .join("&");
   }
 
-  async privateRequest(endpoint: string, params: Record<string, any> = {}, bodyPayload?: any, paramsInBody = false): Promise<any> {
+  async privateRequest(endpoint: string, params: Record<string, any> = {}, bodyPayload?: any, paramsInBody = false, method: "GET" | "POST" = "POST"): Promise<any> {
     if (paramsInBody) {
       bodyPayload = { ...(bodyPayload || {}), ...params };
       params = {};
@@ -72,14 +89,14 @@ export class BinanceP2PClient {
     const url = `${this.apiBase}${endpoint}?${queryStr}&signature=${encodeURIComponent(signature)}`;
 
     const opts: RequestInit = {
-      method: "POST",
+      method,
       headers: {
         "X-MBX-APIKEY": this.apiKey,
         "Content-Type": "application/json",
         "clientType": "web",
       },
     };
-    if (bodyPayload) opts.body = JSON.stringify(bodyPayload);
+    if (bodyPayload && method !== "GET") opts.body = JSON.stringify(bodyPayload);
 
     const res = await fetch(url, opts);
     const weightStr = res.headers.get("X-SAPI-USED-IP-WEIGHT-1M") || res.headers.get("x-sapi-used-ip-weight-1m") || res.headers.get("x-mbx-used-weight") || "0";
@@ -382,6 +399,60 @@ export class BinanceP2PClient {
 
   async verifyOrder(orderNumber: string) {
     return this.privateRequest("/sapi/v1/c2c/orderMatch/verifiedAdditionalKyc", {}, { orderNumber }, true);
+  }
+
+  // ─── Liberar orden (release) ───────────────────────────────────
+  // Endpoint y fórmula confirmados por soporte oficial de Binance (jul 2026):
+  // 1) getUserOrderDetail (param "adOrderNo", NO "orderNumber") da el
+  //    "selectedPayId" — el payId que exige releaseCoin.
+  // 2) rsa-public-key (GET) da la llave pública para cifrar la contraseña de
+  //    fondos (FUND_PWD) con RSA/OAEP-SHA256.
+  // 3) releaseCoin con authType=FUND_PWD, code=<cifrado>, payId, orderNumber,
+  //    confirmPaidType="normal" (NUNCA "quick" — eso libera sin que conste que
+  //    el comprador ya pagó, no se expone esa opción a propósito).
+  //
+  // Límite confirmado por soporte de Binance (jul 2026): la contraseña de
+  // fondos SOLO reemplaza el 2FA estándar para órdenes P2P de USD $500 o
+  // menos — no sirve para retiros, transferencias fiat, ni cambios de
+  // seguridad de la cuenta (eso siempre exige 2FA completo, sin excepción).
+  // Por encima de $500 Binance va a rechazar igual el release y pedir 2FA —
+  // se corta ANTES de intentarlo para dar un mensaje claro en vez de un error
+  // críptico de Binance. El activo siempre es USDT en este bot (paridad ~1:1
+  // con USD), así que "amount" de la orden se usa directo como proxy de USD.
+
+  async getUserOrderDetail(orderNumber: string) {
+    return this.privateRequest("/sapi/v1/c2c/orderMatch/getUserOrderDetail", {}, { adOrderNo: orderNumber }, true);
+  }
+
+  async getRsaPublicKey(): Promise<string> {
+    const res = await this.privateRequest("/sapi/v1/c2c/cryptography/rsa-public-key", {}, undefined, false, "GET");
+    return res.data;
+  }
+
+  async releaseAssets(orderNumber: string, fundPassword: string) {
+    const detail = await this.getUserOrderDetail(orderNumber);
+    const payId = detail?.data?.selectedPayId;
+    if (!payId) {
+      throw new Error(`No se pudo obtener selectedPayId para la orden ${orderNumber}`);
+    }
+
+    const amountUsdt = Number(detail?.data?.amount ?? 0);
+    if (amountUsdt > this.FUND_PWD_MAX_USD) {
+      throw new Error(
+        `Esta orden es de ${amountUsdt.toFixed(2)} USDT — supera el límite de $${this.FUND_PWD_MAX_USD} USD que Binance permite autorizar con la contraseña de fondos. Libérala manualmente desde la app de Binance.`
+      );
+    }
+
+    const publicKeyRaw = await this.getRsaPublicKey();
+    const code = encryptForBinanceRsa(fundPassword, publicKeyRaw);
+
+    return this.privateRequest("/sapi/v1/c2c/orderMatch/releaseCoin", {}, {
+      authType: "FUND_PWD",
+      code,
+      orderNumber,
+      payId,
+      confirmPaidType: "normal",
+    }, true);
   }
 
   // ─── Chat ──────────────────────────────────────────────────────

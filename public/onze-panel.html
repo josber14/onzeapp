@@ -2135,6 +2135,7 @@
       border-radius:16px !important;
     }
   </style>
+  <script src="/vendor/simplewebauthn-browser.umd.min.js"></script>
 </head>
 <body>
   <div class="mobile-topbar">
@@ -9810,6 +9811,8 @@ function addP2PBotStyles(){
             <button class="bot-panel-tab" data-paneltab="ads" onclick="window.botSwitchPanelTab('ads')">📢 Anuncios</button>
             <button class="bot-panel-tab" data-paneltab="accounts" onclick="window.botSwitchPanelTab('accounts')">🏦 Cuentas</button>
             <button class="bot-panel-tab" data-paneltab="mercado" onclick="window.botSwitchPanelTab('mercado')">📈 Mercado</button>
+            <button class="bot-panel-tab" data-paneltab="security" onclick="window.botSwitchPanelTab('security')">🔐 Seguridad</button>
+            <button class="bot-panel-tab" data-paneltab="skipo" onclick="window.botSwitchPanelTab('skipo')">💱 Skipo</button>
           </div>
           <div class="modal-content">
             <!-- Tab: Ordenes activas -->
@@ -9966,9 +9969,129 @@ function addP2PBotStyles(){
               </div>
               <div id="botMercadoRanking" style="max-height:380px;overflow-y:auto;"></div>
             </div>
+            <!-- Tab: Seguridad -->
+            <div id="botPanelSecurity" class="bot-panel-tab-content" style="display:none;">
+              <p class="section-text" style="margin-bottom:14px;">Protege la liberación de órdenes con una clave de 4 dígitos y/o tu huella. Se te pedirá una de las dos cada vez que liberes una orden.</p>
+
+              <div style="background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.1);border-radius:12px;padding:14px;margin-bottom:14px;">
+                <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">Clave de 4 dígitos</div>
+                <div id="botSecPinStatus" style="font-size:12px;color:#94a3b8;margin-bottom:10px;">Cargando...</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+                  <label style="font-size:11px;color:#94a3b8;">Nueva clave
+                    <input id="botSecPinNew" type="password" inputmode="numeric" maxlength="4" placeholder="••••" style="display:block;width:80px;padding:6px 8px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:14px;letter-spacing:4px;margin-top:4px;">
+                  </label>
+                  <label style="font-size:11px;color:#94a3b8;">Confirmar
+                    <input id="botSecPinConfirm" type="password" inputmode="numeric" maxlength="4" placeholder="••••" style="display:block;width:80px;padding:6px 8px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:14px;letter-spacing:4px;margin-top:4px;">
+                  </label>
+                  <button class="btn small" type="button" onclick="window.botPanelSavePin()">Guardar clave</button>
+                </div>
+                <div id="botSecPinMsg" style="font-size:12px;margin-top:8px;"></div>
+              </div>
+
+              <div style="background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.1);border-radius:12px;padding:14px;margin-bottom:14px;">
+                <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">Contraseña de fondos de Binance (<span id="botSecFundPwdLabel">ONZE</span>)</div>
+                <div id="botSecFundPwdStatus" style="font-size:12px;color:#94a3b8;margin-bottom:10px;">Cargando...</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+                  <label style="font-size:11px;color:#94a3b8;">Nueva contraseña de fondos
+                    <input id="botSecFundPwdNew" type="password" placeholder="Contraseña de fondos" style="display:block;width:220px;padding:6px 8px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:14px;margin-top:4px;">
+                  </label>
+                  <button class="btn small" type="button" onclick="window.botPanelSaveFundPassword()">Guardar</button>
+                </div>
+                <div id="botSecFundPwdMsg" style="font-size:12px;margin-top:8px;"></div>
+              </div>
+
+              <div style="background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.1);border-radius:12px;padding:14px;">
+                <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">Huella / Face ID</div>
+                <div id="botSecCredsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+                <button class="btn small ghost" type="button" onclick="window.botPanelRegisterFingerprint()">+ Registrar huella en este dispositivo</button>
+                <div id="botSecCredMsg" style="font-size:12px;margin-top:8px;"></div>
+              </div>
+            </div>
+            <!-- Tab: Skipo (cotizar/comprar USDT al mayor) -->
+            <div id="botPanelSkipo" class="bot-panel-tab-content" style="display:none;">
+              <p class="section-text" style="margin-bottom:14px;">Cotiza y compra USDT directo a Skipo con tu saldo en CLP. La compra es real e irreversible — se confirma con tu clave o huella.</p>
+
+              <div style="display:flex;gap:8px;margin-bottom:14px;">
+                <div style="flex:1;background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.1);border-radius:12px;padding:12px;">
+                  <div style="font-size:11px;color:#94a3b8;">Saldo CLP en Skipo</div>
+                  <div id="skipoBalanceClp" style="font-size:16px;font-weight:700;color:#e2e8f0;">—</div>
+                </div>
+                <div style="flex:1;background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.1);border-radius:12px;padding:12px;">
+                  <div style="font-size:11px;color:#94a3b8;">Saldo USDT en Skipo</div>
+                  <div id="skipoBalanceUsdt" style="font-size:16px;font-weight:700;color:#e2e8f0;">—</div>
+                </div>
+              </div>
+
+              <div id="skipoPriceCard" onclick="window.skipoOpenBuyModal()" style="cursor:pointer;background:linear-gradient(135deg,rgba(52,211,153,.12),rgba(15,23,42,.4));border:1px solid rgba(52,211,153,.25);border-radius:14px;padding:18px;text-align:center;transition:transform .1s;" onmouseover="this.style.transform='scale(1.01)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Precio actual USDT/CLP en Skipo</div>
+                <div id="skipoCurrentRate" style="font-size:28px;font-weight:800;color:#34d399;">Cargando...</div>
+                <div style="font-size:11px;color:#64748b;margin-top:6px;">Click para comprar</div>
+              </div>
+              <div id="skipoPriceMsg" style="font-size:12px;margin-top:8px;color:#fb7185;"></div>
+            </div>
           </div>
         </div>
       </div>
+      </div>
+
+      <div id="skipoBuyModal" class="modal" style="display:none;" onclick="if(event.target===this)window.skipoCloseBuyModal()">
+        <div class="modal-dialog">
+          <div class="modal-card" style="max-width:380px;">
+            <div class="modal-head">
+              <h3 class="modal-title">Comprar USDT en Skipo</h3>
+              <button class="close-btn" type="button" onclick="window.skipoCloseBuyModal()">&times;</button>
+            </div>
+            <div class="modal-content">
+              <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:10px;">Monto a pagar (CLP)
+                <input id="skipoBuyClp" type="number" min="500" step="1" placeholder="Ej: 100000" style="display:block;width:100%;padding:8px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:15px;margin-top:4px;">
+              </label>
+              <button class="btn small" type="button" style="width:100%;margin-bottom:12px;" onclick="window.skipoGetQuote()">Cotizar</button>
+
+              <div id="skipoQuoteBox" style="display:none;background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:12px;margin-bottom:12px;text-align:center;">
+                <div style="font-size:12px;color:#94a3b8;">Recibes</div>
+                <div id="skipoQuoteUsdt" style="font-size:22px;font-weight:800;color:#34d399;"></div>
+                <div id="skipoQuoteRate" style="font-size:11px;color:#64748b;margin-top:4px;"></div>
+                <div style="font-size:11px;color:#fbbf24;margin-top:6px;">Cotización válida por poco tiempo — confirma pronto</div>
+              </div>
+
+              <div id="skipoConfirmBox" style="display:none;">
+                <div style="display:flex;gap:8px;align-items:end;margin-bottom:10px;">
+                  <label style="font-size:11px;color:#94a3b8;flex:1;">Clave de 4 dígitos
+                    <input id="skipoConfirmPin" type="password" inputmode="numeric" maxlength="4" placeholder="••••" style="display:block;width:100%;padding:8px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:16px;letter-spacing:6px;margin-top:4px;">
+                  </label>
+                  <button class="btn small" type="button" onclick="window.skipoConfirmWithPin()">Confirmar</button>
+                </div>
+                <div style="text-align:center;color:#64748b;font-size:11px;margin:8px 0;">— o —</div>
+                <button class="btn small ghost" type="button" style="width:100%;" onclick="window.skipoConfirmWithFingerprint()">👆 Usar huella / Face ID</button>
+              </div>
+
+              <div id="skipoBuyMsg" style="font-size:12px;margin-top:10px;min-height:16px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="releaseAuthModal" class="modal" style="display:none;" onclick="if(event.target===this)window.botCloseReleaseAuthModal()">
+        <div class="modal-dialog">
+          <div class="modal-card" style="max-width:360px;">
+            <div class="modal-head">
+              <h3 class="modal-title">Liberar orden #<span id="releaseAuthOrderLabel"></span></h3>
+              <button class="close-btn" type="button" onclick="window.botCloseReleaseAuthModal()">&times;</button>
+            </div>
+            <div class="modal-content">
+              <p class="section-text" style="margin-bottom:10px;">Confirma con tu clave o tu huella para liberar los activos de esta orden. Esta acción es irreversible.</p>
+              <div style="display:flex;gap:8px;align-items:end;margin-bottom:10px;">
+                <label style="font-size:11px;color:#94a3b8;flex:1;">Clave de 4 dígitos
+                  <input id="releaseAuthPin" type="password" inputmode="numeric" maxlength="4" placeholder="••••" style="display:block;width:100%;padding:8px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:16px;letter-spacing:6px;margin-top:4px;">
+                </label>
+                <button class="btn small" type="button" onclick="window.botReleaseAuthWithPin()">Confirmar</button>
+              </div>
+              <div style="text-align:center;color:#64748b;font-size:11px;margin:8px 0;">— o —</div>
+              <button class="btn small ghost" type="button" style="width:100%;" onclick="window.botReleaseAuthWithFingerprint()">👆 Usar huella / Face ID</button>
+              <div id="releaseAuthMsg" style="font-size:12px;margin-top:10px;min-height:16px;"></div>
+            </div>
+          </div>
+        </div>
       </div>
     `;
     if(!document.querySelector(".views-container")){
@@ -11162,13 +11285,16 @@ function addP2PBotStyles(){
   window.botSwitchPanelTab = function(tab){
     document.querySelectorAll(".bot-panel-tab").forEach(t => t.classList.toggle("active", t.dataset.paneltab === tab));
     document.querySelectorAll(".bot-panel-tab-content").forEach(c => c.style.display = "none");
-    const map = { orders:"botPanelOrders", ads:"botPanelAds", accounts:"botPanelAccounts", mercado:"botPanelMercado" };
+    const map = { orders:"botPanelOrders", ads:"botPanelAds", accounts:"botPanelAccounts", mercado:"botPanelMercado", security:"botPanelSecurity", skipo:"botPanelSkipo" };
     const el = document.getElementById(map[tab]);
     if(el) el.style.display = "";
     if(tab === "orders"){ loadPanelOrders(); window.botStopMercadoRefresh(); }
     else if(tab === "ads"){ loadPanelAds(); window.botStopMercadoRefresh(); }
     else if(tab === "accounts"){ loadPanelAccounts(); window.botStopMercadoRefresh(); }
     else if(tab === "mercado"){ loadPanelMercado(); window.botStartMercadoRefresh(); }
+    else if(tab === "security"){ window.botLoadPanelSecurity(); window.botStopMercadoRefresh(); }
+    else if(tab === "skipo"){ window.botStopMercadoRefresh(); window.skipoStartRefresh(); }
+    if(tab !== "skipo") window.skipoStopRefresh();
   };
 
   let botOrdersMainTab = "active";
@@ -13065,16 +13191,409 @@ function addP2PBotStyles(){
     }
   };
 
-  window.botPanelReleaseOrder = async function(orderNumber){
-    if(!confirm("Liberar activos de la orden #" + orderNumber + "?")) return;
+  window.botPanelReleaseOrder = function(orderNumber){
+    window._releaseOrderNumber = orderNumber;
+    const label = document.getElementById("releaseAuthOrderLabel");
+    if(label) label.textContent = orderNumber;
+    const pinInput = document.getElementById("releaseAuthPin");
+    if(pinInput) pinInput.value = "";
+    const msg = document.getElementById("releaseAuthMsg");
+    if(msg){ msg.textContent = ""; }
+    const modal = document.getElementById("releaseAuthModal");
+    if(modal) modal.style.display = "flex";
+  };
+
+  window.botCloseReleaseAuthModal = function(){
+    const modal = document.getElementById("releaseAuthModal");
+    if(modal) modal.style.display = "none";
+  };
+
+  window.botFinishRelease = async function(orderNumber, token){
+    const msg = document.getElementById("releaseAuthMsg");
+    if(msg){ msg.textContent = "Liberando..."; msg.style.color = "#94a3b8"; }
     try{
-      await fetch("/api/p2p/bot/orders", {
+      const r = await fetch("/api/p2p/bot/orders", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ action: "release", orderNumber, exchange: botSelectedExchange })
+        body: JSON.stringify({ action:"release", orderNumber, exchange: botSelectedExchange, label: botActiveLabel, token })
       });
+      const d = await r.json();
+      if(!d.ok){
+        if(msg){ msg.textContent = d.error || "No se pudo liberar"; msg.style.color = "#fb7185"; }
+        return;
+      }
+      window.botCloseReleaseAuthModal();
       loadPanelOrders();
+    }catch(e){
+      if(msg){ msg.textContent = "Error de red"; msg.style.color = "#fb7185"; }
+    }
+  };
+
+  window.botReleaseAuthWithPin = async function(){
+    const orderNumber = window._releaseOrderNumber;
+    const pin = (document.getElementById("releaseAuthPin").value || "").trim();
+    const msg = document.getElementById("releaseAuthMsg");
+    if(!/^\d{4}$/.test(pin)){ msg.textContent = "Ingresa los 4 dígitos"; msg.style.color = "#fb7185"; return; }
+    msg.textContent = "Verificando..."; msg.style.color = "#94a3b8";
+    try{
+      const r = await fetch("/api/security/pin/verify", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ pin, orderNumber })
+      });
+      const d = await r.json();
+      if(!d.ok){ msg.textContent = d.error || "Clave incorrecta"; msg.style.color = "#fb7185"; return; }
+      await window.botFinishRelease(orderNumber, d.token);
+    }catch(e){ msg.textContent = "Error de red"; msg.style.color = "#fb7185"; }
+  };
+
+  window.botReleaseAuthWithFingerprint = async function(){
+    const orderNumber = window._releaseOrderNumber;
+    const msg = document.getElementById("releaseAuthMsg");
+    if(!window.SimpleWebAuthnBrowser){ msg.textContent = "Huella no disponible en este navegador"; msg.style.color = "#fb7185"; return; }
+    msg.textContent = "Esperando tu huella..."; msg.style.color = "#94a3b8";
+    try{
+      const optRes = await fetch("/api/security/webauthn/auth-options", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ orderNumber })
+      });
+      const optData = await optRes.json();
+      if(!optData.ok){ msg.textContent = optData.error || "No se pudo iniciar la verificación"; msg.style.color = "#fb7185"; return; }
+      const authResp = await window.SimpleWebAuthnBrowser.startAuthentication({ optionsJSON: optData.options });
+      const verifyRes = await fetch("/api/security/webauthn/auth-verify", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ orderNumber, response: authResp })
+      });
+      const verifyData = await verifyRes.json();
+      if(!verifyData.ok){ msg.textContent = verifyData.error || "Huella no verificada"; msg.style.color = "#fb7185"; return; }
+      await window.botFinishRelease(orderNumber, verifyData.token);
+    }catch(e){
+      msg.textContent = (e && e.name === "NotAllowedError") ? "Cancelado" : "Error al verificar huella";
+      msg.style.color = "#fb7185";
+    }
+  };
+
+  /* ————— Seguridad: PIN + huella ————— */
+
+  window.botLoadPanelSecurity = async function(){
+    const pinStatus = document.getElementById("botSecPinStatus");
+    const credsList = document.getElementById("botSecCredsList");
+    if(pinStatus) pinStatus.textContent = "Cargando...";
+    try{
+      const r = await fetch("/api/security/pin", { credentials:"include" });
+      const d = await r.json();
+      if(pinStatus){
+        pinStatus.textContent = d.ok && d.configured ? "✅ Clave configurada" : "⚠️ Todavía no has configurado una clave";
+        pinStatus.style.color = d.ok && d.configured ? "#8df0b2" : "#ffd36e";
+      }
+    }catch(e){
+      if(pinStatus) pinStatus.textContent = "No se pudo cargar el estado de la clave";
+    }
+    try{
+      const label = botActiveLabel || "ONZE";
+      const fundLabelEl = document.getElementById("botSecFundPwdLabel");
+      if(fundLabelEl) fundLabelEl.textContent = label;
+      const fr = await fetch("/api/security/binance-fund-password?label=" + encodeURIComponent(label), { credentials:"include" });
+      const fd = await fr.json();
+      const fundStatus = document.getElementById("botSecFundPwdStatus");
+      if(fundStatus){
+        fundStatus.textContent = fd.ok && fd.configured ? "✅ Configurada" : "⚠️ Todavía no has configurado tu contraseña de fondos";
+        fundStatus.style.color = fd.ok && fd.configured ? "#8df0b2" : "#ffd36e";
+      }
+    }catch(e){
+      const fundStatus = document.getElementById("botSecFundPwdStatus");
+      if(fundStatus) fundStatus.textContent = "No se pudo cargar el estado";
+    }
+    try{
+      const r2 = await fetch("/api/security/webauthn/credentials", { credentials:"include" });
+      const d2 = await r2.json();
+      window._botSecHasCredential = !!(d2.ok && d2.credentials?.length);
+      if(credsList){
+        if(!d2.ok || !d2.credentials?.length){
+          credsList.innerHTML = '<div style="font-size:12px;color:#64748b;">Sin huellas registradas todavía.</div>';
+        } else {
+          credsList.innerHTML = d2.credentials.map(c => {
+            const date = new Date(c.createdAt).toLocaleString("es-CL");
+            return `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:8px;padding:6px 10px;font-size:12px;">
+              <span>${c.deviceLabel || "Dispositivo"} <span style="color:#64748b;">— ${date}</span></span>
+              <button class="btn small danger" type="button" style="font-size:10px;padding:2px 8px;" onclick="window.botPanelDeleteFingerprint(${c.id})">Eliminar</button>
+            </div>`;
+          }).join("");
+        }
+      }
+    }catch(e){
+      if(credsList) credsList.innerHTML = '<div style="font-size:12px;color:#fb7185;">No se pudo cargar la lista.</div>';
+    }
+  };
+
+  // Si ya hay al menos una huella registrada, cambiar el PIN o agregar OTRA
+  // huella exige confirmar primero con una huella existente — pide el
+  // sensor directamente y devuelve el token de un solo uso que el backend
+  // exige (ver requireSettingsAuthIfConfigured en lib/security-pin.ts).
+  // Si todavía no hay ninguna huella (primera configuración), no hay nada
+  // que verificar y devuelve null sin pedir nada.
+  window.botGetSettingsAuthToken = async function(msg){
+    if(!window._botSecHasCredential) return { ok:true, token: null };
+    if(!window.SimpleWebAuthnBrowser){
+      if(msg){ msg.textContent = "Este navegador no soporta huella/Face ID"; msg.style.color = "#fb7185"; }
+      return { ok:false };
+    }
+    if(msg){ msg.textContent = "Confirma con tu huella para continuar..."; msg.style.color = "#94a3b8"; }
+    try{
+      const optRes = await fetch("/api/security/webauthn/auth-options", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ orderNumber: "__security_settings__" })
+      });
+      const optData = await optRes.json();
+      if(!optData.ok){ if(msg){ msg.textContent = optData.error || "No se pudo iniciar la verificación"; msg.style.color = "#fb7185"; } return { ok:false }; }
+      const authResp = await window.SimpleWebAuthnBrowser.startAuthentication({ optionsJSON: optData.options });
+      const verifyRes = await fetch("/api/security/webauthn/auth-verify", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ orderNumber: "__security_settings__", response: authResp })
+      });
+      const verifyData = await verifyRes.json();
+      if(!verifyData.ok){ if(msg){ msg.textContent = verifyData.error || "Huella no verificada"; msg.style.color = "#fb7185"; } return { ok:false }; }
+      return { ok:true, token: verifyData.token };
+    }catch(e){
+      if(msg){ msg.textContent = (e && e.name === "NotAllowedError") ? "Cancelado" : "Error al verificar huella"; msg.style.color = "#fb7185"; }
+      return { ok:false };
+    }
+  };
+
+  window.botPanelSaveFundPassword = async function(){
+    const fundPassword = (document.getElementById("botSecFundPwdNew").value || "").trim();
+    const msg = document.getElementById("botSecFundPwdMsg");
+    if(!fundPassword){ msg.textContent = "Ingresa la contraseña de fondos"; msg.style.color = "#fb7185"; return; }
+    const auth = await window.botGetSettingsAuthToken(msg);
+    if(!auth.ok) return;
+    msg.textContent = "Guardando..."; msg.style.color = "#94a3b8";
+    try{
+      const r = await fetch("/api/security/binance-fund-password", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ label: botActiveLabel || "ONZE", fundPassword, token: auth.token })
+      });
+      const d = await r.json();
+      if(!d.ok){ msg.textContent = d.error || "No se pudo guardar"; msg.style.color = "#fb7185"; return; }
+      msg.textContent = "✅ Contraseña de fondos guardada"; msg.style.color = "#8df0b2";
+      document.getElementById("botSecFundPwdNew").value = "";
+      window.botLoadPanelSecurity();
+    }catch(e){ msg.textContent = "Error de red"; msg.style.color = "#fb7185"; }
+  };
+
+  window.botPanelSavePin = async function(){
+    const pin = (document.getElementById("botSecPinNew").value || "").trim();
+    const confirmPin = (document.getElementById("botSecPinConfirm").value || "").trim();
+    const msg = document.getElementById("botSecPinMsg");
+    if(!/^\d{4}$/.test(pin)){ msg.textContent = "La clave debe ser exactamente 4 dígitos"; msg.style.color = "#fb7185"; return; }
+    if(pin !== confirmPin){ msg.textContent = "Las claves no coinciden"; msg.style.color = "#fb7185"; return; }
+    const auth = await window.botGetSettingsAuthToken(msg);
+    if(!auth.ok) return;
+    msg.textContent = "Guardando..."; msg.style.color = "#94a3b8";
+    try{
+      const r = await fetch("/api/security/pin", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ pin, token: auth.token })
+      });
+      const d = await r.json();
+      if(!d.ok){ msg.textContent = d.error || "No se pudo guardar"; msg.style.color = "#fb7185"; return; }
+      msg.textContent = "✅ Clave guardada"; msg.style.color = "#8df0b2";
+      document.getElementById("botSecPinNew").value = "";
+      document.getElementById("botSecPinConfirm").value = "";
+      window.botLoadPanelSecurity();
+    }catch(e){ msg.textContent = "Error de red"; msg.style.color = "#fb7185"; }
+  };
+
+  window.botPanelRegisterFingerprint = async function(){
+    const msg = document.getElementById("botSecCredMsg");
+    if(!window.SimpleWebAuthnBrowser){ msg.textContent = "Este navegador no soporta huella/Face ID"; msg.style.color = "#fb7185"; return; }
+    const auth = await window.botGetSettingsAuthToken(msg);
+    if(!auth.ok) return;
+    msg.textContent = "Sigue las instrucciones de tu dispositivo..."; msg.style.color = "#94a3b8";
+    try{
+      const optRes = await fetch("/api/security/webauthn/register-options", { method:"POST", credentials:"include" });
+      const optData = await optRes.json();
+      if(!optData.ok){ msg.textContent = optData.error || "No se pudo iniciar el registro"; msg.style.color = "#fb7185"; return; }
+      const regResp = await window.SimpleWebAuthnBrowser.startRegistration({ optionsJSON: optData.options });
+      const deviceLabel = (navigator.userAgentData?.platform || navigator.platform || "Dispositivo");
+      const verifyRes = await fetch("/api/security/webauthn/register-verify", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ response: regResp, deviceLabel, token: auth.token })
+      });
+      const verifyData = await verifyRes.json();
+      if(!verifyData.ok){ msg.textContent = verifyData.error || "No se pudo registrar"; msg.style.color = "#fb7185"; return; }
+      msg.textContent = "✅ Huella registrada"; msg.style.color = "#8df0b2";
+      window.botLoadPanelSecurity();
+    }catch(e){
+      msg.textContent = (e && e.name === "NotAllowedError") ? "Cancelado" : "Error al registrar";
+      msg.style.color = "#fb7185";
+    }
+  };
+
+  window.botPanelDeleteFingerprint = async function(id){
+    if(!confirm("¿Eliminar esta huella registrada?")) return;
+    try{
+      await fetch("/api/security/webauthn/credentials", {
+        method:"DELETE", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ id })
+      });
+      window.botLoadPanelSecurity();
     }catch(e){}
+  };
+
+  /* ————— Skipo (cotizar/comprar USDT al mayor) ————— */
+
+  let skipoRefreshInterval = null;
+  window._skipoLastQuote = null;
+
+  window.skipoStartRefresh = function(){
+    window.skipoLoadBalances();
+    window.skipoRefreshPrice();
+    if(skipoRefreshInterval) return;
+    skipoRefreshInterval = setInterval(window.skipoRefreshPrice, 15000);
+  };
+  window.skipoStopRefresh = function(){
+    if(skipoRefreshInterval){ clearInterval(skipoRefreshInterval); skipoRefreshInterval = null; }
+  };
+
+  window.skipoLoadBalances = async function(){
+    try{
+      const r = await fetch("/api/admin/skipo/balance", { credentials:"include" });
+      const d = await r.json();
+      if(!d.ok) return;
+      const clp = (d.balances||[]).find(b => b.currency === "CLP");
+      const usdt = (d.balances||[]).find(b => b.currency === "USDT");
+      const clpEl = document.getElementById("skipoBalanceClp");
+      const usdtEl = document.getElementById("skipoBalanceUsdt");
+      if(clpEl) clpEl.textContent = clp ? Number(clp.balance).toLocaleString("es-CL") + " CLP" : "—";
+      if(usdtEl) usdtEl.textContent = usdt ? Number(usdt.balance).toLocaleString("es-CL", {minimumFractionDigits:2, maximumFractionDigits:2}) + " USDT" : "—";
+    }catch(e){}
+  };
+
+  // Cotiza un monto de referencia SOLO para mostrar la tasa en la tarjeta —
+  // no confirma nada. Cada 15s para no gastar cuota de cotizaciones de más.
+  window.skipoRefreshPrice = async function(){
+    const rateEl = document.getElementById("skipoCurrentRate");
+    const msgEl = document.getElementById("skipoPriceMsg");
+    try{
+      const r = await fetch("/api/admin/skipo/quote", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ quantity: "100000", qtyCurrencyId: "CLP", side: "BUY" })
+      });
+      const d = await r.json();
+      if(!d.ok){ if(msgEl) msgEl.textContent = d.error || "No se pudo cotizar"; return; }
+      if(rateEl) rateEl.textContent = Number(d.quote.rate).toLocaleString("es-CL", {minimumFractionDigits:2, maximumFractionDigits:2}) + " CLP";
+      if(msgEl) msgEl.textContent = "";
+    }catch(e){
+      if(msgEl) msgEl.textContent = "Error de red";
+    }
+  };
+
+  window.skipoOpenBuyModal = function(){
+    document.getElementById("skipoBuyClp").value = "";
+    document.getElementById("skipoQuoteBox").style.display = "none";
+    document.getElementById("skipoConfirmBox").style.display = "none";
+    document.getElementById("skipoBuyMsg").textContent = "";
+    window._skipoLastQuote = null;
+    document.getElementById("skipoBuyModal").style.display = "flex";
+  };
+  window.skipoCloseBuyModal = function(){
+    document.getElementById("skipoBuyModal").style.display = "none";
+  };
+
+  window.skipoGetQuote = async function(){
+    const clp = (document.getElementById("skipoBuyClp").value || "").trim();
+    const msg = document.getElementById("skipoBuyMsg");
+    if(!clp || Number(clp) < 500){ msg.textContent = "Ingresa al menos 500 CLP"; msg.style.color = "#fb7185"; return; }
+    msg.textContent = "Cotizando..."; msg.style.color = "#94a3b8";
+    try{
+      const r = await fetch("/api/admin/skipo/quote", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ quantity: clp, qtyCurrencyId: "CLP", side: "BUY" })
+      });
+      const d = await r.json();
+      if(!d.ok){ msg.textContent = d.error || "No se pudo cotizar"; msg.style.color = "#fb7185"; return; }
+      window._skipoLastQuote = d.quote;
+      document.getElementById("skipoQuoteUsdt").textContent = Number(d.quote.baseQty).toLocaleString("es-CL",{minimumFractionDigits:2,maximumFractionDigits:8}) + " USDT";
+      document.getElementById("skipoQuoteRate").textContent = "Tasa: " + Number(d.quote.rate).toLocaleString("es-CL",{minimumFractionDigits:2,maximumFractionDigits:2}) + " CLP/USDT";
+      document.getElementById("skipoQuoteBox").style.display = "";
+      document.getElementById("skipoConfirmBox").style.display = "";
+      msg.textContent = "";
+    }catch(e){ msg.textContent = "Error de red"; msg.style.color = "#fb7185"; }
+  };
+
+  window.skipoConfirmWithPin = async function(){
+    const quote = window._skipoLastQuote;
+    const msg = document.getElementById("skipoBuyMsg");
+    if(!quote){ msg.textContent = "Cotiza primero"; msg.style.color = "#fb7185"; return; }
+    const pin = (document.getElementById("skipoConfirmPin").value || "").trim();
+    if(!/^\d{4}$/.test(pin)){ msg.textContent = "Ingresa los 4 dígitos"; msg.style.color = "#fb7185"; return; }
+    msg.textContent = "Verificando..."; msg.style.color = "#94a3b8";
+    try{
+      const r = await fetch("/api/security/pin/verify", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ pin, orderNumber: quote.ordId })
+      });
+      const d = await r.json();
+      if(!d.ok){ msg.textContent = d.error || "Clave incorrecta"; msg.style.color = "#fb7185"; return; }
+      await window.skipoFinishConfirm(quote.ordId, d.token);
+    }catch(e){ msg.textContent = "Error de red"; msg.style.color = "#fb7185"; }
+  };
+
+  window.skipoConfirmWithFingerprint = async function(){
+    const quote = window._skipoLastQuote;
+    const msg = document.getElementById("skipoBuyMsg");
+    if(!quote){ msg.textContent = "Cotiza primero"; msg.style.color = "#fb7185"; return; }
+    if(!window.SimpleWebAuthnBrowser){ msg.textContent = "Huella no disponible en este navegador"; msg.style.color = "#fb7185"; return; }
+    msg.textContent = "Esperando tu huella..."; msg.style.color = "#94a3b8";
+    try{
+      const optRes = await fetch("/api/security/webauthn/auth-options", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ orderNumber: quote.ordId })
+      });
+      const optData = await optRes.json();
+      if(!optData.ok){ msg.textContent = optData.error || "No se pudo iniciar la verificación"; msg.style.color = "#fb7185"; return; }
+      const authResp = await window.SimpleWebAuthnBrowser.startAuthentication({ optionsJSON: optData.options });
+      const verifyRes = await fetch("/api/security/webauthn/auth-verify", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ orderNumber: quote.ordId, response: authResp })
+      });
+      const verifyData = await verifyRes.json();
+      if(!verifyData.ok){ msg.textContent = verifyData.error || "Huella no verificada"; msg.style.color = "#fb7185"; return; }
+      await window.skipoFinishConfirm(quote.ordId, verifyData.token);
+    }catch(e){
+      msg.textContent = (e && e.name === "NotAllowedError") ? "Cancelado" : "Error al verificar huella";
+      msg.style.color = "#fb7185";
+    }
+  };
+
+  window.skipoFinishConfirm = async function(ordId, token){
+    const msg = document.getElementById("skipoBuyMsg");
+    msg.textContent = "Confirmando compra..."; msg.style.color = "#94a3b8";
+    try{
+      const r = await fetch("/api/admin/skipo/confirm", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ ordId, token })
+      });
+      const d = await r.json();
+      if(!d.ok){ msg.textContent = d.error || "No se pudo confirmar"; msg.style.color = "#fb7185"; return; }
+      msg.textContent = "✅ Compra confirmada"; msg.style.color = "#8df0b2";
+      window.skipoLoadBalances();
+      setTimeout(window.skipoCloseBuyModal, 1500);
+    }catch(e){ msg.textContent = "Error de red"; msg.style.color = "#fb7185"; }
   };
 
   window.botRefreshExchange = botRefreshExchange;
@@ -25119,6 +25638,302 @@ try{
     document.addEventListener('DOMContentLoaded', function(){ setTimeout(initSocioBn, 500); });
   } else {
     setTimeout(initSocioBn, 500);
+  }
+})();
+</script>
+
+<script>
+(function(){
+  "use strict";
+
+  async function usdtFetch(url, opts){
+    const res = await fetch(url, Object.assign({ credentials: 'include', headers: { 'Content-Type': 'application/json' } }, opts||{}));
+    return res.json();
+  }
+
+  function usdtMoney(n, decimals){
+    decimals = decimals === undefined ? 0 : decimals;
+    n = Number(n) || 0;
+    return n.toLocaleString('es-CL', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  }
+
+  function usdtStatusLabel(status){
+    const map = {
+      pending_kyc: 'KYC pendiente', pending_approval: 'En revisión',
+      approved: 'Aprobado', rejected: 'Rechazado', suspended: 'Suspendido',
+    };
+    return map[status] || status;
+  }
+  function usdtStatusColor(status){
+    if(status === 'approved') return '#34d399';
+    if(status === 'rejected' || status === 'suspended') return '#fb7185';
+    return '#fbbf24';
+  }
+
+  function buildUsdtClientsView(){
+    if(document.getElementById('view-usdt-clients')) return;
+    const section = document.createElement('section');
+    section.className = 'view admin-only-view';
+    section.id = 'view-usdt-clients';
+    section.innerHTML = `
+      <section class="section-card">
+        <div class="section-top">
+          <div>
+            <h2 class="section-title" style="font-size:18px;">Clientes USDT al mayor</h2>
+            <p class="section-text">Aprobación de clientes, límites de compra y tramos de margen.</p>
+          </div>
+        </div>
+
+        <h3 class="section-title" style="font-size:15px;margin-top:18px;">Tramos de margen por monto (CLP)</h3>
+        <div id="usdtTiersList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:24px;">
+          <label style="font-size:11px;color:#8aa0ba;">Desde (CLP)
+            <input id="usdtTierMin" type="number" min="0" style="display:block;width:130px;padding:6px 8px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;margin-top:4px;">
+          </label>
+          <label style="font-size:11px;color:#8aa0ba;">Hasta (CLP, vacío = sin techo)
+            <input id="usdtTierMax" type="number" min="0" style="display:block;width:150px;padding:6px 8px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;margin-top:4px;">
+          </label>
+          <label style="font-size:11px;color:#8aa0ba;">Margen (%)
+            <input id="usdtTierPct" type="number" min="0" step="0.01" style="display:block;width:100px;padding:6px 8px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;margin-top:4px;">
+          </label>
+          <button class="btn small" type="button" id="usdtTierSaveBtn" onclick="window.usdtSaveTier()">+ Agregar tramo</button>
+          <button class="btn small ghost" type="button" id="usdtTierCancelBtn" style="display:none;" onclick="window.usdtCancelEditTier()">Cancelar</button>
+        </div>
+        <div id="usdtTierMsg" style="font-size:12px;margin-bottom:20px;"></div>
+
+        <h3 class="section-title" style="font-size:15px;">Clientes</h3>
+        <div id="usdtClientsList" style="display:flex;flex-direction:column;gap:8px;"></div>
+      </section>
+
+      <div id="usdtKycModalBackdrop" class="p2p-capacity-modal-backdrop">
+        <div class="p2p-capacity-modal" style="max-width:640px;max-height:85vh;overflow-y:auto;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px;">
+            <h3 class="section-title" style="margin-bottom:4px;">Detalle KYC</h3>
+            <button class="btn secondary" type="button" onclick="window.usdtCloseKycModal()">Cerrar</button>
+          </div>
+          <div id="usdtKycModalBody" style="font-size:13px;color:#c4cdd8;line-height:1.7;"></div>
+        </div>
+      </div>
+    `;
+    document.querySelector('main')?.appendChild(section);
+  }
+
+  function addUsdtClientsNavButton(){
+    const btn = document.querySelector('[data-view-target="usdt-clients"]')
+      || (() => {
+        const target = document.querySelector('[data-view-target="socio-bn"]')
+          || document.querySelector('[data-view-target="p2p-bot"]');
+        if(!target || !target.parentNode) return null;
+        const b = document.createElement('button');
+        b.className = 'nav-btn admin-only-control';
+        b.type = 'button';
+        b.dataset.viewTarget = 'usdt-clients';
+        b.textContent = 'Clientes USDT';
+        target.parentNode.insertBefore(b, target.nextSibling);
+        return b;
+      })();
+    if(!btn) return;
+    btn.addEventListener('click', function(){
+      if(typeof switchView === 'function') switchView('usdt-clients');
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      window.usdtRefreshAll();
+    });
+  }
+
+  window.usdtRefreshAll = async function(){
+    await window.usdtLoadTiers();
+    await window.usdtLoadClients();
+  };
+
+  /* ————— Tramos de margen ————— */
+
+  window.usdtLoadTiers = async function(){
+    const res = await usdtFetch('/api/admin/usdt-margin-tiers');
+    const list = document.getElementById('usdtTiersList');
+    if(!list) return;
+    if(!res.ok || !res.tiers?.length){
+      list.innerHTML = '<div style="color:#64748b;font-size:12px;">Sin tramos configurados — se usa un margen fijo por defecto hasta que agregues alguno.</div>';
+      return;
+    }
+    list.innerHTML = res.tiers.map(function(t){
+      const rango = t.maxClp === null
+        ? usdtMoney(t.minClp) + ' CLP en adelante'
+        : usdtMoney(t.minClp) + ' – ' + usdtMoney(t.maxClp) + ' CLP';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:8px;padding:8px 12px;font-size:13px;">
+        <span>${rango}</span>
+        <span style="display:flex;align-items:center;gap:10px;">
+          <strong style="color:#34d399;">${t.marginPct}%</strong>
+          <button class="btn small secondary" type="button" style="padding:2px 8px;font-size:11px;" onclick='window.usdtEditTier(${JSON.stringify(t)})'>Editar</button>
+          <button class="btn small danger" type="button" style="padding:2px 8px;font-size:11px;" onclick="window.usdtDeleteTier(${t.id})">Eliminar</button>
+        </span>
+      </div>`;
+    }).join('');
+  };
+
+  window.__usdtEditingTierId = null;
+
+  window.usdtEditTier = function(tier){
+    window.__usdtEditingTierId = tier.id;
+    document.getElementById('usdtTierMin').value = tier.minClp;
+    document.getElementById('usdtTierMax').value = tier.maxClp ?? '';
+    document.getElementById('usdtTierPct').value = tier.marginPct;
+    document.getElementById('usdtTierSaveBtn').textContent = 'Guardar cambios';
+    document.getElementById('usdtTierCancelBtn').style.display = '';
+  };
+
+  window.usdtCancelEditTier = function(){
+    window.__usdtEditingTierId = null;
+    document.getElementById('usdtTierMin').value = '';
+    document.getElementById('usdtTierMax').value = '';
+    document.getElementById('usdtTierPct').value = '';
+    document.getElementById('usdtTierSaveBtn').textContent = '+ Agregar tramo';
+    document.getElementById('usdtTierCancelBtn').style.display = 'none';
+    document.getElementById('usdtTierMsg').textContent = '';
+  };
+
+  window.usdtSaveTier = async function(){
+    const msg = document.getElementById('usdtTierMsg');
+    const minClp = document.getElementById('usdtTierMin').value;
+    const maxClpRaw = document.getElementById('usdtTierMax').value;
+    const marginPct = document.getElementById('usdtTierPct').value;
+    const payload = { minClp: Number(minClp), maxClp: maxClpRaw === '' ? null : Number(maxClpRaw), marginPct: Number(marginPct) };
+    const editingId = window.__usdtEditingTierId;
+    const res = await usdtFetch('/api/admin/usdt-margin-tiers', {
+      method: editingId ? 'PATCH' : 'POST',
+      body: JSON.stringify(editingId ? { id: editingId, ...payload } : payload),
+    });
+    if(!res.ok){ msg.textContent = res.error || 'No se pudo guardar'; msg.style.color = '#fb7185'; return; }
+    window.usdtCancelEditTier();
+    window.usdtLoadTiers();
+  };
+
+  window.usdtDeleteTier = async function(id){
+    if(!confirm('¿Eliminar este tramo de margen?')) return;
+    await usdtFetch('/api/admin/usdt-margin-tiers?id=' + id, { method: 'DELETE' });
+    if(window.__usdtEditingTierId === id) window.usdtCancelEditTier();
+    window.usdtLoadTiers();
+  };
+
+  /* ————— Clientes ————— */
+
+  window.__usdtClientsCache = [];
+
+  window.usdtLoadClients = async function(){
+    const res = await usdtFetch('/api/admin/usdt-clients');
+    const list = document.getElementById('usdtClientsList');
+    if(!list) return;
+    if(!res.ok){ list.innerHTML = '<div style="color:#fb7185;font-size:12px;">' + (res.error||'Error al cargar') + '</div>'; return; }
+    window.__usdtClientsCache = res.clients || [];
+    if(!window.__usdtClientsCache.length){
+      list.innerHTML = '<div style="color:#64748b;font-size:12px;">Sin clientes registrados todavía.</div>';
+      return;
+    }
+    list.innerHTML = window.__usdtClientsCache.map(function(c){
+      const date = new Date(c.createdAt).toLocaleString('es-CL', { timeZone: 'America/Santiago' });
+      return `<div style="background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:12px 14px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+          <div>
+            <strong style="color:#fff;">${c.fullName}</strong>
+            <span style="background:rgba(0,0,0,.3);color:${usdtStatusColor(c.status)};padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;margin-left:8px;">${usdtStatusLabel(c.status)}</span>
+            <div style="color:#8aa0ba;font-size:12px;margin-top:3px;">${c.email} · Registrado ${date}</div>
+          </div>
+          <button class="btn secondary" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtOpenKycModal(${c.id})">Ver KYC</button>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+          ${c.status !== 'approved' ? `<button class="btn small" type="button" onclick="window.usdtSetStatus(${c.id},'approved')">Aprobar</button>` : ''}
+          ${c.status !== 'rejected' ? `<button class="btn small danger" type="button" onclick="window.usdtSetStatus(${c.id},'rejected')">Rechazar</button>` : ''}
+          ${c.status === 'approved' ? `<button class="btn small danger" type="button" onclick="window.usdtSetStatus(${c.id},'suspended')">Suspender</button>` : ''}
+        </div>
+        <div style="margin-top:10px;background:rgba(0,0,0,.2);border:1px solid rgba(148,163,184,.08);border-radius:8px;padding:10px 12px;">
+          <div style="font-size:11px;font-weight:700;color:#8aa0ba;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;">⚙️ Configuración de compra</div>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:end;">
+            <label style="font-size:12px;color:#c4cdd8;">
+              <div style="margin-bottom:3px;">Límite de compra</div>
+              <div style="position:relative;">
+                <input id="usdtLimit_${c.id}" type="text" inputmode="numeric" value="${c.purchaseLimitClp ? Number(c.purchaseLimitClp).toLocaleString('es-CL') : ''}" placeholder="Sin límite" oninput="window.usdtFormatClpInput(this)" style="width:150px;padding:6px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.7);color:#e2e8f0;font-size:13px;">
+              </div>
+              <div style="font-size:10px;color:#64748b;margin-top:2px;">CLP</div>
+            </label>
+            <label style="font-size:12px;color:#c4cdd8;">
+              <div style="margin-bottom:3px;">Margen fijo</div>
+              <input id="usdtMargin_${c.id}" type="number" min="0" step="0.01" value="${c.fixedMarginPct ?? ''}" placeholder="Usa tramos" style="width:110px;padding:6px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.7);color:#e2e8f0;font-size:13px;">
+              <div style="font-size:10px;color:#64748b;margin-top:2px;">% — vacío = tramos generales</div>
+            </label>
+            <button class="btn small secondary" type="button" onclick="window.usdtSaveClientSettings(${c.id})">Guardar</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  };
+
+  window.usdtSetStatus = async function(clientId, status){
+    const res = await usdtFetch('/api/admin/usdt-clients', { method: 'PATCH', body: JSON.stringify({ clientId, status }) });
+    if(!res.ok){ alert(res.error || 'No se pudo actualizar'); return; }
+    window.usdtLoadClients();
+  };
+
+  window.usdtFormatClpInput = function(el){
+    const digits = el.value.replace(/\D/g, '');
+    el.value = digits ? Number(digits).toLocaleString('es-CL') : '';
+  };
+
+  window.usdtSaveClientSettings = async function(clientId){
+    const limitDigits = document.getElementById('usdtLimit_' + clientId).value.replace(/\D/g, '');
+    const marginRaw = document.getElementById('usdtMargin_' + clientId).value;
+    const res = await usdtFetch('/api/admin/usdt-clients', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        clientId,
+        purchaseLimitClp: limitDigits === '' ? null : Number(limitDigits),
+        fixedMarginPct: marginRaw === '' ? null : Number(marginRaw),
+      }),
+    });
+    if(!res.ok){ alert(res.error || 'No se pudo guardar'); return; }
+    window.usdtLoadClients();
+  };
+
+  window.usdtOpenKycModal = function(clientId){
+    const client = window.__usdtClientsCache.find(c => c.id === clientId);
+    const backdrop = document.getElementById('usdtKycModalBackdrop');
+    const body = document.getElementById('usdtKycModalBody');
+    if(!client || !backdrop || !body) return;
+    const k = client.kycData || {};
+    const rows = [
+      ['RUT', k.rut], ['Nacionalidad', k.nacionalidad], ['Profesión', k.profesion],
+      ['Actividad / Giro', k.actividadGiro], ['Domicilio', k.domicilio], ['Teléfono', k.telefono],
+      ['Banco', k.nombreBanco], ['Tipo de cuenta', k.tipoCuenta], ['Número de cuenta', k.numeroCuenta],
+      ['Monto mensual esperado', k.montoMensualEsperado],
+      ['Productos a operar', Array.isArray(k.productosOperar) ? k.productosOperar.join(', ') : ''],
+      ['¿Dinero propio?', k.dineroEsPropio ? 'Sí' : 'No'],
+      ['Origen de los fondos', k.origenFondos],
+      ['Declaración PEP', k.declaracionPep],
+      ['Declaración US Person', k.declaracionUsPerson],
+      ['Acepta términos', k.aceptaTerminos ? 'Sí' : 'No'],
+    ];
+    let html = rows.map(([label, value]) => `<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid rgba(148,163,184,.08);"><span style="color:#8aa0ba;">${label}</span><span style="text-align:right;color:#e2e8f0;">${value ?? '—'}</span></div>`).join('');
+    if(k.duenoReal){
+      html += `<div style="margin-top:10px;font-weight:700;color:#fbbf24;">Dueño real de los fondos</div>`;
+      html += ['nombre','rut','nacionalidad','actividad','domicilio','telefono'].map(f => `<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid rgba(148,163,184,.08);"><span style="color:#8aa0ba;">${f}</span><span style="color:#e2e8f0;">${k.duenoReal[f] ?? '—'}</span></div>`).join('');
+    }
+    html += `<div style="margin-top:14px;"><div style="color:#8aa0ba;margin-bottom:6px;">Selfie con documento de identidad</div><img src="/api/admin/usdt-clients/${clientId}/selfie" style="max-width:100%;border-radius:10px;border:1px solid rgba(148,163,184,.15);" onerror="this.replaceWith(document.createTextNode('No se pudo cargar la imagen'))"></div>`;
+    body.innerHTML = html;
+    backdrop.classList.add('open');
+  };
+
+  window.usdtCloseKycModal = function(){
+    document.getElementById('usdtKycModalBackdrop')?.classList.remove('open');
+  };
+
+  function initUsdtClients(){
+    buildUsdtClientsView();
+    addUsdtClientsNavButton();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){ setTimeout(initUsdtClients, 500); });
+  } else {
+    setTimeout(initUsdtClients, 500);
   }
 })();
 </script>
