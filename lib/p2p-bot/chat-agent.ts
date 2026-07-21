@@ -678,10 +678,8 @@ async function handleClientResponse(
           await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "awaiting_previous_account", { isCompany: true, isReturning: true, erutRequested: true, previousBank: history.bank, chosenAccountIds: [history.accountId], retryCount: 0 });
         } else if (accounts.length === 1) {
           const acct = accounts[0];
-          const msg = erutNote + "\n\nTe envío la cuenta para que procedas con el pago:\n\n" +
-            formatSingleAccount(acct) +
-            "\n\nCuando realices el pago:\n- Marca \"Pagado\" en la orden\n- Envía el comprobante aquí en el chat";
-          await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "account_sent", { isCompany: true, erutRequested: true, chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
+          const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: true }, acct);
+          if (sent) await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
         } else {
           const pending = (cs.pendingFirstMsg || "").toLowerCase();
           const named = pending ? matchBank(pending, allAccounts) : null;
@@ -715,10 +713,8 @@ async function handleClientResponse(
         } else if (accounts.length === 1) {
           // New customer, single account: send directly
           const acct = accounts[0];
-          const msg = "Te envío la cuenta para que procedas con el pago:\n\n" +
-            formatSingleAccount(acct) +
-            "\n\nCuando realices el pago:\n- Marca \"Pagado\" en la orden\n- Envía el comprobante aquí en el chat";
-          await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "account_sent", { chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
+          const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, cs, acct);
+          if (sent) await updateState(cs.id, "account_sent", { chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
         } else {
           // Camino rápido: si en el primer mensaje ya pidió varias cuentas o
           // nombró un banco puntual, resolvemos directo en vez de preguntar
