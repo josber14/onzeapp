@@ -1573,6 +1573,34 @@
       }
     }
 
+    .wa-float{
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 56px;
+      height: 56px;
+      border-radius: 9999px;
+      background: #10b981;
+      color: #fff;
+      text-decoration: none;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.35);
+      z-index: 999;
+      transition: background 0.2s ease;
+    }
+    .wa-float:hover{
+      background: #34d399;
+    }
+    .wa-float .wa-icon{
+      font-size: 24px;
+      line-height: 1;
+    }
+    .wa-float .wa-text{
+      display: none;
+    }
+
     @media (max-width: 700px){
       .capital-card{
         padding:12px;
@@ -1776,8 +1804,6 @@
       .wa-float{
         right: 12px !important;
         bottom: 12px !important;
-        min-width: 132px !important;
-        padding: 10px 14px !important;
       }
     }
 
@@ -14160,8 +14186,6 @@ function addP2PBotStyles(){
       .wa-float{
         right: 12px !important;
         bottom: 12px !important;
-        min-width: 132px !important;
-        padding: 10px 14px !important;
       }
     }
 
