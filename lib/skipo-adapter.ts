@@ -49,7 +49,10 @@ export class SkipoClient {
     let data: any = null;
     try { data = text ? JSON.parse(text) : null; } catch { /* respuesta no-JSON */ }
     if (!res.ok) {
-      const msg = data?.message || text || `HTTP ${res.status}`;
+      // Mostrar el cuerpo COMPLETO del error (no solo .message) — Skipo a
+      // veces manda detalle útil en otros campos (ej. errors, details, code)
+      // que .message por sí solo no revela.
+      const msg = data ? JSON.stringify(data) : (text || `HTTP ${res.status}`);
       throw new Error(`Skipo error (${res.status}) en ${path}: ${msg}`);
     }
     return data;
