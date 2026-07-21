@@ -601,10 +601,15 @@ export async function handleVerified(
   // en esa identidad (no solo 1) reduce ese riesgo — el saludo por nombre
   // (arriba) se mantiene desde la 1ra, solo esta oferta puntual de cuenta
   // exige más evidencia.
-  if (known?.lastAccountId && known.orderCount >= 2) {
+  // Pedido explícito del usuario (jul 2026): un cliente frecuente (2+
+  // compras confirmadas) NUNCA debe recibir la pregunta de personal/empresa
+  // — se le saluda y se le pregunta directo si sigue con la misma cuenta de
+  // la vez pasada o quiere una distinta.
+  if (known && known.orderCount >= 2) {
     const ad = findMatchingAd(activeAds, order);
     const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
-    const prevAccount = allAccounts.find((a: any) => a.id === known.lastAccountId);
+    const prevAccount = known.lastAccountId ? allAccounts.find((a: any) => a.id === known.lastAccountId) : null;
+
     if (prevAccount) {
       const greeting = `${hello} ¿Vas a transferir a la misma cuenta de la última vez (${known.lastBank})? Avísame si necesitas que te la reenvíe, o si prefieres usar otra cuenta.`;
       const sent = await sendAndTrack(client, exchange, order.orderNumber, cs, greeting, createdAtTs);
@@ -618,6 +623,25 @@ export async function handleVerified(
       }
       return;
     }
+
+    // Cliente frecuente pero sin cuenta puntual registrada — típicamente
+    // porque la vez pasada pagó directo sin esperar a que el bot terminara
+    // de mandarle la cuenta (no hay forma de saber a cuál transfirió). Aun
+    // así, nunca se le pregunta personal/empresa: se pregunta genérico si
+    // sigue con la misma cuenta o quiere una distinta. Si confirma "misma"
+    // sin que sepamos cuál es, awaiting_previous_account ya cae de forma
+    // segura a la cuenta principal por defecto.
+    const greeting = `${hello} ¿Vas a transferir a la misma cuenta que usaste la última vez, o prefieres que te pase una cuenta distinta esta vez?`;
+    const sent = await sendAndTrack(client, exchange, order.orderNumber, cs, greeting, createdAtTs);
+    if (sent) {
+      await updateState(cs.id, "awaiting_previous_account", {
+        isCompany: known.lastIsCompany,
+        isReturning,
+        previousBank: null,
+        chosenAccountIds: [],
+      });
+    }
+    return;
   }
 
   const greeting = buildInitialGreeting(isReturning, name);
