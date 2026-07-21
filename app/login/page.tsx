@@ -200,7 +200,7 @@ export default function LoginPage() {
                   onClick={() => chooseType("usdt")}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-emerald-500 hover:bg-emerald-50"
                 >
-                  <div className="font-semibold text-slate-900">Comprador USDT</div>
+                  <div className="font-semibold text-slate-900">Activos Digitales</div>
                   <div className="text-sm text-slate-500">Compras USDT directo, con precio en vivo.</div>
                 </button>
               </div>
@@ -219,7 +219,7 @@ export default function LoginPage() {
             <>
               <div className="mb-6 text-center">
                 <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
-                  {accountType === "operador" ? "Entrar como Operador" : "Entrar como Comprador USDT"}
+                  {accountType === "operador" ? "Entrar como Operador" : "Entrar como Activos Digitales"}
                 </h1>
                 <p className="mt-2 text-sm leading-6 text-slate-500">{email}</p>
               </div>
