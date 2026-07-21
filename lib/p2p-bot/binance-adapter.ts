@@ -245,6 +245,13 @@ export class BinanceP2PClient {
     const initAmountBefore = Number(detail.initAmount);
     const surplusAmountBefore = Number(detail.surplusAmount);
     const initAmountAfter = initAmountBefore + (targetSurplusAmount - surplusAmountBefore);
+    // Truncar (no redondear) a 2 decimales — bug real confirmado en vivo
+    // (jul 2026): .toFixed(2) REDONDEA, así que un balance con más precisión
+    // (ej. 12515.605) podía subir a 12515.61, pidiéndole a Binance 0.01 MÁS
+    // de lo que realmente había disponible. Binance entonces rechazaba la
+    // activación del anuncio: "la cantidad objetivo no puede superar el
+    // balance de la cuenta". Truncar hacia abajo nunca pide más de lo real.
+    const initAmountAfterSafe = Math.floor(initAmountAfter * 100) / 100;
 
     const body: Record<string, any> = {
       adAdditionalKycVerifyItems: detail.adAdditionalKycVerifyItems ?? [],
@@ -259,7 +266,7 @@ export class BinanceP2PClient {
       classify: detail.classify,
       fiatScale: detail.fiatScale,
       fiatUnit: detail.fiatUnit,
-      initAmount: initAmountAfter.toFixed(2), // único cambio intencional
+      initAmount: initAmountAfterSafe.toFixed(2), // único cambio intencional
       isSafePayment: false,
       isStarTraderAdditionalKycExclusion: false,
       isStarTraderCounterpartyConditionsExclusion: false,
