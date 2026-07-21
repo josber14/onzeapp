@@ -10060,38 +10060,29 @@ function addP2PBotStyles(){
       </div>
       </div>
 
-      <div id="skipoBuyModal" class="modal" style="display:none;" onclick="if(event.target===this)window.skipoCloseBuyModal()">
+      <div id="skipoBuyModal" class="modal" onclick="if(event.target===this)window.skipoCloseBuyModal()">
         <div class="modal-dialog">
-          <div class="modal-card" style="max-width:380px;">
+          <div class="modal-card" style="max-width:400px;">
             <div class="modal-head">
               <h3 class="modal-title">Comprar USDT en Skipo</h3>
               <button class="close-btn" type="button" onclick="window.skipoCloseBuyModal()">&times;</button>
             </div>
             <div class="modal-content">
               <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:10px;">Monto a pagar (CLP)
-                <input id="skipoBuyClp" type="number" min="500" step="1" placeholder="Ej: 100000" style="display:block;width:100%;padding:8px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:15px;margin-top:4px;">
+                <input id="skipoBuyClp" type="number" min="500" step="1" placeholder="Ej: 100000" style="display:block;width:100%;padding:10px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:16px;margin-top:4px;">
               </label>
-              <button class="btn small" type="button" style="width:100%;margin-bottom:12px;" onclick="window.skipoGetQuote()">Cotizar</button>
+              <button id="skipoBuyBtn" class="btn small" type="button" style="width:100%;margin-bottom:14px;" onclick="window.skipoBuy()">Comprar</button>
 
-              <div id="skipoQuoteBox" style="display:none;background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:12px;margin-bottom:12px;text-align:center;">
-                <div style="font-size:12px;color:#94a3b8;">Recibes</div>
-                <div id="skipoQuoteUsdt" style="font-size:22px;font-weight:800;color:#34d399;"></div>
-                <div id="skipoQuoteRate" style="font-size:11px;color:#64748b;margin-top:4px;"></div>
-                <div style="font-size:11px;color:#fbbf24;margin-top:6px;">Cotización válida por poco tiempo — confirma pronto</div>
+              <div id="skipoQuoteBox" style="display:none;background:linear-gradient(180deg,rgba(52,211,153,.08) 0%,rgba(15,23,42,.5) 100%);border:1px solid rgba(52,211,153,.2);border-radius:14px;padding:18px;margin-bottom:6px;text-align:center;">
+                <div style="font-size:11px;color:#94a3b8;letter-spacing:.04em;text-transform:uppercase;">Estás comprando</div>
+                <div id="skipoQuoteUsdt" style="font-size:30px;font-weight:800;color:#34d399;margin-top:4px;letter-spacing:-.02em;"></div>
+                <div id="skipoQuoteRate" style="font-size:13px;color:#94a3b8;margin-top:6px;"></div>
+                <div style="height:1px;background:rgba(148,163,184,.15);margin:14px 0;"></div>
+                <div style="font-size:11px;color:#94a3b8;">Cotización válida por</div>
+                <div id="skipoQuoteTimer" style="font-size:26px;font-weight:800;color:#fbbf24;margin-top:2px;font-variant-numeric:tabular-nums;">5s</div>
               </div>
 
-              <div id="skipoConfirmBox" style="display:none;">
-                <div style="display:flex;gap:8px;align-items:end;margin-bottom:10px;">
-                  <label style="font-size:11px;color:#94a3b8;flex:1;">Clave de 4 dígitos
-                    <input id="skipoConfirmPin" type="password" inputmode="numeric" maxlength="4" placeholder="••••" style="display:block;width:100%;padding:8px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:16px;letter-spacing:6px;margin-top:4px;">
-                  </label>
-                  <button class="btn small" type="button" onclick="window.skipoConfirmWithPin()">Confirmar</button>
-                </div>
-                <div style="text-align:center;color:#64748b;font-size:11px;margin:8px 0;">— o —</div>
-                <button class="btn small ghost" type="button" style="width:100%;" onclick="window.skipoConfirmWithFingerprint()">👆 Usar huella / Face ID</button>
-              </div>
-
-              <div id="skipoBuyMsg" style="font-size:12px;margin-top:10px;min-height:16px;"></div>
+              <div id="skipoBuyMsg" style="font-size:12px;margin-top:10px;min-height:16px;text-align:center;"></div>
             </div>
           </div>
         </div>
@@ -13523,103 +13514,83 @@ function addP2PBotStyles(){
     }
   };
 
+  var skipoQuoteCountdown = null;
+
+  function skipoStopCountdown(){
+    if(skipoQuoteCountdown){ clearInterval(skipoQuoteCountdown); skipoQuoteCountdown = null; }
+  }
+
   window.skipoOpenBuyModal = function(){
     document.getElementById("skipoBuyClp").value = "";
     document.getElementById("skipoQuoteBox").style.display = "none";
-    document.getElementById("skipoConfirmBox").style.display = "none";
     document.getElementById("skipoBuyMsg").textContent = "";
+    document.getElementById("skipoBuyBtn").disabled = false;
+    skipoStopCountdown();
     window._skipoLastQuote = null;
-    document.getElementById("skipoBuyModal").style.display = "flex";
+    document.getElementById("skipoBuyModal").classList.add("open");
   };
   window.skipoCloseBuyModal = function(){
-    document.getElementById("skipoBuyModal").style.display = "none";
+    skipoStopCountdown();
+    document.getElementById("skipoBuyModal").classList.remove("open");
   };
 
-  window.skipoGetQuote = async function(){
+  // Un solo click: cotiza y confirma de inmediato — pedido explícito del
+  // usuario (jul 2026), sin PIN ni huella para este flujo puntual. El
+  // temporizador es informativo (misma ventana de validez que muestra la
+  // web de Skipo), la confirmación llega antes de que se agote.
+  window.skipoBuy = async function(){
     const clp = (document.getElementById("skipoBuyClp").value || "").trim();
     const msg = document.getElementById("skipoBuyMsg");
+    const btn = document.getElementById("skipoBuyBtn");
     if(!clp || Number(clp) < 500){ msg.textContent = "Ingresa al menos 500 CLP"; msg.style.color = "#fb7185"; return; }
+
+    btn.disabled = true;
+    skipoStopCountdown();
     msg.textContent = "Cotizando..."; msg.style.color = "#94a3b8";
+    document.getElementById("skipoQuoteBox").style.display = "none";
+
     try{
-      const r = await fetch("/api/admin/skipo/quote", {
+      const qr = await fetch("/api/admin/skipo/quote", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ quantity: clp, qtyCurrencyId: "CLP", side: "BUY" })
       });
-      const d = await r.json();
-      if(!d.ok){ msg.textContent = d.error || "No se pudo cotizar"; msg.style.color = "#fb7185"; return; }
-      window._skipoLastQuote = d.quote;
-      document.getElementById("skipoQuoteUsdt").textContent = Number(d.quote.baseQty).toLocaleString("es-CL",{minimumFractionDigits:2,maximumFractionDigits:8}) + " USDT";
-      document.getElementById("skipoQuoteRate").textContent = "Tasa: " + Number(d.quote.rate).toLocaleString("es-CL",{minimumFractionDigits:2,maximumFractionDigits:2}) + " CLP/USDT";
+      const qd = await qr.json();
+      if(!qd.ok){ msg.textContent = qd.error || "No se pudo cotizar"; msg.style.color = "#fb7185"; btn.disabled = false; return; }
+
+      const quote = qd.quote;
+      window._skipoLastQuote = quote;
+      document.getElementById("skipoQuoteUsdt").textContent = Number(quote.baseQty).toLocaleString("es-CL",{minimumFractionDigits:2,maximumFractionDigits:8}) + " USDT";
+      document.getElementById("skipoQuoteRate").textContent = "a " + Number(quote.rate).toLocaleString("es-CL",{minimumFractionDigits:2,maximumFractionDigits:2}) + " CLP/USDT";
       document.getElementById("skipoQuoteBox").style.display = "";
-      document.getElementById("skipoConfirmBox").style.display = "";
-      msg.textContent = "";
-    }catch(e){ msg.textContent = "Error de red"; msg.style.color = "#fb7185"; }
-  };
 
-  window.skipoConfirmWithPin = async function(){
-    const quote = window._skipoLastQuote;
-    const msg = document.getElementById("skipoBuyMsg");
-    if(!quote){ msg.textContent = "Cotiza primero"; msg.style.color = "#fb7185"; return; }
-    const pin = (document.getElementById("skipoConfirmPin").value || "").trim();
-    if(!/^\d{4}$/.test(pin)){ msg.textContent = "Ingresa los 4 dígitos"; msg.style.color = "#fb7185"; return; }
-    msg.textContent = "Verificando..."; msg.style.color = "#94a3b8";
-    try{
-      const r = await fetch("/api/security/pin/verify", {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ pin, orderNumber: quote.ordId })
-      });
-      const d = await r.json();
-      if(!d.ok){ msg.textContent = d.error || "Clave incorrecta"; msg.style.color = "#fb7185"; return; }
-      await window.skipoFinishConfirm(quote.ordId, d.token);
-    }catch(e){ msg.textContent = "Error de red"; msg.style.color = "#fb7185"; }
-  };
+      let secondsLeft = 5;
+      const timerEl = document.getElementById("skipoQuoteTimer");
+      timerEl.textContent = secondsLeft + "s";
+      timerEl.style.color = "#fbbf24";
+      skipoQuoteCountdown = setInterval(function(){
+        secondsLeft--;
+        if(secondsLeft <= 0){ skipoStopCountdown(); timerEl.textContent = "0s"; timerEl.style.color = "#fb7185"; return; }
+        timerEl.textContent = secondsLeft + "s";
+      }, 1000);
 
-  window.skipoConfirmWithFingerprint = async function(){
-    const quote = window._skipoLastQuote;
-    const msg = document.getElementById("skipoBuyMsg");
-    if(!quote){ msg.textContent = "Cotiza primero"; msg.style.color = "#fb7185"; return; }
-    if(!window.SimpleWebAuthnBrowser){ msg.textContent = "Huella no disponible en este navegador"; msg.style.color = "#fb7185"; return; }
-    msg.textContent = "Esperando tu huella..."; msg.style.color = "#94a3b8";
-    try{
-      const optRes = await fetch("/api/security/webauthn/auth-options", {
+      msg.textContent = "Confirmando compra..."; msg.style.color = "#94a3b8";
+      const cr = await fetch("/api/admin/skipo/confirm", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ orderNumber: quote.ordId })
+        body: JSON.stringify({ ordId: quote.ordId })
       });
-      const optData = await optRes.json();
-      if(!optData.ok){ msg.textContent = optData.error || "No se pudo iniciar la verificación"; msg.style.color = "#fb7185"; return; }
-      const authResp = await window.SimpleWebAuthnBrowser.startAuthentication({ optionsJSON: optData.options });
-      const verifyRes = await fetch("/api/security/webauthn/auth-verify", {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ orderNumber: quote.ordId, response: authResp })
-      });
-      const verifyData = await verifyRes.json();
-      if(!verifyData.ok){ msg.textContent = verifyData.error || "Huella no verificada"; msg.style.color = "#fb7185"; return; }
-      await window.skipoFinishConfirm(quote.ordId, verifyData.token);
-    }catch(e){
-      msg.textContent = (e && e.name === "NotAllowedError") ? "Cancelado" : "Error al verificar huella";
-      msg.style.color = "#fb7185";
-    }
-  };
+      const cd = await cr.json();
+      skipoStopCountdown();
+      if(!cd.ok){ msg.textContent = cd.error || "No se pudo confirmar"; msg.style.color = "#fb7185"; btn.disabled = false; return; }
 
-  window.skipoFinishConfirm = async function(ordId, token){
-    const msg = document.getElementById("skipoBuyMsg");
-    msg.textContent = "Confirmando compra..."; msg.style.color = "#94a3b8";
-    try{
-      const r = await fetch("/api/admin/skipo/confirm", {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ ordId, token })
-      });
-      const d = await r.json();
-      if(!d.ok){ msg.textContent = d.error || "No se pudo confirmar"; msg.style.color = "#fb7185"; return; }
       msg.textContent = "✅ Compra confirmada"; msg.style.color = "#8df0b2";
       window.skipoLoadBalances();
       setTimeout(window.skipoCloseBuyModal, 1500);
-    }catch(e){ msg.textContent = "Error de red"; msg.style.color = "#fb7185"; }
+    }catch(e){
+      skipoStopCountdown();
+      msg.textContent = "Error de red"; msg.style.color = "#fb7185"; btn.disabled = false;
+    }
   };
 
   window.botRefreshExchange = botRefreshExchange;

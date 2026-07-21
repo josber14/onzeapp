@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { SkipoClient } from "@/lib/skipo-adapter";
-import { consumeReleaseAuthToken } from "@/lib/security-pin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,9 +17,9 @@ async function requireAdmin() {
   return { session };
 }
 
-// Ejecuta la compra real — mismo token de un solo uso emitido por
-// /api/security/pin/verify o /api/security/webauthn/auth-verify (ya
-// genéricos, se reutilizan pasando el ordId de Skipo como "orderNumber").
+// Ejecuta la compra real — pedido explícito del usuario (jul 2026): sin
+// PIN ni huella para este flujo puntual, solo la sesión de admin ya
+// existente (requireAdmin).
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin();
   if ("error" in auth) return auth.error;
@@ -29,13 +28,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const ordId = String(body.ordId || "");
-  const token = String(body.token || "");
   if (!ordId) return NextResponse.json({ ok: false, error: "Falta ordId" }, { status: 400 });
-
-  const authorized = await consumeReleaseAuthToken(session.tenantId, ordId, token);
-  if (!authorized) {
-    return NextResponse.json({ ok: false, error: "Autorización inválida o expirada. Verifica tu clave o huella de nuevo." }, { status: 401 });
-  }
 
   try {
     const client = new SkipoClient();
