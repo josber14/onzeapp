@@ -98,12 +98,14 @@ export default function ContactosPage() {
           <h1 className="text-lg font-bold">Contactos</h1>
           <p className="text-sm text-slate-400">Agrega contactos para enviar pagos</p>
         </div>
-        <button
-          onClick={openNewForm}
-          className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-black transition hover:bg-emerald-400"
-        >
-          + Agregar contacto
-        </button>
+        {contacts.length > 0 && (
+          <button
+            onClick={openNewForm}
+            className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-black transition hover:bg-emerald-400"
+          >
+            + Agregar contacto
+          </button>
+        )}
       </div>
 
       {showForm && (
