@@ -1048,6 +1048,16 @@ async function handleClientResponse(
         await sendAndTrack(client, exchange, order.orderNumber, cs,
           "Al ser cuenta empresa, no manejamos Cuenta RUT — la que te enviamos es nuestra cuenta corriente de Banco Estado. No hay ningún problema: si tú tienes Banco Estado (aunque sea Cuenta RUT), puedes transferir igual a esa cuenta sin inconveniente."
         );
+      } else if (matchInvalidEmailProblem(textLower)) {
+        // Caso real reportado por el usuario (jul 2026): Banco Estado a veces
+        // marca "correo inválido" al agregar la cuenta como destinatario —
+        // no es un problema real de la cuenta, es un glitch conocido del
+        // banco. Dos soluciones reales: cerrar y volver a abrir la app del
+        // banco e intentar de nuevo, o poner cualquier correo en ese campo
+        // (incluso el propio del comprador) — no afecta la transferencia.
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          "Eso puede pasar a veces con Banco Estado, es un problema conocido de la app y no de la cuenta. Puedes probar:\n1) Cerrar la app del banco y volver a intentar la transferencia\n2) Poner cualquier correo en ese campo (puede ser el tuyo propio) — no afecta la transferencia\n\nCualquiera de las dos debería funcionar."
+        );
       } else if (matchERUT(textLower) || matchCompanyType(textLower) === true) {
         if (cs.isCompany || matchCompanyType(textLower) === true) {
           // Bug real confirmado en vivo (jul 2026): cada vez que el comprador
@@ -1909,6 +1919,14 @@ function matchERUT(text: string): boolean {
 // manualmente.
 function matchAsksRutAccount(text: string): boolean {
   return /cuenta\s*rut/.test(text);
+}
+
+// Caso real reportado por el usuario (jul 2026): el banco del comprador
+// (típicamente Banco Estado) rechaza agregar la cuenta como destinatario
+// marcando "correo inválido" — un glitch conocido de la app del banco, no
+// un problema real de la cuenta.
+function matchInvalidEmailProblem(text: string): boolean {
+  return /correo\s*(es\s*)?inv[aá]lido/.test(text) || /email\s*(es\s*)?inv[aá]lido/.test(text);
 }
 
 function extractAmount(text: string): number {
