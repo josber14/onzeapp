@@ -523,7 +523,31 @@ export async function handleVerified(
   // si existe, esta orden ya es su 2da compra o más. Coincide exactamente
   // con la regla confirmada por el usuario: trato de cliente conocido desde
   // la 2da compra en adelante.
-  const known = order.counterparty ? await findKnownRealName(tenantId, exchange, label, order.counterparty) : null;
+  //
+  // Bug real confirmado en vivo (jul 2026): el apodo que vemos ANTES del
+  // pago (order.counterparty) viene tapado a 3 letras — para apodos por
+  // DEFECTO de Binance ("User-xxxxx", "P2P-xxxxx"), miles de compradores
+  // distintos empiezan igual, así que findKnownRealName se niega a
+  // reconocerlos (a propósito, para no llamar a un desconocido con el
+  // nombre de otra persona). Un comprador real (Beatriz) compró 3 veces el
+  // mismo día y nunca fue reconocida por esto. getUserOrderDetail (el mismo
+  // endpoint que ya usamos para liberar órdenes) SÍ trae el apodo real
+  // completo sin tapar desde el inicio de la orden, sin esperar el pago —
+  // usarlo permite una búsqueda EXACTA (sin ambigüedad posible) en vez de
+  // adivinar por prefijo. Solo existe para Binance; si falla o no aplica,
+  // se cae al método viejo (prefijo tapado) como respaldo.
+  let realNick: string | null = null;
+  if (exchange === "binance" && typeof client.getUserOrderDetail === "function") {
+    try {
+      const detail = await client.getUserOrderDetail(order.orderNumber);
+      realNick = String(detail?.data?.buyerNickname || "").trim() || null;
+    } catch (e: any) {
+      await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: no se pudo obtener buyerNickname real (${e.message}) — usando apodo tapado`);
+    }
+  }
+  const known = realNick
+    ? await findKnownRealNameExact(tenantId, exchange, label, realNick)
+    : (order.counterparty ? await findKnownRealName(tenantId, exchange, label, order.counterparty) : null);
   const isReturning = !!known;
 
   // Camino rápido: si lo primero que escribió (antes de verificar) ya pedía
@@ -2081,6 +2105,28 @@ async function findKnownRealName(tenantId: number, exchange: string, label: stri
     lastBank: latest.lastBank,
     lastAccountId: latest.lastAccountId,
     lastIsCompany: latest.lastIsCompany,
+  };
+}
+
+// Búsqueda EXACTA por apodo real completo (sin tapar) — a diferencia de
+// findKnownRealName (que adivina por prefijo tapado y se niega ante apodos
+// genéricos ambiguos), esta no tiene ambigüedad posible: el apodo real
+// completo es único por cuenta de Binance, incluyendo los que empiezan
+// "User-"/"P2P-". Requiere haber obtenido el apodo real vía
+// getUserOrderDetail (ver handleVerified) — nunca se usa con el apodo
+// tapado que llega antes del pago.
+async function findKnownRealNameExact(tenantId: number, exchange: string, label: string, fullNick: string): Promise<KnownIdentity | null> {
+  const identity = await prisma.p2PBuyerIdentity.findUnique({
+    where: { tenantId_exchange_label_nickName: { tenantId, exchange, label, nickName: fullNick } },
+    select: { realName: true, orderCount: true, lastBank: true, lastAccountId: true, lastIsCompany: true },
+  });
+  if (!identity) return null;
+  return {
+    realName: identity.realName,
+    orderCount: identity.orderCount,
+    lastBank: identity.lastBank,
+    lastAccountId: identity.lastAccountId,
+    lastIsCompany: identity.lastIsCompany,
   };
 }
 
