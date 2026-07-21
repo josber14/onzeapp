@@ -10051,7 +10051,7 @@ function addP2PBotStyles(){
               <div id="skipoPriceCard" style="background:linear-gradient(135deg,rgba(52,211,153,.12),rgba(15,23,42,.4));border:1px solid rgba(52,211,153,.25);border-radius:14px;padding:18px;text-align:center;">
                 <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:4px;">
                   <div style="font-size:11px;color:#94a3b8;">Precio actual USDT/CLP en Skipo</div>
-                  <span id="skipoPriceCountdown" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:9999px;border:2px solid #fbbf24;color:#fbbf24;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;flex-shrink:0;">15</span>
+                  <span id="skipoPriceCountdown" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:9999px;border:2px solid #fbbf24;color:#fbbf24;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;flex-shrink:0;">5</span>
                 </div>
                 <div id="skipoCurrentRate" style="font-size:28px;font-weight:800;color:#34d399;">Cargando...</div>
               </div>
@@ -13466,7 +13466,7 @@ function addP2PBotStyles(){
     window.skipoLoadBalances();
     window.skipoRefreshPrice();
     if(skipoRefreshInterval) return;
-    skipoRefreshInterval = setInterval(window.skipoRefreshPrice, 15000);
+    skipoRefreshInterval = setInterval(window.skipoRefreshPrice, 5000);
   };
   window.skipoStopRefresh = function(){
     if(skipoRefreshInterval){ clearInterval(skipoRefreshInterval); skipoRefreshInterval = null; }
@@ -13474,22 +13474,23 @@ function addP2PBotStyles(){
   };
 
   // Cuenta regresiva del precio en pantalla, sincronizada con el refresco
-  // real cada 15s (mismo concepto que el contador de la web de Skipo) —
-  // pedido explícito del usuario. Se reinicia cada vez que el precio se
-  // actualiza de verdad, nunca queda desincronizada del refresco real.
+  // real cada 5s — mismo temporizador que usa Skipo de verdad para la
+  // validez de sus cotizaciones (confirmado por el usuario). Se reinicia
+  // cada vez que el precio se actualiza de verdad, nunca queda
+  // desincronizada del refresco real.
   var skipoPriceCountdownInterval = null;
   function skipoStopPriceCountdown(){
     if(skipoPriceCountdownInterval){ clearInterval(skipoPriceCountdownInterval); skipoPriceCountdownInterval = null; }
   }
   function skipoStartPriceCountdown(){
     skipoStopPriceCountdown();
-    let secondsLeft = 15;
+    let secondsLeft = 5;
     const el = document.getElementById("skipoPriceCountdown");
     if(!el) return;
     el.textContent = secondsLeft;
     skipoPriceCountdownInterval = setInterval(function(){
       secondsLeft--;
-      if(secondsLeft < 0) secondsLeft = 15;
+      if(secondsLeft < 0) secondsLeft = 5;
       el.textContent = secondsLeft;
     }, 1000);
   }
@@ -13521,7 +13522,7 @@ function addP2PBotStyles(){
   };
 
   // Cotiza un monto de referencia SOLO para mostrar la tasa en la tarjeta —
-  // no confirma nada. Cada 15s para no gastar cuota de cotizaciones de más.
+  // no confirma nada. Cada 5s, igual al temporizador real de Skipo.
   window.skipoRefreshPrice = async function(){
     const rateEl = document.getElementById("skipoCurrentRate");
     const msgEl = document.getElementById("skipoPriceMsg");
