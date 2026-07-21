@@ -10051,7 +10051,7 @@ function addP2PBotStyles(){
               <div id="skipoPriceCard" style="background:linear-gradient(135deg,rgba(52,211,153,.12),rgba(15,23,42,.4));border:1px solid rgba(52,211,153,.25);border-radius:14px;padding:18px;text-align:center;">
                 <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:4px;">
                   <div style="font-size:11px;color:#94a3b8;">Precio actual USDT/CLP en Skipo</div>
-                  <div id="skipoPriceCountdown" style="font-size:10px;color:#64748b;font-variant-numeric:tabular-nums;border:1px solid rgba(148,163,184,.2);border-radius:20px;padding:1px 7px;">15s</div>
+                  <span id="skipoPriceCountdown" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:9999px;border:2px solid #fbbf24;color:#fbbf24;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;flex-shrink:0;">15</span>
                 </div>
                 <div id="skipoCurrentRate" style="font-size:28px;font-weight:800;color:#34d399;">Cargando...</div>
               </div>
@@ -10059,7 +10059,7 @@ function addP2PBotStyles(){
 
               <div style="margin-top:16px;background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.1);border-radius:14px;padding:16px;">
                 <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:10px;">Monto a pagar (CLP)
-                  <input id="skipoBuyClp" type="number" min="500" step="1" placeholder="Ej: 100000" style="display:block;width:100%;padding:10px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:16px;margin-top:4px;">
+                  <input id="skipoBuyClp" type="text" inputmode="numeric" placeholder="Ej: 100.000" oninput="window.skipoFormatClpInput(this)" style="display:block;width:100%;padding:10px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:16px;margin-top:4px;">
                 </label>
                 <button id="skipoBuyBtn" class="btn small" type="button" style="width:100%;" onclick="window.skipoBuy()">Comprar</button>
 
@@ -13486,13 +13486,25 @@ function addP2PBotStyles(){
     let secondsLeft = 15;
     const el = document.getElementById("skipoPriceCountdown");
     if(!el) return;
-    el.textContent = secondsLeft + "s";
+    el.textContent = secondsLeft;
     skipoPriceCountdownInterval = setInterval(function(){
       secondsLeft--;
       if(secondsLeft < 0) secondsLeft = 15;
-      el.textContent = secondsLeft + "s";
+      el.textContent = secondsLeft;
     }, 1000);
   }
+
+  // Formatea el monto en CLP con puntos de miles mientras se escribe (ej.
+  // "1.000.000") — el input es de texto, no numérico, así que se guarda el
+  // dígito crudo aparte y se muestra ya formateado.
+  window.skipoFormatClpInput = function(el){
+    const raw = (el.value || "").replace(/\D/g, "");
+    el.value = raw ? Number(raw).toLocaleString("es-CL") : "";
+  };
+  window.skipoGetClpValue = function(){
+    const el = document.getElementById("skipoBuyClp");
+    return (el && el.value || "").replace(/\D/g, "");
+  };
 
   window.skipoLoadBalances = async function(){
     try{
@@ -13555,7 +13567,7 @@ function addP2PBotStyles(){
   // temporizador es informativo (misma ventana de validez que muestra la
   // web de Skipo), la confirmación llega antes de que se agote.
   window.skipoBuy = async function(){
-    const clp = (document.getElementById("skipoBuyClp").value || "").trim();
+    const clp = window.skipoGetClpValue();
     const msg = document.getElementById("skipoBuyMsg");
     const btn = document.getElementById("skipoBuyBtn");
     if(!clp || Number(clp) < 500){ msg.textContent = "Ingresa al menos 500 CLP"; msg.style.color = "#fb7185"; return; }
