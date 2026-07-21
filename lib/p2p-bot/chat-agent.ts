@@ -757,7 +757,7 @@ async function handleClientResponse(
           } else {
             // New customer, multiple accounts: ask
             await sendThenTransition(client, exchange, order.orderNumber, cs,
-              `¿A qué cuenta deseas transferir?\n${accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n")}\n\nTambién puedes escribir el nombre del banco.`,
+              `¿A qué cuenta deseas transferir?\n${accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n")}`,
               "awaiting_bank_choice", { isCompany: false, retryCount: 0, pendingBankMenuIds: accounts.map((a: any) => a.id) }
             );
           }
@@ -865,7 +865,7 @@ async function handleClientResponse(
         const accounts = pickDefaultAccountsPerBank(allAccounts);
         const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
         await sendThenTransition(client, exchange, order.orderNumber, cs,
-          `Claro, ¿a qué banco prefieres transferir esta vez?\n${choices}\n\nTambién puedes escribir el nombre del banco.`,
+          `Claro, ¿a qué banco prefieres transferir esta vez?\n${choices}`,
           "awaiting_bank_choice", { retryCount: 0, pendingBankMenuIds: accounts.map((a: any) => a.id) }
         );
       } else {
@@ -1019,7 +1019,7 @@ async function handleClientResponse(
         } else {
           const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
           await sendThenTransition(client, exchange, order.orderNumber, cs,
-            aiFollowUp || `No entendí. Por favor elige el banco para tu depósito:\n${choices}\n\nResponde el número o escribe el nombre del banco.`,
+            aiFollowUp || `No entendí. Por favor elige el banco para tu depósito:\n${choices}`,
             "awaiting_bank_choice", { retryCount, pendingBankMenuIds: accounts.map((a: any) => a.id) }
           );
         }
