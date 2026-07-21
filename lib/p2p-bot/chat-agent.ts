@@ -1586,14 +1586,31 @@ async function sendAndTrack(client: any, exchange: string, orderNo: string, cs: 
       // Envío por WebSocket oficial (API Key, sin cookies ni navegador) —
       // confirmado funcionando con soporte de Binance jul 2026, ver
       // binance-adapter.ts sendChatMessageWS(). Reemplaza Playwright/BAPI.
-      try {
-        const wsRes = await client.sendChatMessageWS(orderNo, msg);
-        sent = wsRes.ok;
-        if (!sent) {
-          await logMsg(cs.tenantId, exchange, `WS chat falló ${orderNo}: ${wsRes.error}`);
+      //
+      // Bug real confirmado en vivo (jul 2026, causó al menos 3 conversaciones
+      // atascadas la misma noche): el WS de Binance falla intermitentemente
+      // con "ILLEGAL_PARAM" (falla del lado de Binance, no del contenido —
+      // el mismo texto se manda con éxito en otras órdenes segundos después).
+      // Sin reintento, un mensaje que responde algo puntual del comprador
+      // (ej. "quiero la cuenta de Santander") se perdía sin que nada más lo
+      // reintentara — la conversación quedaba pegada mostrando el mensaje
+      // anterior hasta que el aviso de "por vencer" la interrumpía. Un solo
+      // reintento corto (3s) after — mismo patrón ya usado para reintentos de
+      // precio en engine.ts — resuelve la mayoría de estos casos sin
+      // introducir demoras notorias para el comprador.
+      for (let attempt = 0; attempt < 2 && !sent; attempt++) {
+        try {
+          const wsRes = await client.sendChatMessageWS(orderNo, msg);
+          sent = wsRes.ok;
+          if (!sent) {
+            await logMsg(cs.tenantId, exchange, `WS chat falló ${orderNo} (intento ${attempt + 1}): ${wsRes.error}`);
+          }
+        } catch (wsErr: any) {
+          await logMsg(cs.tenantId, exchange, `WS chat err ${orderNo} (intento ${attempt + 1}): ${wsErr.message}`);
         }
-      } catch (wsErr: any) {
-        await logMsg(cs.tenantId, exchange, `WS chat err ${orderNo}: ${wsErr.message}`);
+        if (!sent && attempt === 0) {
+          await new Promise((r) => setTimeout(r, 3000));
+        }
       }
     } else {
       await client.sendChatMessage(orderNo, msg);
