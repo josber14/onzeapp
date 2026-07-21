@@ -896,6 +896,11 @@ async function handleClientResponse(
       // vista); pero si escribe texto libre, matchBank sí puede reconocer una
       // cuenta oculta (ej. "vista", o los últimos dígitos) si la pide directo.
       const chosen = opt ? accounts[opt - 1] : matchBank(textLower, allAccounts);
+      // Si no eligió por número (texto libre) y nombró 2+ bancos distintos
+      // en el mismo mensaje (ej. "Chile y bci", "dos pueden ser, chile y
+      // bci"), es un pedido explícito de dividir el pago entre esos bancos
+      // puntuales — no el primer banco que calce.
+      const namedBanks = !opt ? matchAllBanks(textLower, allAccounts) : [];
 
       let wantsAll = matchWantsMultipleAccounts(textLower);
       // Bug real confirmado en vivo (jul 2026): un comprador dijo "no me
@@ -938,7 +943,13 @@ async function handleClientResponse(
         }
       }
 
-      if (chosen) {
+      if (namedBanks.length >= 2) {
+        const erutNote = cs.isCompany ? "Al realizar el pago, por favor adjunta el ERUT junto con el comprobante para emitir la factura.\n\n" : "";
+        const msg = erutNote + "Sin problema, aquí tienes las cuentas:\n\n" +
+          namedBanks.map((a: any, i: number) => `--- Cuenta ${i + 1} ---\n${formatSingleAccount(a)}`).join("\n\n") +
+          "\n\nCuando realices cada pago:\n- Marca \"Pagado\" en la orden\n- Envía los comprobantes aquí en el chat";
+        await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "account_sent", { chosenBank: namedBanks.map((a: any) => a.bank).join(", "), chosenAccountIds: namedBanks.map((a: any) => a.id), retryCount: 0 });
+      } else if (chosen) {
         const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, cs, chosen);
         if (sent) await updateState(cs.id, "account_sent", { chosenBank: chosen.bank, chosenAccountIds: [chosen.id], retryCount: 0 });
       } else if (wantsAll) {
@@ -1759,6 +1770,33 @@ function matchBank(text: string, accounts: any[]): any | null {
   }
 
   return null;
+}
+
+// Igual que matchBank pero devuelve TODOS los bancos nombrados en el
+// mensaje, no solo el primero. Bug real confirmado en vivo (jul 2026): un
+// comprador escribió "Chile y bci" pidiendo dividir el pago entre esos dos
+// bancos puntuales — matchBank encontraba "chile" y se detenía ahí, así que
+// el bot mandaba solo esa cuenta e ignoraba "bci" y el pedido explícito de
+// dividir. Solo usa las dos primeras estrategias de matchBank (nombre
+// completo y token clave) — las de número de cuenta/tipo no aplican para
+// "nombró varios bancos a la vez".
+function matchAllBanks(text: string, accounts: any[]): any[] {
+  const found: any[] = [];
+  const seen = new Set<string>();
+  for (const a of accounts) {
+    if (seen.has(a.id)) continue;
+    if (text.includes(a.bank.toLowerCase())) {
+      found.push(a);
+      seen.add(a.id);
+      continue;
+    }
+    const tokens = bankCoreTokens(a.bank);
+    if (tokens.some(t => new RegExp(`\\b${t}\\b`, "i").test(text))) {
+      found.push(a);
+      seen.add(a.id);
+    }
+  }
+  return found;
 }
 
 function matchCompanyType(text: string): boolean | null {
