@@ -26,6 +26,22 @@ function isAuthorized(req: NextRequest): boolean {
   return req.headers.get("authorization") === `Bearer ${secret}`;
 }
 
+// Confirmado en vivo (jul 2026): un cuelgue real de 60s (el límite duro de
+// Vercel) sin ningún error de por medio, incluso después de acortar los
+// timeouts internos de imapflow (que no alcanzaron a activarse). En vez de
+// confiar en que la librería falle a tiempo, cada paso se envuelve acá con
+// un plazo propio — así, sea cual sea la causa real, queda un log señalando
+// EXACTAMENTE en qué paso se trabó, dentro del presupuesto de la función.
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timeout (${ms}ms) en: ${label}`)), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); }
+    );
+  });
+}
+
 // Disparado por el cron de Vercel (cada 1 minuto, ver vercel.json) — lee la
 // bandeja dedicada por IMAP, procesa los avisos de transferencia recibida
 // nuevos, y los deja marcados como leídos. Nunca ejecuta ninguna acción de
@@ -61,10 +77,14 @@ export async function GET(req: NextRequest) {
   const errors: string[] = [];
 
   try {
-    await client.connect();
-    await client.mailboxOpen("INBOX");
+    console.log("[usdt-payment-poll] conectando a", host, port, "con usuario", user);
+    await withTimeout(client.connect(), 20000, "client.connect()");
+    console.log("[usdt-payment-poll] conectado, abriendo INBOX");
+    await withTimeout(client.mailboxOpen("INBOX"), 15000, "client.mailboxOpen('INBOX')");
+    console.log("[usdt-payment-poll] INBOX abierta, buscando no leídos");
 
-    const uids = await client.search({ seen: false }, { uid: true });
+    const uids = await withTimeout(client.search({ seen: false }, { uid: true }), 15000, "client.search(seen:false)");
+    console.log("[usdt-payment-poll] encontrados", (uids || []).length, "correos no leídos");
 
     for (const uid of uids || []) {
       try {
@@ -142,9 +162,10 @@ export async function GET(req: NextRequest) {
       }
     }
   } catch (e: any) {
+    console.error("[usdt-payment-poll] error:", e.message);
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   } finally {
-    await client.logout().catch(() => {});
+    await withTimeout(client.logout(), 5000, "client.logout()").catch(() => {});
   }
 
   return NextResponse.json({ ok: true, processed, skipped, errors });
