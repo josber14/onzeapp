@@ -3,21 +3,10 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { verifyUsdtClientSessionToken, USDT_CLIENT_SESSION_COOKIE } from "@/lib/usdt-client-session";
 import { SkipoClient } from "@/lib/skipo-adapter";
+import { findMarginPct } from "@/lib/usdt-margin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-async function findMarginPct(tenantId: number, clpAmount: number): Promise<number> {
-  const tiers = await prisma.usdtMarginTier.findMany({ where: { tenantId }, orderBy: { minClp: "asc" } });
-  for (const t of tiers) {
-    const min = Number(t.minClp);
-    const max = t.maxClp !== null ? Number(t.maxClp) : Infinity;
-    if (clpAmount >= min && clpAmount <= max) return Number(t.marginPct);
-  }
-  // Sin tramo configurado que calce — margen de seguridad por defecto en vez
-  // de vender al precio crudo de Skipo (nunca vender sin margen).
-  return 3;
-}
 
 // Solo cotiza — no ejecuta nada en Skipo ni reserva nada. El precio que ve
 // el cliente ya incluye el margen del tramo que le corresponda por monto.
@@ -64,6 +53,10 @@ export async function POST(req: NextRequest) {
     const skipoRate = Number(skipoQuote.rate);
     const clientRate = skipoRate * (1 + marginPct / 100);
     const usdtAmount = clpAmount / clientRate;
+
+    // No bloquea la respuesta al cliente — es solo para el historial visual
+    // de los últimos minutos, no una fuente de verdad para ejecutar compras.
+    prisma.usdtPriceTick.create({ data: { tenantId: session.tenantId, rate: clientRate } }).catch(() => {});
 
     return NextResponse.json({
       ok: true,

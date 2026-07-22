@@ -69,6 +69,9 @@ model Tenant {
   p2pReleaseAuthTokens  P2PReleaseAuthToken[]
   usdtClients           UsdtClient[]
   usdtMarginTiers       UsdtMarginTier[]
+  usdtPurchaseIntents   UsdtPurchaseIntent[]
+  usdtIncomingTransfers UsdtIncomingTransfer[]
+  usdtPriceTicks        UsdtPriceTick[]
   partnerAccounts       PartnerAccount[]
   partnerCapacities     PartnerCapacity[]
   partnerSales          PartnerSale[]
@@ -634,6 +637,7 @@ model UsdtClient {
   updatedAt        DateTime  @updatedAt
   tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   contacts         UsdtClientContact[]
+  purchaseIntents  UsdtPurchaseIntent[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -671,6 +675,83 @@ model UsdtMarginTier {
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+}
+
+// Solicitud de compra de USDT de un cliente de Activos Digitales — se crea
+// ANTES de que el cliente transfiera, con un código de referencia único para
+// que la transferencia se pueda identificar sin ambigüedad (sobrevive a pago
+// dividido en varias cuentas, montos idénticos en compras simultáneas, y
+// errores de monto). El cliente solo puede comprar (status pasa a
+// ready_to_buy) una vez que receivedClp alcanza requestedClp — nunca antes.
+model UsdtPurchaseIntent {
+  id             Int       @id @default(autoincrement())
+  tenantId       Int
+  clientId       Int
+  referenceCode  String
+  requestedClp   Decimal   @db.Decimal(18, 2)
+  receivedClp    Decimal   @default(0) @db.Decimal(18, 2)
+  // awaiting_payment: esperando que llegue la plata. ready_to_buy: ya llegó,
+  // el cliente puede apretar Comprar. completed: ya se ejecutó la compra en
+  // Skipo. cancelled: el cliente/operador la dio de baja.
+  status         String    @default("awaiting_payment")
+  usdtAmount     Decimal?  @db.Decimal(18, 8)
+  executedRate   Decimal?  @db.Decimal(18, 4)
+  skipoOrdId     String?
+  skipoConvertId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  readyAt        DateTime?
+  executedAt     DateTime?
+  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client         UsdtClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  transfers      UsdtIncomingTransfer[]
+
+  @@unique([tenantId, referenceCode])
+  @@index([tenantId, clientId, status])
+}
+
+// Una transferencia real recibida en la cuenta bancaria del operador,
+// detectada leyendo los avisos de "transferencia recibida" del banco. Nunca
+// se confía en el remitente visible del correo — authPassed refleja el
+// resultado real de la validación SPF/DKIM contra el dominio esperado.
+model UsdtIncomingTransfer {
+  id               Int       @id @default(autoincrement())
+  tenantId         Int
+  purchaseIntentId Int?
+  amountClp        Decimal   @db.Decimal(18, 2)
+  payerName        String?
+  rawComment       String?
+  // "code": matcheado por el código de referencia en el comentario/glosa.
+  // "name_fallback": matcheado por nombre+monto, siempre needsReview=true.
+  // "manual": el operador lo asoció a mano desde la bandeja de revisión.
+  matchMethod      String?
+  needsReview      Boolean   @default(true)
+  reviewedByUserId Int?
+  // Message-ID real del correo — evita procesar el mismo aviso dos veces si
+  // el cron se solapa o el correo llega más de una vez.
+  emailMessageId   String    @unique
+  sourceEmail      String
+  authPassed       Boolean
+  receivedAt       DateTime
+  createdAt        DateTime  @default(now())
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseIntent   UsdtPurchaseIntent? @relation(fields: [purchaseIntentId], references: [id])
+
+  @@index([tenantId, needsReview])
+}
+
+// Historial simple de precio USDT/CLP para mostrarle al cliente cómo se ha
+// movido en los últimos minutos — un tick por cada cotización real pedida a
+// Skipo, no es una fuente de verdad para ejecutar compras (esas siempre
+// piden una cotización fresca).
+model UsdtPriceTick {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int
+  rate      Decimal  @db.Decimal(18, 4)
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
 }
 
 model PasswordResetCode {

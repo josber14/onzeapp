@@ -25727,6 +25727,10 @@ try{
 
         <h3 class="section-title" style="font-size:15px;">Clientes</h3>
         <div id="usdtClientsList" style="display:flex;flex-direction:column;gap:8px;"></div>
+
+        <h3 class="section-title" style="font-size:15px;margin-top:24px;">Pagos por revisar</h3>
+        <p class="section-text" style="margin-bottom:10px;">Transferencias detectadas que no se pudieron asociar solas a una compra (sin código de referencia, o solo una coincidencia de nombre) — no cuentan para habilitar "Comprar" hasta que las asocies acá.</p>
+        <div id="usdtReviewList" style="display:flex;flex-direction:column;gap:8px;"></div>
       </section>
 
       <div id="usdtKycModalBackdrop" class="p2p-capacity-modal-backdrop">
@@ -25768,6 +25772,7 @@ try{
   window.usdtRefreshAll = async function(){
     await window.usdtLoadTiers();
     await window.usdtLoadClients();
+    await window.usdtLoadReviewQueue();
   };
 
   /* ————— Tramos de margen ————— */
@@ -25947,6 +25952,76 @@ try{
 
   window.usdtCloseKycModal = function(){
     document.getElementById('usdtKycModalBackdrop')?.classList.remove('open');
+  };
+
+  /* ————— Revisión de pagos (Activos Digitales) ————— */
+
+  window.__usdtOpenIntentsCache = [];
+
+  window.usdtLoadReviewQueue = async function(){
+    const res = await usdtFetch('/api/admin/usdt-payment-review');
+    const list = document.getElementById('usdtReviewList');
+    if(!list) return;
+    if(!res.ok){ list.innerHTML = '<div style="color:#fb7185;font-size:12px;">' + (res.error||'Error al cargar') + '</div>'; return; }
+    window.__usdtOpenIntentsCache = res.openIntents || [];
+    if(!res.transfers?.length){
+      list.innerHTML = '<div style="color:#64748b;font-size:12px;">Sin pagos pendientes de revisión.</div>';
+      return;
+    }
+    const intentOptions = window.__usdtOpenIntentsCache.map(function(i){
+      return `<option value="${i.id}">${i.referenceCode} — ${i.client?.fullName || ''} — ${usdtMoney(i.requestedClp)} CLP</option>`;
+    }).join('');
+    list.innerHTML = res.transfers.map(function(t){
+      const date = new Date(t.receivedAt).toLocaleString('es-CL', { timeZone: 'America/Santiago' });
+      const suggestion = t.purchaseIntent
+        ? `<div style="color:#fbbf24;font-size:12px;margin-top:4px;">Sugerido por nombre: ${t.purchaseIntent.client?.fullName || ''} (${t.purchaseIntent.referenceCode})</div>`
+        : '';
+      const authBadge = t.authPassed
+        ? `<span style="color:#34d399;font-size:11px;">✓ correo verificado</span>`
+        : `<span style="color:#fb7185;font-size:11px;">⚠ no se pudo verificar el remitente</span>`;
+      return `<div style="background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:12px 14px;">
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div>
+            <strong style="color:#fff;">${usdtMoney(t.amountClp)} CLP</strong>
+            <span style="color:#8aa0ba;font-size:12px;margin-left:8px;">de ${t.payerName || '(sin nombre)'} · ${date}</span>
+          </div>
+          ${authBadge}
+        </div>
+        ${t.rawComment ? `<div style="color:#8aa0ba;font-size:12px;margin-top:4px;">Comentario: "${t.rawComment}"</div>` : ''}
+        ${suggestion}
+        <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+          <select id="usdtReviewSelect_${t.id}" style="padding:6px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.7);color:#e2e8f0;font-size:12px;">
+            <option value="">Asociar a…</option>
+            ${intentOptions}
+          </select>
+          <button class="btn small" type="button" onclick="window.usdtConfirmReview(${t.id})">Asociar</button>
+          <button class="btn small danger" type="button" onclick="window.usdtDiscardReview(${t.id})">Descartar (no es de aquí)</button>
+        </div>
+      </div>`;
+    }).join('');
+    // Preselecciona la sugerencia por nombre, si hay una.
+    res.transfers.forEach(function(t){
+      if(t.purchaseIntent){
+        const sel = document.getElementById('usdtReviewSelect_' + t.id);
+        if(sel) sel.value = String(t.purchaseIntent.id);
+      }
+    });
+  };
+
+  window.usdtConfirmReview = async function(transferId){
+    const sel = document.getElementById('usdtReviewSelect_' + transferId);
+    const purchaseIntentId = Number(sel?.value);
+    if(!purchaseIntentId){ alert('Elige a qué solicitud asociarla.'); return; }
+    const res = await usdtFetch('/api/admin/usdt-payment-review', { method: 'PATCH', body: JSON.stringify({ transferId, purchaseIntentId }) });
+    if(!res.ok){ alert(res.error || 'No se pudo asociar'); return; }
+    window.usdtLoadReviewQueue();
+  };
+
+  window.usdtDiscardReview = async function(transferId){
+    if(!confirm('¿Descartar esta transferencia? (no se asociará a ninguna compra)')) return;
+    const res = await usdtFetch('/api/admin/usdt-payment-review', { method: 'PATCH', body: JSON.stringify({ transferId, discard: true }) });
+    if(!res.ok){ alert(res.error || 'No se pudo descartar'); return; }
+    window.usdtLoadReviewQueue();
   };
 
   function initUsdtClients(){
