@@ -83,10 +83,30 @@ export async function GET(req: NextRequest) {
     await withTimeout(client.mailboxOpen("INBOX"), 15000, "client.mailboxOpen('INBOX')");
     console.log("[usdt-payment-poll] INBOX abierta, buscando no leídos");
 
-    const uids = await withTimeout(client.search({ seen: false }, { uid: true }), 15000, "client.search(seen:false)");
-    console.log("[usdt-payment-poll] encontrados", (uids || []).length, "correos no leídos");
+    // Confirmado en vivo (jul 2026): esta cuenta ya tenía 13.693 correos sin
+    // leer de ANTES de usarla para esto — buscar solo por "no leído" y filtrar
+    // el remitente recién después de descargar cada uno hacía que la función
+    // intentara bajar y parsear los 13.693, muy por encima del límite de 60s
+    // de Vercel. El filtro por remitente tiene que ir en la búsqueda IMAP
+    // misma (el servidor lo hace, no nosotros correo por correo).
+    const uids = await withTimeout(
+      client.search({ seen: false, or: [{ from: SENDER_ADDRESSES[0] }, { from: SENDER_ADDRESSES[1] }] }, { uid: true }),
+      15000,
+      "client.search(from Santander/MACH)"
+    );
+    console.log("[usdt-payment-poll] encontrados", (uids || []).length, "correos de Santander/MACH sin leer");
 
-    for (const uid of uids || []) {
+    // Tope de seguridad por corrida — si alguna vez hay una ráfaga real, el
+    // resto queda para la siguiente corrida (1 min después) en vez de volver
+    // a arriesgar un cuelgue de 60s.
+    const MAX_PER_RUN = 50;
+    const allUids = uids || [];
+    const uidsToProcess = allUids.slice(0, MAX_PER_RUN);
+    if (allUids.length > MAX_PER_RUN) {
+      console.log(`[usdt-payment-poll] limitando a ${MAX_PER_RUN} de ${allUids.length} — el resto se procesa en la próxima corrida`);
+    }
+
+    for (const uid of uidsToProcess) {
       try {
         const raw = await client.download(String(uid), undefined, { uid: true });
         if (!raw?.content) {
