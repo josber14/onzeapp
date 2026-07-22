@@ -327,16 +327,27 @@ async function processOrderLocked(
         // relee el chat. Se guarda también qué cuenta/tipo usó esta vez, para
         // poder ofrecérsela directo la próxima ("¿misma cuenta de la vez
         // pasada?") en vez de repetirle las mismas preguntas.
+        //
+        // .trim() es OBLIGATORIO acá — bug real confirmado en vivo (jul
+        // 2026): Binance a veces manda buyerNickname con un espacio invisible
+        // al final (ej. "Roberto Romero Borda "). El lado que BUSCA si ya
+        // conocemos a este comprador (handleVerified, más abajo) SÍ hace
+        // .trim() antes de comparar — si acá se guarda sin recortar, la
+        // igualdad exacta nunca vuelve a coincidir y esa persona queda
+        // "desconocida" para siempre sin importar cuántas veces compre.
+        // Confirmado con un comprador real de 3 compras (Roberto Romero
+        // Borda) que nunca fue reconocido por este motivo exacto.
+        const nickNameKey = payed.nickName.trim();
         const lastAccountId = Array.isArray(cs.chosenAccountIds) && cs.chosenAccountIds.length === 1 ? Number(cs.chosenAccountIds[0]) : null;
         await prisma.p2PBuyerIdentity.upsert({
-          where: { tenantId_exchange_label_nickName: { tenantId, exchange, label, nickName: payed.nickName } },
+          where: { tenantId_exchange_label_nickName: { tenantId, exchange, label, nickName: nickNameKey } },
           update: {
             realName: payed.realName,
             orderCount: { increment: 1 },
             ...(lastAccountId ? { lastBank: cs.chosenBank || null, lastAccountId, lastIsCompany: !!cs.isCompany } : {}),
           },
           create: {
-            tenantId, exchange, label, nickName: payed.nickName, realName: payed.realName,
+            tenantId, exchange, label, nickName: nickNameKey, realName: payed.realName,
             lastBank: lastAccountId ? (cs.chosenBank || null) : null,
             lastAccountId,
             lastIsCompany: !!cs.isCompany,
@@ -1064,7 +1075,9 @@ async function handleClientResponse(
       const bareYesNo = ["si", "sí", "no"].includes(textLower.replace(/[.,!?¡¿]+$/g, "").trim());
       if (bareYesNo) break;
 
-      if (matchThirdParty(textLower)) {
+      if (matchProceeding(textLower)) {
+        await sendAndTrack(client, exchange, order.orderNumber, cs, "Perfecto, estaré atento.");
+      } else if (matchThirdParty(textLower)) {
         await sendAndTrack(client, exchange, order.orderNumber, cs,
           "Lo siento, la transferencia debe ser desde una cuenta a nombre del titular de la orden. No aceptamos depósitos de terceros.\n\n¿Tienes otra forma de realizar el pago?"
         );
@@ -1972,6 +1985,15 @@ function matchAsksRutAccount(text: string): boolean {
 // un problema real de la cuenta.
 function matchInvalidEmailProblem(text: string): boolean {
   return /correo\s*(es\s*)?inv[aá]lido/.test(text) || /email\s*(es\s*)?inv[aá]lido/.test(text);
+}
+
+// "Procedo" (o variantes: "voy a proceder", "procediendo") significa que el
+// comprador ya tiene la cuenta y va a EMPEZAR a hacer la transferencia ahora
+// — no es un problema ni una pregunta, solo un aviso de que sigue en curso.
+// Pedido explícito del usuario (jul 2026): merece una confirmación breve
+// ("perfecto, estaré atento"), no el respaldo genérico de IA ni silencio.
+function matchProceeding(text: string): boolean {
+  return /\bproced(o|iendo|er[eé])\b/.test(text);
 }
 
 function extractAmount(text: string): number {
