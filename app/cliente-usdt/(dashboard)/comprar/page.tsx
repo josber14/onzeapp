@@ -334,9 +334,9 @@ export default function ComprarPage() {
               </div>
             </div>
             {quote && (
-              <div className="mt-2 flex items-center justify-center gap-2 text-sm text-slate-200">
+              <div className="mt-2 flex items-center justify-center gap-2 text-base text-white">
                 <span>
-                  Precio: <span className="font-semibold text-slate-50">{quote.rate.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> CLP/USDT
+                  Precio: <span className="font-bold text-white">{quote.rate.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> CLP/USDT
                 </span>
                 <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-amber-400 text-xs font-bold text-amber-400">
                   {countdown}
@@ -450,9 +450,9 @@ export default function ComprarPage() {
                     {quote ? quote.usdtAmount.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "…"} USDT
                   </div>
                   {quote && (
-                    <div className="mt-2 flex items-center justify-center gap-2 text-sm text-slate-300">
+                    <div className="mt-2 flex items-center justify-center gap-2 text-base text-white">
                       <span>
-                        Precio: <span className="font-semibold text-slate-50">{quote.rate.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> CLP/USDT
+                        Precio: <span className="font-bold text-white">{quote.rate.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> CLP/USDT
                       </span>
                       <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-amber-400 text-xs font-bold text-amber-400">
                         {countdown}
