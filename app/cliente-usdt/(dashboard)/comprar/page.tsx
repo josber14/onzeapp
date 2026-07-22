@@ -72,6 +72,7 @@ export default function ComprarPage() {
   const [priceHistory, setPriceHistory] = useState<{ rate: number; createdAt: string }[]>([]);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
+  const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
 
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -256,6 +257,17 @@ export default function ComprarPage() {
     setExecuteError("");
   }
 
+  async function copyToClipboard(text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedLabel(label);
+      setTimeout(() => setCopiedLabel((current) => (current === label ? null : current)), 2000);
+    } catch {
+      // Si el navegador no da acceso al portapapeles, no rompe nada — el
+      // cliente igual puede seleccionar y copiar el texto a mano.
+    }
+  }
+
   async function handleCancelarSolicitud() {
     if (!activeIntent) return;
     setCancelling(true);
@@ -341,6 +353,12 @@ export default function ComprarPage() {
             <div className="mb-4 rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-4 text-center">
               <div className="text-xs uppercase tracking-wide text-amber-300">Código de referencia</div>
               <div className="text-3xl font-black tracking-[0.3em] text-amber-300">{activeIntent.referenceCode}</div>
+              <button
+                onClick={() => copyToClipboard(activeIntent.referenceCode, "codigo")}
+                className="mt-2 rounded-md border border-amber-400/30 px-3 py-1 text-xs text-amber-300"
+              >
+                {copiedLabel === "codigo" ? "¡Copiado!" : "Copiar código"}
+              </button>
             </div>
 
             {paymentAccount && (
@@ -348,7 +366,18 @@ export default function ComprarPage() {
                 <div className="mb-1 flex justify-between"><span className="text-slate-400">Banco</span><span>{paymentAccount.bank}</span></div>
                 <div className="mb-1 flex justify-between"><span className="text-slate-400">Cuenta</span><span>{paymentAccount.accountNumber}</span></div>
                 <div className="mb-1 flex justify-between"><span className="text-slate-400">RUT</span><span>{paymentAccount.rut}</span></div>
-                <div className="flex justify-between"><span className="text-slate-400">Titular</span><span>{paymentAccount.holderName}</span></div>
+                <div className="mb-3 flex justify-between"><span className="text-slate-400">Titular</span><span>{paymentAccount.holderName}</span></div>
+                <button
+                  onClick={() =>
+                    copyToClipboard(
+                      `Banco: ${paymentAccount.bank}\nCuenta: ${paymentAccount.accountNumber}\nRUT: ${paymentAccount.rut}\nTitular: ${paymentAccount.holderName}`,
+                      "cuenta"
+                    )
+                  }
+                  className="w-full rounded-md border border-white/10 py-1.5 text-xs text-slate-300"
+                >
+                  {copiedLabel === "cuenta" ? "¡Copiado!" : "Copiar datos bancarios"}
+                </button>
               </div>
             )}
 
