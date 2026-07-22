@@ -73,6 +73,7 @@ export default function ComprarPage() {
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
   const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
+  const [showComprarQuote, setShowComprarQuote] = useState(false);
 
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -230,6 +231,18 @@ export default function ComprarPage() {
     }
   }
 
+  function handleVerCotizacionCompra() {
+    if (!activeIntent) return;
+    setShowComprarQuote(true);
+    startTicking(Number(activeIntent.receivedClp));
+  }
+
+  function handleCancelarCotizacionCompra() {
+    setShowComprarQuote(false);
+    stopTicking();
+    setQuote(null);
+  }
+
   async function handleComprar() {
     if (!activeIntent) return;
     setExecuting(true);
@@ -242,6 +255,8 @@ export default function ComprarPage() {
         return;
       }
       stopIntentPoll();
+      stopTicking();
+      setShowComprarQuote(false);
       setActiveIntent(data.intent);
     } catch {
       setExecuteError("Ocurrió un error inesperado");
@@ -410,18 +425,57 @@ export default function ComprarPage() {
               </>
             )}
 
-            {(activeIntent.status === "ready_to_buy" || activeIntent.status === "executing") && (
+            {(activeIntent.status === "ready_to_buy" || activeIntent.status === "executing") && !showComprarQuote && (
               <>
                 <p className="mb-3 text-center text-sm text-emerald-400">✓ Pago confirmado — ya puedes comprar.</p>
-                {executeError && <p className="mb-3 text-sm text-rose-400">{executeError}</p>}
                 <button
-                  disabled={executing || activeIntent.status === "executing"}
-                  onClick={handleComprar}
+                  disabled={activeIntent.status === "executing"}
+                  onClick={handleVerCotizacionCompra}
                   className="w-full rounded-lg bg-emerald-500 py-3 font-semibold text-black disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
                 >
-                  {executing ? "Comprando…" : `Comprar por $${Number(activeIntent.receivedClp).toLocaleString("es-CL")}`}
+                  Ver cotización y comprar
                 </button>
               </>
+            )}
+
+            {(activeIntent.status === "ready_to_buy" || activeIntent.status === "executing") && showComprarQuote && (
+              <div>
+                <div className="mb-3 rounded-xl border border-emerald-400/30 bg-emerald-400/5 p-4 text-center">
+                  <div className="text-xs uppercase tracking-wide text-slate-400">Vas a recibir</div>
+                  <div className="text-2xl font-bold text-emerald-400">
+                    {quote ? quote.usdtAmount.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "…"} USDT
+                  </div>
+                  {quote && (
+                    <div className="mt-2 flex items-center justify-center gap-2 text-sm text-slate-300">
+                      <span>
+                        Precio: <span className="font-semibold text-slate-50">{quote.rate.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> CLP/USDT
+                      </span>
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-amber-400 text-xs font-bold text-amber-400">
+                        {countdown}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {executeError && <p className="mb-3 text-sm text-rose-400">{executeError}</p>}
+
+                <div className="flex gap-2">
+                  <button
+                    disabled={executing}
+                    onClick={handleCancelarCotizacionCompra}
+                    className="flex-1 rounded-lg border border-white/10 bg-white/5 py-3 font-semibold text-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    disabled={executing || !quote}
+                    onClick={handleComprar}
+                    className="flex-1 rounded-lg bg-emerald-500 py-3 font-semibold text-black disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                  >
+                    {executing ? "Comprando…" : "Confirmar compra"}
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         )}
