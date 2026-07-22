@@ -58,6 +58,20 @@ export async function PATCH(req: NextRequest) {
   if (!session.tenantId) return NextResponse.json({ error: "Falta tenantId" }, { status: 400 });
 
   const body = await req.json().catch(() => ({}));
+
+  // Descarte masivo — "seleccionar todos" en la bandeja de revisión (ej.
+  // limpiar de una vez el backlog histórico que dejó la primera lectura de
+  // correos). Cada transferencia queda igual registrada (nunca se borra),
+  // solo se marca como ya revisada y sin asociar a ninguna compra.
+  if (Array.isArray(body.transferIds) && body.discard === true) {
+    const ids = body.transferIds.map((id: any) => Number(id)).filter((id: number) => id > 0);
+    const result = await prisma.usdtIncomingTransfer.updateMany({
+      where: { id: { in: ids }, tenantId: session.tenantId },
+      data: { needsReview: false, matchMethod: "manual", purchaseIntentId: null, reviewedByUserId: session.userId },
+    });
+    return NextResponse.json({ ok: true, count: result.count });
+  }
+
   const transferId = Number(body.transferId);
   if (!transferId) return NextResponse.json({ error: "Falta transferId" }, { status: 400 });
 

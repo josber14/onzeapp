@@ -25730,6 +25730,13 @@ try{
 
         <h3 class="section-title" style="font-size:15px;margin-top:24px;">Pagos por revisar</h3>
         <p class="section-text" style="margin-bottom:10px;">Transferencias detectadas que no se pudieron asociar solas a una compra (sin código de referencia, o solo una coincidencia de nombre) — no cuentan para habilitar "Comprar" hasta que las asocies acá.</p>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#8aa0ba;">
+            <input id="usdtReviewSelectAll" type="checkbox" onchange="window.usdtToggleSelectAllReview(this)">
+            Seleccionar todos
+          </label>
+          <button class="btn small danger" type="button" onclick="window.usdtDiscardSelectedReview()">Descartar seleccionados</button>
+        </div>
         <div id="usdtReviewList" style="display:flex;flex-direction:column;gap:8px;"></div>
       </section>
 
@@ -25964,6 +25971,8 @@ try{
     if(!list) return;
     if(!res.ok){ list.innerHTML = '<div style="color:#fb7185;font-size:12px;">' + (res.error||'Error al cargar') + '</div>'; return; }
     window.__usdtOpenIntentsCache = res.openIntents || [];
+    const selectAll = document.getElementById('usdtReviewSelectAll');
+    if(selectAll) selectAll.checked = false;
     if(!res.transfers?.length){
       list.innerHTML = '<div style="color:#64748b;font-size:12px;">Sin pagos pendientes de revisión.</div>';
       return;
@@ -25981,9 +25990,10 @@ try{
         : `<span style="color:#fb7185;font-size:11px;">⚠ no se pudo verificar el remitente</span>`;
       return `<div style="background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:12px 14px;">
         <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-          <div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" class="usdtReviewCheckbox" data-transfer-id="${t.id}">
             <strong style="color:#fff;">${usdtMoney(t.amountClp)} CLP</strong>
-            <span style="color:#8aa0ba;font-size:12px;margin-left:8px;">de ${t.payerName || '(sin nombre)'} · ${date}</span>
+            <span style="color:#8aa0ba;font-size:12px;">de ${t.payerName || '(sin nombre)'} · ${date}</span>
           </div>
           ${authBadge}
         </div>
@@ -26020,6 +26030,19 @@ try{
   window.usdtDiscardReview = async function(transferId){
     if(!confirm('¿Descartar esta transferencia? (no se asociará a ninguna compra)')) return;
     const res = await usdtFetch('/api/admin/usdt-payment-review', { method: 'PATCH', body: JSON.stringify({ transferId, discard: true }) });
+    if(!res.ok){ alert(res.error || 'No se pudo descartar'); return; }
+    window.usdtLoadReviewQueue();
+  };
+
+  window.usdtToggleSelectAllReview = function(checkbox){
+    document.querySelectorAll('.usdtReviewCheckbox').forEach(function(cb){ cb.checked = checkbox.checked; });
+  };
+
+  window.usdtDiscardSelectedReview = async function(){
+    const ids = Array.from(document.querySelectorAll('.usdtReviewCheckbox:checked')).map(function(cb){ return Number(cb.dataset.transferId); });
+    if(!ids.length){ alert('No seleccionaste ninguna transferencia.'); return; }
+    if(!confirm(`¿Descartar ${ids.length} transferencia(s) seleccionada(s)? (no se asociarán a ninguna compra)`)) return;
+    const res = await usdtFetch('/api/admin/usdt-payment-review', { method: 'PATCH', body: JSON.stringify({ transferIds: ids, discard: true }) });
     if(!res.ok){ alert(res.error || 'No se pudo descartar'); return; }
     window.usdtLoadReviewQueue();
   };
