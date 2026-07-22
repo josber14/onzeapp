@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/internal/usdt-payment-poll",
-      "schedule": "* * * * *"
-    }
-  ]
-}
