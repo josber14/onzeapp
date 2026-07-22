@@ -70,6 +70,8 @@ export default function ComprarPage() {
   const [executing, setExecuting] = useState(false);
   const [executeError, setExecuteError] = useState("");
   const [priceHistory, setPriceHistory] = useState<{ rate: number; createdAt: string }[]>([]);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState("");
 
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -254,6 +256,26 @@ export default function ComprarPage() {
     setExecuteError("");
   }
 
+  async function handleCancelarSolicitud() {
+    if (!activeIntent) return;
+    setCancelling(true);
+    setCancelError("");
+    try {
+      const res = await fetch(`/api/usdt-client/purchase-intent/${activeIntent.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setCancelError(data.error || "No se pudo cancelar");
+        return;
+      }
+      stopIntentPoll();
+      handleNuevaCompra();
+    } catch {
+      setCancelError("Ocurrió un error inesperado");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   if (loadingInitial) {
     return <div className="mx-auto max-w-lg text-sm text-slate-400">Cargando…</div>;
   }
@@ -346,7 +368,17 @@ export default function ComprarPage() {
             </div>
 
             {activeIntent.status === "awaiting_payment" && (
-              <p className="text-center text-sm text-slate-400">Esperando tu transferencia…</p>
+              <>
+                <p className="mb-3 text-center text-sm text-slate-400">Esperando tu transferencia…</p>
+                {cancelError && <p className="mb-3 text-sm text-rose-400">{cancelError}</p>}
+                <button
+                  disabled={cancelling}
+                  onClick={handleCancelarSolicitud}
+                  className="w-full rounded-lg border border-white/10 bg-white/5 py-2 text-sm text-slate-300 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {cancelling ? "Cancelando…" : "Cancelar solicitud"}
+                </button>
+              </>
             )}
 
             {(activeIntent.status === "ready_to_buy" || activeIntent.status === "executing") && (
