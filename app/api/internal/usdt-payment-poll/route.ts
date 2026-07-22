@@ -43,7 +43,18 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Falta IMAP_USER/IMAP_PASS" }, { status: 500 });
   }
 
-  const client = new ImapFlow({ host, port, secure: true, auth: { user, pass }, logger: false });
+  // imapflow por defecto espera hasta 90s para conectar y 16s para el saludo
+  // del servidor — más que el límite de 60s de esta función en Vercel. Si
+  // algo falla (credenciales, red, IMAP deshabilitado), en vez de un error
+  // claro se producía un "Task timed out" sin ningún detalle útil. Acortado
+  // para que falle rápido y devuelva la razón real dentro del presupuesto de
+  // tiempo de la función.
+  const client = new ImapFlow({
+    host, port, secure: true, auth: { user, pass }, logger: false,
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    socketTimeout: 30000,
+  });
 
   let processed = 0;
   let skipped = 0;
