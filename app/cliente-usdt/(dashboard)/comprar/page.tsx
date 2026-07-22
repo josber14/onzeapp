@@ -24,6 +24,7 @@ type PaymentAccount = {
   accountNumber: string;
   rut: string;
   holderName: string;
+  email: string;
 };
 
 const REFRESH_SECONDS = 5;
@@ -381,11 +382,14 @@ export default function ComprarPage() {
                 <div className="mb-1 flex justify-between"><span className="text-slate-400">Banco</span><span>{paymentAccount.bank}</span></div>
                 <div className="mb-1 flex justify-between"><span className="text-slate-400">Cuenta</span><span>{paymentAccount.accountNumber}</span></div>
                 <div className="mb-1 flex justify-between"><span className="text-slate-400">RUT</span><span>{paymentAccount.rut}</span></div>
-                <div className="mb-3 flex justify-between"><span className="text-slate-400">Titular</span><span>{paymentAccount.holderName}</span></div>
+                <div className="mb-1 flex justify-between"><span className="text-slate-400">Titular</span><span>{paymentAccount.holderName}</span></div>
+                {paymentAccount.email && (
+                  <div className="mb-3 flex justify-between"><span className="text-slate-400">Correo</span><span>{paymentAccount.email}</span></div>
+                )}
                 <button
                   onClick={() =>
                     copyToClipboard(
-                      `Banco: ${paymentAccount.bank}\nCuenta: ${paymentAccount.accountNumber}\nRUT: ${paymentAccount.rut}\nTitular: ${paymentAccount.holderName}`,
+                      `Banco: ${paymentAccount.bank}\nCuenta: ${paymentAccount.accountNumber}\nRUT: ${paymentAccount.rut}\nTitular: ${paymentAccount.holderName}${paymentAccount.email ? `\nCorreo: ${paymentAccount.email}` : ""}`,
                       "cuenta"
                     )
                   }
