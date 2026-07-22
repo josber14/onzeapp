@@ -25738,6 +25738,9 @@ try{
           <button class="btn small danger" type="button" onclick="window.usdtDiscardSelectedReview()">Descartar seleccionados</button>
         </div>
         <div id="usdtReviewList" style="display:flex;flex-direction:column;gap:8px;"></div>
+
+        <h3 class="section-title" style="font-size:15px;margin-top:24px;">Compras realizadas</h3>
+        <div id="usdtPurchaseHistoryList" style="display:flex;flex-direction:column;gap:8px;"></div>
       </section>
 
       <div id="usdtKycModalBackdrop" class="p2p-capacity-modal-backdrop">
@@ -25780,6 +25783,7 @@ try{
     await window.usdtLoadTiers();
     await window.usdtLoadClients();
     await window.usdtLoadReviewQueue();
+    await window.usdtLoadPurchaseHistory();
   };
 
   /* ————— Tramos de margen ————— */
@@ -26045,6 +26049,36 @@ try{
     const res = await usdtFetch('/api/admin/usdt-payment-review', { method: 'PATCH', body: JSON.stringify({ transferIds: ids, discard: true }) });
     if(!res.ok){ alert(res.error || 'No se pudo descartar'); return; }
     window.usdtLoadReviewQueue();
+  };
+
+  /* ————— Historial de compras ————— */
+
+  window.usdtLoadPurchaseHistory = async function(){
+    const res = await usdtFetch('/api/admin/usdt-purchase-history');
+    const list = document.getElementById('usdtPurchaseHistoryList');
+    if(!list) return;
+    if(!res.ok){ list.innerHTML = '<div style="color:#fb7185;font-size:12px;">' + (res.error||'Error al cargar') + '</div>'; return; }
+    if(!res.purchases?.length){
+      list.innerHTML = '<div style="color:#64748b;font-size:12px;">Sin compras realizadas todavía.</div>';
+      return;
+    }
+    list.innerHTML = res.purchases.map(function(p){
+      const date = p.executedAt ? new Date(p.executedAt).toLocaleString('es-CL', { timeZone: 'America/Santiago' }) : '';
+      return `<div style="background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:12px 14px;">
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div>
+            <strong style="color:#fff;">${p.clientName}</strong>
+            <span style="color:#8aa0ba;font-size:12px;margin-left:8px;">${p.clientEmail} · ${date}</span>
+          </div>
+          <span style="color:#64748b;font-size:11px;">${p.referenceCode}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:13px;">
+          <span style="color:#8aa0ba;">${usdtMoney(p.receivedClp)} CLP</span>
+          <strong style="color:#34d399;">${usdtMoney(p.usdtAmount, 2)} USDT</strong>
+          ${p.executedRate ? `<span style="color:#64748b;">a ${usdtMoney(p.executedRate, 2)} CLP/USDT</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
   };
 
   function initUsdtClients(){
