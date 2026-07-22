@@ -490,7 +490,7 @@ export default function ComprarPage() {
             <p className="mb-4 text-sm text-slate-300">
               Recibiste{" "}
               <span className="font-semibold text-slate-50">
-                {Number(activeIntent.usdtAmount || 0).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 8 })} USDT
+                {Number(activeIntent.usdtAmount || 0).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
               </span>
               {activeIntent.executedRate && (
                 <> a {Number(activeIntent.executedRate).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CLP/USDT.</>

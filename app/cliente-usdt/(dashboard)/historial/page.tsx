@@ -50,7 +50,7 @@ export default function HistorialPage() {
               <div className="mt-1 flex justify-between text-sm">
                 <span className="text-slate-400">Recibiste</span>
                 <span className="font-semibold text-emerald-400">
-                  {(p.usdtAmount ?? 0).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 8 })} USDT
+                  {(p.usdtAmount ?? 0).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
                 </span>
               </div>
               {p.executedRate && (

@@ -29,7 +29,7 @@ export default function BilleteraPage() {
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center">
         <div className="text-xs text-slate-400">Saldo disponible</div>
         <div className="mt-1 text-3xl font-bold text-emerald-400">
-          {saldo === null ? "…" : saldo.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 8 })} USDT
+          {saldo === null ? "…" : saldo.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
         </div>
         <p className="mt-3 text-xs text-slate-500">
           Suma de todas tus compras completadas — los retiros todavía no están disponibles.
