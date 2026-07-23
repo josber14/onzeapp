@@ -493,7 +493,7 @@ export default function ComprarPage() {
                 {Number(activeIntent.usdtAmount || 0).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
               </span>
               {activeIntent.executedRate && (
-                <> a {Number(activeIntent.executedRate).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CLP/USDT.</>
+                <> a <span className="font-semibold text-white">{Number(activeIntent.executedRate).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CLP/USDT</span>.</>
               )}
             </p>
             <button onClick={handleNuevaCompra} className="w-full rounded-lg border border-white/10 bg-white/5 py-3 font-semibold">
