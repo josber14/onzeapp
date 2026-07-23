@@ -56,7 +56,7 @@ export default function HistorialPage() {
               {p.executedRate && (
                 <div className="mt-1 flex justify-between text-sm text-slate-300">
                   <span>Precio</span>
-                  <span className="font-semibold text-white">{p.executedRate.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  <span className="font-semibold text-white">{p.executedRate.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CLP</span>
                 </div>
               )}
             </div>
