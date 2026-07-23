@@ -336,7 +336,7 @@ export default function ComprarPage() {
             {quote && (
               <div className="mt-2 flex items-center justify-center gap-2 text-base text-white">
                 <span>
-                  Precio: <span className="font-bold text-white">{quote.rate.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> CLP/USDT
+                  Precio: <span className="font-bold text-white">{quote.rate.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </span>
                 <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-amber-400 text-xs font-bold text-amber-400">
                   {countdown}
@@ -452,7 +452,7 @@ export default function ComprarPage() {
                   {quote && (
                     <div className="mt-2 flex items-center justify-center gap-2 text-base text-white">
                       <span>
-                        Precio: <span className="font-bold text-white">{quote.rate.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> CLP/USDT
+                        Precio: <span className="font-bold text-white">{quote.rate.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       </span>
                       <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-amber-400 text-xs font-bold text-amber-400">
                         {countdown}
@@ -493,7 +493,7 @@ export default function ComprarPage() {
                 {Number(activeIntent.usdtAmount || 0).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
               </span>
               {activeIntent.executedRate && (
-                <> a <span className="font-semibold text-white">{Number(activeIntent.executedRate).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CLP/USDT</span>.</>
+                <> a <span className="font-semibold text-white">{Number(activeIntent.executedRate).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>.</>
               )}
             </p>
             <button onClick={handleNuevaCompra} className="w-full rounded-lg border border-white/10 bg-white/5 py-3 font-semibold">
