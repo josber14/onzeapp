@@ -111,8 +111,8 @@ export default function RegisterPage() {
                   onClick={() => { window.location.href = "/cliente-usdt/registro"; }}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-emerald-500 hover:bg-emerald-50"
                 >
-                  <div className="font-semibold text-slate-900">Mayorista</div>
-                  <div className="text-sm text-slate-500">Quieres comprar USDT directo, con precio en vivo.</div>
+                  <div className="font-semibold text-slate-900">Activos Digitales</div>
+                  <div className="text-sm text-slate-500">Obtén activos digitales con precio en vivo del mercado.</div>
                 </button>
               </div>
               <p className="mt-6 text-center text-sm text-slate-600">
