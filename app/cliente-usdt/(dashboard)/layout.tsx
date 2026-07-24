@@ -8,6 +8,7 @@ const WHATSAPP_NUMBER = "56951333777";
 
 const MAIN_NAV_ITEMS = [
   { href: "/cliente-usdt/billetera", label: "Billetera", icon: "💼" },
+  { href: "/cliente-usdt/mercado", label: "Mercado", icon: "📈" },
   { href: "/cliente-usdt/comprar", label: "Comprar", icon: "💱" },
   { href: "/cliente-usdt/retirar", label: "Retirar", icon: "⬆️" },
   { href: "/cliente-usdt/historial", label: "Historial", icon: "📜" },

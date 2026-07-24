@@ -15,15 +15,23 @@ export async function GET() {
   const session = verifyUsdtClientSessionToken(token);
   if (!session) return NextResponse.json({ ok: false, error: "No autenticado" }, { status: 401 });
 
-  const since = new Date(Date.now() - 10 * 60 * 1000);
+  const since = new Date(Date.now() - 60 * 60 * 1000);
   const ticks = await prisma.usdtPriceTick.findMany({
     where: { tenantId: session.tenantId, createdAt: { gte: since } },
     orderBy: { createdAt: "asc" },
     select: { rate: true, createdAt: true },
   });
 
+  const rates = ticks.map((t) => Number(t.rate));
+  const current = rates.length > 0 ? rates[rates.length - 1] : null;
+  const high = rates.length > 0 ? Math.max(...rates) : null;
+  const low = rates.length > 0 ? Math.min(...rates) : null;
+
   return NextResponse.json({
     ok: true,
     ticks: ticks.map((t) => ({ rate: Number(t.rate), createdAt: t.createdAt })),
+    current,
+    high,
+    low,
   });
 }

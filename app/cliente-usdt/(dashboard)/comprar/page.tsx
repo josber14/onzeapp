@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 
 type Quote = {
   clpAmount: number;
@@ -29,34 +30,6 @@ type PaymentAccount = {
 
 const REFRESH_SECONDS = 5;
 const INTENT_POLL_MS = 6000;
-const PRICE_HISTORY_POLL_MS = 30000;
-
-function PriceSparkline({ ticks }: { ticks: { rate: number }[] }) {
-  if (ticks.length < 2) return null;
-  const rates = ticks.map((t) => t.rate);
-  const min = Math.min(...rates);
-  const max = Math.max(...rates);
-  const range = max - min || 1;
-  const width = 240;
-  const height = 40;
-  const points = rates
-    .map((r, i) => {
-      const x = (i / (rates.length - 1)) * width;
-      const y = height - ((r - min) / range) * height;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-  const trendUp = rates[rates.length - 1] >= rates[0];
-
-  return (
-    <div className="mt-3">
-      <div className="mb-1 text-xs text-slate-500">Precio — últimos 10 min</div>
-      <svg width={width} height={height} className="overflow-visible">
-        <polyline points={points} fill="none" stroke={trendUp ? "#34d399" : "#fb7185"} strokeWidth={2} />
-      </svg>
-    </div>
-  );
-}
 
 export default function ComprarPage() {
   const [clpInput, setClpInput] = useState("");
@@ -70,7 +43,6 @@ export default function ComprarPage() {
   const [creating, setCreating] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [executeError, setExecuteError] = useState("");
-  const [priceHistory, setPriceHistory] = useState<{ rate: number; createdAt: string }[]>([]);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
   const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
@@ -139,23 +111,6 @@ export default function ComprarPage() {
   }, [clpInput, activeIntent]);
 
   useEffect(() => () => stopTicking(), []);
-
-  // Historial de precio — puramente informativo, corre independiente del
-  // resto (no afecta ninguna cotización real).
-  useEffect(() => {
-    async function loadHistory() {
-      try {
-        const res = await fetch("/api/usdt-client/price-history");
-        const data = await res.json();
-        if (res.ok && data.ok) setPriceHistory(data.ticks);
-      } catch {
-        // silencioso — es solo un gráfico de referencia
-      }
-    }
-    loadHistory();
-    const id = setInterval(loadHistory, PRICE_HISTORY_POLL_MS);
-    return () => clearInterval(id);
-  }, []);
 
   function stopIntentPoll() {
     if (intentPollRef.current) clearInterval(intentPollRef.current);
@@ -347,7 +302,9 @@ export default function ComprarPage() {
               Este precio es solo referencial — el precio final se fija recién cuando confirmemos tu pago y aprietes "Comprar".
             </p>
 
-            <PriceSparkline ticks={priceHistory} />
+            <Link href="/cliente-usdt/mercado" className="mt-3 block text-center text-xs text-emerald-400 underline underline-offset-2">
+              Ver movimiento del precio en Mercado →
+            </Link>
 
             <button
               disabled={!(Number(clpInput) >= 500) || creating}
