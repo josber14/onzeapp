@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 
 type Quote = {
   clpAmount: number;
@@ -301,10 +300,6 @@ export default function ComprarPage() {
             <p className="mt-2 text-xs text-slate-500">
               Este precio es solo referencial — el precio final se fija recién cuando confirmemos tu pago y aprietes "Comprar".
             </p>
-
-            <Link href="/cliente-usdt/mercado" className="mt-3 block text-center text-xs text-emerald-400 underline underline-offset-2">
-              Ver movimiento del precio en Mercado →
-            </Link>
 
             <button
               disabled={!(Number(clpInput) >= 500) || creating}
