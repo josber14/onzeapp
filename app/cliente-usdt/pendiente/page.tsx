@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function ClienteUsdtPendientePage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#041126] px-4 py-10">
@@ -6,6 +8,9 @@ export default function ClienteUsdtPendientePage() {
         <p className="text-sm text-slate-300">
           Todavía no puedes comprar — tu cuenta está pendiente de aprobación. Te avisaremos cuando esté lista.
         </p>
+        <Link href="/" className="mt-4 inline-block text-sm text-emerald-400 hover:underline">
+          ← Volver al inicio
+        </Link>
       </div>
     </main>
   );

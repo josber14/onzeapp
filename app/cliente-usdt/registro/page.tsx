@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import PasswordInput from "@/components/password-input";
 
 // tenantId fijo por ahora — este producto es para UN solo negocio (el
@@ -139,6 +140,9 @@ export default function ClienteUsdtRegistroPage() {
           <p className="text-sm text-slate-300">
             Tu cuenta quedó en revisión. Te avisaremos apenas esté aprobada para que puedas comprar.
           </p>
+          <Link href="/" className="mt-4 inline-block text-sm text-emerald-400 hover:underline">
+            ← Volver al inicio
+          </Link>
         </div>
       </main>
     );
@@ -147,6 +151,9 @@ export default function ClienteUsdtRegistroPage() {
   return (
     <main className="flex min-h-screen justify-center bg-[#041126] px-4 py-10">
       <form onSubmit={handleSubmit} className="w-full max-w-xl rounded-2xl border border-white/10 bg-white/5 p-8 text-slate-100">
+        <Link href="/" className="mb-4 inline-block text-sm text-slate-400 hover:text-slate-200">
+          ← Volver al inicio
+        </Link>
         <h1 className="mb-1 text-xl font-bold">Crear cuenta</h1>
         <p className="mb-2 text-sm text-slate-400">Compra USDT directo, con precio en vivo.</p>
         <p className="mb-6 text-xs text-slate-500">

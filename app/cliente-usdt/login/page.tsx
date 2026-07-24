@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import PasswordInput from "@/components/password-input";
 
 const TENANT_ID = 1;
@@ -44,6 +45,9 @@ export default function ClienteUsdtLoginPage() {
         onSubmit={handleSubmit}
         className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-8 text-slate-100"
       >
+        <Link href="/" className="mb-6 inline-block text-sm text-slate-400 hover:text-slate-200">
+          ← Volver al inicio
+        </Link>
         <h1 className="mb-6 text-xl font-bold">Iniciar sesión</h1>
 
         <label className="mb-3 block text-sm">
