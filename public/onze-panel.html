@@ -10474,22 +10474,25 @@ function addP2PBotStyles(){
     } else {
       body[field] = value === '' ? null : (field === 'botStrategy' || field === 'botPriceSource' ? value : Number(value));
     }
-    var safeInput = document.getElementById("adCfg_" + realId + "_SafeMarginPct");
-    if(safeInput) safeInput.style.outline = "2px solid #fbbf24";
+    // Resalta el campo que realmente se está guardando (antes siempre
+    // resaltaba "Margen seguridad" sin importar cuál campo fuera).
+    var suffix = field === 'botCompetePayTypes' ? 'CompetePayType' : field.replace(/^bot/, '');
+    var targetInput = document.getElementById("adCfg_" + realId + "_" + suffix);
+    if(targetInput) targetInput.style.outline = "2px solid #fbbf24";
     fetch("/api/p2p/bot/ads", {
       method:"PUT", credentials:"include",
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify(body)
     }).then(function(r){
-      if(r.ok && safeInput) safeInput.style.outline = "2px solid #34d399";
+      if(r.ok && targetInput) targetInput.style.outline = "2px solid #34d399";
       else if(!r.ok){
-        if(safeInput) safeInput.style.outline = "2px solid #fb7185";
+        if(targetInput) targetInput.style.outline = "2px solid #fb7185";
         console.warn("[P2P Bot] save cfg error: HTTP", r.status, r.statusText);
       }
-      setTimeout(function(){ if(safeInput) safeInput.style.outline = ""; }, 1500);
+      setTimeout(function(){ if(targetInput) targetInput.style.outline = ""; }, 1500);
     }).catch(function(e){
-      if(safeInput) safeInput.style.outline = "2px solid #fb7185";
-      setTimeout(function(){ if(safeInput) safeInput.style.outline = ""; }, 1500);
+      if(targetInput) targetInput.style.outline = "2px solid #fb7185";
+      setTimeout(function(){ if(targetInput) targetInput.style.outline = ""; }, 1500);
       console.warn("[P2P Bot] save cfg error:", e);
     });
   };
