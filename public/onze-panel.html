@@ -9728,11 +9728,11 @@ function addP2PBotStyles(){
                 Circuit breaker (% caída)
                 <input id="botCircuitBreakPct" type="number" step="0.1" value="3" autocomplete="off" onblur="window.botSaveExchangeConfig()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
               </label>
-              <label>
+              <form autocomplete="off" style="display:contents"><label>
                 Límite diferencia anuncios (%)
                 <input id="botMinAdPriceDiffPct" type="number" step="0.01" value="0.1" autocomplete="off" onblur="window.botSaveExchangeConfig()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
                 <span class="help-text">Distancia mínima entre precios de tus propios anuncios (Binance exige ≥0.1%)</span>
-              </label>
+              </label></form>
               <label>
                 Intervalo ciclo (seg)
                 <input id="botCycleInterval" type="number" step="0.1" value="10" min="1" autocomplete="off" onblur="window.botSaveExchangeConfig()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
@@ -10417,10 +10417,10 @@ function addP2PBotStyles(){
           <label>Circuit breaker (% caída)
             <input id="adCfg_${realId}_CircuitBreakPct" type="number" step="0.1" value="${a.botCircuitBreakPct != null ? a.botCircuitBreakPct : ''}" placeholder="3" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botCircuitBreakPct',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
           </label>
-          <label>Límite diferencia anuncios (%)
+          <form autocomplete="off" style="display:contents"><label>Límite diferencia anuncios (%)
             <input id="adCfg_${realId}_MinAdPriceDiffPct" type="number" step="0.01" value="${a.botMinAdPriceDiffPct != null ? a.botMinAdPriceDiffPct : ''}" placeholder="0.1" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botMinAdPriceDiffPct',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
             <span class="help-text">Distancia mínima con tus otros anuncios (Binance exige ≥0.1%)</span>
-          </label>
+          </label></form>
         </div>
       </div>
     </div>`;
