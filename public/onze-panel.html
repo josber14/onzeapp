@@ -10175,6 +10175,20 @@ function addP2PBotStyles(){
   };
 
   window.botSelectExchange = function(exchange){
+    // ONZE/ZINPLE es exclusivo de Binance -- Bybit/OKX son cuenta única.
+    // Forzamos botActiveLabel a "ONZE" mientras se ve Bybit/OKX (así TODOS
+    // los fetch de este panel que arman su label con botActiveLabel quedan
+    // apuntando a la cuenta correcta sin tener que tocar cada uno), y
+    // restauramos el label real guardado al volver a Binance.
+    if(exchange === "binance"){
+      const stored = localStorage.getItem("botActiveLabel") || "ONZE";
+      botActiveLabel = stored;
+      window.botActiveLabel = stored;
+    } else {
+      botActiveLabel = "ONZE";
+      window.botActiveLabel = "ONZE";
+    }
+
     botSelectedExchange = exchange;
     botSelectedAdId = null;
     document.querySelectorAll(".bot-exchange-btn").forEach(b => {

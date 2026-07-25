@@ -535,8 +535,14 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
         if (binancePromises.length > 0) await Promise.all(binancePromises);
         if (cycleState.binance === undefined) cycleState.binance = buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
       } else if (exchange === "bybit") {
+        // Bybit no tiene concepto de ONZE/ZINPLE — es una única cuenta fija.
+        // Sin importar bajo qué label (ONZE o ZINPLE) esté corriendo el timer
+        // del panel en este momento, las credenciales y el ciclo de Bybit
+        // siempre usan "ONZE" — igual que ya se arregló en el guardado de
+        // credenciales (bybit-credentials/route.ts) y en la UI del panel.
+        const bybitLabel = "ONZE";
         const creds = await prisma.bybitCredentials.findFirst({
-          where: { tenantId, isActive: true, label },
+          where: { tenantId, isActive: true, label: bybitLabel },
         });
         if (!creds) {
           await l("warn", "bybit", "Sin credenciales Bybit configuradas");
@@ -549,7 +555,7 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
         if (!isDisabled) {
           bybitPromises.push((async () => {
             try {
-              const result = await runBybitCycle(tenantId, activeConfig, creds.apiKey, creds.secretKey, label);
+              const result = await runBybitCycle(tenantId, activeConfig, creds.apiKey, creds.secretKey, bybitLabel);
               if (result.actions.length > 0) {
                 actions.push(...result.actions);
                 await l( "info", "bybit", `${result.actions.length} acción(es) ejecutada(s)`, { actions: result.actions });
@@ -565,7 +571,7 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
           bybitPromises.push((async () => {
             try {
               const client = new BybitP2PClient(creds.apiKey, creds.secretKey);
-              await processChats(tenantId, "bybit", async () => ({ client }), [], label);
+              await processChats(tenantId, "bybit", async () => ({ client }), [], bybitLabel);
             } catch (e: any) {
               await l( "warn", "bybit", `Chat process: ${e.message}`);
             }
@@ -574,6 +580,7 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
 
         if (bybitPromises.length > 0) await Promise.all(bybitPromises);
       } else if (exchange === "okx") {
+        // Mismo caso que Bybit: OKX es una única cuenta fija, sin ONZE/ZINPLE.
         if (chatEnabled) {
           await l( "info", "okx", "Chat OKX pendiente de API");
         } else if (!isDisabled) {
