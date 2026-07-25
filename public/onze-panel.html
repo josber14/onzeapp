@@ -9613,7 +9613,7 @@ function addP2PBotStyles(){
           <p class="section-text" style="margin-top:2px;font-size:12px;color:#64748b;">Bot autom\u00E1tico de P2P Market Making</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <div style="display:flex;gap:4px;margin-right:8px;border:1px solid rgba(148,163,184,.15);border-radius:8px;overflow:hidden;">
+          <div id="botAcctSwitcher" style="display:flex;gap:4px;margin-right:8px;border:1px solid rgba(148,163,184,.15);border-radius:8px;overflow:hidden;">
             <button class="btn bot-acct-btn active" data-label="ONZE" onclick="window.botSetActiveLabel('ONZE')" style="border-radius:0;padding:5px 14px;font-size:12px;font-weight:700;">ONZE</button>
             <button class="btn bot-acct-btn" data-label="ZINPLE" onclick="window.botSetActiveLabel('ZINPLE')" style="border-radius:0;padding:5px 14px;font-size:12px;font-weight:700;">ZINPLE</button>
           </div>
@@ -10182,6 +10182,10 @@ function addP2PBotStyles(){
     });
     document.getElementById("botCredExchangeLabel").textContent = exchange.charAt(0).toUpperCase() + exchange.slice(1);
     document.getElementById("botAdsExchangeLabel").textContent = exchange.charAt(0).toUpperCase() + exchange.slice(1);
+
+    // ONZE/ZINPLE es exclusivo de Binance -- no aplica a Bybit ni OKX
+    const acctSwitcher = document.getElementById("botAcctSwitcher");
+    if(acctSwitcher) acctSwitcher.style.display = exchange === "binance" ? "" : "none";
 
     // Show sections
     const adsSection = document.getElementById("botAdsSection");
@@ -11135,7 +11139,7 @@ function addP2PBotStyles(){
         </form>
       `;
       try{
-        const r = await fetch("/api/p2p/bot/bybit-credentials?label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
+        const r = await fetch("/api/p2p/bot/bybit-credentials?label=ONZE", { credentials:"include" });
         const d = await r.json();
         if(d?.ok && d?.credentials){
           document.getElementById("botCredApiKey").value = d.credentials.apiKey || "";
@@ -11157,7 +11161,7 @@ function addP2PBotStyles(){
         </form>
       `;
       try{
-        const r = await fetch("/api/p2p/bot/okx-credentials?label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
+        const r = await fetch("/api/p2p/bot/okx-credentials?label=ONZE", { credentials:"include" });
         const d = await r.json();
         if(d?.ok && d?.credentials){
           document.getElementById("botCredApiKey").value = d.credentials.apiKey || "";
@@ -11182,18 +11186,22 @@ function addP2PBotStyles(){
       return;
     }
 
-    const lbl = botActiveLabel || "ONZE";
+    // ONZE/ZINPLE es un concepto exclusivo de Binance -- Bybit y OKX siempre
+    // usan una sola cuenta fija, sin depender de que sesion tengas
+    // seleccionada en Binance (antes esto causaba que las credenciales
+    // parecieran "borrarse": se guardaban con una sesion y se leian con otra).
     let url, body;
     if(ex === "binance"){
+      const lbl = botActiveLabel || "ONZE";
       url = "/api/binance/credentials";
       body = { apiKey, secretKey, test: true, label: lbl };
     }else if(ex === "bybit"){
       url = "/api/p2p/bot/bybit-credentials";
-      body = { apiKey, secretKey, test: true, label: lbl };
+      body = { apiKey, secretKey, test: true, label: "ONZE" };
     }else if(ex === "okx"){
       const passphrase = document.getElementById("botCredPassphrase")?.value.trim();
       url = "/api/p2p/bot/okx-credentials";
-      body = { apiKey, secretKey, passphrase, test: true, label: lbl };
+      body = { apiKey, secretKey, passphrase, test: true, label: "ONZE" };
     }
 
     const res = await fetch(url, {

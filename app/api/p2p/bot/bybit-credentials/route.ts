@@ -43,8 +43,8 @@ export async function POST(req: NextRequest) {
     if (!session?.tenantId) {
       return Response.json({ ok: false, error: "No autorizado" }, { status: 401 });
     }
-    const label = req.nextUrl.searchParams.get("label") || "ONZE";
     const body = await req.json();
+    const label = body.label || req.nextUrl.searchParams.get("label") || "ONZE";
     const { apiKey, secretKey, test } = body;
 
     if (apiKey && secretKey) {
