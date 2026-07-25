@@ -20,6 +20,7 @@ export interface P2PBotConfigData {
   competePayTypes: string[] | null;
   commissionPct: number;
   safeMarginPct: number;
+  minAdPriceDiffPct: number | null;
 }
 
 export interface P2PBotExchangeConfigData {
@@ -45,6 +46,7 @@ export interface P2PBotExchangeConfigData {
   adUpdateCount: number;
   commissionPct: number;
   safeMarginPct: number;
+  minAdPriceDiffPct: number | null;
 }
 
 export interface BotAd {

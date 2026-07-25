@@ -980,6 +980,7 @@ model P2PBotConfig {
   competePayTypes    Json?
   commissionPct      Decimal   @default(0.14) @db.Decimal(8, 4)
   safeMarginPct      Decimal   @default(0) @db.Decimal(8, 4)
+  minAdPriceDiffPct  Decimal?  @db.Decimal(8, 4)
   tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
@@ -1196,6 +1197,7 @@ model P2PBotExchangeConfig {
   chatCookies          Json?
   commissionPct        Decimal   @default(0.14) @db.Decimal(8, 4)
   safeMarginPct        Decimal   @default(0) @db.Decimal(8, 4)
+  minAdPriceDiffPct    Decimal?  @db.Decimal(8, 4)
   Tenant               Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, exchange, label])

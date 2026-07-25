@@ -9578,6 +9578,23 @@ function addP2PBotStyles(){
     .toggle-switch .slider::before{content:"";position:absolute;height:18px;width:18px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
     .toggle-switch input:checked+.slider{background:#22c55e;}
     .toggle-switch input:checked+.slider::before{transform:translateX(18px);}
+
+    /* Mobile: colapsa a una sola columna las grillas que asumían escritorio.
+       Sin esto, columnas con contenido ancho (ej. Ordenes) empujan a las
+       angostas (ej. Actividad) a un ancho casi nulo, partiendo el texto
+       letra por letra. */
+    @media (max-width:700px){
+      .bot-cols,
+      .bot-config-grid,
+      .bot-accounts-grid,
+      .bot-panel-form,
+      .bot-panel-form.af-pro .af-grid,
+      .bot-ad-card .ad-body,
+      .ad-bot-config-inner,
+      .bot-filter-grid{grid-template-columns:1fr!important;}
+      .bot-cred-fields{grid-template-columns:1fr!important;}
+      #botFilterDateCustom{grid-template-columns:1fr!important;}
+    }
   `;
   document.head.appendChild(style);
 }
@@ -9712,8 +9729,9 @@ function addP2PBotStyles(){
                 <input id="botCircuitBreakPct" type="number" step="0.1" value="3" autocomplete="off" onblur="window.botSaveExchangeConfig()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
               </label>
               <label>
-                Vol. máximo diario (USDT)
-                <input id="botDailyVolumeCap" type="number" value="" placeholder="Sin límite" autocomplete="off" onblur="window.botSaveExchangeConfig()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+                Límite diferencia anuncios (%)
+                <input id="botMinAdPriceDiffPct" type="number" step="0.01" value="0.1" autocomplete="off" onblur="window.botSaveExchangeConfig()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+                <span class="help-text">Distancia mínima entre precios de tus propios anuncios (Binance exige ≥0.1%)</span>
               </label>
               <label>
                 Intervalo ciclo (seg)
@@ -9884,7 +9902,7 @@ function addP2PBotStyles(){
                 </div>
                 <!-- Filter dropdown -->
                 <div id="botOrdersFilterDropdown" style="display:none;margin-bottom:8px;background:rgba(15,23,42,.95);border:1px solid rgba(148,163,184,.1);border-radius:12px;padding:14px;">
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                  <div class="bot-filter-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                     <div>
                       <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Tipo</div>
                       <select id="botFilterType" onchange="window.botApplyOrdersFilters()" style="width:100%;padding:5px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.1);background:rgba(15,23,42,.5);color:#e2e8f0;font-size:11px;font-family:inherit;">
@@ -10957,7 +10975,7 @@ function addP2PBotStyles(){
     const payTypes = cfg.competePayTypes;
     setField("botExCompetePayType", (payTypes && payTypes.length > 0 && payTypes[0] === "__match_ad__") ? "match" : "all");
     setField("botCircuitBreakPct", cfg.circuitBreakPct || 3);
-    setField("botDailyVolumeCap", cfg.dailyVolumeCapUsdt || "");
+    setField("botMinAdPriceDiffPct", cfg.minAdPriceDiffPct ?? 0.1);
     setField("botCycleInterval", cfg.cycleInterval ?? 10);
     var chatCb = document.getElementById("botChatBotEnabled");
     if(chatCb) chatCb.checked = !!cfg.chatBotEnabled;
@@ -11054,8 +11072,7 @@ function addP2PBotStyles(){
     const competePayTypes = competePayType === "all" ? null : ["__match_ad__"];
     const circuitBreakPct = parseFloat(document.getElementById("botCircuitBreakPct").value) || 3;
     const cycleInterval = Math.round(parseFloat(document.getElementById("botCycleInterval").value)) || 10;
-    const dailyV = document.getElementById("botDailyVolumeCap").value;
-    const dailyVolumeCapUsdt = dailyV ? parseFloat(dailyV) : null;
+    const minAdPriceDiffPct = parseFloat(document.getElementById("botMinAdPriceDiffPct").value) || 0.1;
     const chatBotEnabled = document.getElementById("botChatBotEnabled").checked;
 
     var _r = Math.random().toString(36).slice(2);
@@ -11063,7 +11080,7 @@ function addP2PBotStyles(){
       method:"PUT",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ exchange: ex, label: botActiveLabel || "ONZE", strategy, top1Diff, spreadPct, priceSource, priceFloorPct, commissionPct, safeMarginPct, minCompetitorCapital, competePayTypes, circuitBreakPct, dailyVolumeCapUsdt, cycleInterval, chatBotEnabled })
+      body: JSON.stringify({ exchange: ex, label: botActiveLabel || "ONZE", strategy, top1Diff, spreadPct, priceSource, priceFloorPct, commissionPct, safeMarginPct, minCompetitorCapital, competePayTypes, circuitBreakPct, minAdPriceDiffPct, cycleInterval, chatBotEnabled })
     });
     var cb = document.getElementById("botChatBotEnabled");
     if(cb) cb.checked = chatBotEnabled;

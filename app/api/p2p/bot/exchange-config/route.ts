@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
         chatCookies: c.chatCookies as string | null,
         commissionPct: Number(c.commissionPct) || 0.14,
         safeMarginPct: Number(c.safeMarginPct) || 0,
+        minAdPriceDiffPct: c.minAdPriceDiffPct != null ? Number(c.minAdPriceDiffPct) : 0.1,
         pauseUntil: c.pauseUntil?.toISOString() || null,
         lastStartedAt: c.lastStartedAt?.toISOString() || null,
         lastStoppedAt: c.lastStoppedAt?.toISOString() || null,
@@ -91,6 +92,7 @@ export async function PUT(req: NextRequest) {
     if (data.chatCookies !== undefined) update.chatCookies = data.chatCookies;
     if (data.commissionPct !== undefined) update.commissionPct = data.commissionPct;
     if (data.safeMarginPct !== undefined) update.safeMarginPct = data.safeMarginPct;
+    if (data.minAdPriceDiffPct !== undefined) update.minAdPriceDiffPct = data.minAdPriceDiffPct;
     if (data.action === "start") {
       update.enabled = true;
       update.pauseUntil = null;
@@ -133,6 +135,7 @@ export async function PUT(req: NextRequest) {
         competePayTypes: (data.competePayTypes ?? null) as any,
         commissionPct: data.commissionPct ?? 0.14,
         safeMarginPct: data.safeMarginPct ?? 0,
+        minAdPriceDiffPct: data.minAdPriceDiffPct ?? 0.1,
         chatBotEnabled: data.chatBotEnabled ?? false,
       },
     });
@@ -155,6 +158,7 @@ export async function PUT(req: NextRequest) {
         chatCookies: config.chatCookies as string | null,
         commissionPct: Number(config.commissionPct) || 0.14,
         safeMarginPct: Number(config.safeMarginPct) || 0,
+        minAdPriceDiffPct: config.minAdPriceDiffPct != null ? Number(config.minAdPriceDiffPct) : 0.1,
         pauseUntil: config.pauseUntil?.toISOString() || null,
         lastStartedAt: config.lastStartedAt?.toISOString() || null,
         lastStoppedAt: config.lastStoppedAt?.toISOString() || null,

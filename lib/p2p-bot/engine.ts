@@ -163,6 +163,7 @@ export async function getBotConfig(
       ? Number(config.dailyVolumeCapUsdt)
       : null,
     circuitBreakPct: Number(config.circuitBreakPct),
+    minAdPriceDiffPct: config.minAdPriceDiffPct != null ? Number(config.minAdPriceDiffPct) : 0.1,
     pauseUntil: config.pauseUntil?.toISOString() || null,
     lastStartedAt: config.lastStartedAt?.toISOString() || null,
     lastStoppedAt: config.lastStoppedAt?.toISOString() || null,
@@ -292,6 +293,7 @@ export async function getExchangeConfig(
     competePayTypes: config.competePayTypes as string[] | null,
     commissionPct: Number(config.commissionPct) || 0.14,
     safeMarginPct: Number(config.safeMarginPct) || 0,
+    minAdPriceDiffPct: config.minAdPriceDiffPct != null ? Number(config.minAdPriceDiffPct) : 0.1,
     chatBotEnabled: config.chatBotEnabled ?? false,
     chatCookies: config.chatCookies as string | null,
   };
@@ -317,6 +319,7 @@ export async function saveExchangeConfig(
   if (data.competePayTypes !== undefined) update.competePayTypes = data.competePayTypes;
   if (data.commissionPct !== undefined) update.commissionPct = data.commissionPct;
   if (data.safeMarginPct !== undefined) update.safeMarginPct = data.safeMarginPct;
+  if (data.minAdPriceDiffPct !== undefined) update.minAdPriceDiffPct = data.minAdPriceDiffPct;
   if (data.adUpdateCount !== undefined) update.adUpdateCount = data.adUpdateCount;
   if (data.chatBotEnabled !== undefined) update.chatBotEnabled = data.chatBotEnabled;
   if (data.chatCookies !== undefined) update.chatCookies = data.chatCookies;
@@ -340,6 +343,7 @@ export async function saveExchangeConfig(
       competePayTypes: (data.competePayTypes ?? null) as any,
       commissionPct: data.commissionPct ?? (exchange === "binance" ? 0.14 : 0),
       safeMarginPct: data.safeMarginPct ?? 0,
+      minAdPriceDiffPct: data.minAdPriceDiffPct ?? 0.1,
       adUpdateCount: data.adUpdateCount ?? 0,
     },
   });
@@ -828,6 +832,12 @@ async function runBinanceCycle(
     const exchangeCompetePayTypes = (config as any).competePayTypes as string[] | null | undefined;
     const exchangeCircuitBreakPct = Number((config as any).circuitBreakPct) || 3;
     const exchangeDailyVolumeCapUsdt = (config as any).dailyVolumeCapUsdt ? Number((config as any).dailyVolumeCapUsdt) : null;
+    // Binance exige (confirmado por soporte, jul 2026): "Para los anuncios
+    // publicados con un precio fijo, la diferencia de precio entre anuncios en
+    // la misma direccion debe ser ≥ 0.1%." Si dos anuncios propios (mismo lado)
+    // quedan mas cerca que esto, Binance restringe la cuenta para cambiar
+    // precios — por eso nunca se deja en 0 salvo que el usuario lo pida.
+    const exchangeMinAdPriceDiffPct = (config as any).minAdPriceDiffPct != null ? Number((config as any).minAdPriceDiffPct) : 0.1;
     const exchangePriceSource = (config as any).priceSource || "capacity";
     const exchangePriceFloorPct = (config as any).priceFloorPct ? Number((config as any).priceFloorPct) : 0;
 
@@ -915,6 +925,18 @@ async function runBinanceCycle(
         });
       }
     } catch (e) {}
+
+    // Precio "efectivo" de cada anuncio propio gestionado, para chequear la
+    // distancia minima entre anuncios de la misma cuenta y lado (Binance exige
+    // ≥0.1% o restringe la cuenta). Arranca con el precio real vigente en
+    // Binance, y se va actualizando con el precio objetivo de cada anuncio a
+    // medida que el ciclo avanza — asi el siguiente anuncio de este mismo
+    // ciclo ya lo tiene en cuenta y no vuelven a chocar entre si.
+    const ownAdPrices = new Map<string, number>();
+    for (const ma of managedAds) {
+      const sellAd = ourSellAds.find((a: any) => String(a.id) === String(ma.adId));
+      if (sellAd) ownAdPrices.set(String(ma.adId), Number(sellAd.price));
+    }
 
     // 4. Process each managed ad
     let firstAdPrice = 0;
@@ -1107,6 +1129,29 @@ async function runBinanceCycle(
       let targetPrice = targetCompetitor ? Number(targetCompetitor.price) - adTop1Diff : safeFloor;
       // Nunca quedarse debajo del precio mínimo de seguridad
       if (targetPrice < safeFloor) { targetPrice = safeFloor; }
+
+      // ── Distancia mínima con nuestros otros anuncios del mismo lado ──
+      // Binance exige ≥0.1% de diferencia entre anuncios propios en la misma
+      // dirección (confirmado por soporte, jul 2026) — si no se respeta,
+      // restringe la cuenta para cambiar precios (ya pasó una vez). Si el
+      // precio objetivo queda demasiado cerca de otro anuncio propio, se aleja
+      // lo mínimo necesario, sin bajar nunca del piso de seguridad.
+      if (exchangeMinAdPriceDiffPct > 0) {
+        for (const [otherId, otherPrice] of ownAdPrices) {
+          if (otherId === String(adId) || !otherPrice) continue;
+          const gapPct = (Math.abs(targetPrice - otherPrice) / otherPrice) * 100;
+          if (gapPct < exchangeMinAdPriceDiffPct) {
+            const requiredGap = otherPrice * (exchangeMinAdPriceDiffPct / 100);
+            let adjusted = targetPrice <= otherPrice ? otherPrice - requiredGap : otherPrice + requiredGap;
+            if (adjusted < safeFloor) adjusted = otherPrice + requiredGap;
+            await log( "info", "binance",
+              `Ad ${adId}: precio ${targetPrice.toFixed(2)} muy cerca del anuncio ${otherId} (${otherPrice}) — ajustado a ${adjusted.toFixed(2)} para respetar el ${exchangeMinAdPriceDiffPct}% mínimo que exige Binance entre anuncios propios`);
+            targetPrice = adjusted;
+          }
+        }
+      }
+      ownAdPrices.set(String(adId), targetPrice);
+
       if (firstAdTarget === 0) firstAdTarget = targetPrice;
 
       const diff = Math.abs(currentPrice - targetPrice);
