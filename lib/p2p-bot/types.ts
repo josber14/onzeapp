@@ -89,6 +89,7 @@ export interface P2PBotAdConfigData {
   botCycleInterval: number | null;
   botCircuitBreakPct: number | null;
   botDailyVolumeCapUsdt: number | null;
+  botMinAdPriceDiffPct: number | null;
 }
 
 export interface BotAction {

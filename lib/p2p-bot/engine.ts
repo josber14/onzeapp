@@ -971,6 +971,7 @@ async function runBinanceCycle(
       const adPriceFloorPct = managedAd.botPriceFloorPct != null ? Number(managedAd.botPriceFloorPct) : (exchangePriceFloorPct > 0 ? exchangePriceFloorPct : null);
       const adCircuitBreakPct = managedAd.botCircuitBreakPct != null ? Number(managedAd.botCircuitBreakPct) : exchangeCircuitBreakPct;
       const adDailyVolumeCapUsdt = managedAd.botDailyVolumeCapUsdt != null ? Number(managedAd.botDailyVolumeCapUsdt) : exchangeDailyVolumeCapUsdt;
+      const adMinAdPriceDiffPct = (managedAd as any).botMinAdPriceDiffPct != null ? Number((managedAd as any).botMinAdPriceDiffPct) : exchangeMinAdPriceDiffPct;
 
       let minSellPrice = 0;
       // 1) Per-ad price floor override (solo si source es manual)
@@ -1136,16 +1137,16 @@ async function runBinanceCycle(
       // restringe la cuenta para cambiar precios (ya pasó una vez). Si el
       // precio objetivo queda demasiado cerca de otro anuncio propio, se aleja
       // lo mínimo necesario, sin bajar nunca del piso de seguridad.
-      if (exchangeMinAdPriceDiffPct > 0) {
+      if (adMinAdPriceDiffPct > 0) {
         for (const [otherId, otherPrice] of ownAdPrices) {
           if (otherId === String(adId) || !otherPrice) continue;
           const gapPct = (Math.abs(targetPrice - otherPrice) / otherPrice) * 100;
-          if (gapPct < exchangeMinAdPriceDiffPct) {
-            const requiredGap = otherPrice * (exchangeMinAdPriceDiffPct / 100);
+          if (gapPct < adMinAdPriceDiffPct) {
+            const requiredGap = otherPrice * (adMinAdPriceDiffPct / 100);
             let adjusted = targetPrice <= otherPrice ? otherPrice - requiredGap : otherPrice + requiredGap;
             if (adjusted < safeFloor) adjusted = otherPrice + requiredGap;
             await log( "info", "binance",
-              `Ad ${adId}: precio ${targetPrice.toFixed(2)} muy cerca del anuncio ${otherId} (${otherPrice}) — ajustado a ${adjusted.toFixed(2)} para respetar el ${exchangeMinAdPriceDiffPct}% mínimo que exige Binance entre anuncios propios`);
+              `Ad ${adId}: precio ${targetPrice.toFixed(2)} muy cerca del anuncio ${otherId} (${otherPrice}) — ajustado a ${adjusted.toFixed(2)} para respetar el ${adMinAdPriceDiffPct}% mínimo que exige Binance entre anuncios propios`);
             targetPrice = adjusted;
           }
         }

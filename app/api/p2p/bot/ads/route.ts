@@ -99,6 +99,7 @@ export async function GET(req: NextRequest) {
               botCycleInterval: localAd?.botCycleInterval ? Number(localAd.botCycleInterval) : null,
               botCircuitBreakPct: localAd?.botCircuitBreakPct ? Number(localAd.botCircuitBreakPct) : null,
               botDailyVolumeCapUsdt: localAd?.botDailyVolumeCapUsdt ? Number(localAd.botDailyVolumeCapUsdt) : null,
+              botMinAdPriceDiffPct: localAd?.botMinAdPriceDiffPct != null ? Number(localAd.botMinAdPriceDiffPct) : null,
               createdAt: a.createDate || a.createdAt || new Date().toISOString(),
               fromBinance: true,
             };
@@ -168,6 +169,7 @@ export async function GET(req: NextRequest) {
             botCycleInterval: localAd?.botCycleInterval ? Number(localAd.botCycleInterval) : null,
             botCircuitBreakPct: localAd?.botCircuitBreakPct ? Number(localAd.botCircuitBreakPct) : null,
             botDailyVolumeCapUsdt: localAd?.botDailyVolumeCapUsdt ? Number(localAd.botDailyVolumeCapUsdt) : null,
+            botMinAdPriceDiffPct: localAd?.botMinAdPriceDiffPct != null ? Number(localAd.botMinAdPriceDiffPct) : null,
             createdAt: a.createDate ? new Date(Number(a.createDate)).toISOString() : new Date().toISOString(),
             fromBybit: true,
             };
@@ -209,6 +211,7 @@ export async function GET(req: NextRequest) {
       botCycleInterval: a.botCycleInterval ? Number(a.botCycleInterval) : null,
       botCircuitBreakPct: a.botCircuitBreakPct ? Number(a.botCircuitBreakPct) : null,
       botDailyVolumeCapUsdt: a.botDailyVolumeCapUsdt ? Number(a.botDailyVolumeCapUsdt) : null,
+      botMinAdPriceDiffPct: a.botMinAdPriceDiffPct != null ? Number(a.botMinAdPriceDiffPct) : null,
       createdAt: a.createdAt.toISOString(),
       fromBybit: false,
     }))];
@@ -240,7 +243,7 @@ export async function PUT(req: NextRequest) {
 
     const body = await req.json();
     const label = body.label || req.nextUrl.searchParams.get("label") || "ONZE";
-    const { id, adId, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged, botEnabled, botTop1Diff, botSafeMarginPct, botCompetePayTypes, botPriceFloorPct, botPriceSource, botCommissionPct, botMinCompetitorCapital, botStrategy, botSpreadPct, botCycleInterval, botCircuitBreakPct, botDailyVolumeCapUsdt } = body;
+    const { id, adId, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged, botEnabled, botTop1Diff, botSafeMarginPct, botCompetePayTypes, botPriceFloorPct, botPriceSource, botCommissionPct, botMinCompetitorCapital, botStrategy, botSpreadPct, botCycleInterval, botCircuitBreakPct, botDailyVolumeCapUsdt, botMinAdPriceDiffPct } = body;
 
     if (!exchange) {
       return Response.json({ ok: false, error: "exchange es requerido" }, { status: 400 });
@@ -344,6 +347,7 @@ export async function PUT(req: NextRequest) {
     if (botCycleInterval !== undefined) updateData.botCycleInterval = botCycleInterval;
     if (botCircuitBreakPct !== undefined) updateData.botCircuitBreakPct = botCircuitBreakPct;
     if (botDailyVolumeCapUsdt !== undefined) updateData.botDailyVolumeCapUsdt = botDailyVolumeCapUsdt;
+    if (botMinAdPriceDiffPct !== undefined) updateData.botMinAdPriceDiffPct = botMinAdPriceDiffPct;
     if (body.label !== undefined) updateData.label = body.label;
 
     if (dbRecord) {
