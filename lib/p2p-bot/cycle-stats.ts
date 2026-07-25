@@ -78,5 +78,100 @@ export async function computeCycleOrderStats(
   const firstOrder = sortedByTime[0] || null;
   const lastOrder = sortedByTime[sortedByTime.length - 1] || null;
 
-  return { totalUsdt, totalBinanceClp, orderCount: cycleOrders.length, firstOrder, lastOrder };
+  return {
+    totalUsdt,
+    totalBinanceClp,
+    orderCount: cycleOrders.length,
+    firstOrder,
+    lastOrder,
+    // Lista completa para mostrar "qué órdenes van entrando" en el ciclo activo.
+    orders: sortedByTime,
+  };
+}
+
+// Estados que Binance/Bybit consideran definitivos como venta real completada
+// (ver P2PBotOrder.status, guardado con el string crudo del exchange).
+const COMPLETED_STATUSES = new Set(["COMPLETED", "completed"]);
+
+// Para Bybit (y cualquier exchange sin una API de historial propia todavía
+// integrada acá) usamos las órdenes que el propio ciclo del bot ya sincroniza
+// a P2PBotOrder en cada vuelta (ver runBybitCycle en engine.ts, sección
+// "Sync orders"). A diferencia de Binance, Bybit es una cuenta única sin
+// variante ONZE/ZINPLE, así que no hay riesgo de mezclar cuentas al no
+// filtrar por label acá.
+export async function computeLocalCycleStats(
+  prisma: any,
+  tenantId: number,
+  exchange: string,
+  startMs: number,
+  endMs?: number
+) {
+  const endTimestamp = endMs ?? Date.now();
+  const rows = await prisma.p2PBotOrder.findMany({
+    where: {
+      tenantId,
+      exchange,
+      executedAt: { gte: new Date(startMs), lte: new Date(endTimestamp) },
+    },
+    orderBy: { executedAt: "asc" },
+  });
+
+  const completed = rows.filter((o: any) => COMPLETED_STATUSES.has(o.status));
+
+  let totalUsdt = 0;
+  let totalClp = 0;
+  for (const o of completed) {
+    totalUsdt += Number(o.amount) || 0;
+    totalClp += Math.round(Number(o.totalPrice) || 0);
+  }
+
+  const firstOrder = completed[0] || null;
+  const lastOrder = completed[completed.length - 1] || null;
+
+  return {
+    totalUsdt,
+    totalBinanceClp: totalClp,
+    orderCount: completed.length,
+    firstOrder: firstOrder
+      ? { orderNumber: firstOrder.orderNumber, totalPrice: firstOrder.totalPrice, createTime: firstOrder.executedAt.getTime() }
+      : null,
+    lastOrder: lastOrder
+      ? { orderNumber: lastOrder.orderNumber, totalPrice: lastOrder.totalPrice, createTime: lastOrder.executedAt.getTime() }
+      : null,
+    orders: completed,
+  };
+}
+
+// "Producción del bot": qué tanto trabajó el motor durante la ventana del
+// ciclo — cambios de precio ejecutados y ciclos corridos — leído de
+// P2PBotLog. Sirve para comparar cuánto se movió el bot vs. cuánto realmente
+// se vendió, y para detectar ciclos donde el bot estuvo activo pero el
+// mercado no dejó vender (mucha "producción", poca venta real).
+export async function computeCycleProductionStats(
+  prisma: any,
+  tenantId: number,
+  exchange: string,
+  label: string,
+  startMs: number,
+  endMs?: number
+) {
+  const endTimestamp = endMs ?? Date.now();
+  const range = { gte: new Date(startMs), lte: new Date(endTimestamp) };
+
+  const [priceUpdates, cyclesRun] = await Promise.all([
+    prisma.p2PBotLog.count({
+      where: { tenantId, exchange, label, createdAt: range, message: { contains: "precio actualizado" } },
+    }),
+    prisma.p2PBotLog.count({
+      where: { tenantId, exchange, label, createdAt: range, message: { contains: "Ciclo completado" } },
+    }),
+  ]);
+
+  const hoursElapsed = Math.max((endTimestamp - startMs) / 3600000, 1 / 60);
+
+  return {
+    priceUpdates,
+    cyclesRun,
+    priceUpdatesPerHour: priceUpdates / hoursElapsed,
+  };
 }

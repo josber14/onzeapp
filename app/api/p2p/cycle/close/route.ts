@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { BinanceP2PClient } from "@/lib/p2p-bot/binance-adapter";
-import { computeCycleOrderStats } from "@/lib/p2p-bot/cycle-stats";
+import { computeCycleOrderStats, computeLocalCycleStats } from "@/lib/p2p-bot/cycle-stats";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,29 +23,37 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const label = body.label || "ONZE";
+    const exchange = body.exchange || "binance";
 
     const cycle = await prisma.p2PCycle.findFirst({
-      where: { tenantId: session.tenantId, label, status: "active" },
+      where: { tenantId: session.tenantId, exchange, label, status: "active" },
       include: { manualSales: true },
     });
     if (!cycle) {
       return Response.json({ ok: false, error: "No hay un ciclo activo para esta etiqueta" });
     }
 
-    const creds = await prisma.binanceCredentials.findFirst({
-      where: { tenantId: session.tenantId, isActive: true, label },
-      orderBy: { id: "asc" },
-    });
-    if (!creds) {
-      return Response.json({ ok: false, error: "Sin credenciales Binance" });
-    }
-
-    const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
-
     const startMs = Number(cycle.startTime);
     const endMs = Date.now();
-    const { totalUsdt, totalBinanceClp, orderCount, firstOrder, lastOrder } =
-      await computeCycleOrderStats(client, startMs, endMs);
+
+    let totalUsdt: number, totalBinanceClp: number, orderCount: number, firstOrder: any, lastOrder: any;
+    if (exchange === "binance") {
+      const creds = await prisma.binanceCredentials.findFirst({
+        where: { tenantId: session.tenantId, isActive: true, label },
+        orderBy: { id: "asc" },
+      });
+      if (!creds) {
+        return Response.json({ ok: false, error: "Sin credenciales Binance" });
+      }
+      const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
+      ({ totalUsdt, totalBinanceClp, orderCount, firstOrder, lastOrder } =
+        await computeCycleOrderStats(client, startMs, endMs));
+    } else {
+      // Bybit/OKX: sin API de historial propia integrada acá todavía --
+      // usamos las órdenes que el ciclo del bot ya sincroniza a P2PBotOrder.
+      ({ totalUsdt, totalBinanceClp, orderCount, firstOrder, lastOrder } =
+        await computeLocalCycleStats(prisma, session.tenantId, exchange, startMs, endMs));
+    }
 
     const totalManualClp = Number(cycle.totalManualClp);
 

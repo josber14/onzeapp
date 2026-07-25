@@ -9814,6 +9814,31 @@ function addP2PBotStyles(){
                   <div class="bot-cycle-tile-value" id="botCycleMinClose" style="font-size:13px;">—</div>
                 </div>
               </div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px;">
+                <div class="bot-cycle-tile" style="border-color:rgba(52,211,153,.25);">
+                  <div class="bot-cycle-tile-label">Ganancia estimada</div>
+                  <div class="bot-cycle-tile-value" id="botCycleProfit" style="color:#34d399;font-size:13px;">—</div>
+                </div>
+                <div class="bot-cycle-tile">
+                  <div class="bot-cycle-tile-label">Cambios de precio</div>
+                  <div class="bot-cycle-tile-value" id="botCycleProdUpdates" style="font-size:13px;">—</div>
+                </div>
+                <div class="bot-cycle-tile">
+                  <div class="bot-cycle-tile-label">Cambios / hora</div>
+                  <div class="bot-cycle-tile-value" id="botCycleProdRate" style="font-size:13px;">—</div>
+                </div>
+                <div class="bot-cycle-tile">
+                  <div class="bot-cycle-tile-label">Promedio por orden</div>
+                  <div class="bot-cycle-tile-value" id="botCycleAvgOrder" style="font-size:13px;">—</div>
+                </div>
+              </div>
+              <p id="botCycleProfitHint" style="margin-top:6px;font-size:10px;color:#64748b;"></p>
+              <div style="margin-top:10px;">
+                <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px;">Órdenes de este ciclo</div>
+                <div id="botCycleOrdersList" style="max-height:220px;overflow-y:auto;border:1px solid rgba(148,163,184,.12);border-radius:8px;">
+                  <div style="color:#64748b;font-size:11px;text-align:center;padding:12px 0;">Sin órdenes todavía</div>
+                </div>
+              </div>
             </div>
             <div id="botCycleManualList" style="margin-top:10px;font-size:11px;color:#94a3b8;display:none;"></div>
           </div>
@@ -13678,7 +13703,7 @@ function addP2PBotStyles(){
   }
 
   async function botCycleRefresh(){
-    const lbl = "?label=" + encodeURIComponent(botActiveLabel || "ONZE");
+    const lbl = "?label=" + encodeURIComponent(botActiveLabel || "ONZE") + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance");
     try{
       const res = await fetch("/api/p2p/cycle/status" + lbl, { credentials:"include" });
       const data = await res.json();
@@ -13696,15 +13721,62 @@ function addP2PBotStyles(){
         closeBtn.style.display = "";
         info.style.display = "block";
         if(emptyHint) emptyHint.style.display = "none";
-        labelEl.textContent = "Activo · " + (cycle.label || "ONZE");
+        // ONZE/ZINPLE solo tiene sentido en Binance -- en Bybit/OKX (cuenta
+        // única) mostrar el nombre del exchange en vez del label interno.
+        const cycleTag = botSelectedExchange === "binance" ? (cycle.label || "ONZE") : botSelectedExchange.toUpperCase();
+        labelEl.textContent = "Activo · " + cycleTag;
         labelEl.style.background = "rgba(0,255,136,.14)";
         labelEl.style.color = "#00ff88";
         document.getElementById("botCycleStartTime").textContent = new Date(cycle.startTime).toLocaleString();
         document.getElementById("botCycleUsdt").textContent = Number(cycle.totalUsdt || 0).toFixed(2);
         document.getElementById("botCycleBinanceClp").textContent = "$" + Math.round(Number(cycle.totalBinanceClp || 0)).toLocaleString();
         document.getElementById("botCycleManualClp").textContent = "$" + Math.round(Number(cycle.totalManualClp || 0)).toLocaleString();
-        document.getElementById("botCycleTotalClp").textContent = "$" + Math.round(Number(cycle.totalBinanceClp || 0) + Number(cycle.totalManualClp || 0)).toLocaleString();
+        const totalClpNum = Number(cycle.totalBinanceClp || 0) + Number(cycle.totalManualClp || 0);
+        document.getElementById("botCycleTotalClp").textContent = "$" + Math.round(totalClpNum).toLocaleString();
         document.getElementById("botCycleMinClose").textContent = cycle.minCloseBalance ? Number(cycle.minCloseBalance).toFixed(2) + " USDT" : "—";
+
+        // Ganancia estimada (viene calculada del servidor con el costo de la
+        // capacity activa AHORA -- se marca como estimado, no contabilidad exacta).
+        const profitEl = document.getElementById("botCycleProfit");
+        const profitHintEl = document.getElementById("botCycleProfitHint");
+        if(data.profitEstimate != null){
+          const p = Number(data.profitEstimate);
+          profitEl.textContent = (p >= 0 ? "+$" : "-$") + Math.round(Math.abs(p)).toLocaleString();
+          profitEl.style.color = p >= 0 ? "#34d399" : "#fb7185";
+          if(profitHintEl) profitHintEl.textContent = "Estimado con costo actual ($" + Number(data.costPriceUsed).toFixed(2) + "/USDT) -- no es contabilidad exacta por capacity";
+        }else{
+          profitEl.textContent = "—";
+          if(profitHintEl) profitHintEl.textContent = "Sin capacity activa para estimar costo";
+        }
+
+        // Producción del bot
+        const prod = data.production;
+        document.getElementById("botCycleProdUpdates").textContent = prod ? prod.priceUpdates : "—";
+        document.getElementById("botCycleProdRate").textContent = prod ? prod.priceUpdatesPerHour.toFixed(1) : "—";
+        const orderCountForAvg = Number(cycle.totalUsdt || 0) > 0 ? (data.orders || []).length : 0;
+        document.getElementById("botCycleAvgOrder").textContent = orderCountForAvg > 0
+          ? "$" + Math.round(totalClpNum / orderCountForAvg).toLocaleString()
+          : "—";
+
+        // Lista de órdenes que van entrando en este ciclo
+        const ordersListEl = document.getElementById("botCycleOrdersList");
+        if(ordersListEl){
+          const orders = data.orders || [];
+          if(orders.length){
+            ordersListEl.innerHTML = orders.map(o => {
+              const t = o.executedAt || o.createTime;
+              const dateStr = t ? new Date(Number(t) || t).toLocaleString("es-CL", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }) : "—";
+              return "<div style='display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-bottom:1px solid rgba(148,163,184,.08);font-size:11px;'>" +
+                "<span style='color:#94a3b8;'>" + dateStr + "</span>" +
+                "<span style='color:#e2e8f0;'>" + Number(o.amount || 0).toFixed(2) + " USDT</span>" +
+                "<span style='color:#fbbf24;font-weight:700;'>$" + Math.round(Number(o.totalPrice || 0)).toLocaleString() + "</span>" +
+              "</div>";
+            }).join("");
+          }else{
+            ordersListEl.innerHTML = "<div style='color:#64748b;font-size:11px;text-align:center;padding:12px 0;'>Sin órdenes todavía</div>";
+          }
+        }
+
         const listEl = document.getElementById("botCycleManualList");
         if(cycle.manualSales?.length){
           listEl.style.display = "block";
@@ -13778,7 +13850,7 @@ function addP2PBotStyles(){
       const res = await fetch("/api/p2p/cycle/start", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ label: lbl, minCloseBalance: minClose })
+        body: JSON.stringify({ label: lbl, exchange: botSelectedExchange || "binance", minCloseBalance: minClose })
       });
       const data = await res.json();
       if(!data.ok){
@@ -13822,7 +13894,7 @@ function addP2PBotStyles(){
     if(!concept){ showErr("Ingresa un concepto"); return; }
     if(!amountClp || amountClp <= 0){ showErr("Ingresa un monto válido"); return; }
     try{
-      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
+      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(botActiveLabel || "ONZE") + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance"), { credentials:"include" });
       const status = await res.json();
       if(!status?.ok || !status?.active){ showErr("No hay ciclo activo"); return; }
       const addRes = await fetch("/api/p2p/cycle/manual-sale", {
@@ -13841,7 +13913,7 @@ function addP2PBotStyles(){
     const lbl = botActiveLabel || "ONZE";
     let preview = null;
     try{
-      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(lbl), { credentials:"include" });
+      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(lbl) + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance"), { credentials:"include" });
       const status = await res.json();
       preview = status?.active || null;
     }catch(e){}
@@ -13871,7 +13943,7 @@ function addP2PBotStyles(){
       const res = await fetch("/api/p2p/cycle/close", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ label: botActiveLabel || "ONZE" })
+        body: JSON.stringify({ label: botActiveLabel || "ONZE", exchange: botSelectedExchange || "binance" })
       });
       const data = await res.json();
       if(!data.ok){
@@ -13920,7 +13992,7 @@ function addP2PBotStyles(){
     const lbl = botActiveLabel || "ONZE";
     let cycles = [];
     try{
-      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(lbl), { credentials:"include" });
+      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(lbl) + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance"), { credentials:"include" });
       const data = await res.json();
       cycles = data?.recent || [];
     }catch(e){}
@@ -14043,7 +14115,7 @@ function addP2PBotStyles(){
       const res = await fetch("/api/p2p/cycle/delete", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ all: true, label: lbl })
+        body: JSON.stringify({ all: true, label: lbl, exchange: botSelectedExchange || "binance" })
       });
       const data = await res.json();
       if(!data.ok){ alert(data.error || "No se pudo vaciar"); return; }

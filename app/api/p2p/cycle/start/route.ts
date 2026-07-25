@@ -17,10 +17,11 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const label = body.label || "ONZE";
+    const exchange = body.exchange || "binance";
     const minCloseBalance = body.minCloseBalance ? Number(body.minCloseBalance) : null;
 
     const existing = await prisma.p2PCycle.findFirst({
-      where: { tenantId: session.tenantId, label, status: "active" },
+      where: { tenantId: session.tenantId, exchange, label, status: "active" },
     });
     if (existing) {
       return Response.json({ ok: false, error: "Ya hay un ciclo activo para esta etiqueta", cycle: existing });
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
     // ninguna orden, se usa su hora de cierre. Si es el primer ciclo de todos,
     // arranca desde ahora (comportamiento original).
     const lastClosed = await prisma.p2PCycle.findFirst({
-      where: { tenantId: session.tenantId, label, status: "closed" },
+      where: { tenantId: session.tenantId, exchange, label, status: "closed" },
       orderBy: { id: "desc" },
     });
 
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest) {
       data: {
         tenantId: session.tenantId,
         label,
+        exchange,
         status: "active",
         startTime,
         minCloseBalance: minCloseBalance ?? undefined,

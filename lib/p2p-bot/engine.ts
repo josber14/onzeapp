@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { BybitP2PClient, bybitOrderGroup, bybitOrderStatusLabel } from "./bybit-adapter";
 import { BinanceP2PClient } from "./binance-adapter";
 import { canCallPriority, canCallNonUrgent, recordCall, getUsage } from "./rate-limiter";
-import { computeCycleOrderStats } from "./cycle-stats";
+import { computeCycleOrderStats, computeLocalCycleStats } from "./cycle-stats";
 import { processChats } from "./chat-agent";
 import type {
   P2PBotConfigData,
@@ -1361,7 +1361,7 @@ async function runBinanceCycle(
     await log( "info", "binance", `Ciclo completado: managedAds: ${managedAds.length}`);
 
     try {
-      await autoCloseCycle(prisma, tenantId, label, client, log);
+      await autoCloseCycle(prisma, tenantId, label, client, log, "binance");
     } catch (e: any) {
       await log( "warn", "binance", `Auto-close cycle check: ${e.message}`);
     }
@@ -1879,7 +1879,7 @@ async function runBybitCycle(
     await log( "info", "bybit", `Ciclo completado: ${bybitOrders.length} órdenes, managedAds: ${managedAds.length}`);
 
     try {
-      await autoCloseCycle(prisma, tenantId, label, client, log);
+      await autoCloseCycle(prisma, tenantId, label, client, log, "bybit");
     } catch (e: any) {
       await log( "warn", "bybit", `Auto-close cycle check: ${e.message}`);
     }
@@ -1895,10 +1895,11 @@ async function autoCloseCycle(
   tenantId: number,
   label: string,
   client: any,
-  log: (level: string, exchange: string | null, message: string) => Promise<void>
+  log: (level: string, exchange: string | null, message: string) => Promise<void>,
+  exchange: string = "binance"
 ) {
   const cycle = await prisma.p2PCycle.findFirst({
-    where: { tenantId, label, status: "active" },
+    where: { tenantId, exchange, label, status: "active" },
   });
   if (!cycle) return;
 
@@ -1940,10 +1941,21 @@ async function autoCloseCycle(
   // tampoco habían llegado a COMPLETED todavía — el bot las dio por
   // "resueltas" antes de tiempo. Cada orden que entra debe llegar a un
   // estado FINAL (completada o cancelada) antes de poder cerrar el ciclo.
-  const FINAL_ORDER_STATUSES = new Set(["COMPLETED", "CANCELLED", "CANCELLED_BY_SYSTEM"]);
-  const recentOrdersRes = await client.getOrders({ page: 1, rows: 20 });
-  const recentOrders = recentOrdersRes?.data || [];
-  const hasPending = recentOrders.some((o: any) => !FINAL_ORDER_STATUSES.has(o.orderStatus));
+  let hasPending: boolean;
+  let recentOrders: any[] = [];
+  if (exchange === "binance") {
+    const FINAL_ORDER_STATUSES = new Set(["COMPLETED", "CANCELLED", "CANCELLED_BY_SYSTEM"]);
+    const recentOrdersRes = await client.getOrders({ page: 1, rows: 20 });
+    recentOrders = recentOrdersRes?.data || [];
+    hasPending = recentOrders.some((o: any) => !FINAL_ORDER_STATUSES.has(o.orderStatus));
+  } else {
+    // Bybit (y cualquier otro exchange sin historial propio integrado acá)
+    // usa su propio esquema de estados numéricos — bybitOrderGroup ya sabe
+    // traducirlos a pending/completed/cancelled.
+    const recentOrdersRes = await client.getOrders({ page: 1, size: 20 });
+    recentOrders = recentOrdersRes?.result?.items || [];
+    hasPending = recentOrders.some((o: any) => bybitOrderGroup(Number(o.status)) === "pending");
+  }
   if (hasPending) {
     await log( "info", null, `Auto-close: saldo bajo (${balance}) pero hay orden(es) pendiente(s) sin resolver — se espera a que se resuelvan antes de cerrar el ciclo ${cycle.id}`);
     return;
@@ -1954,7 +1966,9 @@ async function autoCloseCycle(
   const startMs = Number(cycle.startTime);
   const endMs = Date.now();
   const { totalUsdt, totalBinanceClp, firstOrder, lastOrder } =
-    await computeCycleOrderStats(client, startMs, endMs, recentOrders);
+    exchange === "binance"
+      ? await computeCycleOrderStats(client, startMs, endMs, recentOrders)
+      : await computeLocalCycleStats(prisma, tenantId, exchange, startMs, endMs);
 
   const totalManualClp = Number(cycle.totalManualClp);
 

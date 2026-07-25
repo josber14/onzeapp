@@ -1250,6 +1250,7 @@ model P2PCycle {
   id               Int                  @id @default(autoincrement())
   tenantId         Int
   label            String               @default("ONZE")
+  exchange         String               @default("binance")
   startTime        DateTime             @default(now())
   endTime          DateTime?
   status           String               @default("active")
@@ -1268,7 +1269,7 @@ model P2PCycle {
   manualSales      P2PCycleManualSale[]
   tenant           Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
-  @@index([tenantId, label, status])
+  @@index([tenantId, exchange, label, status])
   @@index([tenantId])
 }
 
