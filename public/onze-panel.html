@@ -10933,7 +10933,8 @@ function addP2PBotStyles(){
     if(!refPrice){
       refPrice = getActiveCapacityBuyPrice() || 0;
     }
-    var commPct = parseFloat(document.getElementById("botExCommissionPct").value) || 0;
+    // Bybit/OKX no cobran comisión -- el piso ahí es solo costo + margen.
+    var commPct = botSelectedExchange === 'binance' ? (parseFloat(document.getElementById("botExCommissionPct").value) || 0) : 0;
     var realCost = refPrice > 0 ? refPrice * (1 + commPct / 100) : refPrice;
     var threshold = realCost > 0 ? realCost * (1 + pct / 100) : 0;
     hint.textContent = refPrice > 0
@@ -10974,8 +10975,12 @@ function addP2PBotStyles(){
         if(activePrice) refPrice = activePrice;
       }
     }
-    var commPct = parseFloat(document.getElementById("adCfg_" + realId + "_CommissionPct").value);
-    if(!commPct || isNaN(commPct)) commPct = parseFloat(document.getElementById("botExCommissionPct").value) || 0;
+    // Bybit/OKX no cobran comisión -- el piso ahí es solo costo + margen.
+    var commPct = 0;
+    if(botSelectedExchange === 'binance'){
+      commPct = parseFloat(document.getElementById("adCfg_" + realId + "_CommissionPct").value);
+      if(!commPct || isNaN(commPct)) commPct = parseFloat(document.getElementById("botExCommissionPct").value) || 0;
+    }
     var threshold = refPrice > 0 ? refPrice * (1 + (commPct + pct) / 100) : 0;
     hint.textContent = refPrice > 0
       ? "→ ignora bajo $" + threshold.toFixed(2)
