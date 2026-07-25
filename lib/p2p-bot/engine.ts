@@ -1849,29 +1849,45 @@ async function runBybitCycle(
       }
     }
 
-    // 6. Sync orders from Bybit to local DB (once)
+    // 6. Sync orders from Bybit to local DB
+    // IMPORTANTE: `o.amount` de Bybit es el monto en FIAT (CLP), no la
+    // cantidad de USDT -- la cantidad real de cripto viene en
+    // `o.notifyTokenQuantity`. Guardar `o.amount` como si fuera USDT y
+    // multiplicarlo de nuevo por el precio (bug anterior) inflaba el total en
+    // CLP cientos de veces (confirmado en vivo: una orden real de ~100.000
+    // CLP quedaba guardada como ~95.000.000 CLP).
+    //
+    // También se actualiza (no solo crea) cada orden ya conocida: antes solo
+    // se guardaba una vez, en el momento en que Bybit la mostraba por primera
+    // vez (normalmente "pending"), y nunca se refrescaba su estado real —
+    // una orden que se completaba después quedaba congelada como "pending"
+    // para siempre en nuestra copia local, aunque en Bybit ya estuviera
+    // completada. Esto rompía el Ciclo de Ventas (solo cuenta "completed").
     let bybitOrders: any[] = [];
     try {
       const ordersRes = await client.getOrders({ page: 1, size: 30 });
       bybitOrders = ordersRes?.result?.items || [];
       for (const o of bybitOrders) {
+        const data = {
+          tenantId, exchange: "bybit", orderNumber: o.id,
+          tradeType: o.side === 0 ? "BUY" : "SELL",
+          asset: o.tokenId || "USDT", fiat: o.currencyId || "CLP",
+          amount: Number(o.notifyTokenQuantity) || 0,
+          totalPrice: Number(o.amount) || 0,
+          unitPrice: Number(o.price) || 0,
+          status: bybitOrderStatusLabel(Number(o.status)),
+          counterparty: o.targetNickName || "",
+          executedAt: new Date(Number(o.createDate)),
+        };
         const existing = await prisma.p2PBotOrder.findFirst({
           where: { tenantId, orderNumber: o.id, exchange: "bybit" },
         });
-        if (!existing) {
-          await prisma.p2PBotOrder.create({
-            data: {
-              tenantId, exchange: "bybit", orderNumber: o.id,
-              tradeType: o.side === 0 ? "BUY" : "SELL",
-              asset: o.tokenId || "USDT", fiat: o.currencyId || "CLP",
-              amount: Number(o.amount) || 0,
-              totalPrice: Number(o.amount) * Number(o.price) || 0,
-              unitPrice: Number(o.price) || 0,
-              status: bybitOrderStatusLabel(Number(o.status)),
-              counterparty: o.targetNickName || "",
-              executedAt: new Date(Number(o.createDate)),
-            },
-          });
+        if (existing) {
+          if (existing.status !== data.status) {
+            await prisma.p2PBotOrder.update({ where: { id: existing.id }, data: { status: data.status } });
+          }
+        } else {
+          await prisma.p2PBotOrder.create({ data });
         }
       }
     } catch (e: any) {}
