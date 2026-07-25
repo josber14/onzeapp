@@ -10337,7 +10337,7 @@ function addP2PBotStyles(){
     const cfgFields = [];
     if (strategy !== 'spread') cfgFields.push('Top1Diff');
     if (strategy !== 'top1') cfgFields.push('SpreadPct');
-    cfgFields.push('PriceSource','CommissionPct','SafeMarginPct','MinCompetitorCapital','CompetePayType','CycleInterval','CircuitBreakPct','DailyVolumeCapUsdt');
+    cfgFields.push('PriceSource','CommissionPct','SafeMarginPct','MinCompetitorCapital','CompetePayType','CycleInterval','CircuitBreakPct');
     const cfgCount = cfgFields.length;
     return `<div class="bot-ad-pill" data-ad-real-id="${realId}" data-ad-adid="${a.adId||''}">
       <div class="bot-ad-card-header">
@@ -10416,9 +10416,6 @@ function addP2PBotStyles(){
           </label>
           <label>Circuit breaker (% caída)
             <input id="adCfg_${realId}_CircuitBreakPct" type="number" step="0.1" value="${a.botCircuitBreakPct != null ? a.botCircuitBreakPct : ''}" placeholder="3" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botCircuitBreakPct',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
-          </label>
-          <label>Vol. máximo diario (USDT)
-            <input id="adCfg_${realId}_DailyVolumeCapUsdt" type="number" step="1" value="${a.botDailyVolumeCapUsdt != null ? a.botDailyVolumeCapUsdt : ''}" placeholder="Sin límite" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botDailyVolumeCapUsdt',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
           </label>
         </div>
       </div>
@@ -10520,8 +10517,6 @@ function addP2PBotStyles(){
     body.botCycleInterval = cycleInp ? parseInt(cycleInp.value) || null : null;
     var cbInp = document.getElementById("adCfg_" + realId + "_CircuitBreakPct");
     body.botCircuitBreakPct = cbInp ? parseFloat(cbInp.value) || null : null;
-    var dvInp = document.getElementById("adCfg_" + realId + "_DailyVolumeCapUsdt");
-    body.botDailyVolumeCapUsdt = dvInp ? parseFloat(dvInp.value) || null : null;
     var _r = Math.random().toString(36).slice(2);
     fetch("/api/p2p/bot/ads?_=" + _r, {
       method:"PUT", credentials:"include",
