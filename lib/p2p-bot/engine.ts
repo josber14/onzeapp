@@ -1653,6 +1653,17 @@ async function runBybitCycle(
             remark: String(fullAd.remark ?? ""),
             tradingPreferenceSet: strTps,
           };
+
+          // Si el precio objetivo es igual al que ya está publicado, no hay
+          // nada que actualizar de verdad -- llamar a Bybit igual gastaba un
+          // "mod" del límite de 10 por anuncio (acercándolo a una recreación
+          // innecesaria) y una unidad del cupo de velocidad de la cuenta, sin
+          // ningún cambio real que justifique el gasto.
+          if (targetPrice.toFixed(2) === currentPrice.toFixed(2)) {
+            await log( "debug", "bybit", `Ad ${adId}: precio ya está en ${currentPrice.toFixed(2)}, sin cambios`);
+            continue;
+          }
+
           // Recreate at mod 9 (before hitting Bybit's 10-mod limit)
           if (currentMods >= 9) {
             await log( "info", "bybit", `Ad ${adId}: ${currentMods} modificaciones, recreando...`);
