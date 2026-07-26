@@ -43,6 +43,7 @@ model Tenant {
   binanceCredentials    BinanceCredentials[]
   binanceOrders         BinanceOrder[]
   bybitCredentials      BybitCredentials[]
+  bybitOrders           BybitOrder[]
   collaboratorPayments  CollaboratorPayment[]
   dataSources           DataSource[]
   earningsMovements     EarningsMovement[]
@@ -801,6 +802,32 @@ model BinanceOrder {
   totalPrice          Decimal  @db.Decimal(18, 8)
   unitPrice           Decimal  @db.Decimal(18, 8)
   commission          Decimal  @db.Decimal(18, 8)
+  orderStatus         String
+  createTime          BigInt
+  createdAt           DateTime
+  syncedAt            DateTime @default(now())
+  counterPartNickName String?
+  payMethodName       String?
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([createTime])
+}
+
+// Espejo de BinanceOrder para el historial de ventas P2P de Bybit. Bybit no
+// cobra comisión (a diferencia de Binance) -- el campo commission siempre
+// queda en 0, se mantiene solo por simetría de esquema con BinanceOrder.
+model BybitOrder {
+  id                  Int      @id @default(autoincrement())
+  tenantId            Int
+  orderNumber         String   @unique
+  tradeType           String
+  asset               String
+  fiat                String
+  amount              Decimal  @db.Decimal(18, 8)
+  totalPrice          Decimal  @db.Decimal(18, 8)
+  unitPrice           Decimal  @db.Decimal(18, 8)
+  commission          Decimal  @default(0) @db.Decimal(18, 8)
   orderStatus         String
   createTime          BigInt
   createdAt           DateTime
