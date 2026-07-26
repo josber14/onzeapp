@@ -10337,9 +10337,9 @@ function addP2PBotStyles(){
               <button class="menu-item danger" onclick="event.stopPropagation();window.botPanelDeleteAd(${a.id},'${escHtml(a.adId||'')}')">Borrar anuncio</button>
             </div>
           </div>
-          <div class="bot-ad-card-body">
+          <div class="bot-ad-card-body" style="flex-direction:column;align-items:flex-start;gap:6px;">
             <div class="bot-ad-card-price"><span id="botAdPrice_${a.id}">${fmt(a.price)}</span><span class="currency">CLP</span></div>
-            <div class="bot-ad-card-rows">
+            <div class="bot-ad-card-rows" style="padding:0;">
               <div class="row"><span class="label">Balance</span><span class="value" id="botAdAmount_${a.id}">${fmtFlex(a.amount)} ${a.asset||'USDT'}</span></div>
               <div class="row"><span class="label">Límite</span><span class="value" id="botAdLimits_${a.id}">$${fmtInt(a.minAmount||0)} – $${fmtInt(a.maxAmount||0)}</span></div>
             </div>
