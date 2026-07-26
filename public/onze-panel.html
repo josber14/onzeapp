@@ -9798,7 +9798,7 @@ function addP2PBotStyles(){
                   <div class="bot-cycle-tile-value" id="botCycleUsdt">0</div>
                 </div>
                 <div class="bot-cycle-tile">
-                  <div class="bot-cycle-tile-label">CLP Binance</div>
+                  <div class="bot-cycle-tile-label" id="botCycleClpLabel">CLP Binance</div>
                   <div class="bot-cycle-tile-value" id="botCycleBinanceClp">0</div>
                 </div>
                 <div class="bot-cycle-tile">
@@ -13728,6 +13728,8 @@ function addP2PBotStyles(){
         labelEl.textContent = "Activo · " + cycleTag;
         labelEl.style.background = "rgba(0,255,136,.14)";
         labelEl.style.color = "#00ff88";
+        const clpLabelEl = document.getElementById("botCycleClpLabel");
+        if(clpLabelEl) clpLabelEl.textContent = "CLP " + (botSelectedExchange || "binance").charAt(0).toUpperCase() + (botSelectedExchange || "binance").slice(1);
         document.getElementById("botCycleStartTime").textContent = new Date(cycle.startTime).toLocaleString();
         document.getElementById("botCycleUsdt").textContent = Number(cycle.totalUsdt || 0).toFixed(2);
         document.getElementById("botCycleBinanceClp").textContent = "$" + Math.round(Number(cycle.totalBinanceClp || 0)).toLocaleString();
@@ -13826,9 +13828,10 @@ function addP2PBotStyles(){
 
   window.botCycleStart = function(){
     const lbl = botActiveLabel || "ONZE";
+    const cuentaTag = botSelectedExchange === "binance" ? lbl : botSelectedExchange.toUpperCase();
     botCycleModalShell("botCycleStartModal", "▶ Iniciar ciclo de ventas", `
       <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
-        Cuenta: <strong style="color:#fff;">${escHtml(lbl)}</strong><br>
+        Cuenta: <strong style="color:#fff;">${escHtml(cuentaTag)}</strong><br>
         Se contarán las ventas P2P y manuales desde este momento hasta que cierres el ciclo.
       </p>
       <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">Monto mínimo USDT para auto-cierre</label>
@@ -14001,6 +14004,7 @@ function addP2PBotStyles(){
       cycles = data?.recent || [];
     }catch(e){}
     botCycleHistoryCache = cycles;
+    const exLabel = (botSelectedExchange || "binance").charAt(0).toUpperCase() + (botSelectedExchange || "binance").slice(1);
     const rows = cycles.length ? cycles.map(c => {
       const totalClp = Math.round(Number(c.totalBinanceClp || 0) + Number(c.totalManualClp || 0)).toLocaleString();
       const binanceClp = Math.round(Number(c.totalBinanceClp || 0)).toLocaleString();
@@ -14014,7 +14018,7 @@ function addP2PBotStyles(){
       return `<div style="background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:12px;margin-bottom:10px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:10px;">
           <div>
-            <div style="font-size:10px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.3px;">Ciclo #${c.id}</div>
+            <div style="font-size:10px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.3px;">Ciclo #${c.displayNumber ?? c.id}</div>
             <div style="font-size:12px;color:#cbd5e1;margin-top:2px;">${dateRangeLabel}</div>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0;">
@@ -14026,7 +14030,7 @@ function addP2PBotStyles(){
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:6px;margin-bottom:10px;">
           <div class="bot-cycle-tile" style="padding:7px 10px;"><div class="bot-cycle-tile-label">USDT</div><div class="bot-cycle-tile-value" style="font-size:13px;">${Number(c.totalUsdt || 0).toFixed(2)}</div></div>
-          <div class="bot-cycle-tile" style="padding:7px 10px;"><div class="bot-cycle-tile-label">CLP Binance</div><div class="bot-cycle-tile-value" style="font-size:13px;">$${binanceClp}</div></div>
+          <div class="bot-cycle-tile" style="padding:7px 10px;"><div class="bot-cycle-tile-label">CLP ${exLabel}</div><div class="bot-cycle-tile-value" style="font-size:13px;">$${binanceClp}</div></div>
           <div class="bot-cycle-tile" style="padding:7px 10px;"><div class="bot-cycle-tile-label">CLP Manual</div><div class="bot-cycle-tile-value" style="font-size:13px;">$${manualClp}</div></div>
           <div class="bot-cycle-tile" style="padding:7px 10px;border-color:rgba(0,212,255,.25);"><div class="bot-cycle-tile-label">Total CLP</div><div class="bot-cycle-tile-value" style="font-size:13px;color:#00d4ff;">$${totalClp}</div></div>
         </div>
@@ -14035,7 +14039,7 @@ function addP2PBotStyles(){
           <span>Última: <strong style="color:#94a3b8;">#${escHtml(String(c.lastOrderNumber || "—"))}</strong></span>
         </div>
       </div>`;
-    }).join("") : `<p style="color:#64748b;font-size:13px;">Todavía no hay ciclos cerrados para ${escHtml(lbl)}.</p>`;
+    }).join("") : `<p style="color:#64748b;font-size:13px;">Todavía no hay ciclos cerrados para ${escHtml(botSelectedExchange === "binance" ? lbl : exLabel)}.</p>`;
     botCycleModalShell("botCycleHistoryModal", "📜 Historial de ciclos", `
       <div style="max-height:440px;overflow-y:auto;margin-bottom:16px;">${rows}</div>
       <div style="display:flex;justify-content:space-between;">
@@ -14061,9 +14065,11 @@ function addP2PBotStyles(){
         <span>${escHtml(s.concept)}</span>
         <span style="color:#fbbf24;font-weight:700;">$${Math.round(Number(s.amountClp)).toLocaleString()}</span>
       </div>`).join("") : `<p style="color:#64748b;font-size:12px;">Sin ventas manuales en este ciclo.</p>`;
-    botCycleModalShell("botCycleDetailModal", `📋 Detalle del ciclo #${c.id}`, `
+    const cuentaTag = botSelectedExchange === "binance" ? (c.label || "ONZE") : botSelectedExchange.toUpperCase();
+    const exLabelDetail = (botSelectedExchange || "binance").charAt(0).toUpperCase() + (botSelectedExchange || "binance").slice(1);
+    botCycleModalShell("botCycleDetailModal", `📋 Detalle del ciclo #${c.displayNumber ?? c.id}`, `
       <div style="display:flex;flex-direction:column;gap:4px;margin-bottom:14px;font-size:12px;color:#94a3b8;">
-        <div><strong style="color:#e2e8f0;">Cuenta:</strong> ${escHtml(c.label || "ONZE")}</div>
+        <div><strong style="color:#e2e8f0;">Cuenta:</strong> ${escHtml(cuentaTag)}</div>
         <div><strong style="color:#e2e8f0;">Inicio:</strong> ${start}</div>
         <div><strong style="color:#e2e8f0;">Fin:</strong> ${end}</div>
         <div><strong style="color:#e2e8f0;">Duración:</strong> ${durationLabel}</div>
@@ -14071,7 +14077,7 @@ function addP2PBotStyles(){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
         <div class="bot-cycle-tile"><div class="bot-cycle-tile-label">USDT vendidos</div><div class="bot-cycle-tile-value">${Number(c.totalUsdt || 0).toFixed(2)}</div></div>
         <div class="bot-cycle-tile" style="border-color:rgba(0,212,255,.25);"><div class="bot-cycle-tile-label">Total CLP</div><div class="bot-cycle-tile-value" style="color:#00d4ff;">$${totalClp.toLocaleString()}</div></div>
-        <div class="bot-cycle-tile"><div class="bot-cycle-tile-label">CLP Binance</div><div class="bot-cycle-tile-value">$${Math.round(Number(c.totalBinanceClp || 0)).toLocaleString()}</div></div>
+        <div class="bot-cycle-tile"><div class="bot-cycle-tile-label">CLP ${exLabelDetail}</div><div class="bot-cycle-tile-value">$${Math.round(Number(c.totalBinanceClp || 0)).toLocaleString()}</div></div>
         <div class="bot-cycle-tile"><div class="bot-cycle-tile-label">CLP manual</div><div class="bot-cycle-tile-value">$${Math.round(Number(c.totalManualClp || 0)).toLocaleString()}</div></div>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:14px;">

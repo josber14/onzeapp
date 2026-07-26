@@ -96,10 +96,21 @@ export async function GET(req: NextRequest) {
       include: { manualSales: true },
     });
 
+    // Numeración propia por exchange+cuenta (1, 2, 3...) en vez del id crudo
+    // de la tabla (compartido entre todos los exchanges) -- así el primer
+    // ciclo que se cierra en Bybit es "Ciclo #1", no el id global de la fila.
+    const allIds = await prisma.p2PCycle.findMany({
+      where: { tenantId: session.tenantId, exchange, label },
+      orderBy: { id: "asc" },
+      select: { id: true },
+    });
+    const numberById = new Map(allIds.map((c: any, i: number) => [c.id, i + 1]));
+    const withNumber = (c: any) => (c ? { ...c, displayNumber: numberById.get(c.id) ?? c.id } : c);
+
     return Response.json({
       ok: true,
-      active: activeWithLiveStats,
-      recent,
+      active: withNumber(activeWithLiveStats),
+      recent: recent.map(withNumber),
       orders,
       production,
       profitEstimate,
