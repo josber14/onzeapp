@@ -2183,7 +2183,6 @@
         <button class="nav-btn active" data-view-target="inicio">Inicio</button>
         <button class="nav-btn" data-view-target="calculadora">Calculadora</button>
         <button class="nav-btn" data-view-target="tasa-del-dia">Crea tu tasa del día</button>
-        <button class="nav-btn" data-view-target="marketing">Marketing</button>
         <button class="nav-btn" data-view-target="dashboard">Dashboard</button>
         <button class="nav-btn admin-only-control" data-view-target="p2p-bot" onclick="switchView('p2p-bot')">P2P Bot</button>
         <button class="nav-btn" data-view-target="historial">Historial</button>
@@ -2570,57 +2569,12 @@
             </div>
           </div>
         </div>
-      </section>
-      <section class="view" id="view-marketing">
-        <div class="section-card">
-          <div class="section-header">
-            <div>
-              <h2 class="section-title">Marketing</h2>
-              <p class="section-text">Crea imágenes de publicidad, promociones y días especiales listas para compartir.</p>
-            </div>
+        <div class="mkt-inline-block">
+          <div class="mkt-inline-header">
+            <h3 class="section-title" style="font-size:18px;margin-bottom:4px;">📢 Marketing y promociones</h3>
+            <p class="section-text" style="margin:0;">Listas para descargar y publicar — ya vienen con tu información.</p>
           </div>
-
-          <div class="mkt-template-grid" id="mktTemplateGrid">
-            <button type="button" class="mkt-template-card" data-mkt="cerrado" onclick="window.mktSelectTemplate('cerrado')">
-              <div class="mkt-template-thumb" style="background:linear-gradient(160deg,#0a6044,#064f38);">🔒</div>
-              <div class="mkt-template-name">Cerrado</div>
-            </button>
-            <button type="button" class="mkt-template-card" data-mkt="horario" onclick="window.mktSelectTemplate('horario')">
-              <div class="mkt-template-thumb" style="background:linear-gradient(160deg,#f4b700,#c98f00);">🕒</div>
-              <div class="mkt-template-name">Horario</div>
-            </button>
-            <button type="button" class="mkt-template-card" data-mkt="paises" onclick="window.mktSelectTemplate('paises')">
-              <div class="mkt-template-thumb" style="background:linear-gradient(160deg,#0a6044,#064f38);">🌎</div>
-              <div class="mkt-template-name">Países donde enviamos</div>
-            </button>
-            <button type="button" class="mkt-template-card" data-mkt="cta" onclick="window.mktSelectTemplate('cta')">
-              <div class="mkt-template-thumb" style="background:linear-gradient(160deg,#f4b700,#c98f00);">📞</div>
-              <div class="mkt-template-name">Transfiere ahora</div>
-            </button>
-            <button type="button" class="mkt-template-card" data-mkt="promo" onclick="window.mktSelectTemplate('promo')">
-              <div class="mkt-template-thumb" style="background:linear-gradient(160deg,#0a6044,#064f38);">🎉</div>
-              <div class="mkt-template-name">Promoción / Día especial</div>
-            </button>
-          </div>
-
-          <div id="mktFormWrap" style="display:none;margin-top:22px;">
-            <div class="mkt-editor-grid">
-              <div class="mkt-form-col">
-                <h3 class="section-title" style="font-size:16px;margin-bottom:10px;" id="mktFormTitle">Editar</h3>
-                <div id="mktFormFields"></div>
-                <label style="display:block;margin-top:14px;">Logo opcional (si no subes uno, se usa el texto de marca)
-                  <input type="file" id="mktLogoInput" accept="image/*" style="margin-top:6px;">
-                </label>
-                <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;">
-                  <button class="btn secondary" type="button" onclick="window.mktBackToGallery()">← Elegir otra plantilla</button>
-                  <button class="btn primary" type="button" id="mktDownloadBtn" onclick="window.mktDownloadImage()">Descargar imagen</button>
-                </div>
-              </div>
-              <div class="mkt-preview-col">
-                <div id="mktPreview" class="mkt-preview-frame"></div>
-              </div>
-            </div>
-          </div>
+          <div class="mkt-template-grid" id="mktTemplateGrid"></div>
         </div>
       </section>
       <section class="view" id="view-rate-list-editor">
@@ -21535,23 +21489,33 @@ function addP2PBotStyles(){
     box-shadow:0 12px 30px rgba(34,139,34,.22);
   }
 
+  .mkt-inline-block{
+    margin-top:34px;
+    padding-top:28px;
+    border-top:1px solid rgba(148,163,184,.14);
+  }
+
+  .mkt-inline-header{
+    margin-bottom:6px;
+  }
+
   .mkt-template-grid{
-    margin-top:22px;
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
-    gap:14px;
+    margin-top:18px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:18px;
   }
 
   .mkt-template-card{
+    width:240px;
     border:1px solid rgba(148,163,184,.18);
     background:rgba(15,23,42,.4);
     border-radius:18px;
-    padding:14px;
-    cursor:pointer;
+    padding:12px;
     display:flex;
     flex-direction:column;
     align-items:center;
-    gap:10px;
+    gap:8px;
     transition:all .15s;
   }
 
@@ -21561,13 +21525,20 @@ function addP2PBotStyles(){
   }
 
   .mkt-template-thumb{
-    width:100%;
-    aspect-ratio:9/14;
+    width:216px;
+    height:384px;
     border-radius:12px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-size:38px;
+    overflow:hidden;
+    position:relative;
+    background:#064f38;
+  }
+
+  .mkt-template-thumb .mkt-canvas{
+    position:absolute;
+    top:0;
+    left:0;
+    transform:scale(0.24);
+    transform-origin:top left;
   }
 
   .mkt-template-name{
@@ -21575,56 +21546,6 @@ function addP2PBotStyles(){
     font-weight:800;
     font-size:13px;
     text-align:center;
-  }
-
-  .mkt-editor-grid{
-    display:grid;
-    grid-template-columns:1fr 340px;
-    gap:24px;
-    align-items:start;
-  }
-
-  @media (max-width:820px){
-    .mkt-editor-grid{
-      grid-template-columns:1fr;
-    }
-  }
-
-  .mkt-form-col label{
-    display:block;
-    margin-top:12px;
-    color:#94a3b8;
-    font-size:13px;
-    font-weight:700;
-  }
-
-  .mkt-form-col input, .mkt-form-col textarea{
-    width:100%;
-    box-sizing:border-box;
-    margin-top:6px;
-    padding:10px 12px;
-    border-radius:10px;
-    border:1px solid rgba(148,163,184,.22);
-    background:rgba(15,23,42,.5);
-    color:#f1f5f9;
-    font-size:14px;
-    font-family:inherit;
-  }
-
-  .mkt-preview-col{
-    display:flex;
-    justify-content:center;
-  }
-
-  .mkt-preview-frame{
-    width:100%;
-    max-width:320px;
-  }
-
-  .mkt-preview-frame > div{
-    width:100% !important;
-    height:auto !important;
-    aspect-ratio:9/16;
   }
 
   .rate-lists-container{
@@ -26609,9 +26530,29 @@ try{
   if(window.__onzeMarketingStudioLoaded) return;
   window.__onzeMarketingStudioLoaded = true;
 
-  // Paleta de marca ONZE (misma que "Crea tu tasa del día" / onze_base) para
-  // que todo el material de marketing se vea consistente con el resto del panel.
-  var MKT_GREEN_BG = "linear-gradient(180deg,#0a6044 0%,#07583d 52%,#064f38 100%)";
+  // Fuente redondeada y gruesa (parecida a la tipografía real de AKI Transfer)
+  // -- se auto-hospeda vía Google Fonts. html2canvas necesita que la fuente ya
+  // esté cargada antes de capturar, por eso mktEnsureFont() espera
+  // document.fonts.ready antes de generar el PNG.
+  if(!document.getElementById("mktFontLink")){
+    var fontLink = document.createElement("link");
+    fontLink.id = "mktFontLink";
+    fontLink.rel = "stylesheet";
+    fontLink.href = "https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@600;700;800&display=swap";
+    document.head.appendChild(fontLink);
+  }
+  function mktEnsureFont(){
+    try{
+      return Promise.all([
+        document.fonts.load('800 60px "Baloo 2"'),
+        document.fonts.load('700 24px "Nunito"')
+      ]).then(function(){ return document.fonts.ready; }).catch(function(){});
+    }catch(e){ return Promise.resolve(); }
+  }
+
+  var MKT_FONT_DISPLAY = '"Baloo 2", Arial, sans-serif';
+  var MKT_FONT_TEXT = '"Nunito", Arial, sans-serif';
+  var MKT_GREEN_BG = "linear-gradient(165deg,#0c6c4d 0%,#0a6044 40%,#064f38 100%)";
   var MKT_GOLD = "#f4b700";
   var MKT_GREEN_DARK = "#07583d";
 
@@ -26620,225 +26561,198 @@ try{
       .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
   }
 
-  // Mapa de países comunes -> emoji de bandera. Cubre los mercados que ya
-  // aparecen en el resto del panel (P2P Chile/Venezuela y remesas LATAM).
   var MKT_FLAGS = {
-    "chile":"🇨🇱","venezuela":"🇻🇪","colombia":"🇨🇴","argentina":"🇦🇷",
-    "mexico":"🇲🇽","méxico":"🇲🇽","peru":"🇵🇪","perú":"🇵🇪","uruguay":"🇺🇾",
-    "espana":"🇪🇸","españa":"🇪🇸","estados unidos":"🇺🇸","eeuu":"🇺🇸","usa":"🇺🇸",
-    "ecuador":"🇪🇨","brasil":"🇧🇷","panama":"🇵🇦","panamá":"🇵🇦","honduras":"🇭🇳",
-    "republica dominicana":"🇩🇴","república dominicana":"🇩🇴","bolivia":"🇧🇴",
-    "paraguay":"🇵🇾","costa rica":"🇨🇷","guatemala":"🇬🇹","el salvador":"🇸🇻",
-    "nicaragua":"🇳🇮","cuba":"🇨🇺","puerto rico":"🇵🇷","canada":"🇨🇦","canadá":"🇨🇦"
+    "venezuela":"🇻🇪","chile":"🇨🇱","colombia":"🇨🇴","argentina":"🇦🇷",
+    "mexico":"🇲🇽","méxico":"🇲🇽","uruguay":"🇺🇾","espana":"🇪🇸","españa":"🇪🇸",
+    "estados unidos":"🇺🇸","ecuador":"🇪🇨","peru":"🇵🇪","perú":"🇵🇪",
+    "brasil":"🇧🇷","panama":"🇵🇦","panamá":"🇵🇦","honduras":"🇭🇳",
+    "puerto rico":"🇵🇷"
   };
-
   function mktFlagFor(name){
-    var key = String(name || "").trim().toLowerCase();
-    return MKT_FLAGS[key] || "🏳️";
+    return MKT_FLAGS[String(name||"").trim().toLowerCase()] || "🏳️";
   }
 
-  function mktBrandBlock(logoDataUrl){
-    if(logoDataUrl){
-      return '<img src="' + mktEsc(logoDataUrl) + '" alt="ONZE" style="max-width:220px;max-height:95px;object-fit:contain;display:block;margin:0 auto;">';
-    }
+  // ── Íconos propios en SVG plano (nada de emojis de interfaz ni fotos de
+  // stock) para que el material se vea diseñado, no genérico. ──
+  var MKT_ICON_SIGN =
+    '<svg viewBox="0 0 200 170" width="150" height="128" fill="none">' +
+      '<circle cx="100" cy="12" r="8" fill="' + MKT_GOLD + '"/>' +
+      '<line x1="100" y1="12" x2="30" y2="70" stroke="#ffffff" stroke-width="4"/>' +
+      '<line x1="100" y1="12" x2="170" y2="70" stroke="#ffffff" stroke-width="4"/>' +
+      '<circle cx="30" cy="70" r="6" fill="' + MKT_GOLD + '"/>' +
+      '<circle cx="170" cy="70" r="6" fill="' + MKT_GOLD + '"/>' +
+      '<rect x="14" y="70" width="172" height="76" rx="14" fill="#ffffff"/>' +
+      '<text x="100" y="123" text-anchor="middle" font-family="' + MKT_FONT_DISPLAY + '" font-weight="800" font-size="44" fill="' + MKT_GREEN_DARK + '">CERRADO</text>' +
+    '</svg>';
+
+  var MKT_ICON_CLOCK =
+    '<svg viewBox="0 0 120 120" width="96" height="96" fill="none">' +
+      '<circle cx="60" cy="60" r="52" stroke="#ffffff" stroke-width="7"/>' +
+      '<line x1="60" y1="60" x2="60" y2="30" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>' +
+      '<line x1="60" y1="60" x2="82" y2="72" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>' +
+      '<circle cx="60" cy="60" r="6" fill="' + MKT_GOLD + '"/>' +
+    '</svg>';
+
+  var MKT_ICON_GLOBE =
+    '<svg viewBox="0 0 160 160" width="130" height="130" fill="none">' +
+      '<circle cx="80" cy="80" r="58" fill="rgba(255,255,255,.10)" stroke="#ffffff" stroke-width="4"/>' +
+      '<ellipse cx="80" cy="80" rx="58" ry="22" stroke="#ffffff" stroke-width="2.5" opacity=".55"/>' +
+      '<ellipse cx="80" cy="80" rx="22" ry="58" stroke="#ffffff" stroke-width="2.5" opacity=".55"/>' +
+      '<path d="M28 50 A72 72 0 0 1 132 60" stroke="' + MKT_GOLD + '" stroke-width="4" fill="none" stroke-linecap="round"/>' +
+      '<path d="M124 43 L132 60 L113 58" fill="' + MKT_GOLD + '"/>' +
+      '<path d="M132 110 A72 72 0 0 1 28 100" stroke="' + MKT_GOLD + '" stroke-width="4" fill="none" stroke-linecap="round"/>' +
+      '<path d="M36 117 L28 100 L47 102" fill="' + MKT_GOLD + '"/>' +
+    '</svg>';
+
+  var MKT_ICON_PHONE =
+    '<svg viewBox="0 0 90 150" width="70" height="118" fill="none">' +
+      '<rect x="4" y="4" width="82" height="142" rx="16" fill="#ffffff"/>' +
+      '<rect x="14" y="24" width="62" height="94" rx="4" fill="' + MKT_GREEN_DARK + '"/>' +
+      '<circle cx="45" cy="133" r="7" fill="' + MKT_GREEN_DARK + '"/>' +
+      '<circle cx="45" cy="70" r="18" fill="' + MKT_GOLD + '"/>' +
+    '</svg>';
+
+  var MKT_ICON_STAR =
+    '<svg viewBox="0 0 100 100" width="72" height="72" fill="none">' +
+      '<path d="M50 6 L61 38 L96 38 L68 58 L79 92 L50 71 L21 92 L32 58 L4 38 L39 38 Z" fill="' + MKT_GOLD + '"/>' +
+    '</svg>';
+
+  function mktLogoBlock(){
     return '' +
-      '<div style="text-align:center;color:#ffffff;">' +
-        '<div style="font-size:52px;line-height:.8;font-weight:950;letter-spacing:-2px;">ONZE</div>' +
-        '<div style="margin-top:6px;font-size:14px;font-weight:800;letter-spacing:.38em;color:' + MKT_GOLD + ';">CASA DE CAMBIO</div>' +
+      '<div style="text-align:center;">' +
+        '<div style="display:inline-flex;align-items:center;gap:10px;">' +
+          '<div style="width:34px;height:34px;background:' + MKT_GOLD + ';clip-path:polygon(50% 0%,100% 100%,0% 100%);"></div>' +
+          '<div style="font-family:' + MKT_FONT_DISPLAY + ';font-weight:800;font-size:46px;color:#ffffff;letter-spacing:-1px;">AKI</div>' +
+        '</div>' +
+        '<div style="font-family:' + MKT_FONT_TEXT + ';font-weight:800;font-size:15px;color:#ffffff;letter-spacing:.42em;margin-top:2px;">TRANSFER</div>' +
+        '<div style="font-family:' + MKT_FONT_TEXT + ';font-weight:700;font-style:italic;font-size:11px;color:' + MKT_GOLD + ';letter-spacing:.08em;margin-top:2px;">¡Aquí y Ahora!</div>' +
       '</div>';
   }
 
-  function mktCanvasOpen(){
-    return '<div id="mktImageCanvas" style="width:900px;height:1600px;box-sizing:border-box;position:relative;overflow:hidden;background:' + MKT_GREEN_BG + ';font-family:Arial, Helvetica, sans-serif;">' +
-      '<div style="position:absolute;left:-160px;top:-120px;width:520px;height:520px;border-radius:999px;background:rgba(244,183,0,.12);"></div>' +
-      '<div style="position:absolute;right:-180px;bottom:120px;width:520px;height:520px;border-radius:999px;background:rgba(255,255,255,.06);"></div>' +
-      '<div style="position:relative;z-index:1;height:100%;box-sizing:border-box;padding:90px 70px 60px;display:flex;flex-direction:column;">';
+  function mktCanvasOpen(bg){
+    return '<div class="mkt-canvas" style="width:900px;height:1600px;box-sizing:border-box;position:relative;overflow:hidden;background:' + (bg || MKT_GREEN_BG) + ';font-family:' + MKT_FONT_TEXT + ';">' +
+      '<div style="position:absolute;left:-170px;top:-140px;width:540px;height:540px;border-radius:999px;background:rgba(244,183,0,.10);"></div>' +
+      '<div style="position:absolute;right:-190px;bottom:100px;width:540px;height:540px;border-radius:999px;background:rgba(255,255,255,.05);"></div>' +
+      '<div style="position:absolute;left:0;right:0;top:0;height:14px;background:' + MKT_GOLD + ';"></div>' +
+      '<div style="position:relative;z-index:1;height:100%;box-sizing:border-box;padding:86px 66px 56px;display:flex;flex-direction:column;">';
   }
   var MKT_CANVAS_CLOSE = '</div></div>';
 
-  // ── Plantillas ──────────────────────────────────────────────────────────
+  var AKI_COUNTRIES = ["Venezuela","Chile","Colombia","Argentina","México","Uruguay","España","Estados Unidos","Ecuador","Perú","Brasil","Panamá"];
+  var AKI_PHONE = "+56 951333777";
 
-  function mktRenderCerrado(f, logoDataUrl){
+  // ── Plantillas, ya con la informacion real de AKI Transfer -- nada que llenar ──
+
+  function mktRenderCerrado(){
     return mktCanvasOpen() +
       '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;">' +
-        '<div style="background:#ffffff;color:' + MKT_GREEN_DARK + ';border-radius:999px;padding:22px 64px;font-size:54px;font-weight:950;letter-spacing:.08em;box-shadow:0 20px 40px rgba(0,0,0,.25);">CERRADO</div>' +
-        '<div style="margin-top:50px;color:#ffffff;font-size:44px;font-weight:900;line-height:1.25;max-width:640px;">' + mktEsc(f.mensaje || "GRACIAS POR TU PREFERENCIA") + '</div>' +
+        MKT_ICON_SIGN +
+        '<div style="margin-top:56px;font-family:' + MKT_FONT_DISPLAY + ';color:#ffffff;font-size:50px;font-weight:800;line-height:1.2;max-width:640px;">GRACIAS POR<br>TU PREFERENCIA</div>' +
       '</div>' +
-      '<div style="display:flex;justify-content:center;">' + mktBrandBlock(logoDataUrl) + '</div>' +
+      '<div>' + mktLogoBlock() + '</div>' +
     MKT_CANVAS_CLOSE;
   }
 
-  function mktRenderHorario(f, logoDataUrl){
+  function mktRenderHorario(){
     return mktCanvasOpen() +
       '<div style="text-align:center;color:#ffffff;">' +
-        '<div style="font-size:30px;font-weight:800;letter-spacing:.3em;">CONOCE NUESTRO</div>' +
-        '<div style="margin-top:10px;display:inline-block;background:' + MKT_GOLD + ';color:' + MKT_GREEN_DARK + ';border-radius:999px;padding:14px 46px;font-size:58px;font-weight:950;letter-spacing:.04em;">HORARIO</div>' +
+        '<div style="display:flex;justify-content:center;margin-bottom:14px;">' + MKT_ICON_CLOCK + '</div>' +
+        '<div style="font-family:' + MKT_FONT_TEXT + ';font-size:24px;font-weight:800;letter-spacing:.22em;">CONOCE NUESTRO</div>' +
+        '<div style="margin-top:12px;display:inline-block;background:' + MKT_GOLD + ';color:' + MKT_GREEN_DARK + ';border-radius:20px;padding:14px 48px;font-family:' + MKT_FONT_DISPLAY + ';font-size:56px;font-weight:800;box-shadow:0 16px 30px rgba(0,0,0,.2);">HORARIO</div>' +
       '</div>' +
-      '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:34px;">' +
-        '<div style="display:flex;align-items:center;gap:22px;">' +
-          '<div style="background:#ffffff;color:' + MKT_GREEN_DARK + ';border-radius:26px;padding:26px 40px;font-size:52px;font-weight:950;">' + mktEsc(f.apertura || "9AM") + '</div>' +
-          '<div style="color:#ffffff;font-size:34px;font-weight:800;">A</div>' +
-          '<div style="background:#ffffff;color:' + MKT_GREEN_DARK + ';border-radius:26px;padding:26px 40px;font-size:52px;font-weight:950;">' + mktEsc(f.cierre || "8:30PM") + '</div>' +
+      '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:36px;">' +
+        '<div style="display:flex;align-items:center;gap:24px;">' +
+          '<div style="background:#ffffff;color:' + MKT_GREEN_DARK + ';border-radius:24px;padding:24px 40px;font-family:' + MKT_FONT_DISPLAY + ';font-size:50px;font-weight:800;box-shadow:0 14px 26px rgba(0,0,0,.18);">9AM</div>' +
+          '<div style="color:#ffffff;font-family:' + MKT_FONT_TEXT + ';font-size:30px;font-weight:800;">A</div>' +
+          '<div style="background:#ffffff;color:' + MKT_GREEN_DARK + ';border-radius:24px;padding:24px 36px;font-family:' + MKT_FONT_DISPLAY + ';font-size:50px;font-weight:800;box-shadow:0 14px 26px rgba(0,0,0,.18);">8:30PM</div>' +
         '</div>' +
-        '<div style="text-align:center;color:#ffffff;font-size:26px;font-weight:800;line-height:1.6;max-width:640px;">' + mktEsc(f.dias || "DE LUNES A SÁBADO").toUpperCase() + '</div>' +
+        '<div style="text-align:center;color:#ffffff;font-family:' + MKT_FONT_TEXT + ';font-size:26px;font-weight:800;line-height:1.7;max-width:640px;">' +
+          'DE LUNES A SÁBADO<br>' +
+          '<span style="color:' + MKT_GOLD + ';">DOMINGOS DESDE LAS 10:30 AM</span>' +
+        '</div>' +
       '</div>' +
-      '<div style="display:flex;justify-content:center;">' + mktBrandBlock(logoDataUrl) + '</div>' +
+      '<div>' + mktLogoBlock() + '</div>' +
     MKT_CANVAS_CLOSE;
   }
 
-  function mktRenderPaises(f, logoDataUrl){
-    var list = String(f.paises || "Chile, Venezuela, Colombia, Argentina, México, Perú")
-      .split(",").map(function(s){ return s.trim(); }).filter(Boolean);
-    var chips = list.map(function(name){
-      return '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:130px;">' +
-        '<div style="width:100px;height:100px;border-radius:999px;background:rgba(255,255,255,.12);border:3px solid ' + MKT_GOLD + ';display:flex;align-items:center;justify-content:center;font-size:48px;">' + mktFlagFor(name) + '</div>' +
-        '<div style="color:#ffffff;font-size:16px;font-weight:800;text-align:center;">' + mktEsc(name) + '</div>' +
+  function mktRenderPaises(){
+    var chips = AKI_COUNTRIES.map(function(name){
+      return '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;width:120px;">' +
+        '<div style="width:92px;height:92px;border-radius:999px;background:rgba(255,255,255,.10);border:3px solid ' + MKT_GOLD + ';display:flex;align-items:center;justify-content:center;font-size:42px;box-shadow:0 10px 20px rgba(0,0,0,.15);">' + mktFlagFor(name) + '</div>' +
+        '<div style="color:#ffffff;font-family:' + MKT_FONT_TEXT + ';font-size:15px;font-weight:800;text-align:center;">' + mktEsc(name) + '</div>' +
       '</div>';
     }).join("");
 
     return mktCanvasOpen() +
-      '<div style="text-align:center;">' + mktBrandBlock(logoDataUrl) + '</div>' +
-      '<div style="text-align:center;margin-top:36px;">' +
-        '<div style="color:#ffffff;font-size:52px;font-weight:950;line-height:1.05;">PAÍSES DONDE<br>ENVIAMOS</div>' +
-        '<div style="margin-top:16px;display:inline-block;background:' + MKT_GOLD + ';color:' + MKT_GREEN_DARK + ';border-radius:999px;padding:10px 28px;font-size:20px;font-weight:900;">ESTAMOS EN TODOS LADOS</div>' +
+      '<div>' + mktLogoBlock() + '</div>' +
+      '<div style="text-align:center;margin-top:34px;">' +
+        '<div style="color:#ffffff;font-family:' + MKT_FONT_DISPLAY + ';font-size:48px;font-weight:800;line-height:1.08;">PAÍSES DONDE<br>ENVIAMOS</div>' +
+        '<div style="margin-top:16px;display:inline-block;background:' + MKT_GOLD + ';color:' + MKT_GREEN_DARK + ';border-radius:999px;padding:10px 26px;font-family:' + MKT_FONT_TEXT + ';font-size:18px;font-weight:800;">ESTAMOS EN TODOS LADOS</div>' +
       '</div>' +
       '<div style="flex:1;display:flex;align-items:center;justify-content:center;">' +
-        '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:22px;max-width:760px;">' + chips + '</div>' +
+        '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:18px;max-width:780px;">' + chips + '</div>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:10px;">' + MKT_ICON_STAR +
+        '<div style="color:#ffffff;font-family:' + MKT_FONT_DISPLAY + ';font-size:30px;font-weight:800;">N.º 1 en confianza</div>' +
       '</div>' +
     MKT_CANVAS_CLOSE;
   }
 
-  function mktRenderCTA(f, logoDataUrl){
-    return mktCanvasOpen() +
-      '<div style="text-align:center;">' + mktBrandBlock(logoDataUrl) + '</div>' +
-      '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;">' +
-        '<div style="color:#ffffff;font-size:56px;font-weight:950;line-height:1.15;max-width:680px;">' + mktEsc(f.cta || "TRANSFIERE AHORA") + '</div>' +
-        '<div style="margin-top:44px;border:3px solid ' + MKT_GOLD + ';border-radius:999px;padding:20px 44px;color:#ffffff;font-size:38px;font-weight:900;letter-spacing:.05em;">' + mktEsc(f.telefono || "+56 9 0000 0000") + '</div>' +
-      '</div>' +
-    MKT_CANVAS_CLOSE;
-  }
-
-  function mktRenderPromo(f, logoDataUrl){
-    return mktCanvasOpen() +
-      '<div style="text-align:center;">' + mktBrandBlock(logoDataUrl) + '</div>' +
-      '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:22px;">' +
-        '<div style="color:' + MKT_GOLD + ';font-size:26px;font-weight:900;letter-spacing:.25em;">' + mktEsc((f.subtitulo || "PROMOCIÓN ESPECIAL").toUpperCase()) + '</div>' +
-        '<div style="color:#ffffff;font-size:58px;font-weight:950;line-height:1.1;max-width:700px;">' + mktEsc(f.titulo || "Escribe tu título aquí") + '</div>' +
-        '<div style="color:#ffffff;font-size:24px;font-weight:600;line-height:1.5;max-width:640px;">' + mktEsc(f.mensaje || "") + '</div>' +
-      '</div>' +
-    MKT_CANVAS_CLOSE;
-  }
-
-  var MKT_TEMPLATES = {
-    cerrado: {
-      title: "Cerrado",
-      fields: [
-        { id: "mensaje", label: "Mensaje", type: "text", placeholder: "GRACIAS POR TU PREFERENCIA" }
-      ],
-      render: mktRenderCerrado
-    },
-    horario: {
-      title: "Horario",
-      fields: [
-        { id: "apertura", label: "Hora de apertura", type: "text", placeholder: "9AM" },
-        { id: "cierre", label: "Hora de cierre", type: "text", placeholder: "8:30PM" },
-        { id: "dias", label: "Días", type: "text", placeholder: "De lunes a sábado" }
-      ],
-      render: mktRenderHorario
-    },
-    paises: {
-      title: "Países donde enviamos",
-      fields: [
-        { id: "paises", label: "Países (separados por coma)", type: "textarea", placeholder: "Chile, Venezuela, Colombia, Argentina, México, Perú" }
-      ],
-      render: mktRenderPaises
-    },
-    cta: {
-      title: "Transfiere ahora",
-      fields: [
-        { id: "cta", label: "Texto principal", type: "text", placeholder: "TRANSFIERE AHORA" },
-        { id: "telefono", label: "Teléfono", type: "text", placeholder: "+56 9 0000 0000" }
-      ],
-      render: mktRenderCTA
-    },
-    promo: {
-      title: "Promoción / Día especial",
-      fields: [
-        { id: "subtitulo", label: "Etiqueta pequeña", type: "text", placeholder: "Promoción especial" },
-        { id: "titulo", label: "Título grande", type: "text", placeholder: "Escribe tu título aquí" },
-        { id: "mensaje", label: "Texto adicional", type: "textarea", placeholder: "Detalle de la promoción" }
-      ],
-      render: mktRenderPromo
-    }
-  };
-
-  var mktCurrentId = null;
-  var mktLogoDataUrl = "";
-
-  function mktGetFieldValues(){
-    var tpl = MKT_TEMPLATES[mktCurrentId];
-    var values = {};
-    if(!tpl) return values;
-    tpl.fields.forEach(function(field){
-      var el = document.getElementById("mktField_" + field.id);
-      values[field.id] = el ? el.value : "";
-    });
-    return values;
-  }
-
-  function mktRerender(){
-    var tpl = MKT_TEMPLATES[mktCurrentId];
-    var preview = document.getElementById("mktPreview");
-    if(!tpl || !preview) return;
-    preview.innerHTML = tpl.render(mktGetFieldValues(), mktLogoDataUrl);
-  }
-
-  window.mktSelectTemplate = function(id){
-    var tpl = MKT_TEMPLATES[id];
-    if(!tpl) return;
-    mktCurrentId = id;
-    mktLogoDataUrl = "";
-
-    document.getElementById("mktTemplateGrid").style.display = "none";
-    document.getElementById("mktFormWrap").style.display = "block";
-    document.getElementById("mktFormTitle").textContent = "Editar: " + tpl.title;
-
-    var fieldsWrap = document.getElementById("mktFormFields");
-    fieldsWrap.innerHTML = tpl.fields.map(function(field){
-      var tag = field.type === "textarea" ? "textarea" : "input";
-      var attrs = field.type === "textarea" ? ' rows="3"' : ' type="text"';
-      return '<label>' + mktEsc(field.label) +
-        '<' + tag + ' id="mktField_' + field.id + '" placeholder="' + mktEsc(field.placeholder || "") + '"' + attrs + '></' + tag + '>' +
-      '</label>';
+  function mktRenderCTA(){
+    var flagsRow = AKI_COUNTRIES.slice(0,10).map(function(name){
+      return '<span style="font-size:30px;">' + mktFlagFor(name) + '</span>';
     }).join("");
+    return mktCanvasOpen() +
+      '<div style="text-align:center;">' +
+        '<div style="display:flex;justify-content:center;gap:8px;margin-bottom:26px;">' + flagsRow + '</div>' +
+        '<div style="color:#ffffff;font-family:' + MKT_FONT_TEXT + ';font-size:30px;font-weight:800;letter-spacing:.12em;">TRANSFIERE</div>' +
+        '<div style="margin-top:10px;display:inline-block;background:#ffffff;color:' + MKT_GREEN_DARK + ';border-radius:20px;padding:14px 50px;font-family:' + MKT_FONT_DISPLAY + ';font-size:60px;font-weight:800;box-shadow:0 16px 30px rgba(0,0,0,.22);">AHORA</div>' +
+        '<div style="margin-top:30px;">' + mktLogoBlock() + '</div>' +
+      '</div>' +
+      '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:30px;">' +
+        MKT_ICON_PHONE +
+        '<div style="border:3px solid ' + MKT_GOLD + ';border-radius:999px;padding:18px 38px;color:#ffffff;font-family:' + MKT_FONT_DISPLAY + ';font-size:34px;font-weight:800;letter-spacing:.03em;">' + mktEsc(AKI_PHONE) + '</div>' +
+      '</div>' +
+    MKT_CANVAS_CLOSE;
+  }
 
-    fieldsWrap.querySelectorAll("input, textarea").forEach(function(el){
-      el.addEventListener("input", mktRerender);
+  function mktRenderTasaCompetente(){
+    return mktCanvasOpen("linear-gradient(115deg,#0a0a0a 0%,#0a0a0a 42%,#0a6044 42%,#064f38 100%)") +
+      '<div style="display:flex;justify-content:flex-end;">' + mktLogoBlock() + '</div>' +
+      '<div style="flex:1;display:flex;align-items:center;justify-content:center;">' + MKT_ICON_GLOBE + '</div>' +
+      '<div>' +
+        '<div style="color:#ffffff;font-family:' + MKT_FONT_DISPLAY + ';font-size:56px;font-weight:800;line-height:.95;">LA TASA<br>MÁS<br>COMPETENTE</div>' +
+        '<div style="margin-top:18px;display:flex;flex-wrap:wrap;gap:8px;max-width:640px;">' +
+          AKI_COUNTRIES.slice(0,8).map(function(n){ return '<span style="font-size:26px;">' + mktFlagFor(n) + '</span>'; }).join("") +
+        '</div>' +
+      '</div>' +
+    MKT_CANVAS_CLOSE;
+  }
+
+  var MKT_TEMPLATES = [
+    { id: "cerrado", name: "Cerrado", render: mktRenderCerrado },
+    { id: "horario", name: "Horario", render: mktRenderHorario },
+    { id: "paises", name: "Países donde enviamos", render: mktRenderPaises },
+    { id: "cta", name: "Transfiere ahora", render: mktRenderCTA },
+    { id: "tasa", name: "La tasa más competente", render: mktRenderTasaCompetente }
+  ];
+
+  function mktBuildGallery(){
+    var grid = document.getElementById("mktTemplateGrid");
+    if(!grid) return;
+    grid.innerHTML = MKT_TEMPLATES.map(function(tpl){
+      return '' +
+        '<div class="mkt-template-card">' +
+          '<div class="mkt-template-thumb" id="mktThumb_' + tpl.id + '"></div>' +
+          '<div class="mkt-template-name">' + tpl.name + '</div>' +
+          '<button class="btn primary" type="button" style="width:100%;margin-top:8px;" onclick="window.mktDownload(\'' + tpl.id + '\')" id="mktBtn_' + tpl.id + '">Descargar</button>' +
+        '</div>';
+    }).join("");
+    MKT_TEMPLATES.forEach(function(tpl){
+      var thumb = document.getElementById("mktThumb_" + tpl.id);
+      if(thumb) thumb.innerHTML = tpl.render();
     });
-
-    var logoInput = document.getElementById("mktLogoInput");
-    if(logoInput){
-      logoInput.value = "";
-      logoInput.onchange = function(){
-        var file = logoInput.files && logoInput.files[0];
-        if(!file) return;
-        var reader = new FileReader();
-        reader.onload = function(){
-          mktLogoDataUrl = reader.result;
-          mktRerender();
-        };
-        reader.readAsDataURL(file);
-      };
-    }
-
-    mktRerender();
-  };
-
-  window.mktBackToGallery = function(){
-    document.getElementById("mktTemplateGrid").style.display = "grid";
-    document.getElementById("mktFormWrap").style.display = "none";
-    mktCurrentId = null;
-  };
+  }
 
   function mktLoadHtml2Canvas(){
     return new Promise(function(resolve, reject){
@@ -26860,20 +26774,22 @@ try{
     });
   }
 
-  window.mktDownloadImage = async function(){
-    var node = document.getElementById("mktImageCanvas");
-    if(!node){ alert("Primero elige una plantilla."); return; }
-    var btn = document.getElementById("mktDownloadBtn");
+  window.mktDownload = async function(id){
+    var tpl = MKT_TEMPLATES.find(function(t){ return t.id === id; });
+    var thumb = document.getElementById("mktThumb_" + id);
+    var btn = document.getElementById("mktBtn_" + id);
+    if(!tpl || !thumb) return;
     var oldText = btn ? btn.textContent : "";
     try{
       if(btn){ btn.disabled = true; btn.textContent = "Preparando..."; }
+      await mktEnsureFont();
+      var node = thumb.querySelector(".mkt-canvas");
       var html2canvas = await mktLoadHtml2Canvas();
       var canvas = await html2canvas(node, { backgroundColor: null, scale: 3, useCORS: true, allowTaint: true, logging: false });
-      var fileName = "onze-" + (mktCurrentId || "marketing") + ".png";
       var dataUrl = canvas.toDataURL("image/png", 1);
       var link = document.createElement("a");
       link.href = dataUrl;
-      link.download = fileName;
+      link.download = "aki-transfer-" + id + ".png";
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -26883,6 +26799,16 @@ try{
       if(btn){ btn.disabled = false; btn.textContent = oldText; }
     }
   };
+
+  function mktInit(){
+    if(document.getElementById("mktTemplateGrid")) mktBuildGallery();
+  }
+
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", function(){ setTimeout(mktInit, 400); });
+  }else{
+    setTimeout(mktInit, 400);
+  }
 })();
 </script>
 
