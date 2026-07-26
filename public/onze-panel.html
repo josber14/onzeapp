@@ -16850,7 +16850,7 @@ function addP2PBotStyles(){
   if(window.__onzeBinanceP2PSyncLoaded) return;
   window.__onzeBinanceP2PSyncLoaded = true;
 
-  function p2pMoney(n, decimals = 2){
+  window.p2pMoney = function p2pMoney(n, decimals = 2){
     const value = Number(n || 0);
     return value.toLocaleString("es-CL", {
       minimumFractionDigits: decimals,
@@ -16881,7 +16881,7 @@ function addP2PBotStyles(){
     }
   }
 
-  function saveP2PBybitOrders(orders){
+  window.saveP2PBybitOrders = function saveP2PBybitOrders(orders){
     localStorage.setItem("onze_p2p_bybit_orders", JSON.stringify(Array.isArray(orders) ? orders : []));
   }
 
