@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
     let orders: any[] = [];
     let production: any = null;
     let profitEstimate: number | null = null;
+    let profitEstimateUsdt: number | null = null;
     let costPriceUsed: number | null = null;
 
     if (active) {
@@ -82,6 +83,8 @@ export async function GET(req: NextRequest) {
           const totalUsdt = Number(activeWithLiveStats?.totalUsdt || 0);
           const totalClp = Number(activeWithLiveStats?.totalBinanceClp || 0) + Number(active.totalManualClp || 0);
           profitEstimate = totalClp - totalUsdt * costPriceUsed;
+          // Mismo estimado, convertido a USDT con el costo de referencia usado arriba.
+          profitEstimateUsdt = profitEstimate / costPriceUsed;
         }
       } catch (e) {}
     }
@@ -100,6 +103,7 @@ export async function GET(req: NextRequest) {
       orders,
       production,
       profitEstimate,
+      profitEstimateUsdt,
       costPriceUsed,
     });
   } catch (error: any) {

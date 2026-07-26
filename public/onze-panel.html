@@ -13742,7 +13742,10 @@ function addP2PBotStyles(){
         const profitHintEl = document.getElementById("botCycleProfitHint");
         if(data.profitEstimate != null){
           const p = Number(data.profitEstimate);
-          profitEl.textContent = (p >= 0 ? "+$" : "-$") + Math.round(Math.abs(p)).toLocaleString();
+          const pUsdt = Number(data.profitEstimateUsdt || 0);
+          const sign = p >= 0 ? "+" : "-";
+          profitEl.innerHTML = sign + "$" + Math.round(Math.abs(p)).toLocaleString() +
+            "<span style='font-size:10px;font-weight:600;color:#94a3b8;margin-left:4px;'>(" + sign + Math.abs(pUsdt).toFixed(2) + " USDT)</span>";
           profitEl.style.color = p >= 0 ? "#34d399" : "#fb7185";
           if(profitHintEl) profitHintEl.textContent = "Estimado con costo actual ($" + Number(data.costPriceUsed).toFixed(2) + "/USDT) -- no es contabilidad exacta por capacity";
         }else{
