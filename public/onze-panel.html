@@ -10322,10 +10322,11 @@ function addP2PBotStyles(){
       var pmExtra = (pms && Array.isArray(pms) && pms.length > 3) ? '+' + (pms.length - 3) : '';
       function pmName(pm){ return typeof pm === 'object' && pm !== null ? String(pm.name || pm.id || '') : String(pm); }
       content.innerHTML = `
-        <div class="bot-ad-pill">
+        <div class="bot-ad-pill" data-ad-real-id="${a.id}" data-ad-adid="${a.adId||''}">
           <div class="bot-ad-card-header">
-            <span class="sell-label">Vender</span><span style="flex:1;">${a.asset||'USDT'} con ${a.fiat||'CLP'}</span>
-            <span class="status-badge" style="background:${isOnline?'rgba(52,211,153,.12)':'rgba(100,116,139,.12)'};color:${isOnline?'#34d399':'#94a3b8'};"><span class="dot" style="background:${isOnline?'#34d399':'#64748b'};"></span>${isOnline ? 'En línea' : 'Desconectado'}</span>
+            <span class="sell-label">Vender</span>
+            <span style="flex:1;font-size:12px;font-weight:500;color:#94a3b8;">${a.asset||'USDT'} / ${a.fiat||'CLP'}</span>
+            <span class="status-badge${isOnline?'':' offline'}"><span class="dot"></span>${isOnline ? 'En línea' : 'Desconectado'}</span>
             <span class="toggle-switch" onclick="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',!${botEnabled})">
               <input type="checkbox" ${botEnabled?'checked':''}>
               <span class="slider"></span>
@@ -10335,18 +10336,18 @@ function addP2PBotStyles(){
               <button class="menu-item" onclick="event.stopPropagation();window.botSimpleEditAd(${a.id})">Editar anuncio</button>
               <button class="menu-item danger" onclick="event.stopPropagation();window.botPanelDeleteAd(${a.id},'${escHtml(a.adId||'')}')">Borrar anuncio</button>
             </div>
-            </div>
           </div>
           <div class="bot-ad-card-body">
-            <div class="bot-ad-card-price"><span id="botAdPrice_${a.id}" style="color:#34d399;">${fmt(a.price)}</span> CLP</div>
+            <div class="bot-ad-card-price"><span id="botAdPrice_${a.id}">${fmt(a.price)}</span><span class="currency">CLP</span></div>
+            <div class="bot-ad-card-pair">${a.asset||'USDT'} → ${a.fiat||'CLP'}</div>
             <div class="bot-ad-card-rows">
               <div class="row"><span class="label">Balance</span><span class="value" id="botAdAmount_${a.id}">${fmtFlex(a.amount)} ${a.asset||'USDT'}</span></div>
-              <div class="row"><span class="label">Límite</span><span class="value" id="botAdLimits_${a.id}">$${fmtInt(a.minAmount||0)} - $${fmtInt(a.maxAmount||0)} CLP</span></div>
+              <div class="row"><span class="label">Límite</span><span class="value" id="botAdLimits_${a.id}">$${fmtInt(a.minAmount||0)} – $${fmtInt(a.maxAmount||0)}</span></div>
             </div>
           </div>
           <div class="bot-ad-card-methods">
             ${pmBadges.map(function(pm){ return '<span class="pm-badge">'+fmtPayName(pmName(pm))+'</span>'; }).join('')}
-            ${pmExtra ? '<span class="pm-badge" style="background:rgba(148,163,184,.1);color:#94a3b8;">'+escHtml(pmExtra)+'</span>' : ''}
+            ${pmExtra ? '<span class="pm-badge" style="background:rgba(148,163,184,.06);color:#64748b;border-color:rgba(148,163,184,.08);">'+escHtml(pmExtra)+'</span>' : ''}
           </div>
         </div>
       `;
