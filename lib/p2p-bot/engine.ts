@@ -1415,6 +1415,25 @@ const bybitLastUpdateAt = new Map<string, number>();
 const bybitModCount = new Map<string, number>();
 const bybitAdCache = new Map<string, any>();
 
+// Lock a nivel de base de datos (no solo en memoria) para "recrear anuncio"
+// -- confirmado en vivo: dos ejecuciones del ciclo corriendo al mismo tiempo
+// (ej. dos pestañas/servidores del panel abiertos) recreaban el MISMO
+// anuncio en paralelo, dejando dos anuncios duplicados y la base de datos
+// apuntando al que quedaba eliminado. Un lock en memoria no alcanza porque
+// cada proceso de servidor tiene su propia memoria -- por eso el lock se
+// guarda en la fila de P2PBotAd, visible para cualquier proceso.
+async function claimBybitRecreateLock(managedAdDbId: number): Promise<boolean> {
+  const lockMs = 25000;
+  const result = await prisma.p2PBotAd.updateMany({
+    where: {
+      id: managedAdDbId,
+      OR: [{ recreateLockUntil: null }, { recreateLockUntil: { lt: new Date() } }],
+    },
+    data: { recreateLockUntil: new Date(Date.now() + lockMs) },
+  });
+  return result.count > 0;
+}
+
 async function runBybitCycle(
   tenantId: number,
   config: P2PBotConfigData | P2PBotExchangeConfigData,
@@ -1706,6 +1725,17 @@ async function runBybitCycle(
           const rawMin = String(fullAd.minAmount ?? "0");
           const cappedMin = Number(rawMin) > Number(adMaxAmount) ? adMaxAmount : rawMin;
           const updateQuantity = adQuantity;
+
+          // Bybit exige que precio * cantidad disponible sea >= al monto
+          // mínimo por transacción (error 912120023) -- si el saldo se
+          // vendió por completo justo en este instante (cantidad 0, o muy
+          // baja), no tiene sentido intentar publicar/recrear con esos
+          // números: se salta este anuncio hasta que vuelva a tener saldo.
+          if (Number(targetPrice.toFixed(2)) * Number(updateQuantity) < Number(cappedMin)) {
+            await log( "info", "bybit", `Ad ${adId}: saldo insuficiente para el mínimo (${updateQuantity} USDT × ${targetPrice.toFixed(2)} < ${cappedMin} CLP mín.) -- se salta hasta que haya más saldo`);
+            continue;
+          }
+
           updateFields = {
             id: adId,
             price: targetPrice.toFixed(2),
@@ -1732,7 +1762,9 @@ async function runBybitCycle(
           }
 
           // Recreate at mod 9 (before hitting Bybit's 10-mod limit)
-          if (currentMods >= 9) {
+          if (currentMods >= 9 && !(await claimBybitRecreateLock(managedAd.id))) {
+            await log( "debug", "bybit", `Ad ${adId}: otra ejecución ya está recreando este anuncio, se salta`);
+          } else if (currentMods >= 9) {
             await log( "info", "bybit", `Ad ${adId}: ${currentMods} modificaciones, recreando...`);
             const recreatePrice = currentPrice + 0.50;
             try { await client.updateAd({ id: adId, status: 20 }); } catch {}
@@ -1819,7 +1851,9 @@ async function runBybitCycle(
             await log( "info", "bybit", `Ad ${adId} precio actualizado: ${currentPrice} → ${targetPrice.toFixed(2)} (mod #${currentMods + 1})`);
           }
         } catch (e: any) {
-          if (e.message?.includes("912120050")) {
+          if (e.message?.includes("912120050") && !(await claimBybitRecreateLock(managedAd.id))) {
+            await log( "debug", "bybit", `Ad ${adId}: otra ejecución ya está recreando este anuncio tras rate limit, se salta`);
+          } else if (e.message?.includes("912120050")) {
             await log( "info", "bybit", `Rate limit, recreando anuncio ${adId} en 5s...`);
             await new Promise(r => setTimeout(r, 5000));
             let removed = false;

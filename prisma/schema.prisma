@@ -1265,6 +1265,7 @@ model P2PBotAd {
   botCircuitBreakPct      Decimal? @db.Decimal(8, 4)
   botDailyVolumeCapUsdt   Decimal? @db.Decimal(18, 8)
   botMinAdPriceDiffPct    Decimal? @db.Decimal(8, 4)
+  recreateLockUntil       DateTime?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @default(now())
   Tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
