@@ -9388,6 +9388,40 @@ function addP2PBotStyles(){
     .mercado-section-title{font-size:12px;font-weight:700;color:#e2e8f0;margin:14px 0 8px;display:flex;align-items:center;gap:8px;letter-spacing:.2px;}
     .mercado-section-title .badge{font-size:9px;background:rgba(99,102,241,.12);color:#818cf8;padding:2px 7px;border-radius:8px;font-weight:500;}
 
+    /* Oráculo de mercado */
+    .oracle-wrap{border:1px solid rgba(99,102,241,.22);border-radius:16px;background:linear-gradient(160deg,rgba(30,27,75,.35),rgba(15,23,42,.5));padding:14px;}
+    .oracle-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+    .oracle-head-title{font-size:13px;font-weight:800;color:#e2e8f0;display:flex;align-items:center;gap:6px;}
+    .oracle-head-meta{font-size:10px;color:#64748b;display:flex;align-items:center;gap:8px;}
+    .oracle-direction{border:1px solid rgba(99,102,241,.18);background:rgba(15,23,42,.4);border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;}
+    .oracle-direction .od-left{display:flex;align-items:center;gap:10px;}
+    .oracle-streak{font-size:10px;font-weight:700;color:#fbbf24;background:rgba(251,191,36,.1);padding:2px 8px;border-radius:8px;margin-left:6px;}
+    .oracle-badge{font-size:11px;font-weight:800;padding:6px 12px;border-radius:10px;white-space:nowrap;}
+    .oracle-badge.up{background:rgba(52,211,153,.14);color:#34d399;}
+    .oracle-badge.down{background:rgba(251,113,133,.14);color:#fb7185;}
+    .oracle-badge.flat{background:rgba(148,163,184,.14);color:#94a3b8;}
+    .oracle-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+    @media (max-width:700px){ .oracle-grid{grid-template-columns:1fr;} }
+    .oracle-card{border:1px solid rgba(148,163,184,.1);background:rgba(15,23,42,.4);border-radius:14px;padding:12px;}
+    .oracle-card-title{font-size:11px;font-weight:700;color:#94a3b8;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+    .oracle-score-value{font-size:34px;font-weight:900;font-variant-numeric:tabular-nums;}
+    .oracle-score-bar{height:6px;border-radius:4px;background:rgba(148,163,184,.12);margin-top:8px;overflow:hidden;}
+    .oracle-score-bar > div{height:100%;border-radius:4px;}
+    .oracle-mini-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px;font-size:10px;}
+    .oracle-mini-row div{background:rgba(15,23,42,.5);border-radius:8px;padding:5px 8px;color:#94a3b8;display:flex;justify-content:space-between;}
+    .oracle-mini-row span{color:#e2e8f0;font-weight:700;}
+    .oracle-obi-bar{height:22px;border-radius:6px;overflow:hidden;display:flex;font-size:10px;font-weight:800;margin-top:6px;}
+    .oracle-obi-bar .buy{background:#34d399;color:#022c22;display:flex;align-items:center;padding-left:6px;}
+    .oracle-obi-bar .sell{background:#fb7185;color:#450a0a;display:flex;align-items:center;justify-content:flex-end;padding-right:6px;}
+    .oracle-obi-pct{display:flex;justify-content:space-between;font-size:10px;margin-top:4px;}
+    .oracle-history{display:flex;gap:3px;margin-top:10px;height:26px;align-items:flex-end;}
+    .oracle-history > div{flex:1;border-radius:3px 3px 0 0;min-height:3px;}
+    .oracle-mini-stat{display:flex;justify-content:space-between;background:rgba(15,23,42,.5);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:11px;color:#94a3b8;}
+    .oracle-mini-stat strong{color:#e2e8f0;font-size:13px;}
+    .oracle-recommend{border:1px solid rgba(99,102,241,.25);background:rgba(30,27,75,.4);border-radius:14px;padding:12px 14px;font-size:12px;color:#cbd5e1;line-height:1.5;}
+    .oracle-recommend .head{display:flex;align-items:center;gap:8px;font-weight:800;color:#a5b4fc;margin-bottom:6px;font-size:12px;}
+    .oracle-recommend .score-tag{font-size:10px;background:rgba(99,102,241,.16);color:#a5b4fc;padding:2px 8px;border-radius:8px;margin-left:auto;}
+
     /* Merchant cards */
     .merchant-card{background:linear-gradient(135deg,rgba(15,23,42,.45),rgba(15,23,42,.25));border:1px solid rgba(148,163,184,.08);border-radius:10px;padding:10px 14px;flex:1;min-width:160px;max-width:220px;transition:all .15s;}
     .merchant-card:hover{border-color:rgba(148,163,184,.2);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.2);}
@@ -10024,6 +10058,7 @@ function addP2PBotStyles(){
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
                 <span style="font-size:12px;font-weight:600;color:#e2e8f0;">📈 Mercado <span id="botMercadoExchange" style="font-size:10px;color:#64748b;font-weight:400;"></span></span>
               </div>
+              <div id="botOracleCard" style="margin-bottom:16px;"></div>
               <div style="margin-bottom:12px;">
                 <div id="botMercadoStats"></div>
               </div>
@@ -12477,6 +12512,13 @@ function addP2PBotStyles(){
     var loadingMsg = '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px;">Sin datos de mercado para ' + exLabel + '</div>';
 
     try{
+      var r = await fetch("/api/p2p/bot/market?type=oracle&exchange=" + botSelectedExchange, { credentials:"include" });
+      var d = await r.json();
+      if(d?.ok && d?.data) renderMercadoOracle(d.data);
+      else document.getElementById("botOracleCard").innerHTML = "";
+    }catch(e){}
+
+    try{
       var r = await fetch("/api/p2p/bot/market?type=latest&limit=50&live=true&exchange=" + botSelectedExchange, { credentials:"include" });
       var d = await r.json();
       if(d?.ok && d?.data) renderMercadoRanking(d.data);
@@ -12537,6 +12579,87 @@ function addP2PBotStyles(){
       mercadoRefreshTimer = null;
     }
   };
+
+  function renderMercadoOracle(o){
+    const el = document.getElementById("botOracleCard");
+    if(!el) return;
+    if(!o){
+      el.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:16px;">Sin lecturas todavía para el Oráculo.</div>';
+      return;
+    }
+
+    const dirColor = o.direccion === "alza" ? "up" : o.direccion === "baja" ? "down" : "flat";
+    const dirLabel = o.direccion === "alza" ? "▲ ALZA" : o.direccion === "baja" ? "▼ BAJA" : "● LATERAL";
+    const scoreColor = o.score >= 70 ? "#34d399" : o.score >= 45 ? "#fbbf24" : "#fb7185";
+    const ofertaLabel = o.oferta === "toxica" ? "Oferta tóxica" : o.oferta === "demanda_fuerte" ? "Demanda fuerte" : "Equilibrado";
+    const ofertaColor = o.oferta === "toxica" ? "#fb7185" : o.oferta === "demanda_fuerte" ? "#34d399" : "#94a3b8";
+
+    const historyBars = (o.obiHistory || []).map(function(v){
+      var h = Math.max(3, Math.round(v / 100 * 26));
+      var c = v >= 50 ? "#34d399" : "#fb7185";
+      return '<div style="height:' + h + 'px;background:' + c + ';" title="' + v + '% buy"></div>';
+    }).join("");
+
+    el.innerHTML = `
+      <div class="oracle-wrap">
+        <div class="oracle-head">
+          <div class="oracle-head-title">🔮 Oráculo de Mercado</div>
+          <div class="oracle-head-meta">${o.readingsCount}/10 lecturas · ${new Date(o.cycleAt).toLocaleTimeString("es-CL")}</div>
+        </div>
+
+        <div class="oracle-direction">
+          <div class="od-left">
+            <span style="font-size:11px;font-weight:700;color:#e2e8f0;">DIRECCIÓN DEL PRECIO</span>
+            ${o.racha > 1 ? '<span class="oracle-streak">🔥 ' + o.racha + ' racha</span>' : ''}
+            <span style="font-size:11px;color:#64748b;">· Régimen: <strong style="color:#a5b4fc;">${o.regimen}</strong> · spread MA3/MA10: ${o.spreadMa}%</span>
+          </div>
+          <div style="text-align:right;">
+            <div class="oracle-badge ${dirColor}">${dirLabel}</div>
+            <div style="font-size:10px;color:#64748b;margin-top:3px;">WAP: ${fmt(o.wapSell)}</div>
+          </div>
+        </div>
+
+        <div class="oracle-grid">
+          <div class="oracle-card">
+            <div class="oracle-card-title">🎯 Maker Score <span>0-100</span></div>
+            <div class="oracle-score-value" style="color:${scoreColor};">${o.score}</div>
+            <div class="oracle-score-bar"><div style="width:${o.score}%;background:${scoreColor};"></div></div>
+            <div class="oracle-mini-row">
+              <div>OBI <span>${o.obiBuyPct}%</span></div>
+              <div>Racha <span>${o.racha}x</span></div>
+              <div>Vacío <span>${o.hasVacuum ? "Sí" : "No"}</span></div>
+              <div>Asimetría <span>${o.asimetriaLabel}</span></div>
+            </div>
+          </div>
+
+          <div class="oracle-card">
+            <div class="oracle-card-title">⚖️ OBI <span style="color:${ofertaColor};">${ofertaLabel}</span></div>
+            <div style="font-size:10px;color:#64748b;">Presión del libro de órdenes</div>
+            <div class="oracle-obi-bar">
+              <div class="buy" style="width:${o.obiBuyPct}%;">BUY</div>
+              <div class="sell" style="width:${o.obiSellPct}%;">SELL</div>
+            </div>
+            <div class="oracle-obi-pct"><span style="color:#34d399;">${o.obiBuyPct}%</span><span style="color:#fb7185;">${o.obiSellPct}%</span></div>
+            <div style="font-size:9px;color:#64748b;margin-top:8px;">HISTORIAL OBI BUY%</div>
+            <div class="oracle-history">${historyBars}</div>
+          </div>
+
+          <div class="oracle-card">
+            <div class="oracle-card-title">📐 Asimetría <span>Mínimos por lado</span></div>
+            <div class="oracle-mini-stat"><span>Retail (Min)</span><strong style="color:#34d399;">${fmtInt(o.retailMin)}</strong></div>
+            <div class="oracle-mini-stat"><span>Ballena (Min)</span><strong style="color:#fb7185;">${fmtInt(o.whaleMin)}</strong></div>
+            <div class="oracle-mini-stat"><span>${o.hasVacuum ? "⚠️ Spread Vacuum" : "Spread"}</span><strong>${o.vacuumPct}% ${o.hasVacuum ? "· Vacío" : "· Comprimido"}</strong></div>
+          </div>
+        </div>
+
+        <div class="oracle-recommend">
+          <div class="head">✅ Oráculo Maker Recomienda <span class="score-tag">Score ${o.score}/100</span></div>
+          <div>${escHtml(o.recomendacion)}</div>
+          <div style="margin-top:8px;color:#a5b4fc;">🧠 Acción: ${o.accion.emoji} ${escHtml(o.accion.texto)}</div>
+        </div>
+      </div>
+    `;
+  }
 
   function renderMercadoStats(stats){
     const el = document.getElementById("botMercadoStats");

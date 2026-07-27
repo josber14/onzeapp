@@ -238,6 +238,149 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    if (type === "oracle") {
+      // Últimas lecturas del lado venta (nuestros competidores reales) para
+      // dirección/régimen, y del lado compra (side="0") para el OBI.
+      const sellSnaps = await prisma.p2PBotMarketSnapshot.findMany({
+        where: { tenantId: session.tenantId, exchange, side: "1" },
+        orderBy: { cycleAt: "desc" },
+        take: 10,
+      });
+      const buySnaps = await prisma.p2PBotMarketSnapshot.findMany({
+        where: { tenantId: session.tenantId, exchange, side: "0" },
+        orderBy: { cycleAt: "desc" },
+        take: 10,
+      });
+
+      if (!sellSnaps.length) {
+        return Response.json({ ok: true, data: null });
+      }
+
+      // sellSnaps viene desc (mas reciente primero) -- lo volteamos para
+      // calcular en orden cronológico.
+      const chrono = [...sellSnaps].reverse();
+      const top1Series = chrono.map((s) => {
+        const comps = ((s.competitors as any[]) || []).slice().sort((a, b) => Number(a.price) - Number(b.price));
+        return comps.length ? Number(comps[0].price) : null;
+      }).filter((p): p is number => p !== null && p > 0);
+
+      const ma = (arr: number[], n: number) => {
+        const slice = arr.slice(-n);
+        return slice.length ? slice.reduce((a, b) => a + b, 0) / slice.length : null;
+      };
+      const ma3 = ma(top1Series, 3);
+      const ma10 = ma(top1Series, 10);
+      const spreadMa = ma3 !== null && ma10 !== null && ma10 > 0 ? ((ma3 - ma10) / ma10) * 100 : 0;
+
+      // Racha: cuántas lecturas consecutivas (desde la más reciente hacia
+      // atrás) se movieron en la misma dirección.
+      let racha = 0;
+      let direccion: "alza" | "baja" | "lateral" = "lateral";
+      for (let i = top1Series.length - 1; i > 0; i--) {
+        const diff = top1Series[i] - top1Series[i - 1];
+        if (diff === 0) break;
+        const dir = diff > 0 ? "alza" : "baja";
+        if (racha === 0) { direccion = dir; racha = 1; }
+        else if (dir === direccion) racha++;
+        else break;
+      }
+
+      let regimen: "RANGING" | "TRENDING" = Math.abs(spreadMa) < 0.10 ? "RANGING" : "TRENDING";
+
+      // Última lectura del lado venta -- para WAP, asimetría y vacuum.
+      const latestSell = sellSnaps[0];
+      const sellComps = ((latestSell.competitors as any[]) || []).slice().sort((a: any, b: any) => Number(a.price) - Number(b.price));
+      const sellVolume = sellComps.reduce((sum: number, c: any) => sum + Number(c.lastQuantity || 0), 0);
+      const wapSell = sellVolume > 0
+        ? sellComps.reduce((sum: number, c: any) => sum + Number(c.price) * Number(c.lastQuantity || 0), 0) / sellVolume
+        : (sellComps[0] ? Number(sellComps[0].price) : 0);
+
+      // Asimetría: comparamos el monto mínimo de entrada del anuncio más
+      // chico (retail) contra el del anuncio con más volumen disponible
+      // (ballena) -- ambos ya vienen en los datos reales del competidor.
+      const byVolAsc = [...sellComps].sort((a: any, b: any) => Number(a.lastQuantity || 0) - Number(b.lastQuantity || 0));
+      const retailMin = byVolAsc.length ? Number(byVolAsc[0].minAmount || 0) : 0;
+      const whaleMin = byVolAsc.length ? Number(byVolAsc[byVolAsc.length - 1].minAmount || 0) : 0;
+      const asimetriaPct = retailMin > 0 ? Math.abs(whaleMin - retailMin) / retailMin * 100 : 0;
+      const asimetriaLabel = asimetriaPct > 40 ? "Alta" : asimetriaPct > 15 ? "Media" : "Baja";
+
+      // Spread vacuum: hueco entre el 1er y 2do precio, como % del top1.
+      const top1 = sellComps[0] ? Number(sellComps[0].price) : 0;
+      const top2 = sellComps[1] ? Number(sellComps[1].price) : 0;
+      const vacuumPct = top1 > 0 && top2 > 0 ? Math.abs(top2 - top1) / top1 * 100 : 0;
+      const hasVacuum = vacuumPct > 0.5;
+
+      // OBI: presión compra vs venta, comparando volumen disponible de
+      // anuncios de compra vs anuncios de venta en lecturas emparejadas.
+      const obiHistory: number[] = [];
+      for (const bSnap of [...buySnaps].reverse()) {
+        const buyComps = (bSnap.competitors as any[]) || [];
+        const buyVol = buyComps.reduce((sum: number, c: any) => sum + Number(c.lastQuantity || 0), 0);
+        // Emparejar con la lectura de venta más cercana en el tiempo.
+        const closestSell = sellSnaps.reduce((best: any, s: any) => {
+          const d = Math.abs(s.cycleAt.getTime() - bSnap.cycleAt.getTime());
+          return !best || d < best.d ? { snap: s, d } : best;
+        }, null as any)?.snap;
+        const sVol = closestSell ? ((closestSell.competitors as any[]) || []).reduce((sum: number, c: any) => sum + Number(c.lastQuantity || 0), 0) : 0;
+        const total = buyVol + sVol;
+        obiHistory.push(total > 0 ? (buyVol / total) * 100 : 50);
+      }
+      const obiBuyPct = obiHistory.length ? obiHistory[obiHistory.length - 1] : 50;
+      const obiSellPct = 100 - obiBuyPct;
+      const oferta = obiSellPct > 60 ? "toxica" : obiBuyPct > 60 ? "demanda_fuerte" : "equilibrada";
+
+      // Maker Score (0-100): metrica propia de ONZE, combina las señales de
+      // arriba -- NO es una fórmula de terceros, es un puntaje propio para
+      // ayudar a decidir cuándo operar. Parte de 50 (neutral) y suma/resta
+      // según cada señal.
+      let score = 50;
+      score += hasVacuum ? 15 : -5; // un vacío es oportunidad para el maker
+      score += obiBuyPct > 55 ? 10 : obiBuyPct < 45 ? -10 : 0; // demanda favorece vender
+      score += regimen === "RANGING" ? 10 : -5; // mercado lateral = más predecible
+      score += asimetriaLabel === "Baja" ? 5 : asimetriaLabel === "Alta" ? -10 : 0;
+      score = Math.max(0, Math.min(100, Math.round(score)));
+
+      const accion = score >= 70
+        ? { emoji: "🚀", texto: "Operar ahora — señal favorable" }
+        : score >= 45
+          ? { emoji: "⏳", texto: "Esperar próxima lectura — señal moderada" }
+          : { emoji: "⚠️", texto: "Precaución — condiciones desfavorables" };
+
+      const recomendacion = regimen === "RANGING"
+        ? "Mercado lateral. Opera con spreads ajustados y márgenes pequeños."
+        : direccion === "alza"
+          ? "Mercado en alza. Sigue la tendencia, no te quedes atrás del top 1."
+          : "Mercado en baja. Cuidado con vender por debajo de tu piso de seguridad.";
+      const recomendacionExtra = hasVacuum
+        ? " Hay un vacío de precio: hueco entre el 1° y 2° competidor."
+        : " Sin vacíos: competencia aglomerada, diferénciate por velocidad y límites.";
+
+      return Response.json({
+        ok: true,
+        data: {
+          cycleAt: latestSell.cycleAt.toISOString(),
+          direccion,
+          racha,
+          regimen,
+          spreadMa: Number(spreadMa.toFixed(4)),
+          wapSell: Number(wapSell.toFixed(2)),
+          score,
+          accion,
+          obiBuyPct: Number(obiBuyPct.toFixed(1)),
+          obiSellPct: Number(obiSellPct.toFixed(1)),
+          obiHistory: obiHistory.map((v) => Number(v.toFixed(1))),
+          oferta,
+          retailMin: Math.round(retailMin),
+          whaleMin: Math.round(whaleMin),
+          asimetriaLabel,
+          vacuumPct: Number(vacuumPct.toFixed(2)),
+          hasVacuum,
+          recomendacion: recomendacion + recomendacionExtra,
+          readingsCount: sellSnaps.length,
+        },
+      });
+    }
+
     if (type === "insights") {
       const snapshots = await prisma.p2PBotMarketSnapshot.findMany({
         where: { tenantId: session.tenantId, exchange, side: "1" },

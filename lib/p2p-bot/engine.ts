@@ -45,8 +45,16 @@ interface BinanceState {
   isFetching: boolean;
   lastCompetitorCount: number;
   adStates: Map<string, AdState>;
+  lastBuySideFetch: number;
 }
 const binanceStates = new Map<number, BinanceState>();
+
+// Captura del lado de compra (side="0") para el Oráculo de mercado -- es
+// solo para el panel de análisis, no alimenta ninguna decisión de precio,
+// por eso se limita a 1 vez cada 30s (no cada ciclo) para no sumarle mas
+// llamadas de las necesarias a la cuenta de Binance/Bybit.
+const ORACLE_BUY_SIDE_THROTTLE_MS = 30000;
+const bybitBuySideFetch = new Map<number, number>();
 
 // El bloqueo contra procesamiento concurrente del chat vive DENTRO de
 // processChats (chat-agent.ts), a nivel de cada ORDEN individual, no acá a
@@ -66,6 +74,7 @@ function getBinanceState(tenantId: number): BinanceState {
       isFetching: false,
       lastCompetitorCount: 0,
       adStates: new Map(),
+      lastBuySideFetch: 0,
     };
     binanceStates.set(tenantId, s);
   }
@@ -904,6 +913,36 @@ async function runBinanceCycle(
       });
     } catch (e: any) {}
 
+    // Lado de compra (side="0") para el Oráculo de mercado -- throttled a
+    // 30s, no alimenta ninguna decisión de precio del bot, solo el panel de
+    // análisis. OJO con el mismo quirk ya documentado de Binance: tradeType
+    // invertido -- "SELL" es el que trae los anuncios del lado COMPRA.
+    if (Date.now() - bs.lastBuySideFetch > ORACLE_BUY_SIDE_THROTTLE_MS) {
+      bs.lastBuySideFetch = Date.now();
+      try {
+        const buyRes = await client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "SELL", rows: 20, page: 1, payTypes: [] });
+        const buyRaw = (buyRes?.data ?? []).map(normalizeBinanceAd);
+        const buyComps = buyRaw.slice(0, 50).map((c: any) => ({
+          id: c.id, nickName: c.nickName, price: Number(c.price),
+          minAmount: Number(c.minAmount ?? 0), maxAmount: Number(c.maxAmount ?? 0),
+          lastQuantity: Number(c.lastQuantity ?? c.quantity ?? 0),
+          orderCount: Number(c.orderCount ?? 0), completionRate: Number(c.completionRate ?? 0),
+        }));
+        await prisma.p2PBotMarketSnapshot.create({
+          data: {
+            tenantId,
+            exchange: "binance",
+            side: "0",
+            competitors: JSON.parse(JSON.stringify(buyComps)),
+            ourAd: undefined,
+            targetPrice: undefined,
+          },
+        });
+      } catch (e: any) {
+        await log("debug", "binance", `Oráculo: error lado compra: ${e.message}`);
+      }
+    }
+
     // Use cached competitors
     const rawCompetitors = bs.cachedCompetitors;
 
@@ -1478,6 +1517,34 @@ async function runBybitCycle(
         },
       });
     } catch (e: any) {}
+
+    // Lado de compra (side="0") para el Oráculo de mercado -- throttled a
+    // 30s, solo para el panel de análisis, no toca ninguna decisión de precio.
+    if (Date.now() - (bybitBuySideFetch.get(tenantId) || 0) > ORACLE_BUY_SIDE_THROTTLE_MS) {
+      bybitBuySideFetch.set(tenantId, Date.now());
+      try {
+        const buyRes = await client.getOnlineAds({ tokenId: "USDT", currencyId: "CLP", side: "0", page: "1", size: "20" });
+        const buyRaw = buyRes?.result?.items || [];
+        const buyComps = buyRaw.slice(0, 50).map((c: any) => ({
+          id: c.id, nickName: c.nickName, price: Number(c.price),
+          minAmount: Number(c.minAmount ?? 0), maxAmount: Number(c.maxAmount ?? 0),
+          lastQuantity: Number(c.lastQuantity ?? c.quantity ?? 0),
+          orderCount: Number(c.orderCount ?? 0), completionRate: Number(c.completionRate ?? 0),
+        }));
+        await prisma.p2PBotMarketSnapshot.create({
+          data: {
+            tenantId,
+            exchange: "bybit",
+            side: "0",
+            competitors: JSON.parse(JSON.stringify(buyComps)),
+            ourAd: undefined,
+            targetPrice: undefined,
+          },
+        });
+      } catch (e: any) {
+        await log("debug", "bybit", `Oráculo: error lado compra: ${e.message}`);
+      }
+    }
 
     // Get active capacity (initial read)
     let activeCapacityBuyPrice: number | null = null;
