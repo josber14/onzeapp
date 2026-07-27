@@ -1563,8 +1563,15 @@ export function normalizeOrder(raw: any, exchange: string) {
   else if (["APPEALED", "40"].includes(rawStatus)) status = "appealed";
 
   const group = status === "paid" ? "paid" : status === "appealed" ? "appealed" : status === "completed" ? "completed" : status === "cancelled" ? "cancelled" : "pending";
+  // additionalKycVerify es un campo exclusivo de Binance (marca si el
+  // comprador ya pasó su verificación KYC antes de mandarle la cuenta
+  // bancaria). Bybit no tiene este concepto -- confirmado con el usuario,
+  // así que para Bybit/otros exchanges no se espera nada, se trata como ya
+  // verificado. Para Binance esto NO cambia (sigue exactamente igual).
   const rawVerified = raw.additionalKycVerify;
-  const verified = rawVerified === 2 || rawVerified === true || rawVerified === "2" || rawVerified === "true";
+  const verified = exchange === "binance"
+    ? (rawVerified === 2 || rawVerified === true || rawVerified === "2" || rawVerified === "true")
+    : true;
 
   return {
     orderNumber: raw.orderNumber ?? raw.orderNo ?? raw.id ?? raw.orderId ?? "",
