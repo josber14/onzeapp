@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
+import { maskSecret } from "@/lib/exchange-creds-crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,9 +27,15 @@ export async function GET(req: NextRequest) {
       select: { apiKey: true, secretKey: true, isActive: true, testStatus: true, lastTestedAt: true, updatedAt: true }
     });
 
+    // Nunca se devuelve la clave real al navegador -- solo una versión
+    // enmascarada (últimos 4 caracteres) para mostrar que ya está configurada.
+    const masked = creds
+      ? { apiKeyMasked: maskSecret(creds.apiKey), secretKeyMasked: maskSecret(creds.secretKey), isActive: creds.isActive, testStatus: creds.testStatus, lastTestedAt: creds.lastTestedAt, updatedAt: creds.updatedAt }
+      : null;
+
     return Response.json({
       ok: true,
-      credentials: creds || null,
+      credentials: masked,
       configured: !!creds,
       isActive: creds?.isActive || false,
       testStatus: creds?.testStatus || null,

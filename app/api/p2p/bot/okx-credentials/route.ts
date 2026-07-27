@@ -20,12 +20,17 @@ export async function GET(req: NextRequest) {
     }
     const label = req.nextUrl.searchParams.get("label") || "ONZE";
     const { prisma } = await import("@/lib/prisma");
+    const { maskSecret } = await import("@/lib/exchange-creds-crypto");
     const creds = await prisma.okxCredentials.findFirst({
       where: { tenantId: session.tenantId, label },
       orderBy: { id: "asc" },
       select: { isActive: true, lastTestedAt: true, testStatus: true, apiKey: true, secretKey: true, passphrase: true },
     });
-    return Response.json({ ok: true, credentials: creds });
+    // Nunca se devuelve la clave real al navegador -- solo enmascarada.
+    const masked = creds
+      ? { isActive: creds.isActive, lastTestedAt: creds.lastTestedAt, testStatus: creds.testStatus, apiKeyMasked: maskSecret(creds.apiKey), secretKeyMasked: maskSecret(creds.secretKey), passphraseMasked: maskSecret(creds.passphrase) }
+      : null;
+    return Response.json({ ok: true, credentials: masked });
   } catch (error: any) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });
   }

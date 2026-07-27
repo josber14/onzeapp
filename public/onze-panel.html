@@ -11210,8 +11210,8 @@ function addP2PBotStyles(){
         const r = await fetch("/api/binance/credentials?label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
         const d = await r.json();
         if(d?.ok && d?.credentials){
-          document.getElementById("botCredApiKey").value = d.credentials.apiKey || "";
-          document.getElementById("botCredSecret").value = d.credentials.secretKey || "";
+          document.getElementById("botCredApiKey").placeholder = "Ya configurada (" + (d.credentials.apiKeyMasked || "") + ") -- escribe para reemplazarla";
+          document.getElementById("botCredSecret").placeholder = "Ya configurada (" + (d.credentials.secretKeyMasked || "") + ") -- escribe para reemplazarla";
           status.innerHTML = d.credentials.testStatus === "success"
             ? '<span style="color:#34d399;">Conectado</span>'
             : d.credentials.testStatus === "failed"
@@ -11231,8 +11231,8 @@ function addP2PBotStyles(){
         const r = await fetch("/api/p2p/bot/bybit-credentials?label=ONZE", { credentials:"include" });
         const d = await r.json();
         if(d?.ok && d?.credentials){
-          document.getElementById("botCredApiKey").value = d.credentials.apiKey || "";
-          document.getElementById("botCredSecret").value = d.credentials.secretKey || "";
+          document.getElementById("botCredApiKey").placeholder = "Ya configurada (" + (d.credentials.apiKeyMasked || "") + ") -- escribe para reemplazarla";
+          document.getElementById("botCredSecret").placeholder = "Ya configurada (" + (d.credentials.secretKeyMasked || "") + ") -- escribe para reemplazarla";
           status.innerHTML = d.credentials.testStatus === "success"
             ? '<span style="color:#34d399;">Conectado</span>'
             : d.credentials.testStatus === "failed"
@@ -11253,9 +11253,9 @@ function addP2PBotStyles(){
         const r = await fetch("/api/p2p/bot/okx-credentials?label=ONZE", { credentials:"include" });
         const d = await r.json();
         if(d?.ok && d?.credentials){
-          document.getElementById("botCredApiKey").value = d.credentials.apiKey || "";
-          document.getElementById("botCredSecret").value = d.credentials.secretKey || "";
-          document.getElementById("botCredPassphrase").value = d.credentials.passphrase || "";
+          document.getElementById("botCredApiKey").placeholder = "Ya configurada (" + (d.credentials.apiKeyMasked || "") + ") -- escribe para reemplazarla";
+          document.getElementById("botCredSecret").placeholder = "Ya configurada (" + (d.credentials.secretKeyMasked || "") + ") -- escribe para reemplazarla";
+          document.getElementById("botCredPassphrase").placeholder = "Ya configurada (" + (d.credentials.passphraseMasked || "") + ") -- escribe para reemplazarla";
           status.innerHTML = d.credentials.testStatus === "success"
             ? '<span style="color:#34d399;">Conectado</span>'
             : d.credentials.testStatus === "failed"
