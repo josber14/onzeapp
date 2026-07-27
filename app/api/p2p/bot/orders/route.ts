@@ -150,15 +150,8 @@ export async function POST(req: NextRequest) {
       return Response.json({ ok: false, error: "action y orderNumber requeridos" }, { status: 400 });
     }
 
-    // Get tenantId from session, or from DB for verify action (mobile support)
-    let tenantId: number | null = null;
     const session = await getSession();
-    if (session?.tenantId) {
-      tenantId = session.tenantId;
-    } else if (action === "verify") {
-      const firstCfg = await prisma.p2PBotExchangeConfig.findFirst({ where: { exchange: "binance" } });
-      tenantId = firstCfg?.tenantId || null;
-    }
+    const tenantId = session?.tenantId || null;
     if (!tenantId) {
       return Response.json({ ok: false, error: "No autorizado" }, { status: 401 });
     }

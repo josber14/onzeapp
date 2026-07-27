@@ -46,6 +46,10 @@ export async function POST(req: NextRequest) {
   if (!item?.id) {
     return NextResponse.json({ ok: false, error: "Falta id" }, { status: 400 });
   }
+  const existing = await prisma.partnerCapacity.findUnique({ where: { id: String(item.id) } });
+  if (existing && existing.tenantId !== session.tenantId) {
+    return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 403 });
+  }
   const data = {
     tenantId: session.tenantId,
     label: LABEL,
@@ -57,11 +61,11 @@ export async function POST(req: NextRequest) {
     status: String(item.status || "active"),
     finishedAt: item.finishedAt ? new Date(item.finishedAt) : null,
   };
-  await prisma.partnerCapacity.upsert({
-    where: { id: String(item.id) },
-    update: data,
-    create: { id: String(item.id), ...data },
-  });
+  if (existing) {
+    await prisma.partnerCapacity.update({ where: { id: String(item.id) }, data });
+  } else {
+    await prisma.partnerCapacity.create({ data: { id: String(item.id), ...data } });
+  }
   return NextResponse.json({ ok: true });
 }
 

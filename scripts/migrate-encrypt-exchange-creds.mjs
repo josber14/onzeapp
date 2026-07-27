@@ -52,6 +52,7 @@ async function main() {
   await migrateModel("BinanceCredentials", prisma.binanceCredentials, ["apiKey", "secretKey"]);
   await migrateModel("BybitCredentials", prisma.bybitCredentials, ["apiKey", "secretKey"]);
   await migrateModel("OkxCredentials", prisma.okxCredentials, ["apiKey", "secretKey", "passphrase"]);
+  await migrateModel("PartnerAccount", prisma.partnerAccount, ["apiKey", "secretKey"]);
   await prisma.$disconnect();
 }
 

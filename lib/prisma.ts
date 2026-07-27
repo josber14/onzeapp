@@ -17,7 +17,7 @@ const adapter = new PrismaPg(pool);
 // se cifran en reposo (ver lib/exchange-creds-crypto.ts). Este extension es el
 // único punto donde se cifra/descifra, para no tener que tocar cada uno de los
 // ~17 lugares del bot que leen/escriben estas tablas directo con prisma.
-const CRED_MODELS = new Set(["BinanceCredentials", "BybitCredentials", "OkxCredentials"]);
+const CRED_MODELS = new Set(["BinanceCredentials", "BybitCredentials", "OkxCredentials", "PartnerAccount"]);
 const CRED_FIELDS = ["apiKey", "secretKey", "passphrase"] as const;
 
 function encryptDataObject(data: unknown) {

@@ -55,6 +55,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Falta id" }, { status: 400 });
   }
   const existing = await prisma.p2PCapacity.findUnique({ where: { id: String(item.id) } });
+  if (existing && existing.tenantId !== session.tenantId) {
+    return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 403 });
+  }
   const incomingStatus = String(item.status || "active");
   if (existing?.status === "finished" && incomingStatus === "active" && !confirmPost) {
     return NextResponse.json({ ok: false, error: "Capacity ya estaba finalizado en servidor" }, { status: 409 });
@@ -77,11 +80,9 @@ export async function POST(req: NextRequest) {
     manualPaymentClp: item.manualPaymentClp !== undefined && item.manualPaymentClp !== null ? Number(item.manualPaymentClp) : null,
     manualPaymentsClp: item.manualPaymentsClp !== undefined && item.manualPaymentsClp !== null ? Number(item.manualPaymentsClp) : null,
   };
-  const upserted = await prisma.p2PCapacity.upsert({
-    where: { id: String(item.id) },
-    update: data,
-    create: { id: String(item.id), ...data },
-  });
+  const upserted = existing
+    ? await prisma.p2PCapacity.update({ where: { id: String(item.id) }, data })
+    : await prisma.p2PCapacity.create({ data: { id: String(item.id), ...data } });
   console.log("[P2P POST] upserted", upserted.id, "→ status:", upserted.status);
   return NextResponse.json({ ok: true });
 }
