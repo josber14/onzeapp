@@ -26,6 +26,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Tu cuenta no está aprobada todavía" }, { status: 403 });
   }
 
+  // Throttle: máximo una cotización real a Skipo cada 1.5s por cliente
+  // -- evita spam que agote el cupo de la API de Skipo. Claim atómico
+  // (updateMany con condición) para que sea seguro entre procesos.
+  const QUOTE_THROTTLE_MS = 1500;
+  const cutoff = new Date(Date.now() - QUOTE_THROTTLE_MS);
+  const claim = await prisma.usdtClient.updateMany({
+    where: { id: client.id, OR: [{ lastQuoteAt: null }, { lastQuoteAt: { lt: cutoff } }] },
+    data: { lastQuoteAt: new Date() },
+  });
+  if (claim.count === 0) {
+    return NextResponse.json({ ok: false, error: "Espera un segundo antes de pedir otra cotización" }, { status: 429 });
+  }
+
   const body = await req.json().catch(() => ({}));
   const clpAmount = Number(body.clpAmount);
   if (!(clpAmount >= 500)) {

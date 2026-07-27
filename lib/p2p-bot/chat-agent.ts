@@ -1710,7 +1710,21 @@ async function shortDelay(): Promise<void> {
   await new Promise(r => setTimeout(r, ms));
 }
 
+// Última barrera antes de mandar CUALQUIER mensaje (generado por el LLM o
+// por texto fijo del código) a una contraparte real de Binance/Bybit -- no
+// reemplaza las instrucciones del prompt (chat-brain.ts), es una red de
+// seguridad por si un mensaje sale corrupto/anormalmente largo (ej. un
+// intento de manipular al LLM vía el chat). Quita caracteres de control y
+// limita el largo; no reescribe el contenido normal.
+function sanitizeOutgoingChatMessage(msg: string): string {
+  const MAX_LEN = 1000;
+  // eslint-disable-next-line no-control-regex
+  const stripped = msg.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim();
+  return stripped.length > MAX_LEN ? stripped.slice(0, MAX_LEN) : stripped;
+}
+
 async function sendAndTrack(client: any, exchange: string, orderNo: string, cs: any, msg: string, createdAt?: number, delayFn: () => Promise<void> = humanDelay): Promise<boolean> {
+  msg = sanitizeOutgoingChatMessage(msg);
   try {
     await delayFn();
     let sent = false;

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { prisma } from "@/lib/prisma";
@@ -23,7 +24,10 @@ const SENDER_ADDRESSES = ["mensajeria@santander.cl", "noreply@somosmach.com"];
 function isAuthorized(req: NextRequest): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
-  return req.headers.get("authorization") === `Bearer ${secret}`;
+  const expected = Buffer.from(`Bearer ${secret}`);
+  const received = Buffer.from(req.headers.get("authorization") || "");
+  if (received.length !== expected.length) return false;
+  return timingSafeEqual(received, expected);
 }
 
 // Confirmado en vivo (jul 2026): un cuelgue real de 60s (el límite duro de

@@ -634,6 +634,9 @@ model UsdtClient {
   kycData          Json?
   approvedAt       DateTime?
   approvedByUserId Int?
+  // Throttle simple de /api/usdt-client/quote -- evita que una cuenta (o una
+  // sesión comprometida) haga spam de cotizaciones reales contra Skipo.
+  lastQuoteAt      DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -863,6 +866,17 @@ model P2PCapacity {
 
   @@index([tenantId])
   @@index([status])
+}
+
+// Idempotencia para /api/admin/skipo/confirm -- evita que un doble clic o un
+// reintento de red confirme la misma cotización de Skipo dos veces. El
+// ordId es único por cotización (viene de client.getQuotation), así que
+// reclamarlo con un create() que choca por PK ante un ordId repetido es
+// suficiente sin necesitar locks adicionales.
+model SkipoConfirmLock {
+  ordId     String   @id
+  tenantId  Int
+  createdAt DateTime @default(now())
 }
 
 // ─── Dashboard de cuenta del socio (Binance separado, 100% aislado del bot ONZE/ZINPLE) ───
