@@ -21,8 +21,19 @@ export async function GET(req: NextRequest) {
 
     const label = req.nextUrl.searchParams.get("label") || "ONZE";
 
+    // Bybit y OKX no tienen concepto de ONZE/ZINPLE -- siempre usan label
+    // fijo "ONZE" (ver engine.ts). Si solo filtráramos por el label pedido
+    // (ej. "ZINPLE" al mirar la pestaña Binance con esa cuenta), su estado
+    // desaparecería del agregado "_allExchanges"/"_runningLabel" del panel,
+    // mostrando "Detenido" aunque Bybit/OKX sigan corriendo de verdad.
     const configs = await prisma.p2PBotExchangeConfig.findMany({
-      where: { tenantId: session.tenantId, label },
+      where: {
+        tenantId: session.tenantId,
+        OR: [
+          { exchange: "binance", label },
+          { exchange: { in: ["bybit", "okx"] }, label: "ONZE" },
+        ],
+      },
     });
 
     const result: Record<string, any> = {};
