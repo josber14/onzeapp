@@ -16604,6 +16604,7 @@ function addP2PBotStyles(){
               <div style="display:flex;gap:6px;margin-top:10px;">
                 <button type="button" id="p2pResumenTabBinance" class="p2p-resumen-tab active" onclick="window.setP2PResumenExchange('binance')">Binance</button>
                 <button type="button" id="p2pResumenTabBybit" class="p2p-resumen-tab" onclick="window.setP2PResumenExchange('bybit')">Bybit</button>
+                <button type="button" id="p2pResumenTabOkx" class="p2p-resumen-tab" onclick="window.setP2PResumenExchange('okx')">OKX</button>
               </div>
             </div>
             <button class="onze-metric-icon-btn" type="button" id="btn-p2p-detail-main" onclick="openP2PRangeDetailModal('today', window.__p2pResumenExchange || 'binance')" title="Ver métricas P2P" aria-label="Ver métricas P2P"><svg viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16V11"/><path d="M12 16V8"/><path d="M16 16V6"/><path d="M20 16V13"/></svg></button>
@@ -16657,6 +16658,7 @@ function addP2PBotStyles(){
               <div style="display:flex;gap:6px;">
                 <button type="button" id="p2pVentasTabBinance" class="p2p-resumen-tab active" onclick="window.setP2PVentasExchange('binance')">Ventas Binance</button>
                 <button type="button" id="p2pVentasTabBybit" class="p2p-resumen-tab" onclick="window.setP2PVentasExchange('bybit')">Ventas Bybit</button>
+                <button type="button" id="p2pVentasTabOkx" class="p2p-resumen-tab" onclick="window.setP2PVentasExchange('okx')">Ventas OKX</button>
               </div>
               <div id="p2pVentasBinanceControls" style="margin-left:auto;display:flex;gap:6px;align-items:center;">
                 <button id="btn-sync-binance-sales" class="btn secondary" type="button" style="padding:4px 8px;font-size:12px;line-height:1.2;" title="Sincronizar Binance P2P">🔄</button>
@@ -16667,9 +16669,13 @@ function addP2PBotStyles(){
                 <button id="btn-sync-bybit-sales" class="btn secondary" type="button" style="padding:4px 8px;font-size:12px;line-height:1.2;" title="Sincronizar Bybit P2P">🔄</button>
                 <button id="btn-manual-sale-bybit" class="btn secondary" type="button" style="padding:4px 8px;font-size:12px;line-height:1.2;background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25);color:#fbbf24;">✚ manual</button>
               </div>
+              <div id="p2pVentasOkxControls" style="margin-left:auto;display:none;gap:6px;align-items:center;">
+                <button id="btn-manual-sale-okx" class="btn secondary" type="button" style="padding:4px 8px;font-size:12px;line-height:1.2;background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.25);color:#fbbf24;">✚ manual</button>
+              </div>
             </div>
             <div id="binance-sales-container" class="p2p-dashboard-empty" style="margin-top:14px;">Sin operaciones P2P registradas todavía.</div>
             <div id="bybit-sales-container" class="p2p-dashboard-empty" style="margin-top:14px;display:none;">Sin operaciones Bybit registradas todavía.</div>
+            <div id="okx-sales-container" class="p2p-dashboard-empty" style="margin-top:14px;display:none;">Sin operaciones OKX registradas todavía. OKX solo admite ventas manuales por ahora.</div>
           </div>
         </div>
       </section>
@@ -16731,6 +16737,7 @@ function addP2PBotStyles(){
     }
     setTimeout(initBinanceSalesSync, 500);
     setTimeout(initBybitSalesSync, 500);
+    setTimeout(initOkxSalesTab, 500);
   }
 
   if(document.readyState === "loading"){
@@ -17013,6 +17020,21 @@ function addP2PBotStyles(){
 
   window.saveP2PBybitOrders = function saveP2PBybitOrders(orders){
     localStorage.setItem("onze_p2p_bybit_orders", JSON.stringify(Array.isArray(orders) ? orders : []));
+  }
+
+  // Mismo espejo para OKX -- solo ventas manuales por ahora (no hay API de
+  // OKX conectada todavía, ver lib/p2p-bot/okx-adapter.ts), sin comisión
+  // igual que Bybit.
+  window.loadP2POkxOrders = function loadP2POkxOrders(){
+    try{
+      return JSON.parse(localStorage.getItem("onze_p2p_okx_orders") || "[]");
+    }catch(e){
+      return [];
+    }
+  }
+
+  window.saveP2POkxOrders = function saveP2POkxOrders(orders){
+    localStorage.setItem("onze_p2p_okx_orders", JSON.stringify(Array.isArray(orders) ? orders : []));
   }
 
   window.deleteManualSale = function deleteManualSale(orderId){
@@ -17638,19 +17660,20 @@ function addP2PBotStyles(){
 
     const p2pCapacityBaselineTs = getP2PCapacityBaselineTs();
 
-    // Ventas de Binance y Bybit se mezclan en una sola lista ordenada por
-    // fecha real antes de repartirlas entre los capacity -- así un capacity
-    // se descuenta en el orden correcto sin importar de qué exchange vino
-    // cada venta. Cada venta queda marcada con "exchange" (por defecto
-    // "binance" para ventas ya guardadas antes de este cambio), lo que
-    // permite separar Binance/Bybit después en las tarjetas del resumen.
-    // La comisión de Bybit siempre es 0 desde su propio origen (ver
-    // /api/bybit/p2p-history y el formulario de venta manual) -- no hace
-    // falta ninguna lógica especial acá, el mismo cálculo de abajo ya la
-    // trata como cualquier otra venta con comisión 0.
+    // Ventas de Binance, Bybit y OKX se mezclan en una sola lista ordenada
+    // por fecha real antes de repartirlas entre los capacity -- así un
+    // capacity se descuenta en el orden correcto sin importar de qué
+    // exchange vino cada venta. Cada venta queda marcada con "exchange"
+    // (por defecto "binance" para ventas ya guardadas antes de este
+    // cambio), lo que permite separar Binance/Bybit/OKX después en las
+    // tarjetas del resumen. La comisión de Bybit y OKX siempre es 0 desde
+    // su propio origen (ver /api/bybit/p2p-history y el formulario de venta
+    // manual) -- no hace falta ninguna lógica especial acá, el mismo
+    // cálculo de abajo ya la trata como cualquier otra venta con comisión 0.
     const sales = [
       ...loadP2PBinanceOrders().map(o => ({ ...o, exchange: o.exchange || "binance" })),
       ...loadP2PBybitOrders().map(o => ({ ...o, exchange: "bybit" })),
+      ...loadP2POkxOrders().map(o => ({ ...o, exchange: "okx" })),
     ]
       .filter(o => isCompletedSellClp(o))
       .filter(o => {
@@ -20087,7 +20110,7 @@ function addP2PBotStyles(){
     if(!content) return;
 
     const modalExchange = window.__p2pModalExchange || window.__p2pResumenExchange || "binance";
-    const exLabel = modalExchange.charAt(0).toUpperCase() + modalExchange.slice(1);
+    const exLabel = modalExchange === "okx" ? "OKX" : (modalExchange.charAt(0).toUpperCase() + modalExchange.slice(1));
     const stats = calculateP2PCapacityStats();
     const data = getP2PRangeStatsFromCapacity(stats, range, modalExchange);
     // Capital P2P es una sola bolsa compartida entre Binance y Bybit -- se
@@ -20427,6 +20450,7 @@ function addP2PBotStyles(){
     window.__p2pResumenExchange = exchange;
     document.getElementById("p2pResumenTabBinance")?.classList.toggle("active", exchange === "binance");
     document.getElementById("p2pResumenTabBybit")?.classList.toggle("active", exchange === "bybit");
+    document.getElementById("p2pResumenTabOkx")?.classList.toggle("active", exchange === "okx");
     updateP2PDashboardWithCapacity();
   };
 
@@ -20435,7 +20459,7 @@ function addP2PBotStyles(){
     const stats = calculateP2PCapacityStats();
     const activeExchange = window.__p2pResumenExchange || "binance";
     const today = getP2PRangeStatsFromCapacity(stats, "today", activeExchange);
-    const exLabel = activeExchange.charAt(0).toUpperCase() + activeExchange.slice(1);
+    const exLabel = activeExchange === "okx" ? "OKX" : (activeExchange.charAt(0).toUpperCase() + activeExchange.slice(1));
     const capitalLabelEl = document.getElementById("p2pDashCapitalLabel");
     if(capitalLabelEl) capitalLabelEl.textContent = "USDT vendidos " + exLabel;
     const profitTodayLabelEl = document.getElementById("p2pDashProfitTodayLabel");
@@ -20780,19 +20804,81 @@ function addP2PBotStyles(){
     setInterval(() => syncBybitSales(true), 15000);
   }
 
-  // Pestaña activa del bloque "Ventas Binance / Ventas Bybit" (lista de
-  // órdenes) -- independiente de la pestaña del "Resumen P2P" de más arriba.
+  // OKX no tiene API conectada todavía (ver lib/p2p-bot/okx-adapter.ts) --
+  // solo ventas manuales, sin botón ni intervalo de sincronización.
+  window.renderP2PDashboardFromOkx = function renderP2PDashboardFromOkx(){
+    const container = document.getElementById("okx-sales-container");
+    if(!container) return;
+
+    const orders = loadP2POkxOrders();
+    const completedSales = orders
+      .filter(o => isCompletedSellClp(o))
+      .sort((a,b) => getOrderTs(b) - getOrderTs(a));
+
+    if(!completedSales.length){
+      container.innerHTML = "Sin operaciones OKX registradas todavía. OKX solo admite ventas manuales por ahora.";
+      return;
+    }
+
+    container.innerHTML = completedSales.map(o => {
+      const isManual = o._manual || String(o.orderNumber || '').startsWith('manual_');
+      const date = o.createdAt ? new Date(o.createdAt).toLocaleString("es-CL", {
+        timeZone:"America/Santiago", day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit"
+      }) : "";
+      return `
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid rgba(148,163,184,.12);text-align:left;">
+          <div>
+            <strong style="color:#f8fafc;">Venta ${p2pMoney(o.amount, 2)} ${o.asset || "USDT"}</strong>
+            <div style="color:#00d4ff;font-size:11px;margin-top:3px;font-family:monospace;word-break:break-all;">Orden: ${o.orderNumber || ""}${isManual ? " (manual)" : ""}</div>
+            <div style="color:#8aa0ba;font-size:12px;margin-top:3px;">${date}</div>
+            <div style="color:#8aa0ba;font-size:12px;margin-top:3px;">Comisión: 0 USDT (OKX no cobra)</div>
+          </div>
+          <div style="text-align:right;">
+            <strong style="color:#34d399;">${p2pMoney(o.unitPrice, 2)} ${o.fiat || "CLP"}</strong>
+            <div style="color:#f8fafc;font-size:12px;margin-top:3px;">${p2pMoney(o.totalPrice, 0)} ${o.fiat || "CLP"}</div>
+            ${isManual ? `<div style="margin-top:4px;"><button class="btn small danger" type="button" onclick="event.stopPropagation();window.deleteManualSaleOkx('${o.orderNumber}')" title="Borrar venta manual" style="padding:2px 6px;font-size:12px;line-height:1;">🗑️</button></div>` : ""}
+          </div>
+        </div>
+      `;
+    }).join("");
+  };
+
+  window.deleteManualSaleOkx = function deleteManualSaleOkx(orderId){
+    if(!confirm("¿Eliminar esta venta manual de OKX?")) return;
+    const orders = loadP2POkxOrders().filter(o => o.orderNumber !== orderId);
+    saveP2POkxOrders(orders);
+    if(typeof renderP2PDashboardFromOkx === 'function') renderP2PDashboardFromOkx();
+    if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
+    if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
+  };
+
+  window.initOkxSalesTab = function initOkxSalesTab(){
+    const manualBtn = document.getElementById('btn-manual-sale-okx');
+    if(manualBtn){
+      manualBtn.addEventListener('click', () => showManualSaleModal('okx'));
+    }
+    if(typeof renderP2PDashboardFromOkx === 'function') renderP2PDashboardFromOkx();
+  }
+
+  // Pestaña activa del bloque "Ventas Binance / Ventas Bybit / Ventas OKX"
+  // (lista de órdenes) -- independiente de la pestaña del "Resumen P2P" de
+  // más arriba.
   window.setP2PVentasExchange = function setP2PVentasExchange(exchange){
     document.getElementById("p2pVentasTabBinance")?.classList.toggle("active", exchange === "binance");
     document.getElementById("p2pVentasTabBybit")?.classList.toggle("active", exchange === "bybit");
+    document.getElementById("p2pVentasTabOkx")?.classList.toggle("active", exchange === "okx");
     const binanceContainer = document.getElementById("binance-sales-container");
     const bybitContainer = document.getElementById("bybit-sales-container");
+    const okxContainer = document.getElementById("okx-sales-container");
     const binanceControls = document.getElementById("p2pVentasBinanceControls");
     const bybitControls = document.getElementById("p2pVentasBybitControls");
+    const okxControls = document.getElementById("p2pVentasOkxControls");
     if(binanceContainer) binanceContainer.style.display = exchange === "binance" ? "" : "none";
     if(bybitContainer) bybitContainer.style.display = exchange === "bybit" ? "" : "none";
+    if(okxContainer) okxContainer.style.display = exchange === "okx" ? "" : "none";
     if(binanceControls) binanceControls.style.display = exchange === "binance" ? "flex" : "none";
     if(bybitControls) bybitControls.style.display = exchange === "bybit" ? "flex" : "none";
+    if(okxControls) okxControls.style.display = exchange === "okx" ? "flex" : "none";
   };
 
   window.showManualSaleModal = function showManualSaleModal(presetExchange){
@@ -20848,8 +20934,9 @@ function addP2PBotStyles(){
             <label class="full">
               Exchange
               <select id="manualSaleExchange" onchange="window.__onManualSaleExchangeChange()">
-                <option value="binance" ${presetExchange !== 'bybit' ? 'selected' : ''}>Binance</option>
+                <option value="binance" ${(presetExchange !== 'bybit' && presetExchange !== 'okx') ? 'selected' : ''}>Binance</option>
                 <option value="bybit" ${presetExchange === 'bybit' ? 'selected' : ''}>Bybit (sin comisión)</option>
+                <option value="okx" ${presetExchange === 'okx' ? 'selected' : ''}>OKX (sin comisión)</option>
               </select>
             </label>
 
@@ -20905,13 +20992,14 @@ function addP2PBotStyles(){
     document.getElementById("manualSaleCommissionPct").addEventListener("input", updateManualSalePreview);
     document.getElementById("manualSaleCommissionPct").addEventListener("change", updateManualSalePreview);
 
-    // Bybit no cobra comisión -- al elegirlo se fija en 0 y se bloquea el
-    // campo; al volver a Binance se restaura el valor configurado del bot.
+    // Bybit y OKX no cobran comisión -- al elegirlos se fija en 0 y se
+    // bloquea el campo; al volver a Binance se restaura el valor
+    // configurado del bot.
     window.__onManualSaleExchangeChange = function(){
       const exVal = document.getElementById("manualSaleExchange")?.value || "binance";
       const commInput = document.getElementById("manualSaleCommissionPct");
       if(!commInput) return;
-      if(exVal === "bybit"){
+      if(exVal === "bybit" || exVal === "okx"){
         commInput.value = "0";
         commInput.readOnly = true;
         commInput.style.opacity = "0.6";
@@ -20923,8 +21011,8 @@ function addP2PBotStyles(){
       updateManualSalePreview();
     };
 
-    // Si se abrió preseleccionando Bybit, bloquear la comisión en 0 de una vez.
-    if(presetExchange === 'bybit') window.__onManualSaleExchangeChange();
+    // Si se abrió preseleccionando Bybit/OKX, bloquear la comisión en 0 de una vez.
+    if(presetExchange === 'bybit' || presetExchange === 'okx') window.__onManualSaleExchangeChange();
 
     document.getElementById("manualSaleForm").addEventListener("submit", function(e){
       e.preventDefault();
@@ -20940,11 +21028,11 @@ function addP2PBotStyles(){
 
         const usdt = clp / sellPrice;
         const exVal = document.getElementById("manualSaleExchange")?.value || "binance";
-        // Bybit no cobra comisión -- sin importar lo que diga el campo (queda
-        // bloqueado en 0 por window.__onManualSaleExchangeChange), se fuerza
-        // acá también por seguridad.
+        // Bybit y OKX no cobran comisión -- sin importar lo que diga el campo
+        // (queda bloqueado en 0 por window.__onManualSaleExchangeChange), se
+        // fuerza acá también por seguridad.
         const commissionPctRaw = document.getElementById("manualSaleCommissionPct")?.value || "0.14";
-        const commissionPct = exVal === "bybit" ? 0 : parseFloat(commissionPctRaw);
+        const commissionPct = (exVal === "bybit" || exVal === "okx") ? 0 : parseFloat(commissionPctRaw);
         if(isNaN(commissionPct) || commissionPct < 0){ alert("Comisión inválida."); return; }
         const commission = usdt * commissionPct / 100;
 
@@ -20971,6 +21059,10 @@ function addP2PBotStyles(){
           const bybitOrders = loadP2PBybitOrders();
           bybitOrders.unshift(order);
           saveP2PBybitOrders(bybitOrders);
+        }else if(exVal === "okx"){
+          const okxOrders = loadP2POkxOrders();
+          okxOrders.unshift(order);
+          saveP2POkxOrders(okxOrders);
         }else{
           const orders = loadP2PBinanceOrders();
           orders.unshift(order);
@@ -21006,6 +21098,8 @@ function addP2PBotStyles(){
         } catch(e) { console.warn("Error persisting manual sale:", e); }
 
         if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
+        if(typeof renderP2PDashboardFromBybit === 'function') renderP2PDashboardFromBybit();
+        if(typeof renderP2PDashboardFromOkx === 'function') renderP2PDashboardFromOkx();
         if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
         if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
         if(typeof renderBinanceSalesTable === 'function') renderBinanceSalesTable();
