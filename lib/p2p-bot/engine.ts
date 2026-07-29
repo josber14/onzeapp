@@ -1467,7 +1467,16 @@ const bybitAdCache = new Map<string, any>();
 // cada proceso de servidor tiene su propia memoria -- por eso el lock se
 // guarda en la fila de P2PBotAd, visible para cualquier proceso.
 async function claimBybitRecreateLock(managedAdDbId: number): Promise<boolean> {
-  const lockMs = 25000;
+  // Bug real confirmado en vivo (jul 2026): con 25s, dos ejecuciones
+  // concurrentes (ej. el Mac local y Vercel corriendo el mismo ciclo al
+  // mismo tiempo) lograron recrear el MISMO anuncio en paralelo -- cada una
+  // borró/creó el suyo, dejando 2 anuncios reales vivos en Bybit mientras
+  // la base de datos solo alcanzaba a registrar uno. La secuencia completa
+  // (apagar viejo, borrar con hasta 3 reintentos, esperas fijas, crear
+  // nuevo, activarlo, reintento por 90043) puede tardar bastante más de
+  // 25s en la práctica -- se sube a 90s para cubrir el peor caso con
+  // margen real, en vez de "casi alcanzar".
+  const lockMs = 90000;
   const result = await prisma.p2PBotAd.updateMany({
     where: {
       id: managedAdDbId,
@@ -1858,7 +1867,13 @@ async function runBybitCycle(
             // archivo). Pedido explícito del usuario: la configuración de
             // seguridad SIEMPRE se respeta, sin excepción.
             const recreatePrice = targetPrice;
-            try { await client.updateAd({ id: adId, status: 20 }); } catch {}
+            // Antes había acá un intento de "apagar" el anuncio viejo con
+            // updateAd({id, status:20}) -- confirmado contra la documentación
+            // oficial de Bybit (/v5/p2p/ad/update-list-ad): ese endpoint NO
+            // tiene ningún parámetro "status", solo actionType ("MODIFY" o
+            // "ACTIVE"). Esa llamada nunca hizo nada (fallaba en silencio,
+            // atrapada en el catch vacío) -- removeAd (el borrado real, de
+            // abajo) es el único paso que de verdad importa acá.
             await new Promise(r => setTimeout(r, 1000));
             let removed = false;
             for (let retry = 0; retry < 3; retry++) {
@@ -1913,7 +1928,10 @@ async function runBybitCycle(
               }
               if (createdId) {
                 await new Promise(r => setTimeout(r, 2000));
-                try { await client.updateAd({ id: String(createdId), status: 10 }); } catch {}
+                // Mismo parámetro inválido que arriba (status no existe en
+                // updateAd) -- se quita porque nunca hizo nada; postFields ya
+                // incluye status:10 en la creación misma, y confirmado en
+                // vivo que el anuncio nuevo queda online sin este paso extra.
                 bybitModCount.set(modKey, 0);
                 await prisma.p2PBotAd.update({ where: { id: managedAd.id }, data: { adId: String(createdId) } });
                 bybitAdCache.set(String(createdId), {
