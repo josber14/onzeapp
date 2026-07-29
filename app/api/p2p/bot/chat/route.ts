@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { createHmac } from "crypto";
+import { getBybitCredentials, BybitP2PClient } from "@/lib/p2p-bot/bybit-adapter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,8 +40,12 @@ export async function GET(req: NextRequest) {
       return Response.json({ ok: false, error: "orderNo requerido" }, { status: 400 });
     }
 
+    if (exchange === "bybit") {
+      return getBybitChat(session.tenantId, orderNo);
+    }
+
     if (exchange !== "binance") {
-      return Response.json({ ok: false, error: "Chat solo disponible para Binance" });
+      return Response.json({ ok: false, error: "Chat solo disponible para Binance y Bybit" });
     }
 
     const creds = await prisma.binanceCredentials.findFirst({
@@ -85,6 +90,48 @@ export async function GET(req: NextRequest) {
 
     // Sort by createTime ascending
     messages.sort((a: any, b: any) => Number(a.createTime) - Number(b.createTime));
+
+    return Response.json({ ok: true, messages, orderNo });
+  } catch (error: any) {
+    return Response.json({ ok: false, error: error.message }, { status: 500 });
+  }
+}
+
+// Espejo de lib/p2p-bot/chat-agent.ts (fetchMessages, rama bybit) -- esta
+// ruta la usa el panel para que el operador VEA el chat manualmente, es
+// código separado del que usa el bot para responder solo, así que hay que
+// mantener el mismo parseo en los dos lados. Antes esta ruta ni siquiera
+// intentaba Bybit (devolvía "Chat solo disponible para Binance"), por eso
+// el panel mostraba "no hay mensajes" aunque el chat real sí tuviera
+// mensajes -- confirmado contra la documentación oficial de Bybit, ver el
+// fix de lib/p2p-bot/bybit-adapter.ts (jul 2026).
+async function getBybitChat(tenantId: number, orderNo: string) {
+  const creds = await getBybitCredentials(tenantId, "ONZE");
+  if (!creds) {
+    return Response.json({ ok: false, error: "Sin credenciales Bybit" }, { status: 400 });
+  }
+  try {
+    const client = new BybitP2PClient(creds.apiKey, creds.secretKey);
+    const [res, ownUserId] = await Promise.all([
+      client.getChatMessages(orderNo, 1, 30),
+      client.getOwnUserId(),
+    ]);
+    const raw = res?.result?.result ?? [];
+    const messages = raw.map((m: any) => {
+      const isImage = m.contentType === "pic";
+      return {
+        id: m.id,
+        uuid: m.msgUuid,
+        type: Number(m.msgType) === 0 ? "system" : isImage ? "image" : "text",
+        content: isImage ? "" : String(m.message ?? ""),
+        self: String(m.userId ?? "") === ownUserId,
+        fromNickName: m.nickName || null,
+        createTime: Number(m.createDate ?? 0),
+        status: null,
+        imageUrl: isImage ? (m.message ?? null) : null,
+        thumbnailUrl: null,
+      };
+    }).sort((a: any, b: any) => Number(a.createTime) - Number(b.createTime));
 
     return Response.json({ ok: true, messages, orderNo });
   } catch (error: any) {
