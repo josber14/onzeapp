@@ -16605,6 +16605,7 @@ function addP2PBotStyles(){
                 <button type="button" id="p2pResumenTabBinance" class="p2p-resumen-tab active" onclick="window.setP2PResumenExchange('binance')">Binance</button>
                 <button type="button" id="p2pResumenTabBybit" class="p2p-resumen-tab" onclick="window.setP2PResumenExchange('bybit')">Bybit</button>
                 <button type="button" id="p2pResumenTabOkx" class="p2p-resumen-tab" onclick="window.setP2PResumenExchange('okx')">OKX</button>
+                <button type="button" id="p2pResumenTabTotal" class="p2p-resumen-tab" onclick="window.setP2PResumenExchange('all')">Total</button>
               </div>
             </div>
             <button class="onze-metric-icon-btn" type="button" id="btn-p2p-detail-main" onclick="openP2PRangeDetailModal('today', window.__p2pResumenExchange || 'binance')" title="Ver métricas P2P" aria-label="Ver métricas P2P"><svg viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16V11"/><path d="M12 16V8"/><path d="M16 16V6"/><path d="M20 16V13"/></svg></button>
@@ -20110,7 +20111,11 @@ function addP2PBotStyles(){
     if(!content) return;
 
     const modalExchange = window.__p2pModalExchange || window.__p2pResumenExchange || "binance";
-    const exLabel = modalExchange === "okx" ? "OKX" : (modalExchange.charAt(0).toUpperCase() + modalExchange.slice(1));
+    // La vista "Total" combinada solo muestra el resumen de HOY -- no tiene
+    // sentido comparar semana/mes/histórico mezclando los 3 exchanges acá,
+    // cada uno se revisa por separado si hace falta más detalle.
+    if(modalExchange === "all") range = "today";
+    const exLabel = p2pExchangeDisplayLabel(modalExchange);
     const stats = calculateP2PCapacityStats();
     const data = getP2PRangeStatsFromCapacity(stats, range, modalExchange);
     // Capital P2P es una sola bolsa compartida entre Binance y Bybit -- se
@@ -20185,6 +20190,11 @@ function addP2PBotStyles(){
 
     content.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+        ${modalExchange === "all" ? `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <span style="border:1px solid rgba(52,211,153,.65);background:rgba(52,211,153,.16);color:#34d399;border-radius:999px;padding:9px 14px;font-size:13px;font-weight:950;">Hoy · Total combinado</span>
+        </div>
+        ` : `
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           ${p2pDetailFilterButton("today", range)}
           ${p2pDetailFilterButton("week", range)}
@@ -20213,6 +20223,7 @@ function addP2PBotStyles(){
             border-radius:999px;padding:6px 14px;font-size:12px;font-weight:950;cursor:pointer;
           ">Aplicar</button>
         </div>
+        `}
       </div>
 
       <h3 class="section-title" style="margin-bottom:8px;">Resumen principal</h3>
@@ -20451,15 +20462,24 @@ function addP2PBotStyles(){
     document.getElementById("p2pResumenTabBinance")?.classList.toggle("active", exchange === "binance");
     document.getElementById("p2pResumenTabBybit")?.classList.toggle("active", exchange === "bybit");
     document.getElementById("p2pResumenTabOkx")?.classList.toggle("active", exchange === "okx");
+    document.getElementById("p2pResumenTabTotal")?.classList.toggle("active", exchange === "all");
     updateP2PDashboardWithCapacity();
   };
+
+  // Etiqueta legible para un exchange (o "all" = Total combinado) -- usada
+  // tanto en el resumen principal como en el modal de métricas.
+  function p2pExchangeDisplayLabel(exchange){
+    if(exchange === "all") return "Total";
+    if(exchange === "okx") return "OKX";
+    return exchange.charAt(0).toUpperCase() + exchange.slice(1);
+  }
 
   window.updateP2PDashboardWithCapacity = function updateP2PDashboardWithCapacity(){
     if(typeof carryOverP2PCapital === 'function') carryOverP2PCapital();
     const stats = calculateP2PCapacityStats();
     const activeExchange = window.__p2pResumenExchange || "binance";
     const today = getP2PRangeStatsFromCapacity(stats, "today", activeExchange);
-    const exLabel = activeExchange === "okx" ? "OKX" : (activeExchange.charAt(0).toUpperCase() + activeExchange.slice(1));
+    const exLabel = p2pExchangeDisplayLabel(activeExchange);
     const capitalLabelEl = document.getElementById("p2pDashCapitalLabel");
     if(capitalLabelEl) capitalLabelEl.textContent = "USDT vendidos " + exLabel;
     const profitTodayLabelEl = document.getElementById("p2pDashProfitTodayLabel");
