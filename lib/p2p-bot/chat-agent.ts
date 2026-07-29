@@ -608,9 +608,14 @@ export async function handleVerified(
   // Pedido explícito del usuario (jul 2026): en Bybit, como el nombre real
   // ya viene desde la primera orden (a diferencia de Binance, que recién lo
   // revela tras el pago), se saluda por nombre a TODOS los compradores, no
-  // solo a los que ya conocemos de compras anteriores.
+  // solo a los que ya conocemos de compras anteriores. OJO: usa SOLO
+  // buyerRealName (el nombre real de verdad) -- nunca order.counterparty
+  // como respaldo acá, porque en Bybit el apodo puede ser un código
+  // genérico sin sentido (ej. "User4397MDQswc", visto en vivo) que se vería
+  // absurdo en un saludo ("¡Hola User4397mdqswc!"). Si buyerRealName no
+  // está disponible todavía, mejor un "¡Hola!" genérico que un saludo raro.
   const bybitFirstTimeName = exchange === "bybit" && !isReturning
-    ? firstNameFrom(order.buyerRealName || order.counterparty)
+    ? firstNameFrom(order.buyerRealName)
     : null;
   const name = firstNameFrom(known?.realName) || bybitFirstTimeName;
   const hello = name ? `¡Hola ${name}!` : "¡Hola!";
@@ -2477,6 +2482,21 @@ function buildInitialGreeting(isReturning: boolean, name?: string | null): strin
     return pick([
       `¡Hola de nuevo! 👋 ${ask}`,
       `Hola, un gusto verte otra vez 🙌 ${ask}`,
+    ]);
+  }
+  // Bug real confirmado en vivo (jul 2026, comprador real "Brahim"): esta
+  // función solo usaba `name` si isReturning era true -- para un comprador
+  // de PRIMERA vez en Bybit (que ya trae su nombre real desde el principio,
+  // a diferencia de Binance) el nombre se calculaba bien más arriba en
+  // handleVerified pero acá se descartaba por completo, mandando un "¡Hola!"
+  // genérico. Para Binance esto no cambia nada -- `name` solo llega no-nulo
+  // acá cuando isReturning ya es true (arriba), así que esta rama nueva
+  // nunca se activa para un comprador nuevo de Binance.
+  if (name) {
+    return pick([
+      `¡Hola ${name}! 👋 ${ask}`,
+      `Hola ${name}, bienvenido/a 🙌 ${ask}`,
+      `${getTimeGreeting()}, ${name} 👋 ${ask}`,
     ]);
   }
   return pick([
