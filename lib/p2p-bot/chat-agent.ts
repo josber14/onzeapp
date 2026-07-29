@@ -1023,7 +1023,9 @@ async function handleClientResponse(
         // account_sent. Todavía no eligió cuenta, así que si ya mencionó un
         // monto se puede repartir directo sin preguntar de nuevo.
         const amount = extractAmount(textLower);
-        if (amount > 0 && cs.totalAmount) {
+        if (amount > 0 && amount < MIN_VIABLE_TRANSFER_LIMIT_CLP) {
+          await sendAndTrack(client, exchange, order.orderNumber, cs, LOW_TRANSFER_LIMIT_MSG);
+        } else if (amount > 0 && cs.totalAmount) {
           await offerSplitPayment(tenantId, exchange, client, order, cs, amount, label);
         } else {
           await sendThenTransition(client, exchange, order.orderNumber, cs,
@@ -1175,7 +1177,9 @@ async function handleClientResponse(
           // transferencia falló, así que no debe caer en handleTransferFails
           // (eso solo ofrece OTRA cuenta, no responde la pregunta real).
           const amount = extractAmount(textLower);
-          if (amount > 0 && cs.totalAmount) {
+          if (amount > 0 && amount < MIN_VIABLE_TRANSFER_LIMIT_CLP) {
+            await sendAndTrack(client, exchange, order.orderNumber, cs, LOW_TRANSFER_LIMIT_MSG);
+          } else if (amount > 0 && cs.totalAmount) {
             await offerSplitPayment(tenantId, exchange, client, order, cs, amount, label);
           } else {
             await sendThenTransition(client, exchange, order.orderNumber, cs,
@@ -1345,7 +1349,9 @@ async function handleClientResponse(
         }
       }
 
-      if (amount > 0 && cs.totalAmount) {
+      if (amount > 0 && amount < MIN_VIABLE_TRANSFER_LIMIT_CLP) {
+        await sendAndTrack(client, exchange, order.orderNumber, cs, LOW_TRANSFER_LIMIT_MSG);
+      } else if (amount > 0 && cs.totalAmount) {
         await offerSplitPayment(tenantId, exchange, client, order, cs, amount, label);
       } else {
         retryCount++;
@@ -2050,6 +2056,15 @@ function extractAmount(text: string): number {
   // seguro está abreviado así.
   return smallest < 10000 ? smallest * 1000 : smallest;
 }
+
+// Regla de negocio confirmada por el usuario (jul 2026): si el comprador
+// dice que su banco solo le permite transferir menos de $100.000 CLP por
+// vez, no se ayuda ofreciendo otra cuenta ni dividiendo el pago -- un
+// límite tan bajo implicaría demasiadas transferencias para completar la
+// compra. Se le pide cancelar la orden y buscar otro vendedor cuyo límite
+// de compra se ajuste al límite real de su banco.
+const MIN_VIABLE_TRANSFER_LIMIT_CLP = 100000;
+const LOW_TRANSFER_LIMIT_MSG = "Entiendo, pero con un límite de transferencia tan bajo no podemos completar esta compra -- necesitamos que tu banco te permita transferir al menos $100.000 CLP por vez. Te recomiendo cancelar esta orden y buscar otro vendedor cuyo límite de compra se ajuste al que te permite tu banco. ¡Gracias por tu comprensión!";
 
 function findMatchingAd(activeAds: any[], order: any): any {
   if (!activeAds || activeAds.length === 0) return null;
