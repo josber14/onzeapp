@@ -130,7 +130,15 @@ export async function GET(req: NextRequest) {
             }
           } catch (_) {}
           const res = await client.getMyAds(1, 50);
-          const items = res?.result?.items || [];
+          // getMyAds devuelve TODO el historial de anuncios de la cuenta,
+          // incluidos los ya cancelados hace tiempo (ej. de recreaciones
+          // viejas) -- Bybit nunca los borra de esta lista, solo cambia su
+          // status. Sin este filtro, el panel mostraba 10 "anuncios" cuando
+          // en realidad solo 1 (o ninguno) estaba de verdad activo, y
+          // "Borrar" en uno ya cancelado no hacía nada visible porque no
+          // hay nada real que cancelar de nuevo -- pedido explícito del
+          // usuario: la lista solo debe mostrar anuncios online reales.
+          const items = (res?.result?.items || []).filter((a: any) => Number(a.status) === 10);
           bybitAds = items.map((a: any) => {
             const localAd = ads.find(la => la.adId === a.id);
             const rawPays: any[] = a.payments || [];
