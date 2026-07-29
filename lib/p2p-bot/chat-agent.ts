@@ -1192,12 +1192,18 @@ async function handleClientResponse(
         const problemType = matchProblemType(textLower);
         let resolvedProblem: "limit" | "not_working" | null =
           problemType === "limit" ? "limit" : (problemType === "not_working" || textLower.includes("no me")) ? "not_working" : null;
+        // "me puede enviar otra cuenta por favor" -- pide otra cuenta sin
+        // nombrar un banco puntual y sin reportar ningún problema técnico.
+        // Se resuelve directo (manda la siguiente cuenta disponible), nunca
+        // se le pregunta "¿hay algún problema?" -- ver matchWantsAnotherAccount.
+        const wantsAnother = !chosen && !resolvedProblem && matchWantsAnotherAccount(textLower);
 
-        // Si no se pudo reconocer un banco ni un problema por palabras clave,
-        // se consulta a la IA como respaldo antes de quedarse en silencio
-        // (antes de este cambio, este caso simplemente no respondía nada).
+        // Si no se pudo reconocer un banco, un problema, ni un pedido directo
+        // de otra cuenta por palabras clave, se consulta a la IA como
+        // respaldo antes de quedarse en silencio (antes de este cambio, este
+        // caso simplemente no respondía nada).
         let aiFollowUp: string | undefined;
-        if (!chosen && !resolvedProblem) {
+        if (!chosen && !resolvedProblem && !wantsAnother) {
           const ai = await classifyIntent({
             state: "account_sent",
             text,
@@ -1250,6 +1256,8 @@ async function handleClientResponse(
           }
         } else if (resolvedProblem === "not_working") {
           await handleTransferFails(tenantId, exchange, client, order, cs, activeAds, textLower, label);
+        } else if (wantsAnother) {
+          await offerAlternateAccount(tenantId, exchange, client, order, cs, activeAds, label);
         } else if (aiFollowUp) {
           // Antes de este fix, un mensaje que no era ni banco ni problema
           // (ej. un comentario aparte) se quedaba sin ninguna respuesta —
@@ -1384,6 +1392,27 @@ async function handleClientResponse(
     }
 
     case "awaiting_limit_amount": {
+      // Bug real confirmado en vivo (jul 2026): mientras se esperaba el monto
+      // máximo para dividir el pago, un comprador nombró un banco puntual
+      // ("enviar la del banco Chile por favor") -- este estado solo sabía
+      // extraer un número, así que lo ignoró por completo y siguió
+      // preguntando por el monto, dejando al operador tener que mandar la
+      // cuenta a mano. Un banco nombrado explícitamente SIEMPRE gana sobre
+      // seguir insistiendo con la pregunta del límite -- el comprador ya dijo
+      // lo que necesita.
+      const adForBankCheck = findMatchingAd(activeAds, order);
+      const accountsForBankCheck = await getAccountsForAd(tenantId, exchange, adForBankCheck, label, { includeHidden: true });
+      const namedBank = matchBank(textLower, accountsForBankCheck);
+      if (namedBank) {
+        const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, cs, namedBank);
+        if (sent) await updateState(cs.id, "account_sent", { chosenBank: namedBank.bank, chosenAccountIds: [namedBank.id], retryCount: 0 });
+        break;
+      }
+      if (matchWantsAnotherAccount(textLower)) {
+        await offerAlternateAccount(tenantId, exchange, client, order, cs, activeAds, label);
+        break;
+      }
+
       let amount = extractAmount(textLower);
       let aiFollowUp: string | undefined;
       if (!(amount > 0)) {
@@ -1483,6 +1512,47 @@ async function handleClientResponse(
     default:
       break;
   }
+}
+
+// Pedido explícito del usuario (jul 2026): cuando el comprador pide otra
+// cuenta directamente (sin reportar que la transferencia falló), se le debe
+// mandar otra cuenta de una vez -- sin el preámbulo de "prueba cerrando la
+// app de tu banco" de handleTransferFails (ese preámbulo es para cuando SÍ
+// reporta un problema técnico, no para un pedido simple de cambiar de
+// cuenta/banco). Reutiliza la misma rotación de cuentas ya no ofrecidas.
+async function offerAlternateAccount(
+  tenantId: number,
+  exchange: string,
+  client: any,
+  order: any,
+  cs: any,
+  activeAds: any[],
+  label = "ONZE"
+): Promise<boolean> {
+  const ad = findMatchingAd(activeAds, order);
+  const accounts = await getAccountsForAd(tenantId, exchange as any, ad, label);
+  const alreadySentIds = new Set((cs.chosenAccountIds as number[]) || []);
+  const remaining = accounts.filter((a: any) => !alreadySentIds.has(a.id));
+
+  if (remaining.length > 0) {
+    const next = remaining[0];
+    await sendThenTransition(client, exchange, order.orderNumber, cs,
+      "Claro, aquí tienes otra cuenta:\n\n" +
+      formatSingleAccount(next) +
+      "\n\nCualquier duda, avísame.",
+      "account_sent", {
+        chosenAccountIds: [...alreadySentIds, next.id],
+        chosenBank: next.bank,
+        retryCount: 0,
+      }
+    );
+    return true;
+  }
+
+  await sendAndTrack(client, exchange, order.orderNumber, cs,
+    "Esas son todas las cuentas que tenemos disponibles por ahora. Cualquier duda, avísame."
+  );
+  return false;
 }
 
 /* ─── Transfer fails (3 attempts then close) ─────────────────── */
@@ -2084,6 +2154,21 @@ function matchWantsAccount(text: string): boolean {
 // LISTA completa para repartir el pago él mismo, no una cuenta puntual.
 function matchWantsMultipleAccounts(text: string): boolean {
   return /\b[2-9]\s*cuentas\b/.test(text) || text.includes("varias cuentas") || text.includes("distintas cuentas") || text.includes("otras cuentas") || text.includes("más de una cuenta") || text.includes("mas de una cuenta");
+}
+
+// Pedido explícito del usuario (jul 2026): "me puede enviar otra cuenta por
+// favor" (sin nombrar un banco puntual) no calzaba con ningún matcher de
+// account_sent -- caía directo a la IA con validIntents ["limit",
+// "not_working", "unclear"], que no tiene ninguna opción para "quiere una
+// cuenta distinta sin dar motivo", así que siempre volvía "unclear" y el bot
+// preguntaba "¿hay algún problema con la cuenta?" en vez de simplemente
+// mandar otra. Regla de negocio: si el comprador pide otra cuenta, se le
+// manda otra cuenta -- no hace falta que explique por qué.
+function matchWantsAnotherAccount(text: string): boolean {
+  return /otra\s+cuenta/.test(text) || /otro\s+banco/.test(text) ||
+    text.includes("cambiar de cuenta") || text.includes("cambiar de banco") ||
+    text.includes("cuenta distinta") || text.includes("distinta cuenta") ||
+    text.includes("cuenta diferente") || text.includes("diferente cuenta");
 }
 
 function matchThirdParty(text: string): boolean {
