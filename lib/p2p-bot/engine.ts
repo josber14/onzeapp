@@ -892,6 +892,50 @@ async function runBinanceCycle(
       (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
     );
 
+    // ── Chequeo de límites duplicados entre anuncios propios ──
+    // Binance cierra anuncios si el "límite de orden" (mínimo-máximo) de dos
+    // anuncios propios en la misma dirección coincide EXACTO, sin importar
+    // que el precio sea distinto (confirmado contra la documentación oficial
+    // de Merchant Guidelines, jul 2026: "If the price, total order amount,
+    // or order limit of the second ad is the same as the first ad, your ads
+    // will be closed"). Pedido explícito del usuario: si esto pasa (ej. tras
+    // editar un anuncio a mano en la app y olvidar cambiar el límite), el
+    // bot se desactiva a sí mismo en esos anuncios puntuales -- no todo el
+    // bot -- y avisa bien fuerte en los logs. La reactivación es siempre
+    // manual desde el panel, nunca automática.
+    {
+      const duplicateLimitAdIds = new Set<number>();
+      for (let i = 0; i < managedAds.length; i++) {
+        for (let j = i + 1; j < managedAds.length; j++) {
+          const adA = managedAds[i];
+          const adB = managedAds[j];
+          const sellA = ourSellAds.find((a: any) => String(a.id) === String(adA.adId));
+          const sellB = ourSellAds.find((a: any) => String(a.id) === String(adB.adId));
+          if (!sellA || !sellB) continue;
+          const sameLimit = Number(sellA.minAmount) > 0
+            && Number(sellA.minAmount) === Number(sellB.minAmount)
+            && Number(sellA.maxAmount) === Number(sellB.maxAmount);
+          if (!sameLimit) continue;
+          duplicateLimitAdIds.add(adA.id);
+          duplicateLimitAdIds.add(adB.id);
+          await log("error", "binance",
+            `🚫 Anuncios ${adA.adId} y ${adB.adId} tienen el MISMO límite (${sellA.minAmount}-${sellA.maxAmount} CLP) -- Binance puede cerrarlos por esto (ver Merchant Guidelines: "order limit" duplicado). Se desactivó el bot en ambos automáticamente. Corrige el límite en la app de Binance y vuelve a activarlos manualmente desde el panel cuando el límite sea distinto.`
+          );
+        }
+      }
+      if (duplicateLimitAdIds.size > 0) {
+        await prisma.p2PBotAd.updateMany({
+          where: { id: { in: [...duplicateLimitAdIds] } },
+          data: { botEnabled: false },
+        });
+        managedAds = managedAds.filter(ma => !duplicateLimitAdIds.has(ma.id));
+        if (managedAds.length === 0) {
+          await log("warn", "binance", "Todos los anuncios gestionados quedaron desactivados por límites duplicados.");
+          return { actions };
+        }
+      }
+    }
+
     // Snapshot all competitors for market data (unfiltered)
     const firstSellAd = ourSellAds[0] || null;
     try {
@@ -1495,6 +1539,41 @@ async function runBybitCycle(
     const ourSellAds = myAds.filter(
       (a: any) => a.side === 1 && a.tokenId === "USDT" && a.currencyId === "CLP"
     );
+
+    // ── Chequeo de límites duplicados entre anuncios propios (mismo motivo
+    // documentado arriba en el ciclo de Binance -- ver ese comentario) ──
+    {
+      const duplicateLimitAdIds = new Set<number>();
+      for (let i = 0; i < managedAds.length; i++) {
+        for (let j = i + 1; j < managedAds.length; j++) {
+          const adA = managedAds[i];
+          const adB = managedAds[j];
+          const sellA = ourSellAds.find((a: any) => String(a.id) === String(adA.adId));
+          const sellB = ourSellAds.find((a: any) => String(a.id) === String(adB.adId));
+          if (!sellA || !sellB) continue;
+          const sameLimit = Number(sellA.minAmount) > 0
+            && Number(sellA.minAmount) === Number(sellB.minAmount)
+            && Number(sellA.maxAmount) === Number(sellB.maxAmount);
+          if (!sameLimit) continue;
+          duplicateLimitAdIds.add(adA.id);
+          duplicateLimitAdIds.add(adB.id);
+          await log("error", "bybit",
+            `🚫 Anuncios ${adA.adId} y ${adB.adId} tienen el MISMO límite (${sellA.minAmount}-${sellA.maxAmount} CLP) -- riesgo de que el exchange los cierre. Se desactivó el bot en ambos automáticamente. Corrige el límite en la app y vuelve a activarlos manualmente desde el panel cuando el límite sea distinto.`
+          );
+        }
+      }
+      if (duplicateLimitAdIds.size > 0) {
+        await prisma.p2PBotAd.updateMany({
+          where: { id: { in: [...duplicateLimitAdIds] } },
+          data: { botEnabled: false },
+        });
+        managedAds = managedAds.filter(ma => !duplicateLimitAdIds.has(ma.id));
+        if (managedAds.length === 0) {
+          await log("warn", "bybit", "Todos los anuncios gestionados quedaron desactivados por límites duplicados.");
+          return { actions };
+        }
+      }
+    }
 
     // 4. Get online competitor ads (once, with pagination)
     let rawCompetitors: any[] = [];
