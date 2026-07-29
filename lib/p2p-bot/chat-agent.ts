@@ -2159,7 +2159,17 @@ function normalizeBankName(name: string): string {
   return (name || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
 }
 
-const BANK_FILLER_WORDS = new Set(["banco", "de", "chile", "sa", "spa", "cl"]);
+// Bug real confirmado en vivo (jul 2026, comprador real "Gonzalez", Bybit):
+// "chile" estaba acá como palabra de relleno, pensada para limpiar nombres
+// de banco genéricos -- pero para "BANCO DE CHILE" específicamente, quitar
+// "banco"/"de"/"chile" no deja NINGÚN token, así que bankCoreTokens caía al
+// respaldo de devolver las palabras SIN filtrar (banco/de/chile) en vez de
+// vacío. "de" es una preposición común en español -- cualquier mensaje que
+// la contuviera (ej. "envíame los datos DE tu cuenta") se interpretaba como
+// "elige Banco de Chile" y el bot mandaba esa cuenta sin preguntar nada.
+// "chile" es justamente la palabra que SÍ distingue a ese banco -- nunca
+// debe tratarse como relleno.
+const BANK_FILLER_WORDS = new Set(["banco", "de", "sa", "spa", "cl"]);
 
 // Palabras "de verdad" de un nombre de banco, sin gen\u00e9ricos como "banco" o
 // "chile" \u2014 permite reconocer que "BANCO BCI" (como lo guardaste) y "BCI
