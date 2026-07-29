@@ -1599,22 +1599,41 @@ export function normalizeOrder(raw: any, exchange: string) {
 async function fetchMessages(exchange: string, client: any, orderNo: string, _orderCreatedAt?: string): Promise<ChatMessage[]> {
   // REST API: fast (~1s), returns real user messages (type: "text") and system (type: "system")
   try {
-    let raw: any;
     if (exchange === "binance") {
       const res = await client.getChatMessages(orderNo);
-      raw = res?.data ?? [];
-    } else {
-      const res = await client.getChatMessages(orderNo);
-      raw = res?.result?.items ?? [];
+      const raw = res?.data ?? [];
+      return raw.map((m: any) => ({
+        id: String(m.id ?? m.uuid ?? ""),
+        type: m.type ?? "user",
+        content: m.content ?? "",
+        self: !!m.self,
+        createTime: Number(m.createTime ?? 0),
+        imageUrl: m.imageUrl ?? m.thumbnailUrl ?? null,
+      })).sort((a: any, b: any) => a.createTime - b.createTime);
     }
-    return raw.map((m: any) => ({
-      id: String(m.id ?? m.uuid ?? ""),
-      type: m.type ?? "user",
-      content: m.content ?? "",
-      self: !!m.self,
-      createTime: Number(m.createTime ?? 0),
-      imageUrl: m.imageUrl ?? m.thumbnailUrl ?? null,
-    })).sort((a: any, b: any) => a.createTime - b.createTime);
+
+    // Bybit: forma real de la respuesta confirmada contra la documentación
+    // oficial (bybit-exchange.github.io/docs/p2p/order/chat-msg, jul 2026):
+    // POST /v5/p2p/order/message/listpage -> result.result[] (no result.items
+    // como se había asumido antes). Cada mensaje trae msgType (0=sistema,
+    // 1/2/7/8=texto o adjunto del usuario), contentType ("str"/"pic"/"pdf"/
+    // "video"), createDate (string, epoch en MILISEGUNDOS) y userId -- Bybit
+    // NO manda un campo "self" como Binance, así que hay que compararlo
+    // contra nuestro propio userId (ver BybitP2PClient.getOwnUserId()).
+    const res = await client.getChatMessages(orderNo);
+    const raw = res?.result?.result ?? [];
+    const ownUserId = await client.getOwnUserId();
+    return raw.map((m: any) => {
+      const isImage = m.contentType === "pic";
+      return {
+        id: String(m.id ?? m.msgUuid ?? ""),
+        type: Number(m.msgType) === 0 ? "system" : "text",
+        content: isImage ? "" : String(m.message ?? ""),
+        self: String(m.userId ?? "") === ownUserId,
+        createTime: Number(m.createDate ?? 0),
+        imageUrl: isImage ? (m.message ?? null) : null,
+      };
+    }).sort((a: any, b: any) => a.createTime - b.createTime);
   } catch {
     return [];
   }

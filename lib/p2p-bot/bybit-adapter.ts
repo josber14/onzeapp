@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { createHmac } from "crypto";
+import { createHmac, randomUUID } from "crypto";
 
 export async function getBybitCredentials(tenantId: number, label = "ONZE") {
   return prisma.bybitCredentials.findFirst({
@@ -199,13 +199,39 @@ export class BybitP2PClient {
   }
 
   // ─── Chat ─────────────────────────────────────────────────────
+  // Endpoints y forma del payload confirmados contra la documentación oficial
+  // (bybit-exchange.github.io/docs/p2p/order/send-chat-msg y .../chat-msg,
+  // jul 2026) -- los que había antes (/v5/p2p/order/chatSend,
+  // /v5/p2p/order/chatMsg) NO EXISTEN en la API real de Bybit y devolvían
+  // HTTP 404 en cada intento, así que ningún mensaje llegaba nunca al
+  // comprador. Confirmado en vivo revisando P2PBotLog: cientos de intentos
+  // de "sendMsg", todos con el mismo error.
 
   async sendChatMessage(orderId: string, message: string) {
-    return this.request("/v5/p2p/order/chatSend", { orderId, message });
+    const msgUuid = randomUUID();
+    return this.request("/v5/p2p/order/message/send", { orderId, message, contentType: "str", msgUuid });
   }
 
   async getChatMessages(orderId: string, page = 1, size = 20) {
-    return this.request("/v5/p2p/order/chatMsg", { orderId, page, size });
+    return this.request("/v5/p2p/order/message/listpage", {
+      orderId,
+      currentPage: String(page),
+      size: String(size),
+    });
+  }
+
+  // Necesario para distinguir "mensaje nuestro" vs "mensaje del comprador" en
+  // getChatMessages -- a diferencia de Binance, Bybit NO manda un campo
+  // `self` en cada mensaje; solo trae el `userId` de quien lo escribió. Hay
+  // que compararlo contra nuestro propio userId (ver /v5/p2p/user/personal/info).
+  // Cacheado en la instancia porque no cambia y engine.ts crea un cliente
+  // nuevo por ciclo -- evita una llamada extra por cada orden del mismo ciclo.
+  private ownUserId: string | null = null;
+  async getOwnUserId(): Promise<string> {
+    if (this.ownUserId) return this.ownUserId;
+    const info = await this.getAccountInfo();
+    this.ownUserId = String(info?.result?.userId || "");
+    return this.ownUserId;
   }
 
   // ─── Balance & Account ────────────────────────────────────────
