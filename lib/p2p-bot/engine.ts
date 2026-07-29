@@ -1845,7 +1845,19 @@ async function runBybitCycle(
             await log( "debug", "bybit", `Ad ${adId}: otra ejecución ya está recreando este anuncio, se salta`);
           } else if (currentMods >= 9) {
             await log( "info", "bybit", `Ad ${adId}: ${currentMods} modificaciones, recreando...`);
-            const recreatePrice = currentPrice + 0.50;
+            // Bug real confirmado en vivo (jul 2026): acá se usaba
+            // currentPrice + 0.50 -- el precio VIEJO pegado en el anuncio,
+            // no el precio recién calculado con el margen de seguridad. Si
+            // currentPrice ya estaba por debajo del piso de seguridad
+            // vigente (ej. tras un cambio de margen o de capacity que el
+            // anuncio no había alcanzado a reflejar), el anuncio se
+            // recreaba heredando ese mismo precio inseguro. targetPrice ya
+            // viene calculado más arriba respetando safeFloor (nunca baja
+            // de ahí) -- es el mismo campo que ya usa correctamente el otro
+            // camino de recreación (tras rate limit, más abajo en este
+            // archivo). Pedido explícito del usuario: la configuración de
+            // seguridad SIEMPRE se respeta, sin excepción.
+            const recreatePrice = targetPrice;
             try { await client.updateAd({ id: adId, status: 20 }); } catch {}
             await new Promise(r => setTimeout(r, 1000));
             let removed = false;
