@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { acquireChatLock, releaseChatLock } from "./chat-lock";
 import { classifyIntent } from "./chat-brain";
+import { bybitOrderStatusLabel } from "./bybit-adapter";
 import type { ChatState, ChatMessage } from "./types";
 
 const MAX_RETRIES = 3;
@@ -316,7 +317,7 @@ async function processOrderLocked(
   // P2PBuyerIdentity para poder reconocer a este comprador en un pedido
   // FUTURO (el apodo que se ve ANTES del pago viene enmascarado a 3 letras y
   // colisiona entre personas distintas — no sirve para esto).
-  if (!cs.realName) {
+  if (!cs.realName && exchange === "binance") {
     const payed = extractSellerPayed(msgs);
     if (payed?.realName) {
       await prisma.p2PChatState.update({ where: { id: cs.id }, data: { realName: payed.realName } });
@@ -354,6 +355,34 @@ async function processOrderLocked(
           },
         }).catch(() => {});
       }
+    }
+  } else if (!cs.realName && exchange === "bybit" && (isPaid || isCompleted) && order.buyerRealName && order.counterparty) {
+    // Bybit no manda un mensaje de sistema tipo "seller_payed" -- pero ya
+    // trae el nombre real del comprador directo en los datos de la orden
+    // (buyerRealName), así que no hace falta parsear ningún chat. Se
+    // captura acá recién que el pago está confirmado (isPaid/isCompleted),
+    // el mismo criterio que Binance, para que orderCount siga contando
+    // compras REALES y no órdenes abiertas que nunca se pagaron.
+    const realName = String(order.buyerRealName).trim();
+    const nickNameKey = String(order.counterparty).trim();
+    if (realName && nickNameKey) {
+      await prisma.p2PChatState.update({ where: { id: cs.id }, data: { realName } });
+      cs.realName = realName;
+      const lastAccountId = Array.isArray(cs.chosenAccountIds) && cs.chosenAccountIds.length === 1 ? Number(cs.chosenAccountIds[0]) : null;
+      await prisma.p2PBuyerIdentity.upsert({
+        where: { tenantId_exchange_label_nickName: { tenantId, exchange, label, nickName: nickNameKey } },
+        update: {
+          realName,
+          orderCount: { increment: 1 },
+          ...(lastAccountId ? { lastBank: cs.chosenBank || null, lastAccountId, lastIsCompany: !!cs.isCompany } : {}),
+        },
+        create: {
+          tenantId, exchange, label, nickName: nickNameKey, realName,
+          lastBank: lastAccountId ? (cs.chosenBank || null) : null,
+          lastAccountId,
+          lastIsCompany: !!cs.isCompany,
+        },
+      }).catch(() => {});
     }
   }
 
@@ -555,6 +584,13 @@ export async function handleVerified(
     } catch (e: any) {
       await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: no se pudo obtener buyerNickname real (${e.message}) — usando apodo tapado`);
     }
+  } else if (exchange === "bybit") {
+    // Bybit NO enmascara el nickname del comprador como Binance (que lo tapa
+    // a 3 letras hasta que paga) -- confirmado contra la documentación
+    // oficial (targetNickName = "Counterparty nickname", sin máscara desde
+    // la primera orden). Se puede usar directo como identificador EXACTO,
+    // sin necesitar una llamada aparte como getUserOrderDetail.
+    realNick = String(order.counterparty || "").trim() || null;
   }
   const known = realNick
     ? await findKnownRealNameExact(tenantId, exchange, label, realNick)
@@ -569,8 +605,15 @@ export async function handleVerified(
   // mande la(s) cuenta(s) apenas responda, sin un paso extra de "¿qué
   // banco?" si ya se puede resolver.
   const firstMsg = (cs.pendingFirstMsg || "").toLowerCase();
-  const name = firstNameFrom(known?.realName);
-  const hello = isReturning && name ? `¡Hola ${name}!` : "¡Hola!";
+  // Pedido explícito del usuario (jul 2026): en Bybit, como el nombre real
+  // ya viene desde la primera orden (a diferencia de Binance, que recién lo
+  // revela tras el pago), se saluda por nombre a TODOS los compradores, no
+  // solo a los que ya conocemos de compras anteriores.
+  const bybitFirstTimeName = exchange === "bybit" && !isReturning
+    ? firstNameFrom(order.buyerRealName || order.counterparty)
+    : null;
+  const name = firstNameFrom(known?.realName) || bybitFirstTimeName;
+  const hello = name ? `¡Hola ${name}!` : "¡Hola!";
 
   // A propósito NO se guarda `realName: known.realName` en cs acá (bug real
   // confirmado en vivo, jul 2026): eso hacía que `!cs.realName` en
@@ -1563,7 +1606,25 @@ async function sendAccountWithErutNote(
 export function normalizeOrder(raw: any, exchange: string) {
   const rawStatus = (raw.orderStatus ?? raw.status ?? "").toString();
   let status = "pending";
-  if (["COMPLETED", "50", "completed"].includes(rawStatus)) status = "completed";
+  if (exchange === "bybit") {
+    // Los códigos numéricos de Bybit NO significan lo mismo que los de
+    // Binance -- confirmado en vivo (jul 2026): una orden CANCELADA de
+    // Bybit (código real 40) caía en el chequeo de abajo pensado para
+    // Binance (donde "40" = apelado), así que el bot le mandaba al
+    // comprador "el comprador ha abierto una apelación" sobre una orden
+    // que en realidad solo se había cancelado. bybitOrderStatusLabel ya
+    // tiene el mapeo real de Bybit (verificado y usado en el resto del
+    // código, ver p2p-history y engine.ts) -- se reusa acá en vez de
+    // duplicar otra tabla de códigos que se puede desalinear de nuevo.
+    const label = bybitOrderStatusLabel(Number(rawStatus));
+    if (label === "completed") status = "completed";
+    else if (label === "cancelled" || label === "pay_fail") status = "cancelled";
+    else if (label === "appealing") status = "appealed";
+    // "paying" = el comprador ya marcó pagado, esperando que liberemos --
+    // equivalente al "paid"/"BUYER_PAYED" de Binance.
+    else if (label === "paying") status = "paid";
+    // pending/waiting_chain quedan como "pending" (valor inicial).
+  } else if (["COMPLETED", "50", "completed"].includes(rawStatus)) status = "completed";
   else if (["CANCELLED", "CANCELLED_BY_SYSTEM", "60", "cancelled"].includes(rawStatus)) status = "cancelled";
   else if (["PAID", "BUYER_PAYED", "30"].includes(rawStatus)) status = "paid";
   else if (["APPEALED", "40"].includes(rawStatus)) status = "appealed";
@@ -1599,6 +1660,11 @@ export function normalizeOrder(raw: any, exchange: string) {
     // advNo para encontrar el anuncio y tomar su paymentPeriod real).
     payTime: Number(raw.payTime ?? raw.paymentTime ?? raw.payWindow ?? 15),
     verified,
+    // Solo Bybit lo trae -- nombre real del comprador directo en los datos
+    // de la orden, sin esperar el pago (ver "Get All Orders" en la
+    // documentación oficial de Bybit: buyerRealName). Binance no tiene este
+    // campo, queda undefined y no afecta nada de lo existente.
+    buyerRealName: raw.buyerRealName ?? null,
   };
 }
 
