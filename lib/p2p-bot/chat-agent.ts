@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { acquireChatLock, releaseChatLock } from "./chat-lock";
-import { classifyIntent } from "./chat-brain";
+import { classifyIntent, resolveFirstName } from "./chat-brain";
 import { bybitOrderStatusLabel } from "./bybit-adapter";
 import type { ChatState, ChatMessage } from "./types";
 
@@ -320,8 +320,10 @@ async function processOrderLocked(
   if (!cs.realName && exchange === "binance") {
     const payed = extractSellerPayed(msgs);
     if (payed?.realName) {
-      await prisma.p2PChatState.update({ where: { id: cs.id }, data: { realName: payed.realName } });
+      const firstName = (await resolveFirstName(payed.realName)) || firstNameFrom(payed.realName);
+      await prisma.p2PChatState.update({ where: { id: cs.id }, data: { realName: payed.realName, firstName } });
       cs.realName = payed.realName;
+      (cs as any).firstName = firstName;
       if (payed.nickName) {
         // orderCount incrementa acá porque este bloque (if !cs.realName) solo
         // corre UNA vez por orden — cuenta compras reales, no cada vez que se
@@ -344,11 +346,12 @@ async function processOrderLocked(
           where: { tenantId_exchange_label_nickName: { tenantId, exchange, label, nickName: nickNameKey } },
           update: {
             realName: payed.realName,
+            firstName,
             orderCount: { increment: 1 },
             ...(lastAccountId ? { lastBank: cs.chosenBank || null, lastAccountId, lastIsCompany: !!cs.isCompany } : {}),
           },
           create: {
-            tenantId, exchange, label, nickName: nickNameKey, realName: payed.realName,
+            tenantId, exchange, label, nickName: nickNameKey, realName: payed.realName, firstName,
             lastBank: lastAccountId ? (cs.chosenBank || null) : null,
             lastAccountId,
             lastIsCompany: !!cs.isCompany,
@@ -366,18 +369,21 @@ async function processOrderLocked(
     const realName = String(order.buyerRealName).trim();
     const nickNameKey = String(order.counterparty).trim();
     if (realName && nickNameKey) {
-      await prisma.p2PChatState.update({ where: { id: cs.id }, data: { realName } });
+      const firstName = (await resolveFirstName(realName)) || firstNameFrom(realName);
+      await prisma.p2PChatState.update({ where: { id: cs.id }, data: { realName, firstName } });
       cs.realName = realName;
+      (cs as any).firstName = firstName;
       const lastAccountId = Array.isArray(cs.chosenAccountIds) && cs.chosenAccountIds.length === 1 ? Number(cs.chosenAccountIds[0]) : null;
       await prisma.p2PBuyerIdentity.upsert({
         where: { tenantId_exchange_label_nickName: { tenantId, exchange, label, nickName: nickNameKey } },
         update: {
           realName,
+          firstName,
           orderCount: { increment: 1 },
           ...(lastAccountId ? { lastBank: cs.chosenBank || null, lastAccountId, lastIsCompany: !!cs.isCompany } : {}),
         },
         create: {
-          tenantId, exchange, label, nickName: nickNameKey, realName,
+          tenantId, exchange, label, nickName: nickNameKey, realName, firstName,
           lastBank: lastAccountId ? (cs.chosenBank || null) : null,
           lastAccountId,
           lastIsCompany: !!cs.isCompany,
@@ -419,11 +425,11 @@ async function processOrderLocked(
   // Handle paid status BEFORE processing client messages
   if (isPaid) {
     if (cs.state === "account_sent") {
-      await sendThenTransition(client, exchange, orderNo, cs, paymentAckMessage(firstNameFrom(cs.realName)), "payment_made", { paidAt: new Date() });
+      await sendThenTransition(client, exchange, orderNo, cs, paymentAckMessage(cs.firstName || firstNameFrom(cs.realName)), "payment_made", { paidAt: new Date() });
       return;
     }
     if (!["account_sent", "payment_made", "awaiting_comprobant", "completed", "closed", "awaiting_verification"].includes(cs.state)) {
-      await sendThenTransition(client, exchange, orderNo, cs, paymentAckMessage(firstNameFrom(cs.realName)), "payment_made", { paidAt: new Date() });
+      await sendThenTransition(client, exchange, orderNo, cs, paymentAckMessage(cs.firstName || firstNameFrom(cs.realName)), "payment_made", { paidAt: new Date() });
       return;
     }
   }
@@ -522,7 +528,7 @@ async function processOrderLocked(
       }
       // "Hola" solo va en el primer mensaje de la conversación — este aviso
       // llega minutos después del saludo inicial, nunca debe repetirlo.
-      const name = firstNameFrom(cs.realName);
+      const name = cs.firstName || firstNameFrom(cs.realName);
       await sendThenTransition(client, exchange, orderNo, cs,
         (name ? `${name}, ¿nos puedes` : "¿Nos puedes") + " enviar el comprobante del pago para agilizar la validación?" + extra,
         "awaiting_comprobant"
@@ -614,10 +620,14 @@ export async function handleVerified(
   // genérico sin sentido (ej. "User4397MDQswc", visto en vivo) que se vería
   // absurdo en un saludo ("¡Hola User4397mdqswc!"). Si buyerRealName no
   // está disponible todavía, mejor un "¡Hola!" genérico que un saludo raro.
-  const bybitFirstTimeName = exchange === "bybit" && !isReturning
-    ? firstNameFrom(order.buyerRealName)
+  // resolveFirstName (IA) reconoce el nombre de pila real sin asumir un
+  // orden fijo -- ver comentario completo en chat-brain.ts. firstNameFrom
+  // (heurística por posición) queda solo como respaldo si la IA no está
+  // disponible o falla, nunca como el camino principal.
+  const bybitFirstTimeName = exchange === "bybit" && !isReturning && order.buyerRealName
+    ? (await resolveFirstName(order.buyerRealName)) || firstNameFrom(order.buyerRealName)
     : null;
-  const name = firstNameFrom(known?.realName) || bybitFirstTimeName;
+  const name = known?.firstName || (known?.realName ? firstNameFrom(known.realName) : null) || bybitFirstTimeName;
   const hello = name ? `¡Hola ${name}!` : "¡Hola!";
 
   // A propósito NO se guarda `realName: known.realName` en cs acá (bug real
@@ -2308,6 +2318,7 @@ const GENERIC_NICK_PATTERNS = [/^user-/i, /^p2p-/i];
 
 interface KnownIdentity {
   realName: string;
+  firstName: string | null;
   orderCount: number;
   lastBank: string | null;
   lastAccountId: number | null;
@@ -2321,7 +2332,7 @@ async function findKnownRealName(tenantId: number, exchange: string, label: stri
   const candidates = await prisma.p2PBuyerIdentity.findMany({
     where: { tenantId, exchange, label, nickName: { startsWith: prefix } },
     orderBy: { updatedAt: "desc" },
-    select: { nickName: true, realName: true, orderCount: true, lastBank: true, lastAccountId: true, lastIsCompany: true },
+    select: { nickName: true, realName: true, firstName: true, orderCount: true, lastBank: true, lastAccountId: true, lastIsCompany: true },
   });
   const trustworthy = candidates.filter(c => !GENERIC_NICK_PATTERNS.some(re => re.test(c.nickName)));
   const uniqueNames = new Set(trustworthy.map(c => c.realName));
@@ -2332,6 +2343,7 @@ async function findKnownRealName(tenantId: number, exchange: string, label: stri
   const latest = trustworthy[0];
   return {
     realName: latest.realName,
+    firstName: latest.firstName,
     orderCount: Math.max(...trustworthy.map(c => c.orderCount)),
     lastBank: latest.lastBank,
     lastAccountId: latest.lastAccountId,
@@ -2349,11 +2361,12 @@ async function findKnownRealName(tenantId: number, exchange: string, label: stri
 async function findKnownRealNameExact(tenantId: number, exchange: string, label: string, fullNick: string): Promise<KnownIdentity | null> {
   const identity = await prisma.p2PBuyerIdentity.findUnique({
     where: { tenantId_exchange_label_nickName: { tenantId, exchange, label, nickName: fullNick } },
-    select: { realName: true, orderCount: true, lastBank: true, lastAccountId: true, lastIsCompany: true },
+    select: { realName: true, firstName: true, orderCount: true, lastBank: true, lastAccountId: true, lastIsCompany: true },
   });
   if (!identity) return null;
   return {
     realName: identity.realName,
+    firstName: identity.firstName,
     orderCount: identity.orderCount,
     lastBank: identity.lastBank,
     lastAccountId: identity.lastAccountId,
@@ -2528,7 +2541,7 @@ function paymentAckMessage(name?: string | null): string {
 async function buildCompletionMessage(cs: any, tenantId: number, exchange: string): Promise<string> {
   const greeting = getTimeGreeting();
   const isNew = !cs.isReturning;
-  const name = firstNameFrom(cs.realName);
+  const name = cs.firstName || firstNameFrom(cs.realName);
   // Pedido explícito del usuario: un cliente frecuente no debería recibir el
   // mismo mensaje final que alguien que compra por primera vez — reconoce
   // que ya nos conoce en vez de repetirle el mensaje genérico. La

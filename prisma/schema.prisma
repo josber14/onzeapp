@@ -1140,6 +1140,15 @@ model P2PChatState {
   partialAmount     Decimal?  @db.Decimal(18, 8)
   totalAmount       Decimal?  @db.Decimal(18, 8)
   realName          String?
+  // Primer nombre de pila ya resuelto (vía IA, ver resolveFirstName en
+  // chat-brain.ts) -- se calcula UNA VEZ cuando se captura realName y se
+  // reutiliza en todos los saludos/mensajes de esta conversación. Necesario
+  // porque el orden de realName varía en la práctica ("APELLIDO APELLIDO
+  // NOMBRE" en unos casos, "NOMBRE NOMBRE APELLIDO APELLIDO" en otros,
+  // confirmado con 20 ejemplos reales jul 2026) -- no hay una posición fija
+  // que funcione siempre, así que adivinar por índice llamaba a la persona
+  // por su apellido en casi la mitad de los casos reales.
+  firstName         String?
   pendingFirstMsg   String?
   lastClientMsgAt   DateTime?
   lastBotMsgAt      DateTime?
@@ -1173,6 +1182,10 @@ model P2PBuyerIdentity {
   label      String   @default("ONZE")
   nickName   String
   realName   String
+  // Mismo motivo que P2PChatState.firstName -- primer nombre de pila ya
+  // resuelto vía IA, para no tener que re-derivarlo cada vez que se
+  // reconoce a un cliente frecuente.
+  firstName  String?
   orderCount Int      @default(1)
   lastBank      String?
   lastAccountId Int?

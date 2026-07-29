@@ -97,3 +97,72 @@ No inventes información. No decidas montos ni cuentas. El followUpText puede re
     clearTimeout(timeout);
   }
 }
+
+// Extrae el primer nombre de pila de un nombre legal completo (formato
+// documento de identidad latinoamericano) para poder saludar a un
+// comprador por su nombre real, no por su apellido.
+//
+// Bug real confirmado en vivo (jul 2026): el código anterior asumía un
+// orden FIJO ("APELLIDO1 APELLIDO2 NOMBRE1 [NOMBRE2]", tomando siempre la
+// 3ra palabra) -- pero revisando 20 nombres reales capturados, casi la
+// mitad venían al revés ("NOMBRE1 [NOMBRE2] APELLIDO1 APELLIDO2"), sin
+// ningún patrón fijo que distinga un caso del otro (varía según el país de
+// origen / tipo de documento del comprador). No existe una posición que
+// funcione siempre -- se usa IA para reconocer, con conocimiento real de
+// nombres/apellidos hispanos comunes, cuál palabra es de verdad un nombre
+// de pila. Se llama UNA SOLA VEZ por comprador (al capturar realName), no
+// en cada mensaje -- ver dónde se guarda el resultado en P2PChatState /
+// P2PBuyerIdentity.firstName.
+export async function resolveFirstName(fullLegalName: string): Promise<string | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+
+  const tool = {
+    name: "extraer_primer_nombre",
+    description: "Identifica el primer nombre de pila de una persona a partir de su nombre legal completo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        firstName: {
+          type: "string",
+          description: "Solo el primer nombre de pila de la persona (nunca un apellido), tal como se usaría para saludarla de forma cercana y natural (ej. 'Juan', 'María', 'Óscar').",
+        },
+      },
+      required: ["firstName"],
+    },
+  };
+
+  const system = `Te doy el nombre legal completo de una persona latinoamericana, tal como aparece en un documento de identidad (cédula/RUT). El orden de las palabras VARÍA según el país/documento -- a veces son "APELLIDO1 APELLIDO2 NOMBRE1 [NOMBRE2]" y a veces "NOMBRE1 [NOMBRE2] APELLIDO1 APELLIDO2". No asumas un orden fijo: usa tu conocimiento de nombres y apellidos hispanos comunes para reconocer cuál palabra es realmente un nombre de pila (nunca un apellido). Devuelve SOLO ese primer nombre de pila, tal como se usaría para saludar a la persona de forma cercana y natural.`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: ANTHROPIC_MODEL,
+        max_tokens: 100,
+        system,
+        messages: [{ role: "user", content: fullLegalName }],
+        tools: [tool],
+        tool_choice: { type: "tool", name: "extraer_primer_nombre" },
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const toolUse = (data?.content ?? []).find((c: any) => c.type === "tool_use");
+    const name = toolUse?.input?.firstName;
+    if (!name || typeof name !== "string" || name.trim().length < 2) return null;
+    return name.trim();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
