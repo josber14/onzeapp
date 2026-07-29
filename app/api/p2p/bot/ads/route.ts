@@ -139,6 +139,44 @@ export async function GET(req: NextRequest) {
           // hay nada real que cancelar de nuevo -- pedido explícito del
           // usuario: la lista solo debe mostrar anuncios online reales.
           const items = (res?.result?.items || []).filter((a: any) => Number(a.status) === 10);
+
+          // Pedido explícito del usuario (jul 2026): un anuncio de Bybit
+          // creado desde la app (fuera del panel, ej. tras una recreación
+          // manual) aparecía con la gestión del bot apagada por defecto --
+          // había que acordarse de prender el switch cada vez. Ahora, si se
+          // detecta un anuncio online que todavía no tiene fila en nuestra
+          // base de datos, se registra de una vez con el bot YA activado --
+          // no solo se muestra el switch prendido, queda gestionado de
+          // verdad desde el primer segundo que el panel lo detecta.
+          for (const a of items) {
+            if (ads.some(la => la.adId === a.id)) continue;
+            try {
+              const created = await prisma.p2PBotAd.create({
+                data: {
+                  tenantId: session.tenantId,
+                  label,
+                  exchange: "bybit",
+                  adId: String(a.id),
+                  tradeType: a.side === 0 ? "BUY" : "SELL",
+                  asset: a.tokenId || "USDT",
+                  fiat: a.currencyId || "CLP",
+                  priceType: a.priceType === 0 ? "fixed" : "float",
+                  price: Number(a.price) || 0,
+                  amount: Number(a.surplusAmount ?? a.tradableQuantity ?? a.lastQuantity ?? a.quantity ?? 0) || 0,
+                  minAmount: Number(a.minSingleTransAmount ?? a.minAmount) || 0,
+                  maxAmount: Number(a.maxSingleTransAmount ?? a.maxAmount) || 0,
+                  status: "online",
+                  isActive: true,
+                  botManaged: true,
+                  botEnabled: true,
+                },
+              });
+              ads.push(created);
+            } catch (e) {
+              // silent -- si falla, el usuario todavía puede activarlo a mano con el switch
+            }
+          }
+
           bybitAds = items.map((a: any) => {
             const localAd = ads.find(la => la.adId === a.id);
             const rawPays: any[] = a.payments || [];
