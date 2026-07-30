@@ -1028,7 +1028,6 @@ async function handleClientResponse(
       // canceló. matchProblemType YA reconoce esto como "limit" (revisa
       // "permite"/"deja"/etc.) — solo faltaba consultarlo acá.
       let resolvedProblem: "limit" | "not_working" | null = null;
-      let aiFollowUp: string | undefined;
       if (!chosen && !wantsAll) {
         const problemType = matchProblemType(textLower);
         resolvedProblem = problemType === "limit" ? "limit" : problemType === "not_working" ? "not_working" : null;
@@ -1048,7 +1047,6 @@ async function handleClientResponse(
             context: `Se le pidió al comprador que elija un banco de esta lista para transferir: ${accounts.map((a: any) => a.bank).join(", ")}.`,
           });
           if (ai) {
-            aiFollowUp = ai.followUpText;
             if (ai.intent === "wants_all_accounts") {
               wantsAll = true;
               await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "wants_all_accounts"`);
@@ -1112,9 +1110,16 @@ async function handleClientResponse(
         if (retryCount >= MAX_RETRIES) {
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         } else {
+          // Pedido explícito del usuario (jul 2026): un mensaje que no
+          // responde realmente cuál banco quiere (ej. un emoji suelto como
+          // "😑") no debe recibir el followUpText genérico de la IA (algo
+          // tipo "¿En qué puedo ayudarte?") -- eso ignora que hay una
+          // pregunta puntual pendiente. Acá siempre se retoma la pregunta
+          // real y directa: elegir uno de los bancos para mandarle la
+          // cuenta, nunca un "¿en qué te ayudo?" genérico.
           const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
           await sendThenTransition(client, exchange, order.orderNumber, cs,
-            aiFollowUp || `No entendí. Por favor elige el banco para tu depósito:\n${choices}`,
+            `Por favor elige uno de los bancos al que deseas transferir para enviarte la cuenta:\n${choices}`,
             "awaiting_bank_choice", { retryCount, pendingBankMenuIds: accounts.map((a: any) => a.id) }
           );
         }
