@@ -13836,11 +13836,26 @@ function addP2PBotStyles(){
   }
 
   async function botCycleRefresh(){
-    const lbl = "?label=" + encodeURIComponent(botActiveLabel || "ONZE") + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance");
+    // Bug real confirmado en vivo (jul 2026): esta función se llama cada
+    // ~300ms mientras el bot está corriendo (scheduleBotCycle). Si el
+    // usuario cambia de pestaña Binance/Bybit justo mientras una de esas
+    // llamadas está en vuelo, las respuestas pueden llegar DESORDENADAS --
+    // una respuesta VIEJA (ej. de Binance) puede llegar DESPUÉS de una más
+    // nueva (ej. de Bybit) y pintar en pantalla los datos de una cuenta
+    // etiquetados con el nombre de la OTRA (el ciclo activo de Binance
+    // apareciendo bajo el rótulo "Activo · BYBIT"). Se capturan la cuenta y
+    // el exchange pedidos en este llamado puntual, y si para cuando la
+    // respuesta llega el usuario ya cambió de pestaña, se descarta sin
+    // tocar el DOM -- la próxima llamada (unos 300ms después) va a traer los
+    // datos correctos de la pestaña actual de todos modos.
+    const requestedLabel = botActiveLabel || "ONZE";
+    const requestedExchange = botSelectedExchange || "binance";
+    const lbl = "?label=" + encodeURIComponent(requestedLabel) + "&exchange=" + encodeURIComponent(requestedExchange);
     try{
       const res = await fetch("/api/p2p/cycle/status" + lbl, { credentials:"include" });
       const data = await res.json();
       if(!data?.ok) return;
+      if((botActiveLabel || "ONZE") !== requestedLabel || (botSelectedExchange || "binance") !== requestedExchange) return;
       const cycle = data.active;
       const startBtn = document.getElementById("botCycleStartBtn");
       const addBtn = document.getElementById("botCycleAddSaleBtn");
