@@ -745,6 +745,21 @@ async function handleClientResponse(
   // estado, solo se ignora en silencio.
   if (isPureAcknowledgment(textLower)) return;
 
+  // Bug real confirmado en vivo (jul 2026, 2 órdenes de Bybit el mismo día):
+  // un saludo suelto ("hola", "hola buenas") justo después de que el bot ya
+  // había mandado la pregunta pendiente (ej. "¿Transfieres desde cuenta
+  // personal o empresa?") caía al respaldo de IA, que -- por diseño --
+  // siempre "retoma la pregunta pendiente" (ver chat-brain.ts), repitiendo
+  // una pregunta que el comprador YA HABÍA VISTO un mensaje antes. Esa
+  // repetición confundió a un comprador real: respondió "1" a la pregunta
+  // original, y cuando el bot la repitió, respondió "1" DE NUEVO por
+  // reflejo -- ese segundo "1" llegó justo cuando el bot ya había avanzado
+  // al siguiente paso (elegir banco) y se interpretó como una elección de
+  // banco real, mandando la cuenta sin que el comprador la hubiera pedido.
+  // Un saludo solo, sin nada más, nunca necesita respuesta -- exactamente
+  // como "ok"/"dale" arriba -- así que nunca debe disparar una repregunta.
+  if (isGreetingOnly(textLower)) return;
+
   switch (cs.state) {
     case "awaiting_account_type": {
       const opt = matchOption(textLower, 2);
@@ -1092,10 +1107,12 @@ async function handleClientResponse(
             "awaiting_limit_amount", { retryCount: 0 }
           );
         }
-      } else if (resolvedProblem === "not_working") {
+      } else if (resolvedProblem === "not_working" && isSpecificTechnicalProblem(textLower)) {
         // Todavía no se envió ninguna cuenta en esta orden, así que no hay
         // "otra cuenta" que ofrecer como en handleTransferFails — se le
-        // manda la primera disponible directo.
+        // manda la primera disponible directo. Solo entra acá con una señal
+        // técnica CONCRETA (ver isSpecificTechnicalProblem) -- un "no puedo"
+        // genérico primero pregunta qué pasó (más abajo).
         const next = accounts[0];
         if (next) {
           await sendThenTransition(client, exchange, order.orderNumber, cs,
@@ -1105,6 +1122,16 @@ async function handleClientResponse(
         } else {
           await sendThenClose(client, exchange, order.orderNumber, cs, "Voy a comunicarte con un asesor. Un momento.", { retryCount });
         }
+      } else if (resolvedProblem === "not_working") {
+        // "no puedo hacer la transferencia" a secas -- no dice si es un
+        // tema de límite de banco o un problema técnico puntual. Pedido
+        // explícito del usuario: primero preguntar QUÉ pasó exactamente, y
+        // solo con esa respuesta decidir la solución (ver case
+        // "awaiting_account_problem_detail").
+        await sendThenTransition(client, exchange, order.orderNumber, cs,
+          "Cuéntame, ¿cuál es el problema exactamente? ¿No te deja transferir el monto completo (límite de tu banco) o te sale algún error / no funciona la transferencia?",
+          "awaiting_account_problem_detail", { retryCount: 0 }
+        );
       } else {
         retryCount++;
         if (retryCount >= MAX_RETRIES) {
@@ -1259,8 +1286,23 @@ async function handleClientResponse(
               "awaiting_limit_amount", { retryCount: 0 }
             );
           }
-        } else if (resolvedProblem === "not_working") {
+        } else if (resolvedProblem === "not_working" && isSpecificTechnicalProblem(textLower)) {
+          // Señal técnica concreta ("me da error", "está rechazando") -- acá
+          // sí corresponde ir directo a handleTransferFails.
           await handleTransferFails(tenantId, exchange, client, order, cs, activeAds, textLower, label);
+        } else if (resolvedProblem === "not_working") {
+          // Caso real confirmado en vivo (jul 2026): "hola no puedo hacer la
+          // transferencia" saltaba directo a "prueba cerrando la app de tu
+          // banco" (handleTransferFails) asumiendo un problema técnico --
+          // resultó ser en realidad un tema de LÍMITE, y la conversación se
+          // enredó porque nunca se le preguntó qué pasaba de verdad. Pedido
+          // explícito del usuario: un "no puedo" genérico primero pregunta
+          // QUÉ pasó, y solo con esa respuesta se decide la solución (ver
+          // case "awaiting_account_problem_detail").
+          await sendThenTransition(client, exchange, order.orderNumber, cs,
+            "Cuéntame, ¿cuál es el problema exactamente? ¿No te deja transferir el monto completo (límite de tu banco) o te sale algún error / no funciona la transferencia?",
+            "awaiting_account_problem_detail", { retryCount: 0 }
+          );
         } else if (wantsAnother) {
           await offerAlternateAccount(tenantId, exchange, client, order, cs, activeAds, label);
         } else if (aiFollowUp) {
@@ -1270,6 +1312,51 @@ async function handleClientResponse(
           // continuidad natural, nunca dejar un mensaje en silencio.
           await sendAndTrack(client, exchange, order.orderNumber, cs, aiFollowUp);
         }
+      }
+      break;
+    }
+
+    // Se llega acá después de preguntar "¿cuál es el problema exactamente?"
+    // ante un "no puedo transferir" genérico (ver account_sent y
+    // awaiting_bank_choice más arriba) -- pedido explícito del usuario:
+    // nunca asumir la solución sin antes saber si es un tema de LÍMITE de
+    // banco o un problema TÉCNICO puntual, porque cada uno tiene una
+    // solución distinta.
+    case "awaiting_account_problem_detail": {
+      // Glitch conocido de Banco Estado (correo inválido al agregar la
+      // cuenta) -- misma respuesta específica que ya existe en account_sent.
+      if (matchInvalidEmailProblem(textLower)) {
+        const isBancoEstado = /estado/i.test(String(cs.chosenBank || ""));
+        const bankReason = isBancoEstado
+          ? "Eso puede pasar a veces con Banco Estado, es un problema conocido de la app y no de la cuenta."
+          : "Eso puede ser un problema puntual de la app de tu banco, no de la cuenta.";
+        await sendThenTransition(client, exchange, order.orderNumber, cs,
+          `${bankReason} Puedes probar:\n1) Cerrar la app del banco y volver a intentar la transferencia\n2) Poner cualquier correo en ese campo (puede ser el tuyo propio) — no afecta la transferencia\n\nCualquiera de las dos debería funcionar.`,
+          "account_sent", { retryCount: 0 }
+        );
+        break;
+      }
+
+      const problemType = matchProblemType(textLower);
+      if (problemType === "limit") {
+        // Sí era un tema de límite -- misma lógica de siempre: si ya dio el
+        // monto, repartir directo; si no, preguntarlo.
+        const amount = extractAmount(textLower);
+        if (amount > 0 && amount < MIN_VIABLE_TRANSFER_LIMIT_CLP) {
+          await sendThenTransition(client, exchange, order.orderNumber, cs, LOW_TRANSFER_LIMIT_MSG, "account_sent", { retryCount: 0 });
+        } else if (amount > 0 && cs.totalAmount) {
+          await offerSplitPayment(tenantId, exchange, client, order, cs, amount, label);
+        } else {
+          await sendThenTransition(client, exchange, order.orderNumber, cs,
+            "¿Cuál es el máximo que te permite transferir tu banco?",
+            "awaiting_limit_amount", { retryCount: 0 }
+          );
+        }
+      } else {
+        // Problema técnico confirmado (o la respuesta sigue sin aclarar
+        // nada) -- ahora sí corresponde ofrecer otra cuenta / sugerir
+        // reiniciar la app, ya con la causa real en mano.
+        await handleTransferFails(tenantId, exchange, client, order, cs, activeAds, textLower, label);
       }
       break;
     }
@@ -2112,6 +2199,21 @@ function isPureAcknowledgment(text: string): boolean {
   return PURE_ACKNOWLEDGMENT_WORDS.has(cleaned);
 }
 
+// Misma lógica que PURE_ACKNOWLEDGMENT_WORDS (lista corta y literal a
+// propósito, para no ignorar por accidente un mensaje real) pero para
+// saludos sueltos -- "hola", "hola buenas", etc. -- que tampoco necesitan
+// respuesta cuando llegan solos, sin ninguna pregunta ni pedido real.
+const GREETING_ONLY_WORDS = new Set([
+  "hola", "hola buenas", "buenas", "hey", "holi", "aloha",
+  "buen dia", "buenos dias", "buenas tardes", "buenas noches",
+]);
+function isGreetingOnly(text: string): boolean {
+  const cleaned = text.trim()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[.,!?¡¿👋🙌😊😁]+/gu, "").trim();
+  return GREETING_ONLY_WORDS.has(cleaned);
+}
+
 // "gracias" es distinto de "ok"/"dale" — pedido explícito del usuario: un
 // agradecimiento SÍ merece una respuesta (de agradecimiento hacia la
 // persona), no silencio. A propósito NO está en PURE_ACKNOWLEDGMENT_WORDS:
@@ -2142,6 +2244,22 @@ function matchProblemType(text: string): string | null {
   // negación) sí es una señal real de que algo falló.
   if (text.includes("no pudo") || text.includes("no puedo") || text.includes("no me")) return "not_working";
   return null;
+}
+
+// Distingue las señales de problema técnico CONCRETAS ("me da error",
+// "está rechazando", "no funciona") de la frase genérica "no puedo" -- que
+// matchProblemType también clasifica como "not_working" pero que en la
+// práctica no dice NADA sobre la causa real (puede ser un tema de límite de
+// su banco, un problema técnico puntual, o cualquier otra cosa). Pedido
+// explícito del usuario (jul 2026), tras un caso real donde "hola no puedo
+// hacer la transferencia" saltó directo a "prueba cerrando la app de tu
+// banco" sin preguntar nada -- luego resultó ser un problema de LÍMITE, y la
+// conversación se enredó porque nunca se le preguntó qué pasaba en realidad.
+// Solo esta señal específica autoriza saltar directo a una solución sin
+// preguntar antes; "no puedo" solo debe generar una pregunta de qué pasó.
+function isSpecificTechnicalProblem(text: string): boolean {
+  return text.includes("concreta") || text.includes("funciona") || text.includes("error") ||
+    text.includes("falla") || text.includes("rechaz") || text.includes("bloque") || text.includes("señal");
 }
 
 // Compradores que van directo al grano: "hola la cuenta porfa", "cuenta banco

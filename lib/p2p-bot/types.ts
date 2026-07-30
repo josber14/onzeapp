@@ -112,6 +112,7 @@ export type ChatState =
   | "awaiting_company_type"
   | "awaiting_problem"
   | "awaiting_limit_amount"
+  | "awaiting_account_problem_detail"
   | "account_sent"
   | "payment_made"
   | "awaiting_comprobant"
