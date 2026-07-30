@@ -909,6 +909,15 @@ async function runBinanceCycle(
         for (let j = i + 1; j < managedAds.length; j++) {
           const adA = managedAds[i];
           const adB = managedAds[j];
+          // Bug real confirmado en vivo (jul 2026): una fila duplicada en
+          // P2PBotAd (misma adId real, dos filas distintas por un problema de
+          // registro -- ver comentario en app/api/p2p/bot/ads/route.ts) hacía
+          // que este chequeo comparara un anuncio CONSIGO MISMO ("mismo
+          // límite" siempre va a dar true si es literalmente el mismo
+          // anuncio) y lo desactivara sin ningún motivo real. Si las dos filas
+          // apuntan al mismo anuncio real, no hay ningún riesgo de duplicado
+          // que reportar -- se salta.
+          if (String(adA.adId) === String(adB.adId)) continue;
           const sellA = ourSellAds.find((a: any) => String(a.id) === String(adA.adId));
           const sellB = ourSellAds.find((a: any) => String(a.id) === String(adB.adId));
           if (!sellA || !sellB) continue;
@@ -1557,6 +1566,12 @@ async function runBybitCycle(
         for (let j = i + 1; j < managedAds.length; j++) {
           const adA = managedAds[i];
           const adB = managedAds[j];
+          // Mismo bug que en runBinanceCycle (ver comentario allá): dos filas
+          // de P2PBotAd pueden apuntar al MISMO anuncio real de Bybit (fila
+          // duplicada por una carrera con el auto-registro del panel -- ver
+          // app/api/p2p/bot/ads/route.ts). Comparar un anuncio consigo mismo
+          // siempre "coincide" y lo desactivaba sin ningún riesgo real.
+          if (String(adA.adId) === String(adB.adId)) continue;
           const sellA = ourSellAds.find((a: any) => String(a.id) === String(adA.adId));
           const sellB = ourSellAds.find((a: any) => String(a.id) === String(adB.adId));
           if (!sellA || !sellB) continue;

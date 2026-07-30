@@ -151,6 +151,24 @@ export async function GET(req: NextRequest) {
           for (const a of items) {
             if (ads.some(la => la.adId === a.id)) continue;
             try {
+              // Bug real confirmado en vivo (jul 2026): el engine (ciclo del
+              // bot, corriendo en el servidor) puede actualizar el adId de un
+              // anuncio gestionado (tras recrearlo) casi al mismo tiempo que
+              // el panel hace este chequeo con el snapshot `ads` de arriba
+              // (tomado al inicio del request) -- si esa recreación no
+              // alcanzó a reflejarse en `ads` todavía, este bloque creaba una
+              // fila DUPLICADA apuntando al MISMO anuncio real, con datos en
+              // 0 (Bybit todavía no propaga minSingleTransAmount/
+              // maxSingleTransAmount para un anuncio recién creado). Esa fila
+              // fantasma después hacía que el chequeo de "límites duplicados"
+              // (engine.ts) comparara el anuncio consigo mismo y lo
+              // desactivara solo. Una relectura fresca justo antes de crear
+              // (en vez de confiar en el snapshot) cierra casi toda la
+              // ventana de la carrera.
+              const freshExisting = await prisma.p2PBotAd.findFirst({
+                where: { tenantId: session.tenantId, exchange: "bybit", label, adId: String(a.id) },
+              });
+              if (freshExisting) { ads.push(freshExisting); continue; }
               const created = await prisma.p2PBotAd.create({
                 data: {
                   tenantId: session.tenantId,
