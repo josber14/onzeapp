@@ -780,6 +780,7 @@ async function handleClientResponse(
           text: text,
           validIntents: ["personal", "empresa", "wants_account", "reports_problem", "unclear"],
           context: "El bot ya le preguntó al comprador si transfiere desde cuenta personal o empresa, con un menú 1) Personal 2) Empresa.",
+          exchange,
         });
         if (ai) {
           // followUpText se guarda SIEMPRE (incluso si intent es "unclear")
@@ -943,6 +944,7 @@ async function handleClientResponse(
           text,
           validIntents: ["resend", "confirm_no_resend", "different_menu", "unclear"],
           context: `Se le preguntó al comprador si va a transferir a la misma cuenta que usó la vez pasada (${cs.previousBank || "una cuenta anterior"}), avisándole que puede pedir que se la reenvíen o pedir otra cuenta distinta.`,
+          exchange,
         });
         if (ai) {
           aiFollowUp = ai.followUpText;
@@ -1060,6 +1062,7 @@ async function handleClientResponse(
             text,
             validIntents: ["wants_all_accounts", "limit", "not_working", "unclear"],
             context: `Se le pidió al comprador que elija un banco de esta lista para transferir: ${accounts.map((a: any) => a.bank).join(", ")}.`,
+            exchange,
           });
           if (ai) {
             if (ai.intent === "wants_all_accounts") {
@@ -1167,7 +1170,25 @@ async function handleClientResponse(
       const bareYesNo = ["si", "sí", "no"].includes(textLower.replace(/[.,!?¡¿]+$/g, "").trim());
       if (bareYesNo) break;
 
-      if (matchProceeding(textLower)) {
+      // Caso real confirmado en vivo (jul 2026, Bybit): el comprador escribió
+      // "esta pagado" y "envié comprobante" -- pero el estado de la orden
+      // (order.status, que es lo que activa el flujo normal de "pago
+      // recibido" más arriba en este archivo) todavía no reflejaba el pago,
+      // por un desfase real entre el mensaje de sistema del chat de Bybit
+      // ("the buyer has completed the payment") y el endpoint que consultamos
+      // para saber el estado real de la orden. Sin ningún matcher para "ya
+      // pagué" en texto libre, esos 2 mensajes cayeron al respaldo de IA
+      // (limit/not_working/unclear -- ninguno encaja) y generó respuestas
+      // desconectadas de lo que el comprador realmente dijo. Se reconoce el
+      // aviso de pago en el propio texto y se responde igual que cuando lo
+      // confirma el estado real de la orden (mismo mensaje, primera persona,
+      // sin mencionar el exchange ni "el vendedor" como tercero).
+      if (matchClaimsAlreadyPaid(textLower)) {
+        await sendThenTransition(client, exchange, order.orderNumber, cs,
+          paymentAckMessage(cs.firstName || firstNameFrom(cs.realName)),
+          "payment_made", { paidAt: new Date() }
+        );
+      } else if (matchProceeding(textLower)) {
         await sendAndTrack(client, exchange, order.orderNumber, cs, "Perfecto, estaré atento.");
       } else if (matchThirdParty(textLower)) {
         await sendAndTrack(client, exchange, order.orderNumber, cs,
@@ -1241,6 +1262,7 @@ async function handleClientResponse(
             text,
             validIntents: ["limit", "not_working", "unclear"],
             context: "Ya se le mandaron los datos de una cuenta bancaria al comprador para que pague. Está escribiendo algo relacionado con ese pago.",
+            exchange,
           });
           if (ai) {
             aiFollowUp = ai.followUpText;
@@ -1373,6 +1395,7 @@ async function handleClientResponse(
           text,
           validIntents: ["empresa", "personal", "unclear"],
           context: "Se le preguntó al comprador si la transferencia es desde cuenta empresa o personal, con un menú 1) Empresa 2) Personal.",
+          exchange,
         });
         if (ai) {
           aiFollowUp = ai.followUpText;
@@ -1518,6 +1541,7 @@ async function handleClientResponse(
           text,
           validIntents: ["gives_amount", "unclear"],
           context: "Se le preguntó al comprador cuál es el monto máximo que su banco le permite transferir.",
+          exchange,
         });
         if (ai) {
           aiFollowUp = ai.followUpText;
@@ -1584,6 +1608,7 @@ async function handleClientResponse(
           text,
           validIntents: ["issue_uploading", "mentions_bank", "gives_op_number", "unclear"],
           context: "Se le pidió al comprador el comprobante de pago y todavía no lo ha enviado.",
+          exchange,
         });
         if (ai?.intent && ai.intent !== "unclear") {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
@@ -2329,6 +2354,28 @@ function matchInvalidEmailProblem(text: string): boolean {
 // ("perfecto, estaré atento"), no el respaldo genérico de IA ni silencio.
 function matchProceeding(text: string): boolean {
   return /\bproced(o|iendo|er[eé])\b/.test(text);
+}
+
+// Reconoce cuando el comprador avisa en TEXTO LIBRE que ya pagó ("esta
+// pagado", "ya pagué", "envié comprobante") -- ver caso real en
+// account_sent, jul 2026, donde el order.status todavía no reflejaba el pago
+// (desfase real entre endpoints de Bybit) y esos mensajes no calzaban con
+// ningún matcher, cayendo a un respaldo de IA que no tenía ninguna opción
+// para "ya pagué". Negación explícita al inicio para no confundir "no está
+// pagado" / "no he pagado" con un aviso real de pago.
+function matchClaimsAlreadyPaid(text: string): boolean {
+  // \b justo después de una vocal con tilde no funciona en JS (la tilde no
+  // cuenta como \w) -- mismo bug ya documentado en otro punto de este
+  // archivo (ver saysYes/saysNo de "awaiting_problem"). Se normaliza y se
+  // quitan tildes ANTES de matchear, en vez de meter la tilde en la clase de
+  // caracteres.
+  const t = text.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (/\bno\b[^.!?\n]{0,20}\b(pagad[oa]|transfer|envi)/.test(t)) return false;
+  return /\besta\s+pagad[oa]\b/.test(t) ||
+    /\bya\s+pague\b/.test(t) ||
+    /\bya\s+transfer/.test(t) ||
+    (/\benvie\b/.test(t) && t.includes("comprobante")) ||
+    (/\bmande\b/.test(t) && t.includes("comprobante"));
 }
 
 function extractAmount(text: string): number {

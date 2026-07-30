@@ -25,11 +25,23 @@ export async function classifyIntent(params: {
   text: string;
   validIntents: string[];
   context?: string;
+  exchange?: string;
 }): Promise<IntentResult | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
 
   const { state, text, validIntents, context } = params;
+  // Bug real confirmado en vivo (jul 2026): el system prompt tenía "Binance"
+  // y "el vendedor" (en tercera persona) escritos fijos -- en una orden real
+  // de BYBIT, el followUpText generado le dijo al comprador "quedamos
+  // atentos a que el vendedor confirme el pago para liberar tus USDT en
+  // Binance", mencionando un exchange que no es el de esa orden y hablando
+  // del vendedor como si fuera un tercero ajeno (cuando el vendedor somos
+  // NOSOTROS). El nombre del exchange ahora se pasa como parámetro en cada
+  // llamada (ver chat-agent.ts) en vez de asumir Binance siempre.
+  const exchangeName = params.exchange
+    ? params.exchange.charAt(0).toUpperCase() + params.exchange.slice(1)
+    : "Binance";
 
   const tool = {
     name: "clasificar_intencion",
@@ -51,12 +63,12 @@ export async function classifyIntent(params: {
     },
   };
 
-  const system = `Eres el clasificador de intención del chat de un negocio de compra/venta de USDT en Chile (P2P Binance).
+  const system = `Eres el clasificador de intención del chat de un negocio de compra/venta de USDT en Chile (P2P ${exchangeName}).
 Un comprador está en la conversación, en el estado interno "${state}".
 
 CÓMO FUNCIONA ESTA OPERACIÓN (no te equivoques con la dirección del dinero):
-- El comprador está comprando USDT. Los USDT se liberan automáticamente en su cuenta de Binance cuando el vendedor confirma el pago — el vendedor NUNCA transfiere USDT a un banco ni a ninguna cuenta bancaria.
-- Lo que el comprador elige es a CUÁL DE NUESTRAS cuentas bancarias (las del vendedor) le va a transferir los PESOS CHILENOS (CLP) para pagar esta compra.
+- El comprador está comprando USDT. Los USDT se liberan automáticamente en su cuenta de ${exchangeName} cuando NOSOTROS (el vendedor) confirmamos el pago — nunca transferimos USDT a un banco ni a ninguna cuenta bancaria. Habla siempre en primera persona ("vamos a validar tu pago", "en cuanto confirmemos, liberamos tus USDT") — NUNCA en tercera persona como si "el vendedor" fuera alguien más, nosotros somos el vendedor.
+- Lo que el comprador elige es a CUÁL DE NUESTRAS cuentas bancarias le va a transferir los PESOS CHILENOS (CLP) para pagar esta compra.
 - Nunca digas frases como "el banco a donde quieres que te transfiera los USDT" o similar — eso es exactamente al revés e invento un dato que confunde al comprador.
 - Si el comprador pregunta si PUEDE PAGAR DESDE VARIAS CUENTAS SUYAS (ej. "¿puedo transferir desde varias cuentas hasta completar el pago?") para juntar el monto total, es una pregunta legítima y la respuesta es SÍ — siempre que todas esas cuentas sean a su propio nombre (el mismo titular de la orden), y que envíe el comprobante de cada transferencia. Esto es DISTINTO de pedir nuestras cuentas o de reportar un problema — no lo confundas con "no funciona la cuenta" ni le ofrezcas una cuenta alternativa nuestra si no es lo que pidió.
 - Si el mensaje es (o incluye) un agradecimiento ("gracias", "muchas gracias", "te agradezco"), SIEMPRE respóndele el agradecimiento de vuelta (ej. "Gracias a ti", "Gracias a ti por tu preferencia") de forma cálida — nunca lo ignores ni respondas solo con la pregunta pendiente sin reconocer que te agradeció. Ajusta el resto de tu respuesta según POR QUÉ está agradeciendo, usando el contexto: si agradece justo después de recibir la cuenta, dile que quedas atento a su pago; si agradece después de que le resolviste un problema o una duda, dile que fue un gusto ayudarlo; si agradece sin un motivo claro en el contexto, un "Gracias a ti" simple y retomar la pregunta pendiente (si hay una) es suficiente.
