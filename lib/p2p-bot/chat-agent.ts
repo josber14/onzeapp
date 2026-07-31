@@ -1193,8 +1193,10 @@ async function handleClientResponse(
       // desconectadas de lo que el comprador realmente dijo. Se reconoce el
       // aviso de pago en el propio texto y se responde igual que cuando lo
       // confirma el estado real de la orden (mismo mensaje, primera persona,
-      // sin mencionar el exchange ni "el vendedor" como tercero).
-      if (matchClaimsAlreadyPaid(textLower)) {
+      // sin mencionar el exchange ni "el vendedor" como tercero). También
+      // cubre "me confirma por favor" (matchAsksConfirmation) -- mismo caso
+      // real, mensaje siguiente de la misma conversación.
+      if (matchClaimsAlreadyPaid(textLower) || matchAsksConfirmation(textLower)) {
         await sendThenTransition(client, exchange, order.orderNumber, cs,
           paymentAckMessage(cs.firstName || firstNameFrom(cs.realName)),
           "payment_made", { paidAt: new Date() }
@@ -2391,6 +2393,20 @@ function matchClaimsAlreadyPaid(text: string): boolean {
     /\bya\s+transfer/.test(t) ||
     (/\benvie\b/.test(t) && t.includes("comprobante")) ||
     (/\bmande\b/.test(t) && t.includes("comprobante"));
+}
+
+// "Me confirma por favor" / "confírmame" -- pedido explícito del usuario
+// (jul 2026), tras un caso real: el comprador mandó el comprobante y
+// escribió "me confirma por favor" (pidiendo que confirmemos que YA nos
+// llegó su pago), y el bot respondió "¿qué necesitas que confirmemos? ¿ya
+// realizaste la transferencia...?" -- ignorando que, en este estado
+// (esperando el pago, justo después de mandar la cuenta), un pedido de
+// "confírmame" siempre es sobre el pago. El usuario aclaró que esta frase
+// NO siempre significa lo mismo en cualquier contexto -- pero acá, dentro
+// de account_sent, no hay ninguna otra cosa pendiente de confirmar.
+function matchAsksConfirmation(text: string): boolean {
+  return /\bme\s+confirma[sn]?\b/.test(text) || /\bconf[ií]rmame\b/.test(text) ||
+    /\bpuedes\s+confirmar\b/.test(text) || text.includes("confirmar el pago") || text.includes("confirmar mi pago");
 }
 
 function extractAmount(text: string): number {
