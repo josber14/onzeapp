@@ -64,6 +64,17 @@ export async function processChats(
 
     const order = normalizeOrder(rawOrder, exchange);
 
+    // Bug real confirmado en vivo (jul 2026): getOrders() se llama pidiendo
+    // tanto órdenes SELL como BUY (para que el resto del sistema pueda ver
+    // ambas), pero nada filtraba cuáles de esas órdenes llegan hasta el chat
+    // -- cuando el usuario hizo una COMPRA directa en Bybit (él mismo como
+    // comprador, no como vendedor), el bot procesó esa orden igual que
+    // cualquier venta gestionada y terminó saludándolo a él mismo en el
+    // chat. Todo este flujo (preguntar personal/empresa, mandar cuenta
+    // bancaria, etc.) solo tiene sentido cuando NOSOTROS somos el vendedor
+    // -- se ignora por completo cualquier orden donde estemos comprando.
+    if (order.tradeType !== "SELL") return;
+
     // Pedido explícito del usuario (jul 2026): el bot solo debe hablar de
     // operaciones en CLP. Confirmado en vivo: una venta P2P directa hecha
     // por fuera de los anuncios gestionados (para comprar bs/VES) hizo que
