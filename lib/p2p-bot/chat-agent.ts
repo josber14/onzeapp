@@ -2358,13 +2358,17 @@ function matchInvalidEmailProblem(text: string): boolean {
   return /correo\s*(es\s*)?inv[aá]lido/.test(text) || /email\s*(es\s*)?inv[aá]lido/.test(text);
 }
 
-// "Procedo" (o variantes: "voy a proceder", "procediendo") significa que el
-// comprador ya tiene la cuenta y va a EMPEZAR a hacer la transferencia ahora
-// — no es un problema ni una pregunta, solo un aviso de que sigue en curso.
-// Pedido explícito del usuario (jul 2026): merece una confirmación breve
-// ("perfecto, estaré atento"), no el respaldo genérico de IA ni silencio.
+// "Procedo" (o variantes: "voy a proceder", "procediendo", "ya va", "ya
+// voy") significa que el comprador ya tiene la cuenta y va a EMPEZAR a hacer
+// la transferencia ahora — no es un problema ni una pregunta, solo un aviso
+// de que sigue en curso. Pedido explícito del usuario (jul 2026): merece una
+// confirmación breve ("perfecto, estaré atento"), no el respaldo genérico de
+// IA ni silencio. Caso real confirmado en vivo (jul 2026): "ok ya va" (una
+// variante que no matcheaba "proced...") hizo que la IA le preguntara "¿ya
+// realizaste la transferencia?" -- una pregunta innecesaria justo después de
+// que el comprador avisó que ya iba a pagar.
 function matchProceeding(text: string): boolean {
-  return /\bproced(o|iendo|er[eé])\b/.test(text);
+  return /\bproced(o|iendo|er[eé])\b/.test(text) || /\bya\s+(voy|va)\b/.test(text);
 }
 
 // Reconoce cuando el comprador avisa en TEXTO LIBRE que ya pagó ("esta
