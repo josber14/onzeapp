@@ -669,23 +669,28 @@ export async function handleVerified(
   // directo en vez de repetirle personal/empresa desde cero. Pedido
   // explícito del usuario: "que no sea la misma pregunta siempre".
   //
-  // orderCount >= 2 es a propósito (bug real confirmado en vivo, jul 2026):
-  // el apodo enmascarado que vemos ANTES del pago (ej. "Ron***") solo trae
-  // 3 letras — cualquier nombre chileno común (Ronald, José, María...)
+  // Antes acá se exigía orderCount >= 2 (bug real confirmado en vivo, jul
+  // 2026): el apodo enmascarado que vemos ANTES del pago (ej. "Ron***") solo
+  // trae 3 letras — cualquier nombre chileno común (Ronald, José, María...)
   // parece "único" la PRIMERA vez que aparece en la tabla, aunque en
   // realidad muchas personas distintas compartan ese mismo comienzo. Un
-  // comprador nuevo (Carrillo Ramírez Ronald Alejandro) recibió la oferta
-  // de "misma cuenta" de OTRO Ronald (Mamani Arispe) visto horas antes,
-  // porque en ese momento solo había UNA identidad con ese prefijo — nada
-  // ambiguo todavía, pero tampoco confiable. Exigir 2+ compras confirmadas
-  // en esa identidad (no solo 1) reduce ese riesgo — el saludo por nombre
-  // (arriba) se mantiene desde la 1ra, solo esta oferta puntual de cuenta
-  // exige más evidencia.
-  // Pedido explícito del usuario (jul 2026): un cliente frecuente (2+
-  // compras confirmadas) NUNCA debe recibir la pregunta de personal/empresa
-  // — se le saluda y se le pregunta directo si sigue con la misma cuenta de
-  // la vez pasada o quiere una distinta.
-  if (known && known.orderCount >= 2) {
+  // comprador nuevo (Carrillo Ramírez Ronald Alejandro) recibió la oferta de
+  // "misma cuenta" de OTRO Ronald (Mamani Arispe) visto horas antes, porque
+  // en ese momento solo había UNA identidad con ese prefijo. Ese chequeo
+  // dejaba el trato de cliente frecuente recién desde la 3RA compra (>=2
+  // compras YA confirmadas antes de esta), contradiciendo la regla real
+  // pedida por el usuario ("desde la 2da compra en adelante"). Bajado a >= 1
+  // (jul 2026) para que arranque de verdad en la 2da compra -- el riesgo de
+  // ambigüedad de arriba solo aplica al respaldo por prefijo tapado
+  // (findKnownRealName); cuando el apodo real completo se obtuvo sin tapar
+  // (findKnownRealNameExact, el camino normal en Binance vía
+  // getUserOrderDetail, y siempre en Bybit) no hay ninguna ambigüedad
+  // posible, es un match exacto.
+  // Pedido explícito del usuario (jul 2026): un cliente frecuente (desde su
+  // 2da compra) NUNCA debe recibir la pregunta de personal/empresa — se le
+  // saluda y se le pregunta directo si sigue con la misma cuenta de la vez
+  // pasada o quiere una distinta.
+  if (known && known.orderCount >= 1) {
     const ad = findMatchingAd(activeAds, order);
     const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
     const prevAccount = known.lastAccountId ? allAccounts.find((a: any) => a.id === known.lastAccountId) : null;
