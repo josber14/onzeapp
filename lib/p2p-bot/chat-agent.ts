@@ -943,7 +943,18 @@ async function handleClientResponse(
       const namedDifferentBank = matchBank(textLower, allAccounts);
       const isSameAccountByName = namedDifferentBank && namedDifferentBank.id === (cs.chosenAccountIds?.[0] || 0);
 
-      const wantsResend = matchWantsAccount(textLower) || textLower.includes("reenv") || textLower.includes("envía") || textLower.includes("mandame") || textLower.includes("mándame");
+      // Bug real confirmado en vivo (jul 2026): un cliente frecuente
+      // (Grajeda) respondió "oka a la misma cuenta" -- matchWantsAccount()
+      // matchea CUALQUIER mención de la palabra "cuenta" (diseñado para otro
+      // contexto: detectar que un comprador NUEVO pide los datos por
+      // primera vez), así que confirmar "la misma cuenta" se interpretó como
+      // un pedido de REENVIAR los datos, y el bot volvió a mandar la cuenta
+      // completa cuando el cliente solo estaba confirmando (ya la tiene, no
+      // hacía falta reenviarla). Acá solo cuentan pedidos EXPLÍCITOS de
+      // reenvío -- nunca la sola palabra "cuenta", que aparece naturalmente
+      // en cualquier frase de confirmación ("la misma cuenta", "sí, esa
+      // cuenta").
+      const wantsResend = textLower.includes("reenv") || textLower.includes("envía") || textLower.includes("mandame") || textLower.includes("mándame") || textLower.includes("los datos");
       const wantsDifferent = !isSameAccountByName && (namedDifferentBank || textLower.includes("otra") || textLower.includes("distinta") || textLower.includes("cambiar") || textLower.includes("diferente"));
       const confirmsSame = !wantsDifferent && (matchOption(textLower, 2) === 1 || textLower.includes("misma") || textLower.includes("si") || textLower.includes("sí") || isSameAccountByName);
 
