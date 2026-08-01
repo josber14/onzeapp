@@ -1023,6 +1023,15 @@ async function handleClientResponse(
     }
 
     case "awaiting_bank_choice": {
+      // Mismo caso real que en awaiting_problem/account_sent -- "monto" (ej.
+      // "debo cancelar e ingresar otro monto") puede colar como problema de
+      // límite en matchProblemType más abajo si esto no se revisa antes.
+      if (matchWantsToCancel(textLower)) {
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          "Entendido, no hay problema. Puedes cancelar esta orden y hacer una nueva por el monto que sí puedas transferir — quedamos atentos."
+        );
+        break;
+      }
       // Check for company/factura request
       if (matchCompanyType(textLower) === true || matchERUT(textLower)) {
         const s = await sendAndTrack(client, exchange, order.orderNumber, cs,
@@ -1205,6 +1214,13 @@ async function handleClientResponse(
         await sendThenTransition(client, exchange, order.orderNumber, cs,
           paymentAckMessage(cs.firstName || firstNameFrom(cs.realName)),
           "payment_made", { paidAt: new Date() }
+        );
+      } else if (matchWantsToCancel(textLower)) {
+        // Mismo caso real que en awaiting_problem -- "monto" (ej. "debo
+        // cancelar e ingresar otro monto") puede colar como problema de
+        // límite en matchProblemType si esto no se revisa antes.
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          "Entendido, no hay problema. Puedes cancelar esta orden y hacer una nueva por el monto que sí puedas transferir — quedamos atentos."
         );
       } else if (matchProceeding(textLower)) {
         await sendAndTrack(client, exchange, order.orderNumber, cs, "Perfecto, estaré atento.");
@@ -1456,6 +1472,26 @@ async function handleClientResponse(
     // (se sigue esperando; el aviso ya se mandó una sola vez).
     case "awaiting_problem": {
       const resumeState = (cs.preInterruptState as ChatState) || "account_sent";
+
+      // Caso real confirmado en vivo (jul 2026): el comprador escribió "lo
+      // siento no recordaba que no tengo cuenta corriente ahora debo
+      // cancelar e ingresar otro monto" -- avisando que iba a cancelar esta
+      // orden para hacer una nueva por el monto que sí puede transferir
+      // (recién se dio cuenta que su cuenta no le permite transferir el
+      // monto de ESTA compra). Sin este chequeo, "monto" hacía que
+      // matchProblemType lo clasificara como "limit", y el bot le preguntó
+      // "¿cuál es el máximo que te permite tu banco?" -- ignorando por
+      // completo que ya había dicho que iba a cancelar. Se revisa ANTES que
+      // matchProblemType, y se entiende y acompaña la decisión en vez de
+      // seguir insistiendo con la pregunta de límite.
+      if (matchWantsToCancel(textLower)) {
+        await updateState(cs.id, resumeState, { preInterruptState: null });
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          "Entendido, no hay problema. Puedes cancelar esta orden y hacer una nueva por el monto que sí puedas transferir — quedamos atentos."
+        );
+        break;
+      }
+
       const problemType = matchProblemType(textLower);
       // \b no sirve acá para detectar "sí" al inicio: la tilde ("í") no
       // cuenta como carácter de palabra para \b en JS, así que "sí," o "sí"
@@ -2412,6 +2448,20 @@ function matchClaimsAlreadyPaid(text: string): boolean {
 function matchAsksConfirmation(text: string): boolean {
   return /\bme\s+confirma[sn]?\b/.test(text) || /\bconf[ií]rmame\b/.test(text) ||
     /\bpuedes\s+confirmar\b/.test(text) || text.includes("confirmar el pago") || text.includes("confirmar mi pago");
+}
+
+// Reconoce cuando el comprador avisa que va a CANCELAR la orden por su
+// cuenta -- caso real confirmado en vivo (jul 2026): "no recordaba que no
+// tengo cuenta corriente, ahora debo cancelar e ingresar otro monto"
+// contiene la palabra "monto", que matchProblemType interpreta como un
+// problema de LÍMITE (revisa "monto" entre sus señales) -- el bot terminó
+// preguntando "¿cuál es el máximo que te permite tu banco?", una pregunta
+// totalmente desconectada de lo que el comprador dijo (que iba a cancelar
+// para hacer una orden nueva por el monto que sí puede transferir).
+// "cancelar" es una señal mucho más fuerte y específica que debe revisarse
+// ANTES que matchProblemType, en cualquier estado donde se llame.
+function matchWantsToCancel(text: string): boolean {
+  return /\bcancel(ar|o|ando)\b/.test(text);
 }
 
 function extractAmount(text: string): number {
