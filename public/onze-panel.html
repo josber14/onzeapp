@@ -25362,6 +25362,23 @@ try{
     return n.toLocaleString('es-CL', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
   }
 
+  // Bug real confirmado en vivo (jul 2026): el modal de Capital P2P del
+  // socio dejó de abrirse por completo después de agregar el historial
+  // mensual -- llamaba a p2pMonthLabel(), pero esa función vive en OTRO
+  // bloque <script> envuelto en su propio IIFE ("(function(){ ... })()"
+  // en la sección de Capacity Externo P2P de ONZE), así que no existe fuera
+  // de ese cierre. La llamada lanzaba un ReferenceError DENTRO del .map()
+  // de la lista, antes de llegar a modal.classList.add('open') -- por eso
+  // el click no hacía nada, ni siquiera abría el modal vacío. Se agrega una
+  // copia local en vez de depender de una función de otro bloque de script.
+  function socioBnMonthLabel(key){
+    const parts = String(key || "").split("-");
+    const y = Number(parts[0]), m = Number(parts[1]);
+    if(!y || !m) return key || "";
+    const names = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    return `${names[m - 1] || key} ${y}`;
+  }
+
   function socioBnUid(){
     return 'sbn_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
   }
@@ -26205,7 +26222,7 @@ try{
           const sign = profitUsdt >= 0 ? '+' : '-';
           const color = profitUsdt >= 0 ? '#34d399' : '#fb7185';
           return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(148,163,184,.08);font-size:13px;">
-            <span style="color:#cbd5e1;font-weight:700;">${p2pMonthLabel(m.month)}</span>
+            <span style="color:#cbd5e1;font-weight:700;">${socioBnMonthLabel(m.month)}</span>
             <span style="color:${color};font-weight:900;">${sign}${socioBnMoney(Math.abs(profitUsdt), 2)} USDT</span>
           </div>`;
         }).join('');
