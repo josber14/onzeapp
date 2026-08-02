@@ -26744,9 +26744,12 @@ try{
     listEl.innerHTML = rows.map(function(e){
       const created = new Date(e.createdAt).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
       return `<div style="padding:8px 0;border-bottom:1px solid rgba(148,163,184,.08);font-size:12px;">
-        <div style="display:flex;justify-content:space-between;color:#cbd5e1;font-weight:700;">
+        <div style="display:flex;justify-content:space-between;align-items:center;color:#cbd5e1;font-weight:700;">
           <span>${e.periodFrom} → ${e.periodTo}</span>
-          <span style="color:#64748b;font-weight:600;">cerrado ${created}</span>
+          <span style="display:flex;align-items:center;gap:8px;">
+            <span style="color:#64748b;font-weight:600;">cerrado ${created}</span>
+            <button type="button" onclick="window.socioBnDeleteCapitalLedger(${e.id})" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:14px;" title="Borrar este cierre (revierte lo sumado al capital)">×</button>
+          </span>
         </div>
         <div style="color:#8aa0ba;margin-top:2px;">
           Neto: ${socioBnMoney(e.netProfitUsdt, 2)} USDT · Retirado: ${socioBnMoney(e.totalWithdrawnUsdt, 2)} USDT ·
@@ -26755,6 +26758,21 @@ try{
         <div style="color:#64748b;margin-top:2px;">Capital: ${socioBnMoney(e.previousCapitalUsdt, 2)} → <strong style="color:#f8fafc;">${socioBnMoney(e.newCapitalUsdt, 2)} USDT</strong></div>
       </div>`;
     }).join('');
+  };
+
+  // Borra un cierre de período y revierte lo que sumó al capital (resta
+  // addedUsdt del capital ACTUAL, no lo pisa con el valor histórico de la
+  // fila) -- pedido explícito del usuario tras cerrar el mismo período por
+  // accidente varias veces seguidas.
+  window.socioBnDeleteCapitalLedger = async function(id){
+    const r = await socioBnFetch('/api/partner/capital-ledger', { method: 'DELETE', body: JSON.stringify({ id }) });
+    if(r.ok){
+      window.socioBnLoadDashboard();
+      window.socioBnStatsRefresh();
+      if(typeof showToast === 'function') showToast('Cierre borrado, capital corregido');
+    } else if(typeof showToast === 'function'){
+      showToast(r.error || 'Error al borrar', 'error');
+    }
   };
 
   // Auto-sync cada 15s — mismo patrón que initBinanceSalesSync() del

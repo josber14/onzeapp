@@ -80,6 +80,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Configura primero el % de PPM" }, { status: 400 });
   }
 
+  // Bug real confirmado en vivo (jul 2026): sin este chequeo, apretar
+  // "Cerrar período" varias veces seguidas (o para un rango que se solapa
+  // con uno ya cerrado) sumaba la MISMA ganancia al capital cada vez --
+  // un usuario cerró el mismo rango 3 veces por accidente y el capital
+  // quedó inflado. Se bloquea si el rango pedido se solapa con cualquier
+  // cierre ya existente (solapan si periodFrom <= existente.periodTo Y
+  // periodTo >= existente.periodFrom).
+  const newFrom = new Date(periodFromStr + "T00:00:00.000Z");
+  const newTo = new Date(periodToStr + "T23:59:59.999Z");
+  const overlapping = await prisma.partnerCapitalLedger.findFirst({
+    where: { tenantId, label: LABEL, periodFrom: { lte: newTo }, periodTo: { gte: newFrom } },
+  });
+  if (overlapping) {
+    return NextResponse.json({
+      ok: false,
+      error: `Ya existe un cierre que se solapa con este rango (${overlapping.periodFrom.toISOString().slice(0, 10)} → ${overlapping.periodTo.toISOString().slice(0, 10)}). Borra ese cierre primero si quieres rehacerlo.`,
+    }, { status: 400 });
+  }
+
   const trackingStart = account.trackingStartDate ?? null;
   const sales = trackingStart ? allSales.filter((s) => s.executedAt >= trackingStart) : allSales;
 
@@ -147,4 +166,42 @@ export async function POST(req: NextRequest) {
       createdAt: entry.createdAt.toISOString(),
     },
   });
+}
+
+// Pedido explícito del usuario (jul 2026), tras cerrar el mismo período por
+// accidente varias veces seguidas: poder borrar un cierre y que el capital
+// vuelva a lo que era antes de ese cierre puntual -- se resta addedUsdt del
+// capital ACTUAL (no se pisa con previousCapitalUsdt/newCapitalUsdt de la
+// fila, que son solo el registro histórico de ese momento), para no romper
+// cierres posteriores que ya se hicieron encima.
+export async function DELETE(req: NextRequest) {
+  const session = await getSession();
+  if (!session?.tenantId) {
+    return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
+  }
+  const tenantId = session.tenantId;
+  const body = await req.json().catch(() => ({}));
+  const id = Number(body?.id);
+  if (!Number.isFinite(id)) {
+    return NextResponse.json({ ok: false, error: "Falta id" }, { status: 400 });
+  }
+
+  const entry = await prisma.partnerCapitalLedger.findFirst({ where: { id, tenantId, label: LABEL } });
+  if (!entry) {
+    return NextResponse.json({ ok: false, error: "Cierre no encontrado" }, { status: 404 });
+  }
+  const account = await prisma.partnerAccount.findUnique({ where: { tenantId_label: { tenantId, label: LABEL } } });
+  if (!account) {
+    return NextResponse.json({ ok: false, error: "Cuenta del socio no encontrada" }, { status: 400 });
+  }
+
+  const currentCapital = account.initialCapitalUsdt ? Number(account.initialCapitalUsdt) : 0;
+  const correctedCapital = currentCapital - Number(entry.addedUsdt);
+
+  await prisma.$transaction([
+    prisma.partnerAccount.update({ where: { id: account.id }, data: { initialCapitalUsdt: correctedCapital } }),
+    prisma.partnerCapitalLedger.delete({ where: { id: entry.id } }),
+  ]);
+
+  return NextResponse.json({ ok: true, newCapitalUsdt: correctedCapital });
 }
