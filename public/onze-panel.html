@@ -19617,9 +19617,20 @@ function addP2PBotStyles(){
     const capitalEl = document.getElementById("p2pDashVolume");
     const subEl = document.getElementById("p2pDashVolumeSub");
 
+    // Bug real confirmado en vivo (jul 2026): el total sumaba el capital
+    // inicial + la ganancia de ESTE MES solamente -- al empezar un mes
+    // nuevo, "este mes" vuelve a 0 (correcto) pero el total mostrado
+    // también bajaba, perdiendo visualmente todos los meses anteriores.
+    // Pedido explícito del usuario: el capital inicial NUNCA se toca solo
+    // (es fijo, con eso arrancó), y el capital TOTAL debe ser inicial + TODA
+    // la ganancia acumulada desde ese arranque (no solo la de este mes) --
+    // "este mes" queda solo como dato informativo aparte, no como lo único
+    // que se suma al total. getP2PRangeStatsFromCapacity(..., "total") ya
+    // existe y respeta el mismo baseline de reinicio del módulo P2P.
     const safeStats = stats || (typeof calculateP2PCapacityStats === "function" ? calculateP2PCapacityStats() : {});
     const monthlyProfit = Number(getP2PRangeStatsFromCapacity(safeStats, "month").profitUsdt || 0);
-    const total = getP2PInitialCapital() + monthlyProfit;
+    const totalProfit = Number(getP2PRangeStatsFromCapacity(safeStats, "total").profitUsdt || 0);
+    const total = getP2PInitialCapital() + totalProfit;
 
     if(capitalEl){
       capitalEl.textContent = `${p2pCapMoney(total, 2)} USDT`;
@@ -26046,27 +26057,39 @@ try{
     const today = socioBnChileToday();
     const monthStart = today.slice(0, 7) + '-01';
     const params = new URLSearchParams({ date: today, page: String(window.__socioBnSalesPage), limit: '20' });
-    const [res, capRes, monthRes] = await Promise.all([
+    const [res, capRes, monthRes, totalRes] = await Promise.all([
       socioBnFetch('/api/partner/dashboard?' + params.toString()),
       socioBnFetch('/api/partner/initial-capital'),
       socioBnFetch('/api/partner/dashboard?' + new URLSearchParams({ from: monthStart, to: today }).toString()),
+      // Bug real confirmado en vivo (jul 2026): el total sumaba inicial +
+      // ganancia de ESTE MES solamente -- al empezar un mes nuevo se perdía
+      // visualmente todo lo acumulado en meses anteriores. Pedido explícito
+      // del usuario: el capital inicial es fijo (nunca se toca solo), y el
+      // total debe sumar TODA la ganancia acumulada desde una fecha muy
+      // temprana (todo el historial real), no solo la de este mes -- "este
+      // mes" queda como dato informativo aparte.
+      socioBnFetch('/api/partner/dashboard?' + new URLSearchParams({ from: '2000-01-01', to: today }).toString()),
     ]);
     if(!res.ok) return;
 
     // ── Capital P2P — mismo cálculo que la tarjeta "Capital P2P" del
     // dashboard ONZE (updateP2PCapitalCard): capital inicial (editable) +
-    // ganancia del mes en curso (hora Chile) expresada en USDT. La ganancia
-    // del mes se convierte a USDT dividiendo el CLP ganado por el precio de
-    // venta PROMEDIO del mes (no por la tasa de compra) — misma fórmula que
-    // usa getP2PRangeStatsFromCapacity en ONZE (profitClp / avgSellPrice).
+    // ganancia TOTAL acumulada expresada en USDT. La ganancia se convierte a
+    // USDT dividiendo el CLP ganado por el precio de venta PROMEDIO del
+    // rango (no por la tasa de compra) — misma fórmula que usa
+    // getP2PRangeStatsFromCapacity en ONZE (profitClp / avgSellPrice).
     const initial = capRes.ok ? Number(capRes.value || 0) : 0;
     const monthStats = monthRes.ok ? monthRes.rangeStats : null;
+    const totalStats = totalRes.ok ? totalRes.rangeStats : null;
     const avgSell = monthStats && monthStats.avgSalePrice ? Number(monthStats.avgSalePrice) : 0;
     const monthProfitClp = monthStats && monthStats.profitClp !== null ? Number(monthStats.profitClp) : 0;
     const monthProfitUsdt = avgSell > 0 ? monthProfitClp / avgSell : 0;
+    const totalAvgSell = totalStats && totalStats.avgSalePrice ? Number(totalStats.avgSalePrice) : 0;
+    const totalProfitClp = totalStats && totalStats.profitClp !== null ? Number(totalStats.profitClp) : 0;
+    const totalProfitUsdt = totalAvgSell > 0 ? totalProfitClp / totalAvgSell : 0;
     window.__socioBnInitialCapital = initial;
 
-    socioBnRenderStats(res.stats, { initial, monthProfitUsdt });
+    socioBnRenderStats(res.stats, { initial, monthProfitUsdt, totalProfitUsdt });
     window.__socioBnCapacityCache = res.stats.perCapacityBreakdown || [];
     socioBnRenderCapacityList();
     socioBnRenderSales(res.recentSales || []);
@@ -26125,7 +26148,7 @@ try{
 
     const cards = [];
     if(capital){
-      const capTotal = capital.initial + capital.monthProfitUsdt;
+      const capTotal = capital.initial + capital.totalProfitUsdt;
       const capSign = capital.monthProfitUsdt >= 0 ? '+' : '-';
       cards.push(socioBnDashCard(
         'Capital P2P',
