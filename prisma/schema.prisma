@@ -901,6 +901,11 @@ model PartnerAccount {
   // capital total. Editable desde el panel, null hasta que el usuario lo
   // defina la primera vez.
   initialCapitalUsdt Decimal? @db.Decimal(18, 8)
+  // % de PPM (Pago Provisional Mensual, SII) a aplicar sobre el CLP recibido
+  // del período — pedido explícito del usuario (jul 2026): todavía no
+  // confirma el % con su contadora, así que queda editable y null hasta que
+  // lo defina (la tarjeta muestra "Configura el %" mientras tanto).
+  ppmPct            Decimal?  @db.Decimal(6, 3)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)

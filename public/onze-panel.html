@@ -26399,7 +26399,65 @@ try{
       </div>
     `;
     document.body.appendChild(modal);
+    // % de PPM se carga una vez al abrir (no cambia seguido) -- se cachea en
+    // window.__socioBnPpmPct para no repetir el fetch en cada refresh de rango.
+    socioBnFetch('/api/partner/ppm-config').then(function(r){
+      window.__socioBnPpmPct = (r.ok && r.value !== null) ? Number(r.value) : null;
+      window.socioBnStatsRefresh();
+    });
     window.socioBnStatsRefresh();
+  };
+
+  // Pedido explícito del usuario (jul 2026): tarjeta que muestra el PPM
+  // (Pago Provisional Mensual, SII) a pagar sobre el CLP recibido del
+  // período seleccionado en el panel de estadísticas -- el % todavía no
+  // está confirmado con la contadora, así que queda editable (click en la
+  // tarjeta) y se guarda en PartnerAccount.ppmPct, null hasta definirlo.
+  window.socioBnOpenPpmModal = function(){
+    let modal = document.getElementById('socioBnPpmModal');
+    if(modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'socioBnPpmModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:1000002;display:flex;align-items:center;justify-content:center;padding:20px;';
+
+    const current = window.__socioBnPpmPct;
+    modal.innerHTML = `
+      <div style="background:#0d2137;border:1px solid #2a4a6a;border-radius:16px;padding:24px;max-width:380px;width:100%;">
+        <h3 style="color:#00d4ff;margin-bottom:8px;">% de PPM (SII)</h3>
+        <p style="color:#aaa;font-size:13px;margin-bottom:16px;">Porcentaje a aplicar sobre el CLP recibido del período para estimar el PPM a pagar. Confírmalo con tu contadora.</p>
+        <input id="socioBnPpmInput" type="number" step="0.01" min="0" max="100" placeholder="Ej: 0.5" value="${current !== null && current !== undefined ? current : ''}"
+          style="width:100%;box-sizing:border-box;border-radius:10px;border:1px solid rgba(96,165,250,.30);background:rgba(15,43,78,.78);color:#f8fafc;padding:12px 14px;font-size:16px;font-weight:700;outline:none;margin-bottom:8px;">
+        <p id="socioBnPpmError" style="color:#fca5a5;font-size:12px;min-height:16px;margin-bottom:8px;"></p>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button onclick="document.getElementById('socioBnPpmModal').remove()"
+            style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
+          <button onclick="window.socioBnSavePpm()"
+            style="padding:10px 16px;background:#00d4ff;color:#022c22;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Guardar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    setTimeout(function(){ document.getElementById('socioBnPpmInput')?.focus(); }, 50);
+  };
+
+  window.socioBnSavePpm = async function(){
+    const input = document.getElementById('socioBnPpmInput');
+    const error = document.getElementById('socioBnPpmError');
+    const value = Number(input?.value);
+    if(!isFinite(value) || value < 0 || value > 100){
+      if(error) error.textContent = 'Ingresa un % válido (0-100).';
+      return;
+    }
+    const r = await socioBnFetch('/api/partner/ppm-config', { method: 'POST', body: JSON.stringify({ value }) });
+    if(r.ok){
+      window.__socioBnPpmPct = r.value;
+      document.getElementById('socioBnPpmModal')?.remove();
+      window.socioBnStatsRefresh();
+      if(typeof showToast === 'function') showToast('% de PPM guardado');
+    } else if(error){
+      error.textContent = r.error || 'Error al guardar';
+    }
   };
 
   window.socioBnStatsQuick = function(kind){
@@ -26455,6 +26513,20 @@ try{
         socioBnDashCard('Comisión Binance', socioBnMoney(s.totalCommissionUsdt, 2) + ' USDT', { color: WHITE }),
         socioBnDashCard('Precio prom. venta', s.avgSalePrice !== null ? socioBnMoney(s.avgSalePrice, 2) + ' CLP' : '—', { color: WHITE }),
         socioBnDashCard('Tasa prom. compra', s.weightedAvgBuyPrice !== null ? socioBnMoney(s.weightedAvgBuyPrice, 2) + ' CLP' : '—', { color: WHITE }),
+        (function(){
+          const pct = window.__socioBnPpmPct;
+          const hasPct = pct !== null && pct !== undefined;
+          const ppmClp = hasPct ? Number(s.totalClpReceived || 0) * (pct / 100) : null;
+          return socioBnDashCard(
+            'PPM a pagar (SII)',
+            hasPct ? socioBnMoney(ppmClp, 0) + ' CLP' : 'Configura el %',
+            {
+              color: '#fbbf24',
+              sub: hasPct ? `${socioBnMoney(pct, 2)}% del CLP recibido — click para editar` : 'Click para definir el % (pendiente con tu contadora)',
+              onClick: 'window.socioBnOpenPpmModal()', title: 'Click para editar el % de PPM',
+            }
+          );
+        })(),
       ].join('');
     }
 
