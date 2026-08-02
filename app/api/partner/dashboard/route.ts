@@ -2,73 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { computeFifo } from "@/lib/partner-fifo";
+import { computeFifo, chileDateStr, aggregateRange } from "@/lib/partner-fifo";
 
 export const dynamic = "force-dynamic";
 
 const LABEL = "SOCIO";
-const TZ = "America/Santiago";
 
 async function getSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get("onze_session")?.value || null;
   return verifySessionToken(token);
-}
-
-// Día calendario en hora de Chile (no UTC) — el socio y su propio bot cuentan
-// "hoy" por hora de Chile, así que medianoche UTC no sirve como corte de día
-// (queda desfasado ~4h, mezcla parte de ayer-tarde con hoy-temprano en Chile).
-function chileDateStr(d: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
-}
-
-// Agrega el detalle por venta (ya con costo/ganancia calculado sobre TODO el
-// historial) a un rango de días calendario de Chile [fromStr, toStr] — un
-// solo día es un rango donde from === to. Así "hoy" se reinicia solo cada
-// día, y un mes completo se puede sumar sin perder precisión del FIFO entre
-// capacities (que corre una sola vez sobre TODO el historial).
-function aggregateRange(saleBreakdown: ReturnType<typeof computeFifo>["saleBreakdown"], fromStr: string, toStr: string) {
-  const rangeSales = saleBreakdown.filter((s) => {
-    const d = chileDateStr(s.executedAt);
-    return d >= fromStr && d <= toStr;
-  });
-
-  let totalUsdtSold = 0, totalCommissionUsdt = 0, totalClpReceived = 0, totalUsdtDrawn = 0;
-  let totalCostClp = 0, matchedClp = 0, matchedUsdtDrawn = 0, unmatchedClp = 0, unmatchedUsdt = 0;
-
-  for (const s of rangeSales) {
-    totalUsdtSold += s.amount;
-    totalCommissionUsdt += s.commission;
-    totalClpReceived += s.clpTotal;
-    totalUsdtDrawn += s.usdtDrawnTotal;
-    totalCostClp += s.costClp;
-    matchedClp += s.matchedClp;
-    unmatchedClp += s.unmatchedClp;
-    unmatchedUsdt += s.unmatchedUsdt;
-    const ratio = s.clpTotal > 0 ? s.matchedClp / s.clpTotal : 0;
-    matchedUsdtDrawn += s.usdtDrawnTotal * ratio;
-  }
-
-  const realProfitClp = matchedClp > 0 ? matchedClp - totalCostClp : null;
-  const profitPct = totalCostClp > 0 && realProfitClp !== null ? (realProfitClp / totalCostClp) * 100 : null;
-  const avgSalePrice = totalUsdtSold > 0 ? totalClpReceived / totalUsdtSold : null;
-  const weightedAvgBuyPrice = matchedUsdtDrawn > 0 ? totalCostClp / matchedUsdtDrawn : null;
-
-  return {
-    salesCount: rangeSales.length,
-    totalUsdtSold,
-    totalCommissionUsdt,
-    totalUsdtDrawn,
-    totalClpReceived,
-    avgSalePrice,
-    weightedAvgBuyPrice,
-    totalCostClp: matchedClp > 0 ? totalCostClp : null,
-    profitClp: realProfitClp,
-    profitPct,
-    matchedClp,
-    unmatchedClp,
-    unmatchedUsdt,
-  };
 }
 
 function aggregateDay(saleBreakdown: ReturnType<typeof computeFifo>["saleBreakdown"], dateStr: string) {

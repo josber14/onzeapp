@@ -76,6 +76,8 @@ model Tenant {
   partnerAccounts       PartnerAccount[]
   partnerCapacities     PartnerCapacity[]
   partnerSales          PartnerSale[]
+  partnerWithdrawals    PartnerWithdrawal[]
+  partnerCapitalLedger  PartnerCapitalLedger[]
   rateLists             RateList[]
   subscriptions         Subscription[]
   ownerUser             User?                  @relation("TenantOwner", fields: [ownerUserId], references: [id])
@@ -912,6 +914,51 @@ model PartnerAccount {
 
   @@unique([tenantId, label])
   @@index([tenantId])
+}
+
+// Registro libre de un retiro real de ganancia -- pedido explícito del
+// usuario (jul 2026): puede anotarse en cualquier momento (a mitad de mes,
+// si alguno necesita retirar antes) y también sirve de insumo para "cerrar"
+// un período (ver PartnerCapitalLedger): la suma de retiros de un período
+// contra la ganancia neta de ese período determina el sobrante que se
+// agrega al capital inicial.
+model PartnerWithdrawal {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int
+  label       String   @default("SOCIO")
+  person      String
+  amountUsdt  Decimal  @db.Decimal(18, 8)
+  note        String?
+  withdrawnAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, label])
+}
+
+// Historial de cuándo se sumó ganancia sin retirar al capital inicial --
+// pedido explícito del usuario: "que exista como la referencia de cuál fue
+// el saldo inicial y cuándo se le sumó a ese saldo, que lleve historial de
+// fecha". Cada fila es un "cierre" de período: ganancia neta calculada,
+// total retirado entre los dos, y lo que quedó sin retirar (addedUsdt) se
+// suma al capital -- previousCapitalUsdt/newCapitalUsdt quedan fijos para
+// siempre como registro histórico, aunque el capital actual se siga
+// moviendo después.
+model PartnerCapitalLedger {
+  id                 Int      @id @default(autoincrement())
+  tenantId           Int
+  label              String   @default("SOCIO")
+  periodFrom         DateTime
+  periodTo           DateTime
+  netProfitUsdt      Decimal  @db.Decimal(18, 8)
+  totalWithdrawnUsdt Decimal  @db.Decimal(18, 8)
+  addedUsdt          Decimal  @db.Decimal(18, 8)
+  previousCapitalUsdt Decimal @db.Decimal(18, 8)
+  newCapitalUsdt     Decimal  @db.Decimal(18, 8)
+  createdAt          DateTime @default(now())
+  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, label])
 }
 
 model PartnerCapacity {

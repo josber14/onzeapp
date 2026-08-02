@@ -26196,6 +26196,11 @@ try{
     const totalProfitUsdt = totalAvgSell > 0 ? totalProfitClp / totalAvgSell : 0;
     window.__socioBnInitialCapital = initial;
     window.__socioBnMonthlyHistory = totalRes.ok ? (totalRes.monthlyBreakdown || []) : [];
+    // Cacheado para la tarjeta "Capital P2P" del panel de estadísticas (ver
+    // socioBnStatsRefresh) -- mismo valor que ya se muestra en la tarjeta
+    // principal, sin tener que recalcularlo ahí.
+    window.__socioBnMonthProfitUsdt = monthProfitUsdt;
+    window.__socioBnTotalProfitUsdt = totalProfitUsdt;
 
     socioBnRenderStats(res.stats, { initial, monthProfitUsdt, totalProfitUsdt });
     window.__socioBnCapacityCache = res.stats.perCapacityBreakdown || [];
@@ -26396,6 +26401,28 @@ try{
         <div class="p2p-dashboard-grid" id="socioBnStatsModalGrid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));"></div>
         <h4 style="font-size:12px;color:#64748b;margin:16px 0 4px;">Por día</h4>
         <div id="socioBnStatsDaily"></div>
+
+        <h4 style="font-size:12px;color:#64748b;margin:20px 0 8px;">💸 Retiros</h4>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+          <select id="socioBnWithdrawPerson" style="font-size:12px;padding:6px;">
+            <option value="Hector">Hector</option>
+            <option value="Josber">Josber</option>
+          </select>
+          <input id="socioBnWithdrawAmount" type="number" step="0.01" min="0" placeholder="Monto USDT" style="font-size:12px;padding:6px;width:110px;">
+          <input id="socioBnWithdrawDate" type="date" value="${today}" style="font-size:12px;padding:6px;">
+          <input id="socioBnWithdrawNote" type="text" placeholder="Nota (opcional)" style="font-size:12px;padding:6px;flex:1;min-width:100px;">
+          <button class="btn" type="button" style="padding:6px 12px;font-size:12px;" onclick="window.socioBnRegisterWithdrawal()">Registrar retiro</button>
+        </div>
+        <div id="socioBnWithdrawError" style="color:#fca5a5;font-size:12px;min-height:16px;margin-bottom:6px;"></div>
+        <div id="socioBnWithdrawList" style="margin-bottom:16px;"></div>
+
+        <h4 style="font-size:12px;color:#64748b;margin:20px 0 8px;">📦 Cerrar período (suma lo no retirado al capital)</h4>
+        <p style="font-size:11px;color:#64748b;margin-bottom:8px;">Usa el rango "Desde/Hasta" de arriba. Calcula la ganancia neta (ya con PPM descontado) de ese rango, le resta lo que Hector y Josber ya retiraron en esas fechas, y suma la diferencia al capital inicial — queda guardado en el historial de abajo con fecha.</p>
+        <button class="btn secondary" type="button" style="padding:6px 14px;font-size:12px;margin-bottom:6px;" onclick="window.socioBnClosePeriod()">Cerrar período seleccionado</button>
+        <div id="socioBnClosePeriodError" style="color:#fca5a5;font-size:12px;min-height:16px;margin-bottom:10px;"></div>
+
+        <h4 style="font-size:12px;color:#64748b;margin:16px 0 8px;">📜 Historial de capital</h4>
+        <div id="socioBnCapitalLedgerList"></div>
       </div>
     `;
     document.body.appendChild(modal);
@@ -26512,7 +26539,23 @@ try{
         socioBnDashCard('Ganancia %', s.profitPct !== null ? socioBnMoney(s.profitPct, 2) + '%' : '—', { color: profitColor }),
         socioBnDashCard('Comisión Binance', socioBnMoney(s.totalCommissionUsdt, 2) + ' USDT', { color: WHITE }),
         socioBnDashCard('Precio prom. venta', s.avgSalePrice !== null ? socioBnMoney(s.avgSalePrice, 2) + ' CLP' : '—', { color: WHITE }),
-        socioBnDashCard('Tasa prom. compra', s.weightedAvgBuyPrice !== null ? socioBnMoney(s.weightedAvgBuyPrice, 2) + ' CLP' : '—', { color: WHITE }),
+        (function(){
+          // Pedido explícito del usuario (jul 2026): reemplaza "Tasa prom.
+          // compra" en el panel de estadísticas -- mismo cálculo que la
+          // tarjeta "Capital P2P" principal (inicial + ganancia acumulada de
+          // TODO el histórico, "este mes" solo informativo), usando los
+          // valores ya cacheados por socioBnLoadDashboard.
+          const initial = window.__socioBnInitialCapital || 0;
+          const totalProfitUsdt = window.__socioBnTotalProfitUsdt || 0;
+          const monthProfitUsdt = window.__socioBnMonthProfitUsdt || 0;
+          const capTotal = initial + totalProfitUsdt;
+          const sign = monthProfitUsdt >= 0 ? '+' : '-';
+          return socioBnDashCard(
+            'Capital P2P',
+            socioBnMoney(capTotal, 2) + ' USDT',
+            { color: GREEN, sub: `Inicial: ${socioBnMoney(initial, 2)} USDT · Este mes: ${sign}${socioBnMoney(Math.abs(monthProfitUsdt), 2)} USDT` }
+          );
+        })(),
         (function(){
           const pct = window.__socioBnPpmPct;
           const hasPct = pct !== null && pct !== undefined;
@@ -26593,6 +26636,125 @@ try{
         </div>`;
       }).join('') : '<div class="p2p-dashboard-empty">Sin ventas en este rango.</div>';
     }
+
+    window.socioBnRenderWithdrawals(fromEl.value, toEl.value || fromEl.value);
+    window.socioBnRenderCapitalLedger();
+  };
+
+  // Pedido explícito del usuario (jul 2026): registro libre de retiros
+  // (Hector / Josber) en cualquier momento -- alimenta el cálculo de
+  // "cerrar período" (ver socioBnClosePeriod) pero también sirve solo como
+  // anotación de "esto ya se retiró".
+  window.socioBnRegisterWithdrawal = async function(){
+    const personEl = document.getElementById('socioBnWithdrawPerson');
+    const amountEl = document.getElementById('socioBnWithdrawAmount');
+    const dateEl = document.getElementById('socioBnWithdrawDate');
+    const noteEl = document.getElementById('socioBnWithdrawNote');
+    const errorEl = document.getElementById('socioBnWithdrawError');
+    if(errorEl) errorEl.textContent = '';
+
+    const amount = Number(amountEl?.value);
+    if(!isFinite(amount) || amount <= 0){
+      if(errorEl) errorEl.textContent = 'Ingresa un monto válido en USDT.';
+      return;
+    }
+    const r = await socioBnFetch('/api/partner/withdrawals', {
+      method: 'POST',
+      body: JSON.stringify({
+        person: personEl?.value || 'Hector',
+        amountUsdt: amount,
+        withdrawnAt: dateEl?.value ? dateEl.value + 'T12:00:00.000Z' : undefined,
+        note: noteEl?.value || undefined,
+      }),
+    });
+    if(r.ok){
+      if(amountEl) amountEl.value = '';
+      if(noteEl) noteEl.value = '';
+      window.socioBnStatsRefresh();
+      if(typeof showToast === 'function') showToast('Retiro registrado');
+    } else if(errorEl){
+      errorEl.textContent = r.error || 'Error al registrar el retiro';
+    }
+  };
+
+  window.socioBnDeleteWithdrawal = async function(id){
+    const r = await socioBnFetch('/api/partner/withdrawals', { method: 'DELETE', body: JSON.stringify({ id }) });
+    if(r.ok){
+      window.socioBnStatsRefresh();
+    } else if(typeof showToast === 'function'){
+      showToast(r.error || 'Error al borrar', 'error');
+    }
+  };
+
+  window.socioBnRenderWithdrawals = async function(from, to){
+    const listEl = document.getElementById('socioBnWithdrawList');
+    if(!listEl) return;
+    const r = await socioBnFetch('/api/partner/withdrawals?' + new URLSearchParams({ from, to }).toString());
+    const rows = r.ok ? (r.withdrawals || []) : [];
+    if(!rows.length){
+      listEl.innerHTML = '<div style="font-size:12px;color:#64748b;">Sin retiros registrados en este rango.</div>';
+      return;
+    }
+    listEl.innerHTML = rows.map(function(w){
+      const d = new Date(w.withdrawnAt).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(148,163,184,.08);font-size:12px;">
+        <span style="color:#cbd5e1;"><strong>${w.person}</strong> · ${d}${w.note ? ' · ' + w.note.replace(/</g,'&lt;') : ''}</span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span style="color:#fb7185;font-weight:800;">-${socioBnMoney(w.amountUsdt, 2)} USDT</span>
+          <button type="button" onclick="window.socioBnDeleteWithdrawal(${w.id})" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:14px;" title="Borrar">×</button>
+        </span>
+      </div>`;
+    }).join('');
+  };
+
+  // Pedido explícito del usuario (jul 2026): "cerrar" el período seleccionado
+  // -- calcula la ganancia neta (ya con PPM descontado) de ese rango, le
+  // resta lo ya retirado por los dos en esas fechas, y suma la diferencia al
+  // capital inicial (bloqueado si retiraron de más). Queda guardado con
+  // fecha en el historial de capital para siempre.
+  window.socioBnClosePeriod = async function(){
+    const fromEl = document.getElementById('socioBnStatsFrom');
+    const toEl = document.getElementById('socioBnStatsTo');
+    const errorEl = document.getElementById('socioBnClosePeriodError');
+    if(errorEl) errorEl.textContent = '';
+    if(!fromEl || !toEl) return;
+
+    const r = await socioBnFetch('/api/partner/capital-ledger', {
+      method: 'POST',
+      body: JSON.stringify({ periodFrom: fromEl.value, periodTo: toEl.value || fromEl.value }),
+    });
+    if(r.ok){
+      if(typeof showToast === 'function') showToast(`Período cerrado: +${Number(r.entry.addedUsdt).toFixed(2)} USDT sumados al capital`);
+      window.socioBnLoadDashboard();
+      window.socioBnStatsRefresh();
+    } else if(errorEl){
+      errorEl.textContent = r.error || 'Error al cerrar el período';
+    }
+  };
+
+  window.socioBnRenderCapitalLedger = async function(){
+    const listEl = document.getElementById('socioBnCapitalLedgerList');
+    if(!listEl) return;
+    const r = await socioBnFetch('/api/partner/capital-ledger');
+    const rows = r.ok ? (r.entries || []) : [];
+    if(!rows.length){
+      listEl.innerHTML = '<div style="font-size:12px;color:#64748b;">Todavía no se ha cerrado ningún período.</div>';
+      return;
+    }
+    listEl.innerHTML = rows.map(function(e){
+      const created = new Date(e.createdAt).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      return `<div style="padding:8px 0;border-bottom:1px solid rgba(148,163,184,.08);font-size:12px;">
+        <div style="display:flex;justify-content:space-between;color:#cbd5e1;font-weight:700;">
+          <span>${e.periodFrom} → ${e.periodTo}</span>
+          <span style="color:#64748b;font-weight:600;">cerrado ${created}</span>
+        </div>
+        <div style="color:#8aa0ba;margin-top:2px;">
+          Neto: ${socioBnMoney(e.netProfitUsdt, 2)} USDT · Retirado: ${socioBnMoney(e.totalWithdrawnUsdt, 2)} USDT ·
+          <span style="color:#34d399;font-weight:700;">+${socioBnMoney(e.addedUsdt, 2)} USDT al capital</span>
+        </div>
+        <div style="color:#64748b;margin-top:2px;">Capital: ${socioBnMoney(e.previousCapitalUsdt, 2)} → <strong style="color:#f8fafc;">${socioBnMoney(e.newCapitalUsdt, 2)} USDT</strong></div>
+      </div>`;
+    }).join('');
   };
 
   // Auto-sync cada 15s — mismo patrón que initBinanceSalesSync() del
