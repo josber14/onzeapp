@@ -26538,27 +26538,42 @@ try{
           // con un ejemplo real: ganancia del período - PPM = neto a
           // repartir; cada uno recibe la mitad. Depende de tener el % de PPM
           // configurado (misma tarjeta de arriba) -- sin eso no hay forma de
-          // calcular el neto real.
+          // calcular el neto real. Tarjeta a medida (no socioBnDashCard) para
+          // poder mostrar ganancia total + el desglose por persona (Hector /
+          // Josber) con números más chicos, tal como pidió el usuario.
           const pct = window.__socioBnPpmPct;
           const hasPct = pct !== null && pct !== undefined;
           const avgSell = s.avgSalePrice ? Number(s.avgSalePrice) : 0;
           const ganancia = s.profitClp !== null && s.profitClp !== undefined ? Number(s.profitClp) : null;
           const ppmClp = (hasPct && ganancia !== null) ? Number(s.totalClpReceived || 0) * (pct / 100) : null;
           const netoClp = (hasPct && ganancia !== null) ? ganancia - ppmClp : null;
+          const netoUsdt = (netoClp !== null && avgSell > 0) ? netoClp / avgSell : null;
           const perPersonClp = netoClp !== null ? netoClp / 2 : null;
           const perPersonUsdt = (perPersonClp !== null && avgSell > 0) ? perPersonClp / avgSell : null;
-          const sign = perPersonClp !== null && perPersonClp >= 0 ? '+' : '';
-          const color = perPersonClp === null ? WHITE : (perPersonClp >= 0 ? GREEN : RED);
-          return socioBnDashCard(
-            'Ganancia neta a repartir (c/u)',
-            perPersonClp !== null ? sign + socioBnMoney(perPersonClp, 0) + ' CLP' : 'Configura el % de PPM',
-            {
-              color,
-              sub: perPersonClp !== null
-                ? `${sign}${socioBnMoney(perPersonUsdt, 2)} USDT c/u · Neto total: ${socioBnMoney(netoClp, 0)} CLP (50/50, capital inicial nunca se toca)`
-                : 'Necesita el % de PPM de la tarjeta anterior',
-            }
-          );
+          const sign = netoClp !== null && netoClp >= 0 ? '+' : '';
+          const color = netoClp === null ? WHITE : (netoClp >= 0 ? GREEN : RED);
+
+          if(netoClp === null){
+            return `<div class="p2p-dashboard-card">
+              <div class="p2p-dashboard-label">Ganancia neta a repartir</div>
+              <div class="p2p-dashboard-value" style="font-size:15px;color:${WHITE};">Configura el % de PPM en la tarjeta anterior</div>
+            </div>`;
+          }
+
+          const personRow = (name, usdt, clp) => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid rgba(148,163,184,.1);font-size:12px;">
+              <span style="color:#cbd5e1;font-weight:800;">${name}</span>
+              <span style="color:${color};font-weight:800;">${sign}${socioBnMoney(usdt, 2)} USDT <span style="color:#8aa0ba;font-weight:600;">· ${sign}${socioBnMoney(clp, 0)} CLP</span></span>
+            </div>`;
+
+          return `<div class="p2p-dashboard-card">
+            <div class="p2p-dashboard-label">Ganancia neta a repartir</div>
+            <div style="font-size:16px;font-weight:900;color:${color};">
+              ${sign}${socioBnMoney(netoUsdt, 2)} USDT <span style="color:#8aa0ba;font-weight:700;">· ${sign}${socioBnMoney(netoClp, 0)} CLP</span>
+            </div>
+            ${personRow('Hector', perPersonUsdt, perPersonClp)}
+            ${personRow('Josber', perPersonUsdt, perPersonClp)}
+          </div>`;
         })(),
       ].join('');
     }
