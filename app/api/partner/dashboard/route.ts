@@ -86,6 +86,18 @@ function dailyBreakdownForRange(saleBreakdown: ReturnType<typeof computeFifo>["s
   return [...days].sort().reverse().map((d) => ({ date: d, ...aggregateRange(saleBreakdown, d, d) }));
 }
 
+// Pedido explícito del usuario (jul 2026): historial de ganancia MES A MES
+// al hacer click en "Capital P2P" -- mismo patrón que dailyBreakdownForRange
+// pero agrupado por mes calendario de Chile (YYYY-MM) en vez de por día.
+function monthlyBreakdownForRange(saleBreakdown: ReturnType<typeof computeFifo>["saleBreakdown"], fromStr: string, toStr: string) {
+  const months = new Set<string>();
+  for (const s of saleBreakdown) {
+    const d = chileDateStr(s.executedAt);
+    if (d >= fromStr && d <= toStr) months.add(d.slice(0, 7));
+  }
+  return [...months].sort().reverse().map((m) => ({ month: m, ...aggregateRange(saleBreakdown, `${m}-01`, `${m}-31`) }));
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session?.tenantId) {
@@ -131,7 +143,8 @@ export async function GET(req: NextRequest) {
     const toParam = searchParams.get("to") || fromParam;
     const rangeStats = aggregateRange(stats.saleBreakdown, fromParam, toParam);
     const dailyBreakdown = dailyBreakdownForRange(stats.saleBreakdown, fromParam, toParam);
-    return NextResponse.json({ ok: true, from: fromParam, to: toParam, rangeStats, dailyBreakdown });
+    const monthlyBreakdown = monthlyBreakdownForRange(stats.saleBreakdown, fromParam, toParam);
+    return NextResponse.json({ ok: true, from: fromParam, to: toParam, rangeStats, dailyBreakdown, monthlyBreakdown });
   }
 
   // Transición automática a "completado": si una capacity quedó con su

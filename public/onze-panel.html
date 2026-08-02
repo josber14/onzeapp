@@ -19699,6 +19699,19 @@ function addP2PBotStyles(){
           <div id="p2pCurrentCapitalLabel" style="margin-top:6px;font-size:28px;font-weight:1000;color:#34d399;">0,00 USDT</div>
         </div>
 
+        <div style="
+          border:1px solid rgba(148,163,184,.15);
+          background:rgba(15,23,42,.45);
+          border-radius:18px;
+          padding:12px 14px;
+          margin-bottom:14px;
+        ">
+          <div style="font-size:12px;color:#94a3b8;font-weight:900;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Historial por mes</div>
+          <div id="p2pMonthlyHistoryList" style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+            <div style="font-size:12px;color:#64748b;">Sin datos todavía</div>
+          </div>
+        </div>
+
         <label style="display:block;font-size:13px;font-weight:800;color:#cbd5e1;margin-bottom:8px;">
           Acción
         </label>
@@ -19884,6 +19897,11 @@ function addP2PBotStyles(){
     if(error) error.textContent = "";
     if(preview) preview.textContent = "";
     if(label) label.textContent = `${p2pCapMoney(current, 2)} USDT`;
+
+    if(typeof calculateP2PCapacityStats === "function"){
+      const safeStats = calculateP2PCapacityStats() || {};
+      renderP2PMonthlyHistory("p2pMonthlyHistoryList", getP2PMonthlyBreakdown(safeStats));
+    }
 
     if(action){
       action.value = "set";
@@ -20105,6 +20123,72 @@ function addP2PBotStyles(){
     result.parts.sort((a,b)=> new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
     return result;
+  }
+
+  // Pedido explícito del usuario (jul 2026): al hacer click en "Capital P2P"
+  // quiere ver el desglose de ganancia MES A MES (no solo el total
+  // acumulado) -- agrupa cada venta por su mes calendario (hora Chile) en
+  // vez de un rango fijo, para armar el historial completo.
+  function getP2PMonthlyBreakdown(stats, exchange){
+    const months = {};
+    (stats.capacities || []).forEach(cap => {
+      const buyPrice = Number(cap.buyPrice || 0);
+      (cap.saleParts || []).forEach(part => {
+        if(!part.createdAt) return;
+        if(!isP2PAfterCapacityBaseline(part.createdAt)) return;
+        if(exchange && exchange !== "all" && (part.exchange || "binance") !== exchange) return;
+
+        const key = p2pChileMonthKey(part.createdAt);
+        if(!key) return;
+        if(!months[key]) months[key] = { key, soldUsdt: 0, clpReceived: 0, commissionClp: 0, costClp: 0, profitClp: 0 };
+
+        const assignedUsdt = Number(part.assignedUsdt || 0);
+        const assignedClp = Number(part.assignedClp || 0);
+        const unitPrice = Number(part.unitPrice || 0);
+        const commissionUsdt = Number(part.commissionUsdt || 0);
+        const commissionClp = commissionUsdt * (unitPrice || 0);
+        const partBuyPrice = Number(part.buyPrice || buyPrice);
+        const costClp = assignedUsdt * partBuyPrice;
+        const profitClp = assignedClp - costClp - commissionClp;
+
+        months[key].soldUsdt += assignedUsdt;
+        months[key].clpReceived += assignedClp;
+        months[key].commissionClp += commissionClp;
+        months[key].costClp += costClp;
+        months[key].profitClp += profitClp;
+      });
+    });
+
+    return Object.values(months).map(m => {
+      const avgSell = m.soldUsdt > 0 ? m.clpReceived / m.soldUsdt : 0;
+      const profitUsdt = avgSell > 0 ? m.profitClp / avgSell : 0;
+      return Object.assign({}, m, { avgSell, profitUsdt });
+    }).sort((a, b) => b.key.localeCompare(a.key));
+  }
+
+  function p2pMonthLabel(key){
+    const parts = String(key || "").split("-");
+    const y = Number(parts[0]), m = Number(parts[1]);
+    if(!y || !m) return key || "";
+    const names = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    return `${names[m - 1] || key} ${y}`;
+  }
+
+  function renderP2PMonthlyHistory(containerId, months){
+    const el = document.getElementById(containerId);
+    if(!el) return;
+    if(!months || !months.length){
+      el.innerHTML = `<div style="font-size:12px;color:#64748b;">Sin datos todavía</div>`;
+      return;
+    }
+    el.innerHTML = months.map(m => {
+      const sign = m.profitUsdt >= 0 ? "+" : "-";
+      const color = m.profitUsdt >= 0 ? "#34d399" : "#fb7185";
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(148,163,184,.08);font-size:13px;">
+        <span style="color:#cbd5e1;font-weight:700;">${p2pMonthLabel(m.key)}</span>
+        <span style="color:${color};font-weight:900;">${sign}${p2pCapMoney(Math.abs(m.profitUsdt), 2)} USDT</span>
+      </div>`;
+    }).join("");
   }
 
   function ensureP2PDetailButton(){
@@ -25309,6 +25393,12 @@ try{
               </div>
               <button class="btn secondary" type="button" onclick="window.socioBnCloseCapitalModal()">Cerrar</button>
             </div>
+            <div style="border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.45);border-radius:14px;padding:12px 14px;margin-bottom:14px;">
+              <div style="font-size:12px;color:#94a3b8;font-weight:900;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Historial por mes</div>
+              <div id="socioBnMonthlyHistoryList" style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+                <div style="font-size:12px;color:#64748b;">Sin datos todavía</div>
+              </div>
+            </div>
             <form class="p2p-capacity-form" onsubmit="event.preventDefault(); window.socioBnSaveInitialCapital();">
               <label class="full">
                 Capital inicial (USDT)
@@ -26088,6 +26178,7 @@ try{
     const totalProfitClp = totalStats && totalStats.profitClp !== null ? Number(totalStats.profitClp) : 0;
     const totalProfitUsdt = totalAvgSell > 0 ? totalProfitClp / totalAvgSell : 0;
     window.__socioBnInitialCapital = initial;
+    window.__socioBnMonthlyHistory = totalRes.ok ? (totalRes.monthlyBreakdown || []) : [];
 
     socioBnRenderStats(res.stats, { initial, monthProfitUsdt, totalProfitUsdt });
     window.__socioBnCapacityCache = res.stats.perCapacityBreakdown || [];
@@ -26100,6 +26191,27 @@ try{
     const modal = document.getElementById('socioBnCapitalModalBackdrop');
     if(!modal) return;
     document.getElementById('socioBnCapitalInput').value = window.__socioBnInitialCapital || '';
+
+    const listEl = document.getElementById('socioBnMonthlyHistoryList');
+    if(listEl){
+      const months = window.__socioBnMonthlyHistory || [];
+      if(!months.length){
+        listEl.innerHTML = `<div style="font-size:12px;color:#64748b;">Sin datos todavía</div>`;
+      } else {
+        listEl.innerHTML = months.map(m => {
+          const avgSell = m.avgSalePrice ? Number(m.avgSalePrice) : 0;
+          const profitClp = m.profitClp !== null && m.profitClp !== undefined ? Number(m.profitClp) : 0;
+          const profitUsdt = avgSell > 0 ? profitClp / avgSell : 0;
+          const sign = profitUsdt >= 0 ? '+' : '-';
+          const color = profitUsdt >= 0 ? '#34d399' : '#fb7185';
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(148,163,184,.08);font-size:13px;">
+            <span style="color:#cbd5e1;font-weight:700;">${p2pMonthLabel(m.month)}</span>
+            <span style="color:${color};font-weight:900;">${sign}${socioBnMoney(Math.abs(profitUsdt), 2)} USDT</span>
+          </div>`;
+        }).join('');
+      }
+    }
+
     modal.classList.add('open');
   };
 
