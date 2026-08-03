@@ -64,6 +64,7 @@ model Tenant {
   p2pBuyerIdentities    P2PBuyerIdentity[]
   p2pBotMarketSnapshots P2PBotMarketSnapshot[]
   p2pCapacities         P2PCapacity[]
+  p2pManualSales        P2PManualSale[]
   p2pCycles             P2PCycle[]
   p2pWebAuthnCredentials P2PWebAuthnCredential[]
   p2pWebAuthnChallenges P2PWebAuthnChallenge[]
@@ -868,6 +869,30 @@ model P2PCapacity {
 
   @@index([tenantId])
   @@index([status])
+}
+
+// Ventas "manuales" del panel de Capacity P2P (Bybit/OKX sin API conectada,
+// o correcciones manuales de Binance) -- antes SOLO vivían en localStorage
+// del navegador (onze_p2p_bybit_orders / onze_p2p_okx_orders), nunca en
+// Neon, a diferencia de P2PCapacity que ya se migró a Neon como única
+// fuente de verdad. Si se limpiaba el navegador o se entraba desde otro
+// dispositivo, estas ventas desaparecían del cálculo de capacity sin aviso.
+// El id reutiliza el mismo "manual_<timestamp>_<random>" que ya generaba el
+// panel como orderNumber, para no duplicar identificadores.
+model P2PManualSale {
+  id         String   @id
+  tenantId   Int
+  exchange   String
+  amount     Decimal  @db.Decimal(18, 8)
+  totalPrice Decimal  @db.Decimal(18, 2)
+  unitPrice  Decimal  @db.Decimal(18, 4)
+  commission Decimal  @default(0) @db.Decimal(18, 8)
+  executedAt DateTime
+  createdAt  DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([exchange])
 }
 
 // Idempotencia para /api/admin/skipo/confirm -- evita que un doble clic o un

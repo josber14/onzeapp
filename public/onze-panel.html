@@ -17019,7 +17019,7 @@ function addP2PBotStyles(){
     }
   }
 
-  function saveP2PBinanceOrders(orders){
+  window.saveP2PBinanceOrders = function saveP2PBinanceOrders(orders){
     localStorage.setItem("onze_p2p_binance_orders", JSON.stringify(Array.isArray(orders) ? orders : []));
   }
 
@@ -17058,6 +17058,7 @@ function addP2PBotStyles(){
     const orders = loadP2PBinanceOrders();
     const filtered = orders.filter(o => o.orderNumber !== orderId);
     saveP2PBinanceOrders(filtered);
+    if(typeof window.deleteP2PManualSaleFromServer === "function") window.deleteP2PManualSaleFromServer(orderId);
     // Recalcular todo desde cero para limpiar valores fantasma
     window.recalculateP2PCapacities();
   };
@@ -17457,6 +17458,94 @@ function addP2PBotStyles(){
     localStorage.setItem(CAPACITY_KEY, JSON.stringify(arr));
   }
 
+  // Ventas manuales (Bybit/OKX sin API conectada, o correcciones manuales de
+  // Binance) -- antes solo vivían en localStorage, ver P2PManualSale en
+  // prisma/schema.prisma. Mismo patrón fire-and-forget con reintentos que
+  // postP2PCapacityToServer, para no bloquear la UI si el servidor tarda.
+  // window.-scoped a propósito -- este archivo tiene varios <script> con su
+  // propio scope (ver comentario de IIFE scoping más abajo en socioBn*), así
+  // que una función local aquí no sería visible desde deleteManualSale (que
+  // vive en OTRO bloque <script>) y rompería silenciosamente el borrado.
+  window.postP2PManualSaleToServer = function postP2PManualSaleToServer(item, attempt){
+    attempt = attempt || 0;
+    fetch('/api/p2p/manual-sale', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item })
+    })
+    .then(async res => {
+      const data = await res.json().catch(()=>null);
+      if(!res.ok || !data?.ok) throw new Error(data?.error || res.statusText || "Error servidor");
+    })
+    .catch(e => {
+      console.warn('Error guardando venta manual (intento '+(attempt+1)+'):', e.message);
+      if(attempt < 2) setTimeout(function(){ postP2PManualSaleToServer(item, attempt+1); }, 2000);
+      else if(typeof showToast === "function") showToast("⚠️ No se pudo guardar la venta manual en servidor");
+    });
+  }
+
+  window.deleteP2PManualSaleFromServer = function deleteP2PManualSaleFromServer(id){
+    fetch('/api/p2p/manual-sale?id=' + encodeURIComponent(id), { method: 'DELETE', credentials: 'include' })
+      .catch(e => console.warn('Error borrando venta manual en servidor:', e.message));
+  }
+
+  // Trae las ventas manuales guardadas en Neon y las mezcla con lo que ya
+  // hay en localStorage (dedup por orderNumber) -- así una venta manual
+  // cargada desde OTRO navegador/dispositivo también aparece acá, y no se
+  // pierde nada si se limpia el caché local.
+  window.syncP2PManualSalesFromServer = async function syncP2PManualSalesFromServer(){
+    try {
+      const res = await fetch('/api/p2p/manual-sale', { credentials: 'include' });
+      if(!res.ok) return false;
+      const data = await res.json();
+      if(!data?.ok || !Array.isArray(data.orders)) return false;
+
+      const byExchange = { binance: [], bybit: [], okx: [] };
+      for(const o of data.orders){
+        const ex = (o.exchange === "bybit" || o.exchange === "okx") ? o.exchange : "binance";
+        byExchange[ex].push(o);
+      }
+
+      function mergeInto(loadFn, saveFn, serverOrders){
+        if(!serverOrders.length) return false;
+        const existing = loadFn();
+        const seen = new Set(existing.map(o => o.orderNumber));
+        let changed = false;
+        for(const o of serverOrders){
+          if(!seen.has(o.orderNumber)){
+            existing.push(o);
+            seen.add(o.orderNumber);
+            changed = true;
+          }
+        }
+        if(changed) saveFn(existing);
+        return changed;
+      }
+
+      const anyChanged = [
+        mergeInto(loadP2PBinanceOrders, saveP2PBinanceOrders, byExchange.binance),
+        mergeInto(loadP2PBybitOrders, saveP2PBybitOrders, byExchange.bybit),
+        mergeInto(loadP2POkxOrders, saveP2POkxOrders, byExchange.okx),
+      ].some(Boolean);
+
+      // Si trajo algo nuevo (ej. cargado desde otro dispositivo), refrescar
+      // las vistas que dependen de estas ventas -- si no, quedarían
+      // desactualizadas hasta el próximo sync no relacionado.
+      if(anyChanged){
+        if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
+        if(typeof renderP2PDashboardFromBybit === 'function') renderP2PDashboardFromBybit();
+        if(typeof renderP2PDashboardFromOkx === 'function') renderP2PDashboardFromOkx();
+        if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
+        if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
+      }
+      return true;
+    } catch(e) {
+      console.warn('Error sincronizando ventas manuales:', e.message);
+      return false;
+    }
+  };
+
   function postP2PCapacityToServer(item, onSuccess){
     (function retry(item, attempt){
       fetch('/api/p2p/capacity?confirm=manual', {
@@ -17741,6 +17830,10 @@ function addP2PBotStyles(){
     let unassignedSaleUsdt = 0;
     let unassignedSaleClp = 0;
     let unassignedCommissionUsdt = 0;
+    // Detalle de qué venta(s) puntuales quedan sin compra/capacity -- antes
+    // el aviso solo mostraba el total, sin forma de saber a qué orden real
+    // correspondía (o si de verdad hay una orden real detrás del monto).
+    const unassignedSaleDetail = [];
 
     for(const sale of sales){
       const saleTotalUsdt = Number(sale.amount || 0);
@@ -17813,6 +17906,15 @@ function addP2PBotStyles(){
         unassignedSaleUsdt += saleTotalUsdt * remainingRatio;
         unassignedSaleClp += saleRemainingClp;
         unassignedCommissionUsdt += saleCommissionUsdt * remainingRatio;
+        unassignedSaleDetail.push({
+          orderNumber: sale.orderNumber || "",
+          exchange: sale.exchange || "binance",
+          isManual: !!(sale._manual || String(sale.orderNumber || "").startsWith("manual_")),
+          clp: saleRemainingClp,
+          usdt: saleTotalUsdt * remainingRatio,
+          date: sale.createdAt || null,
+          ts: Number(getOrderTs(sale) || 0),
+        });
       }
     }
 
@@ -17928,7 +18030,8 @@ function addP2PBotStyles(){
       smartCoveredClp,
       unassignedSaleUsdt: Math.max(unassignedSaleUsdt - getP2POwnCapitalTotalUsdt(), 0),
       unassignedSaleClp,
-      unassignedCommissionUsdt
+      unassignedCommissionUsdt,
+      unassignedSaleDetail
     };
   }
 
@@ -19248,6 +19351,25 @@ function addP2PBotStyles(){
     }
 
     openP2PCapacityModal();
+
+    // Bug real confirmado (ago 2026): una compra registrada con la fecha de
+    // HOY (default del modal) no puede cubrir ventas de días anteriores --
+    // el emparejamiento respeta fecha operativa (ver calculateP2PCapacityStats,
+    // capStartTs > saleTs se salta). Si se abre desde este aviso, se
+    // precarga con la fecha de la venta sin asignar MÁS ANTIGUA (no hoy) y
+    // el monto CLP pendiente, para que la compra sí la absorba.
+    const detail = Array.isArray(stats.unassignedSaleDetail) ? stats.unassignedSaleDetail : [];
+    if(detail.length){
+      const oldest = detail.reduce((a, b) => (Number(a.ts || 0) <= Number(b.ts || 0) ? a : b));
+      if(oldest?.date){
+        const dateEl = document.getElementById("p2pCapacityDate");
+        if(dateEl) dateEl.value = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Santiago", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(oldest.date));
+      }
+    }
+    const clpEl = document.getElementById("p2pCapacityClp");
+    if(clpEl && Number(stats.unassignedSaleClp || 0) > 0){
+      clpEl.value = Math.round(Number(stats.unassignedSaleClp)).toLocaleString("es-CL");
+    }
   };
 
   window.resolveP2PUnassignedAsOwnCapital = function(){
@@ -19373,7 +19495,7 @@ function addP2PBotStyles(){
                     CLP recibido aprox: ${p2pCapMoney(stats.unassignedSaleClp, 0)} CLP · Comisión: ${p2pCapMoney(stats.unassignedCommissionUsdt, 4)} USDT
                   </div>
                   <div class="p2p-capacity-meta" style="margin-top:7px;color:#facc15;">
-                    Para cerrar el ciclo, registra una compra/capacity por el monto correspondiente.
+                    Importante: al registrar la compra, ponle como fecha el día de la venta MÁS ANTIGUA de la lista de abajo (no hoy) -- una compra fechada hoy no puede cubrir ventas de días anteriores.
                   </div>
                 </div>
 
@@ -19381,6 +19503,20 @@ function addP2PBotStyles(){
                   <button class="btn" type="button" onclick="resolveP2PUnassignedAsNewCapacity()">Registrar compra</button>
                 </div>
               </div>
+              ${
+                Array.isArray(stats.unassignedSaleDetail) && stats.unassignedSaleDetail.length
+                  ? `<div style="margin-top:12px;border-top:1px solid rgba(251,191,36,.2);padding-top:10px;">
+                      <div class="p2p-capacity-meta" style="color:#facc15;margin-bottom:6px;">Venta(s) sin asignar (${stats.unassignedSaleDetail.length}):</div>
+                      ${stats.unassignedSaleDetail.slice(0, 20).map(d => {
+                        const dateStr = d.date ? new Date(d.date).toLocaleString("es-CL", { timeZone: "America/Santiago", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "(sin fecha)";
+                        return `<div class="p2p-capacity-meta" style="font-family:monospace;font-size:12px;margin-top:3px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                          <span>${dateStr} · ${d.exchange}${d.isManual ? " (manual)" : ""} · ${p2pCapMoney(d.usdt, 2)} USDT / ${p2pCapMoney(d.clp, 0)} CLP · orden: ${d.orderNumber || "(sin número)"}</span>
+                          ${d.isManual ? `<button class="btn small danger" type="button" onclick="window.deleteP2PUnassignedManualSale('${d.orderNumber}','${d.exchange}')" title="Borrar esta venta manual (ej: si es un registro basura sin monto real)" style="padding:2px 6px;font-size:12px;line-height:1;flex-shrink:0;">🗑️</button>` : ""}
+                        </div>`;
+                      }).join("")}
+                    </div>`
+                  : ""
+              }
             </div>`
           : ""
       }
@@ -20814,6 +20950,7 @@ function addP2PBotStyles(){
       btn.addEventListener('click', syncBinanceSales);
     }
     initManualSaleButton();
+    if(typeof window.syncP2PManualSalesFromServer === "function") window.syncP2PManualSalesFromServer();
     if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
     setInterval(() => syncBinanceSales(true), 15000);
 
@@ -20916,6 +21053,7 @@ function addP2PBotStyles(){
     if(!confirm("¿Eliminar esta venta manual de Bybit?")) return;
     const orders = loadP2PBybitOrders().filter(o => o.orderNumber !== orderId);
     saveP2PBybitOrders(orders);
+    if(typeof window.deleteP2PManualSaleFromServer === "function") window.deleteP2PManualSaleFromServer(orderId);
     if(typeof renderP2PDashboardFromBybit === 'function') renderP2PDashboardFromBybit();
     if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
     if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
@@ -20930,6 +21068,7 @@ function addP2PBotStyles(){
     if(manualBtn){
       manualBtn.addEventListener('click', () => showManualSaleModal('bybit'));
     }
+    if(typeof window.syncP2PManualSalesFromServer === "function") window.syncP2PManualSalesFromServer();
     if(typeof renderP2PDashboardFromBybit === 'function') renderP2PDashboardFromBybit();
     setInterval(() => syncBybitSales(true), 15000);
   }
@@ -20977,9 +21116,19 @@ function addP2PBotStyles(){
     if(!confirm("¿Eliminar esta venta manual de OKX?")) return;
     const orders = loadP2POkxOrders().filter(o => o.orderNumber !== orderId);
     saveP2POkxOrders(orders);
+    if(typeof window.deleteP2PManualSaleFromServer === "function") window.deleteP2PManualSaleFromServer(orderId);
     if(typeof renderP2PDashboardFromOkx === 'function') renderP2PDashboardFromOkx();
     if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
     if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
+  };
+
+  // Botón "🗑️" dentro del aviso "Ventas sin compra/capacity detectadas" --
+  // reusa el borrado ya existente de cada exchange, solo enruta según de
+  // dónde viene la venta manual atascada.
+  window.deleteP2PUnassignedManualSale = function(orderNumber, exchange){
+    if(exchange === "bybit") window.deleteManualSaleBybit(orderNumber);
+    else if(exchange === "okx") window.deleteManualSaleOkx(orderNumber);
+    else window.deleteManualSale(orderNumber);
   };
 
   window.initOkxSalesTab = function initOkxSalesTab(){
@@ -20987,6 +21136,7 @@ function addP2PBotStyles(){
     if(manualBtn){
       manualBtn.addEventListener('click', () => showManualSaleModal('okx'));
     }
+    if(typeof window.syncP2PManualSalesFromServer === "function") window.syncP2PManualSalesFromServer();
     if(typeof renderP2PDashboardFromOkx === 'function') renderP2PDashboardFromOkx();
   }
 
@@ -21200,6 +21350,11 @@ function addP2PBotStyles(){
 
           try { localStorage.setItem("onze_binance_sales", JSON.stringify(orders)); } catch(e){}
         }
+
+        // Persistir en Neon -- antes esto solo quedaba en localStorage (ver
+        // P2PManualSale en prisma/schema.prisma), así que se perdía al
+        // limpiar el navegador o entrar desde otro dispositivo.
+        postP2PManualSaleToServer(order);
 
         backdrop.remove();
 

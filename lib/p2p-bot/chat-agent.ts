@@ -955,11 +955,26 @@ async function handleClientResponse(
       // en cualquier frase de confirmación ("la misma cuenta", "sí, esa
       // cuenta").
       const wantsResend = textLower.includes("reenv") || textLower.includes("envía") || textLower.includes("mandame") || textLower.includes("mándame") || textLower.includes("los datos");
-      const wantsDifferent = !isSameAccountByName && (namedDifferentBank || textLower.includes("otra") || textLower.includes("distinta") || textLower.includes("cambiar") || textLower.includes("diferente"));
-      const confirmsSame = !wantsDifferent && (matchOption(textLower, 2) === 1 || textLower.includes("misma") || textLower.includes("si") || textLower.includes("sí") || isSameAccountByName);
+
+      // Bug real confirmado en vivo (ago 2026): un cliente (Cesar) respondió
+      // "A la misma cuenta del Santander ya que la tengo creada" -- nombró
+      // el banco solo para aclarar CUÁL cuenta, pero también dijo
+      // explícitamente que ya la tenía guardada (no hacía falta reenviarla).
+      // namedDifferentBank detectaba "Santander" y, como todavía no había
+      // chosenAccountIds en esta conversación, isSameAccountByName daba
+      // falso -- así que el bot igual reenviaba la cuenta completa, justo lo
+      // que el cliente dijo que no hacía falta. Una frase explícita de "ya
+      // la tengo/ya tengo esa cuenta/la tengo guardada" gana sobre la sola
+      // mención del banco, salvo que el cliente TAMBIÉN pida explícitamente
+      // una cuenta distinta.
+      const explicitNoResend = /\bya\s+(la\s+)?teng[oa]\b|\bla\s+tengo\s+(guardada|creada|agregada)\b/.test(textLower)
+        && !(textLower.includes("otra") || textLower.includes("distinta") || textLower.includes("cambiar") || textLower.includes("diferente"));
+
+      const wantsDifferent = !isSameAccountByName && !explicitNoResend && (namedDifferentBank || textLower.includes("otra") || textLower.includes("distinta") || textLower.includes("cambiar") || textLower.includes("diferente"));
+      const confirmsSame = !wantsDifferent && (matchOption(textLower, 2) === 1 || textLower.includes("misma") || textLower.includes("si") || textLower.includes("sí") || isSameAccountByName || explicitNoResend);
 
       let resolved: "resend" | "confirm_no_resend" | "different_named" | "different_menu" | null = null;
-      if (namedDifferentBank && !isSameAccountByName) resolved = "different_named";
+      if (namedDifferentBank && !isSameAccountByName && !explicitNoResend) resolved = "different_named";
       else if (wantsResend) resolved = "resend";
       else if (wantsDifferent) resolved = "different_menu";
       else if (confirmsSame) resolved = "confirm_no_resend";
@@ -984,8 +999,13 @@ async function handleClientResponse(
 
       if (resolved === "resend" || resolved === "confirm_no_resend") {
         // Ambos casos son la MISMA cuenta que la vez pasada — la única
-        // diferencia es si hace falta reenviar los datos o no.
-        const acct = allAccounts.find((a: any) => a.id === (cs.chosenAccountIds?.[0] || 0)) || allAccounts[0];
+        // diferencia es si hace falta reenviar los datos o no. Si el
+        // cliente nombró el banco explícitamente (ej. "del Santander"),
+        // usar ESA cuenta -- cs.chosenAccountIds todavía puede estar vacío
+        // en este punto de la conversación (primer intercambio de cuenta),
+        // y sin esto se caía al primer banco de la lista sin relación con
+        // lo que el cliente realmente dijo.
+        const acct = namedDifferentBank || allAccounts.find((a: any) => a.id === (cs.chosenAccountIds?.[0] || 0)) || allAccounts[0];
         let sentPrev: boolean;
         if (resolved === "resend") {
           sentPrev = await sendAccountWithErutNote(tenantId, exchange, client, order, cs, acct, { skipIntro: true });
