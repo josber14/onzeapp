@@ -1435,9 +1435,16 @@ async function runBinanceCycle(
         }
       }
 
-      // 5s gap between ads
+      // Separación entre anuncios de PRECIO (bajado de 5s a 2s, ago 2026 —
+      // pedido explícito del usuario: necesita que el precio reaccione en
+      // <=2s, y ya tiene el contador de rate-limit propio en el panel para
+      // saber si se está acercando al límite real de Binance). Ojo: esto es
+      // SOLO el freno de precio -- el de sync de cantidad (más arriba, "5s
+      // de separación entre intentos de sync de cantidad") queda intacto a
+      // propósito, el usuario pidió explícitamente no tocar nada de
+      // lectura/actualización de saldo.
       if (managedAds.length > 1 && managedAds.indexOf(managedAd) < managedAds.length - 1) {
-        await new Promise(r => setTimeout(r, 5000));
+        await new Promise(r => setTimeout(r, 2000));
       }
     }
 
