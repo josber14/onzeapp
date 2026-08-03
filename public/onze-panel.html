@@ -10846,7 +10846,13 @@ function addP2PBotStyles(){
           return;
         }
       }catch(e){}
-      if(botCycleActive) botCycleTimer = setTimeout(scheduleBotCycle, 300);
+      // Antes 300ms -- sin ningún freno real en el servidor, cada tick hacía
+      // llamadas reales a Binance/Bybit (ver MIN_CYCLE_GAP_MS en engine.ts),
+      // disparando el uso de CPU en Vercel muy por encima de lo necesario
+      // (ago 2026, la cuenta quedó bloqueada por exceder el límite de uso
+      // justo). 1000ms calza con el freno del servidor -- pedir más seguido
+      // que eso solo generaba pedidos que el servidor iba a ignorar igual.
+      if(botCycleActive) botCycleTimer = setTimeout(scheduleBotCycle, 1000);
     }
     scheduleBotCycle();
     await window.botRefreshExchange();

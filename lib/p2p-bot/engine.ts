@@ -49,6 +49,12 @@ interface BinanceState {
 }
 const binanceStates = new Map<number, BinanceState>();
 
+// Freno mínimo entre ciclos completos reales por cuenta+exchange (ver uso en
+// executeBotCycle) -- clave "tenantId:label:exchange" para no mezclar ONZE
+// con ZINPLE ni Binance con Bybit.
+const lastFullCycleAt = new Map<string, number>();
+const MIN_CYCLE_GAP_MS = 1000;
+
 // Captura del lado de compra (side="0") para el Oráculo de mercado -- es
 // solo para el panel de análisis, no alimenta ninguna decisión de precio,
 // por eso se limita a 1 vez cada 30s (no cada ciclo) para no sumarle mas
@@ -489,6 +495,23 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
         if (exchange === "binance") cycleState.binance = buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
         continue;
       }
+
+      // Freno real entre ciclos completos (ago 2026): el timer del panel
+      // pedía este endpoint cada 300ms sin que nada de acá adentro lo
+      // frenara de verdad -- cada tick hacía llamadas reales a Binance/Bybit
+      // (getMyAds, competidores) sin ningún límite, disparando el uso de CPU
+      // en Vercel muy por encima de lo necesario (y probablemente parte de
+      // por qué la cuenta chocaba tan seguido con el límite de velocidad no
+      // revelado de Binance). MIN_CYCLE_GAP_MS ignora ticks de más dentro de
+      // esa ventana y reusa el último estado ya calculado -- "force" (botón
+      // de sync manual) siempre lo salta.
+      const cycleGateKey = `${tenantId}:${label}:${exchange}`;
+      const lastFullCycleAtMs = lastFullCycleAt.get(cycleGateKey) || 0;
+      if (!force && Date.now() - lastFullCycleAtMs < MIN_CYCLE_GAP_MS) {
+        if (exchange === "binance") cycleState.binance = buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
+        continue;
+      }
+      lastFullCycleAt.set(cycleGateKey, Date.now());
 
       if (exchange === "binance") {
         const creds = await prisma.binanceCredentials.findFirst({
