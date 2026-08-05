@@ -27129,6 +27129,32 @@ try{
           <div id="usdtKycModalBody" style="font-size:13px;color:#c4cdd8;line-height:1.7;"></div>
         </div>
       </div>
+
+      <div id="usdtWithdrawAddrModalBackdrop" class="p2p-capacity-modal-backdrop">
+        <div class="p2p-capacity-modal" style="max-width:520px;max-height:85vh;overflow-y:auto;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px;">
+            <h3 class="section-title" style="margin-bottom:4px;">Direcciones de retiro — <span id="usdtWithdrawAddrClientName"></span></h3>
+            <button class="btn secondary" type="button" onclick="window.usdtCloseWithdrawAddrModal()">Cerrar</button>
+          </div>
+          <p class="section-text" style="margin-bottom:14px;">
+            El cliente solo puede retirar a direcciones que agregues acá. Cada una debe corresponder a un contacto ya whitelisteado del lado del proveedor (elige de la lista, no escribas el id a mano).
+          </p>
+
+          <div style="background:rgba(0,0,0,.2);border:1px solid rgba(148,163,184,.08);border-radius:8px;padding:12px;margin-bottom:16px;">
+            <label style="font-size:11px;color:#8aa0ba;display:block;margin-bottom:4px;">Contacto del proveedor</label>
+            <select id="usdtWithdrawAddrContactSelect" style="width:100%;padding:7px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.7);color:#e2e8f0;font-size:13px;margin-bottom:10px;" onchange="window.usdtOnWithdrawAddrContactChange()">
+              <option value="">Cargando contactos...</option>
+            </select>
+            <label style="font-size:11px;color:#8aa0ba;display:block;margin-bottom:4px;">Alias (lo ve el cliente)</label>
+            <input id="usdtWithdrawAddrAlias" type="text" placeholder="Ej: Mi billetera principal" style="width:100%;padding:7px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.7);color:#e2e8f0;font-size:13px;margin-bottom:10px;">
+            <div id="usdtWithdrawAddrPreview" style="font-size:11px;color:#64748b;margin-bottom:10px;"></div>
+            <button class="btn small" type="button" onclick="window.usdtAddWithdrawAddr()">+ Agregar dirección</button>
+            <div id="usdtWithdrawAddrMsg" style="font-size:12px;margin-top:6px;"></div>
+          </div>
+
+          <div id="usdtWithdrawAddrList" style="display:flex;flex-direction:column;gap:6px;"></div>
+        </div>
+      </div>
     `;
     document.querySelector('main')?.appendChild(section);
   }
@@ -27255,7 +27281,10 @@ try{
             <span style="background:rgba(0,0,0,.3);color:${usdtStatusColor(c.status)};padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;margin-left:8px;">${usdtStatusLabel(c.status)}</span>
             <div style="color:#8aa0ba;font-size:12px;margin-top:3px;">${c.email} · Registrado ${date}</div>
           </div>
-          <button class="btn secondary" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtOpenKycModal(${c.id})">Ver KYC</button>
+          <div style="display:flex;gap:6px;">
+            <button class="btn secondary" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtOpenKycModal(${c.id})">Ver KYC</button>
+            <button class="btn secondary" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtOpenWithdrawAddrModal(${c.id},'${(c.fullName||'').replace(/'/g,"\\'")}')">🔑 Direcciones de retiro</button>
+          </div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
           ${c.status !== 'approved' ? `<button class="btn small" type="button" onclick="window.usdtSetStatus(${c.id},'approved')">Aprobar</button>` : ''}
@@ -27340,6 +27369,111 @@ try{
 
   window.usdtCloseKycModal = function(){
     document.getElementById('usdtKycModalBackdrop')?.classList.remove('open');
+  };
+
+  /* ————— Direcciones de retiro (Activos Digitales) ————— */
+  // El cliente solo puede retirar a direcciones que el admin precargue acá
+  // -- cada una ligada a un contacto YA whitelisteado del lado del
+  // proveedor (elegido de una lista real, nunca tipeado a mano en un campo
+  // que mueve dinero real). Ver app/api/admin/usdt-withdrawal-addresses y
+  // app/api/admin/skipo-contacts.
+
+  window.__usdtWithdrawAddrClientId = null;
+  window.__usdtSkipoContactsCache = [];
+
+  window.usdtOpenWithdrawAddrModal = async function(clientId, clientName){
+    window.__usdtWithdrawAddrClientId = clientId;
+    document.getElementById('usdtWithdrawAddrClientName').textContent = clientName || '';
+    document.getElementById('usdtWithdrawAddrAlias').value = '';
+    document.getElementById('usdtWithdrawAddrMsg').textContent = '';
+    document.getElementById('usdtWithdrawAddrModalBackdrop')?.classList.add('open');
+
+    const select = document.getElementById('usdtWithdrawAddrContactSelect');
+    select.innerHTML = '<option value="">Cargando contactos...</option>';
+
+    const [contactsRes, addrRes] = await Promise.all([
+      usdtFetch('/api/admin/skipo-contacts'),
+      usdtFetch('/api/admin/usdt-withdrawal-addresses?clientId=' + clientId),
+    ]);
+
+    if(contactsRes.ok){
+      // Solo contactos de tipo cripto tienen sentido para retiros de USDT.
+      window.__usdtSkipoContactsCache = (contactsRes.contacts || []).filter(c => c.type === 'EXTERNAL_CRYPTO' && c.crypto);
+      if(!window.__usdtSkipoContactsCache.length){
+        select.innerHTML = '<option value="">Sin contactos cripto disponibles</option>';
+      } else {
+        select.innerHTML = '<option value="">Elige un contacto...</option>' +
+          window.__usdtSkipoContactsCache.map(c => `<option value="${c.id}">${c.alias} — ${c.crypto.assetSymbol}/${c.crypto.networkSymbol}</option>`).join('');
+      }
+    } else {
+      select.innerHTML = '<option value="">Error al cargar</option>';
+    }
+    window.usdtOnWithdrawAddrContactChange();
+    window.usdtRenderWithdrawAddrList(addrRes.ok ? (addrRes.addresses || []) : []);
+  };
+
+  window.usdtCloseWithdrawAddrModal = function(){
+    document.getElementById('usdtWithdrawAddrModalBackdrop')?.classList.remove('open');
+  };
+
+  window.usdtOnWithdrawAddrContactChange = function(){
+    const select = document.getElementById('usdtWithdrawAddrContactSelect');
+    const preview = document.getElementById('usdtWithdrawAddrPreview');
+    const contact = window.__usdtSkipoContactsCache.find(c => c.id === select.value);
+    if(!contact){ preview.textContent = ''; return; }
+    preview.textContent = `${contact.crypto.assetSymbol} en ${contact.crypto.networkSymbol} — ${contact.crypto.address}`;
+  };
+
+  window.usdtAddWithdrawAddr = async function(){
+    const clientId = window.__usdtWithdrawAddrClientId;
+    const select = document.getElementById('usdtWithdrawAddrContactSelect');
+    const alias = document.getElementById('usdtWithdrawAddrAlias').value.trim();
+    const msg = document.getElementById('usdtWithdrawAddrMsg');
+    const contact = window.__usdtSkipoContactsCache.find(c => c.id === select.value);
+
+    if(!contact){ msg.style.color = '#fb7185'; msg.textContent = 'Elige un contacto'; return; }
+    if(!alias){ msg.style.color = '#fb7185'; msg.textContent = 'Ingresa un alias'; return; }
+
+    const res = await usdtFetch('/api/admin/usdt-withdrawal-addresses', {
+      method: 'POST',
+      body: JSON.stringify({
+        clientId, alias,
+        assetSymbol: contact.crypto.assetSymbol,
+        networkSymbol: contact.crypto.networkSymbol,
+        address: contact.crypto.address,
+        providerContactId: contact.id,
+      }),
+    });
+    if(!res.ok){ msg.style.color = '#fb7185'; msg.textContent = res.error || 'No se pudo agregar'; return; }
+    msg.style.color = '#34d399';
+    msg.textContent = 'Agregada';
+    document.getElementById('usdtWithdrawAddrAlias').value = '';
+    const addrRes = await usdtFetch('/api/admin/usdt-withdrawal-addresses?clientId=' + clientId);
+    window.usdtRenderWithdrawAddrList(addrRes.ok ? (addrRes.addresses || []) : []);
+  };
+
+  window.usdtRenderWithdrawAddrList = function(addresses){
+    const list = document.getElementById('usdtWithdrawAddrList');
+    if(!addresses.length){
+      list.innerHTML = '<div style="color:#64748b;font-size:12px;">Sin direcciones precargadas todavía.</div>';
+      return;
+    }
+    list.innerHTML = addresses.map(a => `
+      <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:8px;padding:8px 10px;">
+        <div>
+          <strong style="color:#fff;font-size:13px;">${a.alias}</strong>
+          <div style="color:#8aa0ba;font-size:11px;margin-top:2px;">${a.assetSymbol}/${a.networkSymbol} — ${a.address}</div>
+        </div>
+        <button class="btn small danger" type="button" onclick="window.usdtDeleteWithdrawAddr(${a.id})">Quitar</button>
+      </div>
+    `).join('');
+  };
+
+  window.usdtDeleteWithdrawAddr = async function(id){
+    if(!confirm('¿Quitar esta dirección? El cliente ya no podrá elegirla para retirar.')) return;
+    await usdtFetch('/api/admin/usdt-withdrawal-addresses?id=' + id, { method: 'DELETE' });
+    const addrRes = await usdtFetch('/api/admin/usdt-withdrawal-addresses?clientId=' + window.__usdtWithdrawAddrClientId);
+    window.usdtRenderWithdrawAddrList(addrRes.ok ? (addrRes.addresses || []) : []);
   };
 
   /* ————— Revisión de pagos (Activos Digitales) ————— */

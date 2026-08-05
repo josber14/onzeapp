@@ -10,12 +10,9 @@ export default function BilleteraPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/usdt-client/purchase-history");
+        const res = await fetch("/api/usdt-client/balance");
         const data = await res.json();
-        if (res.ok && data.ok) {
-          const total = data.purchases.reduce((sum: number, p: { usdtAmount: number | null }) => sum + (p.usdtAmount || 0), 0);
-          setSaldo(total);
-        }
+        if (res.ok && data.ok) setSaldo(data.availableUsdt);
       } catch {
         // se queda en null (cargando) — no rompe la pantalla
       }
@@ -32,7 +29,7 @@ export default function BilleteraPage() {
           {saldo === null ? "…" : saldo.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          Suma de todas tus compras completadas — los retiros todavía no están disponibles.
+          Compras completadas menos retiros ya realizados.
         </p>
       </div>
     </div>

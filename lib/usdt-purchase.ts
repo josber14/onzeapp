@@ -1,4 +1,5 @@
 import { randomInt } from "crypto";
+import { prisma } from "@/lib/prisma";
 
 // Alfabeto sin 0/O/1/I — evita que el cliente confunda un carácter con otro
 // al copiar el código a mano en el comentario/glosa de su transferencia.
@@ -41,4 +42,36 @@ export function toClientPurchaseIntent(intent: Record<string, any>) {
     id, referenceCode, requestedClp, receivedClp, status, usdtAmount, executedRate,
     createdAt, updatedAt, readyAt, executedAt,
   };
+}
+
+// Fuente única de verdad del saldo disponible de un cliente -- ANTES este
+// número solo se calculaba en el navegador (billetera/page.tsx sumando
+// compras) y nunca restaba los retiros, así que un cliente podía pedir
+// retirar más de lo que en realidad tenía disponible. Server-side siempre:
+// compras COMPLETADAS - retiros que ya comprometieron el saldo (pending +
+// completed; "failed"/"error" nunca movieron nada, no restan).
+export async function getClientAvailableUsdt(tenantId: number, clientId: number): Promise<number> {
+  const [purchased, withdrawn] = await Promise.all([
+    prisma.usdtPurchaseIntent.aggregate({
+      where: { tenantId, clientId, status: "completed" },
+      _sum: { usdtAmount: true },
+    }),
+    prisma.usdtWithdrawal.aggregate({
+      where: { tenantId, clientId, status: { in: ["pending", "completed"] } },
+      _sum: { totalUsdt: true },
+    }),
+  ]);
+  const totalPurchased = Number(purchased._sum.usdtAmount || 0);
+  const totalWithdrawn = Number(withdrawn._sum.totalUsdt || 0);
+  return Math.max(totalPurchased - totalWithdrawn, 0);
+}
+
+// Mismo motivo que toClientPurchaseIntent -- providerWithdrawalId es el id
+// interno del proveedor, nunca debe llegar al cliente.
+export function toClientWithdrawal(w: Record<string, any>) {
+  const {
+    id, addressId, amountUsdt, feeUsdt, totalUsdt, status,
+    createdAt, updatedAt, completedAt,
+  } = w;
+  return { id, addressId, amountUsdt, feeUsdt, totalUsdt, status, createdAt, updatedAt, completedAt };
 }

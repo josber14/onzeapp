@@ -22,6 +22,7 @@
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.3.1",
     "imapflow": "^1.4.9",
+    "jose": "^6.2.8",
     "mailparser": "^3.9.14",
     "next": "16.2.1",
     "next-auth": "^4.24.13",

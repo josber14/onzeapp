@@ -74,6 +74,8 @@ model Tenant {
   usdtPurchaseIntents   UsdtPurchaseIntent[]
   usdtIncomingTransfers UsdtIncomingTransfer[]
   usdtPriceTicks        UsdtPriceTick[]
+  usdtWithdrawalAddresses UsdtWithdrawalAddress[]
+  usdtWithdrawals       UsdtWithdrawal[]
   partnerAccounts       PartnerAccount[]
   partnerCapacities     PartnerCapacity[]
   partnerSales          PartnerSale[]
@@ -645,6 +647,8 @@ model UsdtClient {
   tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   contacts         UsdtClientContact[]
   purchaseIntents  UsdtPurchaseIntent[]
+  withdrawalAddresses UsdtWithdrawalAddress[]
+  withdrawals      UsdtWithdrawal[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -714,6 +718,67 @@ model UsdtPurchaseIntent {
   transfers      UsdtIncomingTransfer[]
 
   @@unique([tenantId, referenceCode])
+  @@index([tenantId, clientId, status])
+}
+
+// Dirección de retiro VERIFICADA para un cliente puntual -- a diferencia de
+// UsdtClientContact (libreta libre, el cliente escribe cualquier dirección
+// sin ninguna validación), esta SOLO la puede crear el operador (admin)
+// desde el panel, y siempre está atada a un `providerContactId` real ya
+// whitelisteado del lado del proveedor. Decisión explícita del usuario (ago
+// 2026): el cliente nunca puede escribir una dirección nueva y esperar que
+// funcione -- el proveedor exige que la dirección exista como "contacto"
+// de SU lado antes de poder retirar a ella, y esa alta solo se puede hacer
+// manualmente desde el panel del proveedor. Por eso el flujo real es:
+// admin agrega el contacto en el panel del proveedor -> admin registra acá
+// la misma dirección con su providerContactId -> el cliente ya la puede
+// elegir para retirar.
+model UsdtWithdrawalAddress {
+  id               Int      @id @default(autoincrement())
+  tenantId         Int
+  clientId         Int
+  alias            String
+  assetSymbol      String   @default("USDT")
+  networkSymbol    String   // ej: "BEP20", "TRC20", "ERC20" -- solo para mostrar al cliente
+  address          String   // solo para mostrar al cliente, NUNCA se manda tal cual al proveedor
+  // Id del contacto ya whitelisteado del lado del proveedor -- esto es lo
+  // que realmente se manda para ejecutar el retiro, no `address`.
+  providerContactId String
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client           UsdtClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  withdrawals      UsdtWithdrawal[]
+
+  @@index([tenantId, clientId, active])
+}
+
+// Registro de cada retiro pedido/ejecutado. `providerWithdrawalId` es el id
+// interno del proveedor -- server-side únicamente, jamás se devuelve en
+// ninguna respuesta al cliente (ver toClientWithdrawal en lib/usdt-purchase.ts).
+model UsdtWithdrawal {
+  id                   Int      @id @default(autoincrement())
+  tenantId             Int
+  clientId             Int
+  addressId            Int
+  amountUsdt           Decimal  @db.Decimal(18, 8)
+  feeUsdt              Decimal? @db.Decimal(18, 8)
+  totalUsdt            Decimal? @db.Decimal(18, 8)
+  // pending: aceptado por el proveedor, esperando confirmación on-chain.
+  // completed / failed: estado terminal (ver GET /withdrawals/{id} o webhook
+  // del lado del proveedor). error: nuestra propia ejecución falló antes de
+  // llegar a un estado del proveedor (ej. red caída) -- nunca se movió nada.
+  status               String   @default("pending")
+  providerWithdrawalId String?
+  errorMessage         String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  completedAt          DateTime?
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client               UsdtClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  address              UsdtWithdrawalAddress @relation(fields: [addressId], references: [id])
+
   @@index([tenantId, clientId, status])
 }
 
