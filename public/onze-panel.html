@@ -19516,9 +19516,19 @@ function addP2PBotStyles(){
                       <div class="p2p-capacity-meta" style="color:#facc15;margin-bottom:6px;">Venta(s) sin asignar (${stats.unassignedSaleDetail.length}):</div>
                       ${stats.unassignedSaleDetail.slice(0, 20).map(d => {
                         const dateStr = d.date ? new Date(d.date).toLocaleString("es-CL", { timeZone: "America/Santiago", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "(sin fecha)";
+                        // Registro fantasma con 0 USDT/0 CLP -- no aporta nada a
+                        // ningún cálculo, seguro de borrar sin importar si vino de
+                        // una venta manual o de una orden real de Binance/Bybit/OKX.
+                        // Para una venta con valor real solo se puede borrar si es
+                        // manual (dato que el usuario mismo tipeó) -- una orden real
+                        // con monto real nunca se borra silenciosamente, hay que
+                        // resolverla con "Registrar compra" o "Marcar como capital
+                        // propio" para no perder el rastro de esa plata.
+                        const isPhantom = Number(d.usdt || 0) === 0 && Number(d.clp || 0) === 0;
+                        const canDelete = d.isManual || isPhantom;
                         return `<div class="p2p-capacity-meta" style="font-family:monospace;font-size:12px;margin-top:3px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
                           <span>${dateStr} · ${d.exchange}${d.isManual ? " (manual)" : ""} · ${p2pCapMoney(d.usdt, 2)} USDT / ${p2pCapMoney(d.clp, 0)} CLP · orden: ${d.orderNumber || "(sin número)"}</span>
-                          ${d.isManual ? `<button class="btn small danger" type="button" onclick="window.deleteP2PUnassignedManualSale('${d.orderNumber}','${d.exchange}')" title="Borrar esta venta manual (ej: si es un registro basura sin monto real)" style="padding:2px 6px;font-size:12px;line-height:1;flex-shrink:0;">🗑️</button>` : ""}
+                          ${canDelete ? `<button class="btn small danger" type="button" onclick="window.deleteP2PUnassignedManualSale('${d.orderNumber}','${d.exchange}',${d.isManual ? 'true' : 'false'})" title="Borrar este registro (ej: si es basura sin monto real)" style="padding:2px 6px;font-size:12px;line-height:1;flex-shrink:0;">🗑️</button>` : ""}
                         </div>`;
                       }).join("")}
                     </div>`
@@ -21129,13 +21139,40 @@ function addP2PBotStyles(){
     if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
   };
 
-  // Botón "🗑️" dentro del aviso "Ventas sin compra/capacity detectadas" --
-  // reusa el borrado ya existente de cada exchange, solo enruta según de
-  // dónde viene la venta manual atascada.
-  window.deleteP2PUnassignedManualSale = function(orderNumber, exchange){
-    if(exchange === "bybit") window.deleteManualSaleBybit(orderNumber);
-    else if(exchange === "okx") window.deleteManualSaleOkx(orderNumber);
-    else window.deleteManualSale(orderNumber);
+  // Botón "🗑️" dentro del aviso "Ventas sin compra/capacity detectadas".
+  // Dos casos:
+  // 1) Venta MANUAL -- reusa el borrado ya existente de cada exchange
+  //    (que también avisa al servidor, ver /api/p2p/manual-sale).
+  // 2) Orden REAL de Binance/Bybit/OKX pero con 0 USDT/0 CLP -- un
+  //    registro fantasma sin ningún valor real (confirmado ago 2026: quedó
+  //    cacheado en localStorage desde antes del reinicio del módulo P2P).
+  //    Como no aporta nada a ningún cálculo, se borra directo del caché
+  //    local sin pasar por el servidor -- estas órdenes viejas nunca
+  //    llegaron a guardarse ahí (el cutoff del servidor es posterior).
+  //    Solo se permite este camino para registros en 0 -- una orden real
+  //    con monto real jamás se borra desde acá (ver isPhantom en el HTML).
+  window.deleteP2PUnassignedManualSale = function(orderNumber, exchange, isManual){
+    if(isManual){
+      if(exchange === "bybit") window.deleteManualSaleBybit(orderNumber);
+      else if(exchange === "okx") window.deleteManualSaleOkx(orderNumber);
+      else window.deleteManualSale(orderNumber);
+      return;
+    }
+
+    if(!confirm("¿Borrar este registro en 0 USDT/0 CLP? No tiene ningún valor real, solo estorba en la lista.")) return;
+
+    if(exchange === "bybit"){
+      saveP2PBybitOrders(loadP2PBybitOrders().filter(o => o.orderNumber !== orderNumber));
+      if(typeof renderP2PDashboardFromBybit === 'function') renderP2PDashboardFromBybit();
+    } else if(exchange === "okx"){
+      saveP2POkxOrders(loadP2POkxOrders().filter(o => o.orderNumber !== orderNumber));
+      if(typeof renderP2PDashboardFromOkx === 'function') renderP2PDashboardFromOkx();
+    } else {
+      saveP2PBinanceOrders(loadP2PBinanceOrders().filter(o => o.orderNumber !== orderNumber));
+      if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
+    }
+    if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
+    if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
   };
 
   window.initOkxSalesTab = function initOkxSalesTab(){
