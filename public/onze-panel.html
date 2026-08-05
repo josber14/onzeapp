@@ -16757,6 +16757,11 @@ function addP2PBotStyles(){
     if(isOnzeSuperAdminForP2PDashboard()){
       addP2PDashboardNavButton();
     }
+    // setTimeout (no llamada directa): cleanupPhantomP2POrders se define más
+    // abajo en este mismo script como asignación a window.X (no hoisted) --
+    // mismo motivo por el que initBinanceSalesSync/etc. también usan 500ms,
+    // para asegurar que ya esté definida cuando se llame.
+    setTimeout(function(){ if(typeof window.cleanupPhantomP2POrders === "function") window.cleanupPhantomP2POrders(); }, 500);
     setTimeout(initBinanceSalesSync, 500);
     setTimeout(initBybitSalesSync, 500);
     setTimeout(initOkxSalesTab, 500);
@@ -17058,6 +17063,28 @@ function addP2PBotStyles(){
   window.saveP2POkxOrders = function saveP2POkxOrders(orders){
     localStorage.setItem("onze_p2p_okx_orders", JSON.stringify(Array.isArray(orders) ? orders : []));
   }
+
+  // Limpieza única al cargar el panel (ago 2026): borra del caché local
+  // cualquier "venta" con 0 USDT/0 CLP guardada en localStorage -- no son
+  // ventas reales (residuos de antes del último reinicio del módulo P2P,
+  // ninguna existe en la base de datos del servidor), y ya se excluyen del
+  // cálculo en calculateP2PCapacityStats(). Esto solo borra el residuo
+  // físico del navegador para que no quede acumulando basura para siempre.
+  window.cleanupPhantomP2POrders = function cleanupPhantomP2POrders(){
+    const isReal = o => Number(o.amount || 0) > 0 && Number(o.totalPrice || 0) > 0;
+
+    const binance = loadP2PBinanceOrders();
+    const binanceClean = binance.filter(isReal);
+    if(binanceClean.length !== binance.length) saveP2PBinanceOrders(binanceClean);
+
+    const bybit = loadP2PBybitOrders();
+    const bybitClean = bybit.filter(isReal);
+    if(bybitClean.length !== bybit.length) saveP2PBybitOrders(bybitClean);
+
+    const okx = loadP2POkxOrders();
+    const okxClean = okx.filter(isReal);
+    if(okxClean.length !== okx.length) saveP2POkxOrders(okxClean);
+  };
 
   window.deleteManualSale = function deleteManualSale(orderId){
     if(!confirm("¿Borrar esta venta manual? Se recalcularán las capacidades.")) return;
@@ -17787,6 +17814,14 @@ function addP2PBotStyles(){
       ...loadP2POkxOrders().map(o => ({ ...o, exchange: "okx" })),
     ]
       .filter(o => isCompletedSellClp(o))
+      // Descartar registros fantasma (0 USDT / 0 CLP) -- no son ventas
+      // reales, son residuos de caché del navegador de antes del último
+      // reinicio del módulo P2P (confirmado ago 2026: una orden así no
+      // existe ni siquiera en la base de datos del servidor). Sin este
+      // filtro, aparecían para siempre en "Ventas sin compra/capacity
+      // detectadas" sin ningún capacity que pudiera "cubrirlas" (0 no se
+      // puede cubrir con nada) y sin aportar ningún valor real.
+      .filter(o => Number(o.amount || 0) > 0 && Number(o.totalPrice || 0) > 0)
       .filter(o => {
         const saleTs = Number(getOrderTs(o) || 0);
 
