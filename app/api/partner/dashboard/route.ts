@@ -126,6 +126,27 @@ export async function GET(req: NextRequest) {
   const dayStats = aggregateDay(stats.saleBreakdown, dateParam);
   const responseStats = { ...dayStats, perCapacityBreakdown: stats.perCapacityBreakdown };
 
+  // Modo combinado (ago 2026): antes el panel pedía esta ruta 3 VECES en
+  // paralelo cada 15s (hoy / mes / histórico total), cada una recalculando
+  // computeFifo() desde cero con sus propias 3 consultas a la base -- 9
+  // consultas + 3 recorridos completos del FIFO por ciclo. Eso disparó el
+  // uso de CPU en Vercel y provocó caídas reales por falta de memoria
+  // (confirmado en logs de producción). computeFifo() ya se calculó UNA vez
+  // arriba para las tarjetas del día -- acá se reusa ese mismo resultado
+  // (aggregateRange es solo un filtro en memoria, no toca la base) para
+  // devolver también el mes y el histórico total en la MISMA respuesta,
+  // sin ninguna consulta ni cálculo adicional a la base.
+  const includeRanges = searchParams.get("includeRanges") === "1";
+  let monthStats: ReturnType<typeof aggregateRange> | undefined;
+  let totalStats: ReturnType<typeof aggregateRange> | undefined;
+  let monthlyBreakdown: ReturnType<typeof monthlyBreakdownForRange> | undefined;
+  if (includeRanges) {
+    const monthStart = dateParam.slice(0, 7) + "-01";
+    monthStats = aggregateRange(stats.saleBreakdown, monthStart, dateParam);
+    totalStats = aggregateRange(stats.saleBreakdown, "2000-01-01", dateParam);
+    monthlyBreakdown = monthlyBreakdownForRange(stats.saleBreakdown, "2000-01-01", dateParam);
+  }
+
   return NextResponse.json({
     ok: true,
     stats: responseStats,
@@ -146,5 +167,6 @@ export async function GET(req: NextRequest) {
       paymentMethod: s.paymentMethod,
       executedAt: s.executedAt.toISOString(),
     })),
+    ...(includeRanges ? { monthStats, totalStats, monthlyBreakdown } : {}),
   });
 }

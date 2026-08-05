@@ -26323,20 +26323,19 @@ try{
   // un fetch más lento) se pisen y hagan parpadear o perder una tarjeta.
   async function socioBnLoadDashboard(){
     const today = socioBnChileToday();
-    const monthStart = today.slice(0, 7) + '-01';
-    const params = new URLSearchParams({ date: today, page: String(window.__socioBnSalesPage), limit: '20' });
-    const [res, capRes, monthRes, totalRes] = await Promise.all([
+    // includeRanges=1 (ago 2026): antes esto disparaba 3 fetches en paralelo
+    // a /api/partner/dashboard (hoy / mes / histórico total), cada uno
+    // recalculando computeFifo() desde cero con sus propias 3 consultas a
+    // la base -- 9 consultas + 3 recorridos completos del FIFO cada 15s,
+    // que disparó el uso de CPU en Vercel y provocó caídas reales por falta
+    // de memoria (confirmado en logs de producción). Ahora el servidor
+    // calcula el FIFO UNA sola vez y devuelve las 3 vistas (día/mes/total)
+    // en la MISMA respuesta -- mismas fórmulas, mismos números, solo sin
+    // repetir el trabajo 3 veces.
+    const params = new URLSearchParams({ date: today, page: String(window.__socioBnSalesPage), limit: '20', includeRanges: '1' });
+    const [res, capRes] = await Promise.all([
       socioBnFetch('/api/partner/dashboard?' + params.toString()),
       socioBnFetch('/api/partner/initial-capital'),
-      socioBnFetch('/api/partner/dashboard?' + new URLSearchParams({ from: monthStart, to: today }).toString()),
-      // Bug real confirmado en vivo (jul 2026): el total sumaba inicial +
-      // ganancia de ESTE MES solamente -- al empezar un mes nuevo se perdía
-      // visualmente todo lo acumulado en meses anteriores. Pedido explícito
-      // del usuario: el capital inicial es fijo (nunca se toca solo), y el
-      // total debe sumar TODA la ganancia acumulada desde una fecha muy
-      // temprana (todo el historial real), no solo la de este mes -- "este
-      // mes" queda como dato informativo aparte.
-      socioBnFetch('/api/partner/dashboard?' + new URLSearchParams({ from: '2000-01-01', to: today }).toString()),
     ]);
     if(!res.ok) return;
 
@@ -26347,8 +26346,8 @@ try{
     // rango (no por la tasa de compra) — misma fórmula que usa
     // getP2PRangeStatsFromCapacity en ONZE (profitClp / avgSellPrice).
     const initial = capRes.ok ? Number(capRes.value || 0) : 0;
-    const monthStats = monthRes.ok ? monthRes.rangeStats : null;
-    const totalStats = totalRes.ok ? totalRes.rangeStats : null;
+    const monthStats = res.monthStats || null;
+    const totalStats = res.totalStats || null;
     const avgSell = monthStats && monthStats.avgSalePrice ? Number(monthStats.avgSalePrice) : 0;
     const monthProfitClp = monthStats && monthStats.profitClp !== null ? Number(monthStats.profitClp) : 0;
     const monthProfitUsdt = avgSell > 0 ? monthProfitClp / avgSell : 0;
@@ -26356,7 +26355,7 @@ try{
     const totalProfitClp = totalStats && totalStats.profitClp !== null ? Number(totalStats.profitClp) : 0;
     const totalProfitUsdt = totalAvgSell > 0 ? totalProfitClp / totalAvgSell : 0;
     window.__socioBnInitialCapital = initial;
-    window.__socioBnMonthlyHistory = totalRes.ok ? (totalRes.monthlyBreakdown || []) : [];
+    window.__socioBnMonthlyHistory = res.monthlyBreakdown || [];
     // Cacheado para la tarjeta "Capital P2P" del panel de estadísticas (ver
     // socioBnStatsRefresh) -- mismo valor que ya se muestra en la tarjeta
     // principal, sin tener que recalcularlo ahí.
