@@ -17070,8 +17070,17 @@ function addP2PBotStyles(){
   // ninguna existe en la base de datos del servidor), y ya se excluyen del
   // cálculo en calculateP2PCapacityStats(). Esto solo borra el residuo
   // físico del navegador para que no quede acumulando basura para siempre.
+  // Umbral (no cero exacto): un residuo puede quedar guardado como
+  // 0,0000001 USDT en vez de 0 exacto -- eso se VE como "0,00 USDT / 0 CLP"
+  // en pantalla (redondeado a 2 y 0 decimales respectivamente) pero un
+  // filtro de "=== 0" o "> 0" no lo detecta. Se trata como fantasma
+  // cualquier valor que redondeado A LO QUE SE MUESTRA en pantalla dé cero.
+  window.isP2POrderPhantom = function isP2POrderPhantom(o){
+    return Math.abs(Number(o.amount || 0)) < 0.005 || Math.abs(Number(o.totalPrice || 0)) < 0.5;
+  };
+
   window.cleanupPhantomP2POrders = function cleanupPhantomP2POrders(){
-    const isReal = o => Number(o.amount || 0) > 0 && Number(o.totalPrice || 0) > 0;
+    const isReal = o => !window.isP2POrderPhantom(o);
 
     const binance = loadP2PBinanceOrders();
     const binanceClean = binance.filter(isReal);
@@ -17821,7 +17830,7 @@ function addP2PBotStyles(){
       // filtro, aparecían para siempre en "Ventas sin compra/capacity
       // detectadas" sin ningún capacity que pudiera "cubrirlas" (0 no se
       // puede cubrir con nada) y sin aportar ningún valor real.
-      .filter(o => Number(o.amount || 0) > 0 && Number(o.totalPrice || 0) > 0)
+      .filter(o => !window.isP2POrderPhantom(o))
       .filter(o => {
         const saleTs = Number(getOrderTs(o) || 0);
 
@@ -19559,7 +19568,7 @@ function addP2PBotStyles(){
                         // con monto real nunca se borra silenciosamente, hay que
                         // resolverla con "Registrar compra" o "Marcar como capital
                         // propio" para no perder el rastro de esa plata.
-                        const isPhantom = Number(d.usdt || 0) === 0 && Number(d.clp || 0) === 0;
+                        const isPhantom = window.isP2POrderPhantom({ amount: d.usdt, totalPrice: d.clp });
                         const canDelete = d.isManual || isPhantom;
                         return `<div class="p2p-capacity-meta" style="font-family:monospace;font-size:12px;margin-top:3px;display:flex;justify-content:space-between;align-items:center;gap:8px;">
                           <span>${dateStr} · ${d.exchange}${d.isManual ? " (manual)" : ""} · ${p2pCapMoney(d.usdt, 2)} USDT / ${p2pCapMoney(d.clp, 0)} CLP · orden: ${d.orderNumber || "(sin número)"}</span>
