@@ -82,6 +82,11 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e.message || "No se pudo cotizar" }, { status: 502 });
+    // Nunca reenviar e.message al cliente: el adaptador del proveedor lo
+    // arma con el nombre del proveedor y su propio dominio adentro (ver
+    // lib/skipo-adapter.ts) -- pedido explícito del usuario, ningún cliente
+    // debe poder ver quién es el proveedor real detrás de la compra.
+    console.error(`[usdt-client/quote] ${e.message}`);
+    return NextResponse.json({ ok: false, error: "No se pudo cotizar en este momento, intenta de nuevo en unos segundos" }, { status: 502 });
   }
 }

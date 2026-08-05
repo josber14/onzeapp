@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { verifyUsdtClientSessionToken, USDT_CLIENT_SESSION_COOKIE } from "@/lib/usdt-client-session";
-import { generateReferenceCode } from "@/lib/usdt-purchase";
+import { generateReferenceCode, toClientPurchaseIntent } from "@/lib/usdt-purchase";
 import { getUsdtPaymentAccount } from "@/lib/usdt-payment-account";
 
 export const runtime = "nodejs";
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
           requestedClp: clpAmount,
         },
       });
-      return NextResponse.json({ ok: true, intent, paymentAccount: getUsdtPaymentAccount() });
+      return NextResponse.json({ ok: true, intent: toClientPurchaseIntent(intent), paymentAccount: getUsdtPaymentAccount() });
     } catch (e: any) {
       if (e.code === "P2002" && attempt < 4) continue;
       return NextResponse.json({ ok: false, error: "No se pudo crear la solicitud" }, { status: 500 });
@@ -70,5 +70,5 @@ export async function GET() {
     where: { clientId: client.id, status: { in: ["awaiting_payment", "ready_to_buy"] } },
     orderBy: { createdAt: "desc" },
   });
-  return NextResponse.json({ ok: true, intents, paymentAccount: getUsdtPaymentAccount() });
+  return NextResponse.json({ ok: true, intents: intents.map(toClientPurchaseIntent), paymentAccount: getUsdtPaymentAccount() });
 }

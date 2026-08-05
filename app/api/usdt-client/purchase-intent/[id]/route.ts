@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { verifyUsdtClientSessionToken, USDT_CLIENT_SESSION_COOKIE } from "@/lib/usdt-client-session";
+import { toClientPurchaseIntent } from "@/lib/usdt-purchase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ ok: false, error: "No encontrado" }, { status: 404 });
   }
 
-  return NextResponse.json({ ok: true, intent });
+  return NextResponse.json({ ok: true, intent: toClientPurchaseIntent(intent) });
 }
 
 // Cancela una solicitud que el cliente ya no quiere seguir esperando — solo
@@ -43,5 +44,5 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 
   const updated = await prisma.usdtPurchaseIntent.update({ where: { id: intent.id }, data: { status: "cancelled" } });
-  return NextResponse.json({ ok: true, intent: updated });
+  return NextResponse.json({ ok: true, intent: toClientPurchaseIntent(updated) });
 }

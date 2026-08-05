@@ -23,3 +23,22 @@ export function findReferenceCodeInText(text: string): string | null {
   const match = text.toUpperCase().match(pattern);
   return match ? match[0] : null;
 }
+
+// Pedido explícito del usuario (ago 2026): ningún cliente debe poder ver
+// quién es el proveedor real (Skipo) detrás de sus compras/retiros -- ni
+// siquiera el NOMBRE de un campo lo puede revelar. UsdtPurchaseIntent tiene
+// skipoOrdId/skipoConvertId (identificadores internos del proveedor); un
+// findMany/findUnique sin `select` los serializa tal cual en el JSON de
+// respuesta, exponiendo la palabra "skipo" en la pestaña Network del
+// navegador aunque el VALOR sea null. Toda ruta bajo /api/usdt-client/* que
+// devuelva un UsdtPurchaseIntent al cliente debe pasarlo por acá primero.
+export function toClientPurchaseIntent(intent: Record<string, any>) {
+  const {
+    id, tenantId: _tenantId, clientId: _clientId, referenceCode, requestedClp, receivedClp,
+    status, usdtAmount, executedRate, createdAt, updatedAt, readyAt, executedAt,
+  } = intent;
+  return {
+    id, referenceCode, requestedClp, receivedClp, status, usdtAmount, executedRate,
+    createdAt, updatedAt, readyAt, executedAt,
+  };
+}

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { verifyUsdtClientSessionToken, USDT_CLIENT_SESSION_COOKIE } from "@/lib/usdt-client-session";
 import { SkipoClient } from "@/lib/skipo-adapter";
 import { findMarginPct } from "@/lib/usdt-margin";
+import { toClientPurchaseIntent } from "@/lib/usdt-purchase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,7 +78,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     skipoConvertId = result.buyConvertId || result.transactionId;
   } catch (e: any) {
     await prisma.usdtPurchaseIntent.update({ where: { id: intent.id }, data: { status: "ready_to_buy" } }).catch(() => {});
-    return NextResponse.json({ ok: false, error: e.message || "No se pudo ejecutar la compra" }, { status: 502 });
+    // Nunca reenviar e.message al cliente -- ver mismo comentario en
+    // /api/usdt-client/quote/route.ts, el proveedor no debe quedar expuesto.
+    console.error(`[UsdtPurchaseIntent ${intent.id}] ${e.message}`);
+    return NextResponse.json({ ok: false, error: "No se pudo ejecutar la compra, intenta de nuevo" }, { status: 502 });
   }
 
   // A partir de acá la compra YA se ejecutó en Skipo (dinero real ya se
@@ -97,7 +101,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         executedAt: new Date(),
       },
     });
-    return NextResponse.json({ ok: true, intent: updated });
+    return NextResponse.json({ ok: true, intent: toClientPurchaseIntent(updated) });
   } catch (e: any) {
     console.error(`[UsdtPurchaseIntent ${intent.id}] compra ejecutada en Skipo (ordId=${skipoOrdId}) pero falló guardar el resultado: ${e.message}`);
     return NextResponse.json({ ok: false, error: "Tu compra se procesó pero hubo un error al registrarla — contáctanos con este código: " + skipoOrdId }, { status: 500 });
