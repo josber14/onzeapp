@@ -1325,8 +1325,15 @@ async function handleClientResponse(
       // cubre "me confirma por favor" (matchAsksConfirmation) -- mismo caso
       // real, mensaje siguiente de la misma conversación.
       if (matchClaimsAlreadyPaid(textLower) || matchAsksConfirmation(textLower)) {
+        // Mismo chequeo de "pagó de menos" que aplica cuando la orden se
+        // marca pagada de verdad (ver el bloque `if (isPaid)` al inicio de
+        // processOrder) -- acá el comprador solo lo está AVISANDO por texto
+        // (el estado real de la orden en Binance/Bybit puede tener lag), pero
+        // el chequeo de monto debe correr igual, no solo cuando confirma el
+        // exchange directamente.
+        const ackMsg = underpaymentCheck(cs, order) || paymentAckMessage(cs.firstName || firstNameFrom(cs.realName));
         await sendThenTransition(client, exchange, order.orderNumber, cs,
-          paymentAckMessage(cs.firstName || firstNameFrom(cs.realName)),
+          ackMsg,
           "payment_made", { paidAt: new Date() }
         );
       } else if (cs.isCompany && cs.erutRequested && !cs.erutReceived && (matchAlreadySentErut(textLower) || matchVagueAlreadySent(textLower))) {
@@ -1359,6 +1366,15 @@ async function handleClientResponse(
       } else if (matchAsksRutAccount(textLower)) {
         await sendAndTrack(client, exchange, order.orderNumber, cs,
           "Al ser cuenta empresa, no manejamos Cuenta RUT — la que te enviamos es nuestra cuenta corriente de Banco Estado. No hay ningún problema: si tú tienes Banco Estado (aunque sea Cuenta RUT), puedes transferir igual a esa cuenta sin inconveniente."
+        );
+      } else if (matchReceiptUploadProblem(textLower)) {
+        // Problema de SUBIR el comprobante al chat, no de la transferencia
+        // en sí -- ver matchReceiptUploadProblem. Se revisa antes de que el
+        // "no me carga" caiga en matchProblemType más abajo (lo clasifica
+        // "not_working" por el "no me", llevando a handleTransferFails y su
+        // mensaje de "problema de tu banco", que no aplica acá).
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          "Sin problema, no hace falta que subas el comprobante aquí si no te deja — con que nos llegue al correo que ya usaste alcanza. Cuando hayas hecho la transferencia, marca \"Pagado\" en la orden."
         );
       } else if (matchInvalidEmailProblem(textLower)) {
         // Caso real reportado por el usuario (jul 2026): Banco Estado a veces
@@ -1507,6 +1523,32 @@ async function handleClientResponse(
     // banco o un problema TÉCNICO puntual, porque cada uno tiene una
     // solución distinta.
     case "awaiting_account_problem_detail": {
+      // Caso real confirmado en vivo (ago 2026): este estado nunca revisaba
+      // si el comprador ya había avisado que pagó -- a diferencia de
+      // account_sent (que sí tiene este chequeo), acá cualquier mensaje que
+      // no fuera "límite" caía directo a handleTransferFails, incluso un
+      // aviso real de pago ya hecho. Mismo chequeo que account_sent, en el
+      // mismo orden de prioridad.
+      if (matchClaimsAlreadyPaid(textLower) || matchAsksConfirmation(textLower)) {
+        const ackMsg = underpaymentCheck(cs, order) || paymentAckMessage(cs.firstName || firstNameFrom(cs.realName));
+        await sendThenTransition(client, exchange, order.orderNumber, cs,
+          ackMsg,
+          "payment_made", { paidAt: new Date() }
+        );
+        break;
+      }
+
+      // Problema de SUBIR el comprobante al chat (no de la transferencia en
+      // sí) -- ver matchReceiptUploadProblem. Nunca se le dice que es "un
+      // problema de tu banco" para esto, esa respuesta es solo para cuando
+      // la TRANSFERENCIA falla.
+      if (matchReceiptUploadProblem(textLower)) {
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          "Sin problema, no hace falta que subas el comprobante aquí si no te deja — con que nos llegue al correo que ya usaste alcanza. Cuando hayas hecho la transferencia, marca \"Pagado\" en la orden."
+        );
+        break;
+      }
+
       // Glitch conocido de Banco Estado (correo inválido al agregar la
       // cuenta) -- misma respuesta específica que ya existe en account_sent.
       if (matchInvalidEmailProblem(textLower)) {
@@ -2564,6 +2606,26 @@ function matchAsksRutAccount(text: string): boolean {
 // un problema real de la cuenta.
 function matchInvalidEmailProblem(text: string): boolean {
   return /correo\s*(es\s*)?inv[aá]lido/.test(text) || /email\s*(es\s*)?inv[aá]lido/.test(text);
+}
+
+// Distingue un problema de SUBIR el comprobante al chat (la app/imagen no
+// carga) de un problema con la TRANSFERENCIA en sí (banco, límite, rechazo)
+// -- son cosas totalmente distintas con soluciones distintas. Caso real
+// confirmado en vivo (ago 2026): un comprador ya había pagado y mandado el
+// comprobante por correo como respaldo porque no le cargaba en el chat de
+// Binance ("no me carga acá") -- el bot interpretó "no me carga" como un
+// problema de la TRANSFERENCIA (matchProblemType lo clasifica "not_working"
+// por el "no me") y respondió "eso suele ser un problema de tu banco, cierra
+// la app" -- una respuesta completamente fuera de contexto, porque la
+// transferencia ya se había hecho sin problema; lo único que fallaba era
+// subir la imagen al chat.
+function matchReceiptUploadProblem(text: string): boolean {
+  const t = text.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return /\bno\s+(me\s+)?carga\b/.test(t) ||
+    /\bno\s+(se\s+)?(puede|puedo)\s+(subir|mandar|enviar|adjuntar)\b/.test(t) ||
+    /\b(no\s+)?(se\s+)?(sube|carga)\b[^.!?\n]{0,15}\b(aca|aqui)\b/.test(t) ||
+    /\bmande?\s+al\s+correo\b/.test(t) ||
+    /\benvi[e]\s+al\s+correo\b/.test(t);
 }
 
 // Distancia de edición simple (sin dependencias) para tolerar errores de
