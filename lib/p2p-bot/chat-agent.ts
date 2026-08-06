@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { acquireChatLock, releaseChatLock } from "./chat-lock";
-import { classifyIntent, resolveFirstName } from "./chat-brain";
+import { classifyIntent, resolveFirstName, classifyImage } from "./chat-brain";
 import { bybitOrderStatusLabel } from "./bybit-adapter";
 import type { ChatState, ChatMessage } from "./types";
 
@@ -436,11 +436,13 @@ async function processOrderLocked(
   // Handle paid status BEFORE processing client messages
   if (isPaid) {
     if (cs.state === "account_sent") {
-      await sendThenTransition(client, exchange, orderNo, cs, paymentAckMessage(cs.firstName || firstNameFrom(cs.realName)), "payment_made", { paidAt: new Date() });
+      const ackMsg = underpaymentCheck(cs, order) || paymentAckMessage(cs.firstName || firstNameFrom(cs.realName));
+      await sendThenTransition(client, exchange, orderNo, cs, ackMsg, "payment_made", { paidAt: new Date() });
       return;
     }
     if (!["account_sent", "payment_made", "awaiting_comprobant", "completed", "closed", "awaiting_verification"].includes(cs.state)) {
-      await sendThenTransition(client, exchange, orderNo, cs, paymentAckMessage(cs.firstName || firstNameFrom(cs.realName)), "payment_made", { paidAt: new Date() });
+      const ackMsg = underpaymentCheck(cs, order) || paymentAckMessage(cs.firstName || firstNameFrom(cs.realName));
+      await sendThenTransition(client, exchange, orderNo, cs, ackMsg, "payment_made", { paidAt: new Date() });
       return;
     }
   }
@@ -459,6 +461,44 @@ async function processOrderLocked(
       const msgTime = lastClientMsg.createTime > 0 ? new Date(lastClientMsg.createTime) : new Date();
       await prisma.p2PChatState.update({ where: { id: cs.id }, data: { lastClientMsgAt: msgTime } });
       cs.lastClientMsgAt = msgTime;
+
+      // Reconoce QUÉ es la imagen (ERUT vs comprobante de pago) para no
+      // depender solo de que el comprador lo aclare en texto -- pedido
+      // explícito del usuario (ago 2026). Es puramente informativo/best-effort
+      // (ver classifyImage en chat-brain.ts): si falla, tarda, o no hay
+      // ANTHROPIC_API_KEY, no pasa nada -- el bot sigue exactamente igual
+      // que antes de agregar esto. Acotado a "account_sent" (el único
+      // momento donde ERUT/comprobante tienen sentido) para no gastar
+      // llamadas de más en otros estados donde una imagen no aporta nada.
+      if (cs.state === "account_sent" && !isPaid) {
+        const imgResult = await classifyImage(lastClientMsg.imageUrl);
+        if (imgResult?.documentType === "erut" && cs.isCompany && cs.erutRequested && !cs.erutReceived) {
+          await sendThenTransition(client, exchange, order.orderNumber, cs,
+            "Perfecto, gracias por el ERUT — ya quedó registrado.",
+            "account_sent", { erutReceived: true }
+          );
+        } else if (imgResult?.documentType === "payment_receipt") {
+          // Se ACUMULA en vez de comparar esta imagen sola contra el total --
+          // regla de negocio explícita del usuario (ago 2026): un comprador
+          // puede dividir el pago en varias transferencias (ej. 250.000 +
+          // 250.000 para completar 500.000), y cada comprobante individual es
+          // naturalmente menor al total sin que eso sea ningún problema. La
+          // comparación real contra el total ocurre recién cuando la orden se
+          // marca "Pagado" (ver el bloque `if (isPaid)` más abajo en este
+          // archivo) -- acá solo se acumula y se agradece.
+          const gotClp = Number(imgResult.amountClp) || 0;
+          if (gotClp > 0) {
+            const previousTotal = Number(cs.receivedReceiptsClp || 0);
+            await prisma.p2PChatState.update({
+              where: { id: cs.id },
+              data: { receivedReceiptsClp: previousTotal + gotClp },
+            });
+            (cs as any).receivedReceiptsClp = previousTotal + gotClp;
+          }
+          await sendAndTrack(client, exchange, order.orderNumber, cs, "Recibí tu comprobante, gracias. Vamos a verificarlo.");
+        }
+      }
+
       if (!isPaid) return;
     } else {
       await handleClientResponse(tenantId, exchange, client, cs, order, lastClientMsg.content, activeAds, label);
@@ -517,6 +557,24 @@ async function processOrderLocked(
         "Tu orden está por vencer. ¿Necesitas más tiempo para completar el pago?",
         "awaiting_problem", { preInterruptState: cs.state, expiryWarnedAt: new Date() }
       );
+      return;
+    }
+  }
+
+  // Recuerda marcar "Pagado" -- caso real, pedido explícito del usuario (ago
+  // 2026): a veces el comprador SÍ hace la transferencia y manda el
+  // comprobante por el chat, pero se olvida del paso de apretar "Pagado" en
+  // la orden -- sin eso, la orden nunca pasa a pagada de nuestro lado. Es el
+  // caso espejo del aviso de abajo ("Monitor payment_made", que pide el
+  // comprobante cuando YA marcaron pagado pero no mandaron nada) -- acá es al
+  // revés: ya mandaron comprobante, pero no marcaron pagado.
+  if (cs.state === "account_sent" && !isPaid && !cs.markPaidReminderSentAt) {
+    const lastReceiptTs = lastComprobantTime(msgs);
+    if (lastReceiptTs > 0 && Date.now() >= lastReceiptTs + 60 * 1000) {
+      await sendAndTrack(client, exchange, orderNo, cs,
+        "Vi tu comprobante, gracias — pero para que podamos procesar tu pago necesitas marcar \"Pagado\" en la orden. ¿Puedes hacerlo, por favor?"
+      );
+      await prisma.p2PChatState.update({ where: { id: cs.id }, data: { markPaidReminderSentAt: new Date() } });
       return;
     }
   }
@@ -815,7 +873,15 @@ async function handleClientResponse(
         const ad = findMatchingAd(activeAds, order);
         const allAccounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
         const accounts = pickDefaultAccountsPerBank(allAccounts);
-        const erutNote = "Al realizar el pago, por favor adjunta el ERUT junto con el comprobante para emitir la factura.";
+        // Caso real confirmado en vivo (ago 2026): un comprador avisó "ya le
+        // envie mi e-rut" un mensaje ANTES de que el bot mandara la cuenta, y
+        // el bot igual le pidió el ERUT de nuevo, ignorando lo que ya había
+        // dicho. Se revisa el mismo mensaje que resolvió "empresa" -- si ya
+        // avisó que lo mandó, no se vuelve a pedir.
+        const alreadySentErut = matchAlreadySentErut(textLower);
+        const erutNote = alreadySentErut
+          ? "Gracias, ya registramos tu ERUT."
+          : "Al realizar el pago, por favor adjunta el ERUT junto con el comprobante para emitir la factura.";
 
         // Check if returning customer
         const history = cs.counterparty ? await getBuyerHistory(tenantId, exchange, cs.counterparty) : null;
@@ -824,11 +890,11 @@ async function handleClientResponse(
         if (previousAccountStillAvailable) {
           const msg = erutNote + "\n\n" +
             `¿Quieres que te envíe la cuenta de ${history.bank} de nuevo, o vas a transferir a la misma cuenta donde ya pagaste antes?\n  1) Envíame la cuenta\n  2) Voy a transferir a la misma cuenta\n\nResponde 1 o 2.`;
-          await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "awaiting_previous_account", { isCompany: true, isReturning: true, erutRequested: true, previousBank: history.bank, chosenAccountIds: [history.accountId], retryCount: 0 });
+          await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "awaiting_previous_account", { isCompany: true, isReturning: true, erutRequested: true, erutReceived: alreadySentErut, previousBank: history.bank, chosenAccountIds: [history.accountId], retryCount: 0 });
         } else if (accounts.length === 1) {
           const acct = accounts[0];
-          const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: true }, acct);
-          if (sent) await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
+          const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: true, erutReceived: alreadySentErut }, acct);
+          if (sent) await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, erutReceived: alreadySentErut, chosenBank: acct.bank, chosenAccountIds: [acct.id], retryCount: 0 });
         } else {
           const pending = (cs.pendingFirstMsg || "").toLowerCase();
           const named = pending ? matchBank(pending, allAccounts) : null;
@@ -836,14 +902,14 @@ async function handleClientResponse(
             const msg = erutNote + "\n\nEstas son nuestras cuentas disponibles:\n\n" +
               accounts.map((a: any, i: number) => `--- Cuenta ${i + 1} ---\n${formatSingleAccount(a)}`).join("\n\n") +
               "\n\nCuando realices cada pago:\n- Marca \"Pagado\" en la orden\n- Envía los comprobantes aquí en el chat";
-            await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "account_sent", { isCompany: true, erutRequested: true, chosenBank: accounts.map((a: any) => a.bank).join(", "), chosenAccountIds: accounts.map((a: any) => a.id), retryCount: 0, pendingFirstMsg: null });
+            await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "account_sent", { isCompany: true, erutRequested: true, erutReceived: alreadySentErut, chosenBank: accounts.map((a: any) => a.bank).join(", "), chosenAccountIds: accounts.map((a: any) => a.id), retryCount: 0, pendingFirstMsg: null });
           } else if (named) {
-            const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: true }, named);
-            if (sent) await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, chosenBank: named.bank, chosenAccountIds: [named.id], retryCount: 0, pendingFirstMsg: null });
+            const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, { ...cs, isCompany: true, erutReceived: alreadySentErut }, named);
+            if (sent) await updateState(cs.id, "account_sent", { isCompany: true, erutRequested: true, erutReceived: alreadySentErut, chosenBank: named.bank, chosenAccountIds: [named.id], retryCount: 0, pendingFirstMsg: null });
           } else {
             const choices = accounts.map((a: any, i: number) => `  ${i + 1}) ${a.bank}`).join("\n");
             const msg = erutNote + "\n\n¿A qué cuenta deseas transferir?\n" + choices;
-            await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "awaiting_bank_choice", { isCompany: true, erutRequested: true, retryCount: 0, pendingBankMenuIds: accounts.map((a: any) => a.id) });
+            await sendThenTransition(client, exchange, order.orderNumber, cs, msg, "awaiting_bank_choice", { isCompany: true, erutRequested: true, erutReceived: alreadySentErut, retryCount: 0, pendingBankMenuIds: accounts.map((a: any) => a.id) });
           }
         }
       } else if (resolvedIntent === "personal") {
@@ -1262,6 +1328,20 @@ async function handleClientResponse(
         await sendThenTransition(client, exchange, order.orderNumber, cs,
           paymentAckMessage(cs.firstName || firstNameFrom(cs.realName)),
           "payment_made", { paidAt: new Date() }
+        );
+      } else if (cs.isCompany && cs.erutRequested && !cs.erutReceived && (matchAlreadySentErut(textLower) || matchVagueAlreadySent(textLower))) {
+        // Caso real confirmado en vivo (ago 2026): el comprador confirmó de
+        // forma vaga ("ya se la envie", sin repetir "erut") que ya había
+        // mandado el ERUT que se le pidió -- sin este chequeo, cae a la IA
+        // de respaldo (que no sabe que el ERUT era lo único pendiente) y
+        // termina preguntando por el banco de la transferencia, una
+        // respuesta fuera de contexto. Solo se activa cuando el ERUT es
+        // justo lo pendiente (erutRequested && !erutReceived) -- una
+        // confirmación de pago real (con "comprobante"/"transferí") ya se
+        // resolvió arriba en la rama anterior, así que no hay ambigüedad.
+        await sendThenTransition(client, exchange, order.orderNumber, cs,
+          "Perfecto, gracias por el ERUT — ya quedó registrado.",
+          "account_sent", { erutReceived: true }
         );
       } else if (matchWantsToCancel(textLower)) {
         // Mismo caso real que en awaiting_problem -- "monto" (ej. "debo
@@ -1869,8 +1949,12 @@ async function sendAccountWithErutNote(
   acct: any,
   opts: { skipIntro?: boolean } = {}
 ): Promise<boolean> {
-  const erutNote = cs.isCompany
+  // Si el comprador ya avisó que mandó el ERUT (ver matchAlreadySentErut en
+  // el llamador), no se le vuelve a pedir en este mismo mensaje.
+  const erutNote = cs.isCompany && !cs.erutReceived
     ? "\n\nAl ser cuenta empresa, necesitamos el ERUT para validar la titularidad y emitir la factura. Por favor adjúntalo cuando puedas."
+    : cs.isCompany
+    ? "\n\nGracias, ya registramos tu ERUT."
     : "";
   // Pedido explícito del usuario (jul 2026): los datos bancarios se mandan
   // en 3 mensajes separados (intro, datos, instrucciones) en vez de un solo
@@ -2083,6 +2167,39 @@ function firstNameFrom(realName?: string | null): string | null {
 function hasComprobant(msgs: ChatMessage[], since: Date | string | null): boolean {
   const sinceTime = since ? new Date(since).getTime() : 0;
   return msgs.some(m => !m.self && m.createTime > sinceTime && (m.imageUrl || m.content.toLowerCase().includes("comprobant")));
+}
+
+// Momento del comprobante MÁS RECIENTE que mandó el comprador (imagen o
+// mención de "comprobante" en texto) -- 0 si no hay ninguno. Se usa para el
+// aviso de "recuerda marcar Pagado" (ver processOrder): el reloj de 1 minuto
+// arranca desde la ÚLTIMA evidencia de pago, no desde la primera, para que
+// un comprador que manda 2 comprobantes seguidos (pago dividido) no reciba
+// el aviso a mitad de mandar el segundo.
+function lastComprobantTime(msgs: ChatMessage[]): number {
+  const found = msgs.filter(m => !m.self && (m.imageUrl || m.content.toLowerCase().includes("comprobant")));
+  if (found.length === 0) return 0;
+  return Math.max(...found.map(m => m.createTime));
+}
+
+// Regla de negocio explícita del usuario (ago 2026): si el comprador marca
+// "Pagado" pero la suma de los comprobantes que mandó (ver
+// cs.receivedReceiptsClp, acumulado en processOrder al llegar cada imagen)
+// es CLARAMENTE menor al total real de la orden, no se debe tratar como un
+// pago normal -- se le avisa que no debió marcar pagado sin completar el
+// monto, que eso afecta el cierre, y que puede pedir una extensión de
+// tiempo si la necesita. Si transfiere DE MÁS, no se hace nada (el usuario
+// lo resuelve manualmente) -- por eso esto solo revisa el caso "de menos".
+// Sin evidencia de comprobantes (receivedReceiptsClp en 0 -- ej. la imagen
+// nunca se pudo clasificar, o no hay ANTHROPIC_API_KEY) no se asume nada:
+// no hay forma de saber si falta algo, así que se deja pasar como un pago
+// normal (ver paymentAckMessage, el llamador).
+function underpaymentCheck(cs: any, order: any): string | null {
+  const expectedClp = Number(order.totalPrice) || 0;
+  const gotClp = Number(cs.receivedReceiptsClp || 0);
+  if (gotClp > 0 && expectedClp > 0 && gotClp < expectedClp * 0.95) {
+    return `Notamos que el total recibido hasta ahora ($${formatCLP(gotClp)}) es menor al monto de la orden ($${formatCLP(expectedClp)}) — no deberías marcar "Pagado" sin haber completado la transferencia por el monto completo, ya que esto afecta nuestro proceso de finalización en Binance (aumenta el tiempo en que liberamos). Por favor realiza la transferencia restante lo antes posible; te pedimos no volver a marcar pagado antes de completar el monto total. Si necesitas más tiempo, avísanos y te damos una extensión sin problema.`;
+  }
+  return null;
 }
 
 function pick<T>(arr: T[]): T {
@@ -2498,6 +2615,31 @@ function matchHolderNameConcern(text: string): boolean {
     /\bnombre\s+no\s+coincide\b/.test(t) ||
     (/\btitular\b/.test(t) && /\b(distinto|diferente|otro|no coincide)\b/.test(t)) ||
     mentionsExpectedHolderName(t);
+}
+
+// Reconoce cuando el comprador avisa EXPLÍCITAMENTE que ya mandó el ERUT
+// (menciona la palabra) -- caso real confirmado en vivo (ago 2026): un
+// comprador escribió "ya le envie mi e-rut" justo antes de que el bot le
+// mandara la cuenta, y el bot igual agregó "necesitamos el ERUT... por favor
+// adjúntalo", ignorando que ya lo había avisado un mensaje antes.
+function matchAlreadySentErut(text: string): boolean {
+  const t = text.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return /\bya\b[^.!?\n]{0,20}\b(envi|mand|adjunt|pas)[eoé]\b[^.!?\n]{0,20}\b(e[\s-]?rut)\b/.test(t) ||
+    /\b(e[\s-]?rut)\b[^.!?\n]{0,20}\bya\b[^.!?\n]{0,15}\b(envi|mand|adjunt|pas)[eoé]\b/.test(t);
+}
+
+// Reconoce una confirmación VAGA de "ya lo/la envié" sin repetir qué cosa
+// (ej. "ya se la envie") -- solo tiene sentido interpretarla como el ERUT
+// cuando el ERUT es justo lo único pendiente en esta conversación (ver uso
+// en account_sent: cs.erutRequested && !cs.erutReceived). Caso real
+// confirmado en vivo (ago 2026): el comprador ya había avisado del ERUT un
+// mensaje antes y, al repetir "ya se la envie" de forma más corta, la IA de
+// respaldo -- sin memoria de que el ERUT era lo pendiente -- lo interpretó
+// como si hablara del PAGO y preguntó "¿desde cuál banco transferiste?", una
+// respuesta totalmente fuera de contexto.
+function matchVagueAlreadySent(text: string): boolean {
+  const t = text.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return /\bya\b[^.!?\n]{0,10}\b(se\s+la|te\s+la|se\s+lo|te\s+lo|la|lo)\s+(envi|mand|adjunt|pas)[eoé]\b/.test(t);
 }
 
 // "Procedo" (o variantes: "voy a proceder", "procediendo", "ya va", "ya

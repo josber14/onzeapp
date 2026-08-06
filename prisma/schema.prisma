@@ -1279,6 +1279,19 @@ model P2PChatState {
   // comprador nunca alcanzó a responder "personal/empresa" antes de que el
   // aviso volviera a interrumpir).
   expiryWarnedAt    DateTime?
+  // Suma acumulada (CLP) de los montos leídos en los comprobantes de pago
+  // que el comprador mandó como imagen (ver classifyImage en chat-brain.ts).
+  // Se acumula porque un comprador puede dividir el pago en varias
+  // transferencias (ej. 250.000 + 250.000 para completar una orden de
+  // 500.000) -- comparar cada imagen suelta contra el total completo daría
+  // una falsa alarma en un pago dividido legítimo. La comparación real
+  // contra el total de la orden ocurre recién cuando se marca "Pagado".
+  receivedReceiptsClp Decimal? @db.Decimal(18, 2)
+  // Se fija la primera vez que se avisa "recuerda marcar Pagado" (comprobante
+  // recibido pero la orden todavía no figura como pagada 1 min después) --
+  // mismo principio que expiryWarnedAt, para no repetir el aviso en cada
+  // ciclo mientras la condición se siga cumpliendo.
+  markPaidReminderSentAt DateTime?
   partialAmount     Decimal?  @db.Decimal(18, 8)
   totalAmount       Decimal?  @db.Decimal(18, 8)
   realName          String?

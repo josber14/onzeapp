@@ -178,3 +178,102 @@ export async function resolveFirstName(fullLegalName: string): Promise<string | 
     clearTimeout(timeout);
   }
 }
+
+export interface ImageClassifyResult {
+  documentType: "erut" | "payment_receipt" | "id_document" | "other";
+  amountClp?: number;
+}
+
+// Reconoce QUÉ es una imagen que mandó el comprador (ERUT, comprobante de
+// pago, cédula, u otra cosa) -- pedido explícito del usuario (ago 2026): hoy
+// el bot recibe imágenes pero nunca mira su contenido, solo sabe que "llegó
+// una imagen". Igual que classifyIntent, es puramente informativo -- NUNCA
+// decide por sí sola que un pago está confirmado ni libera nada; eso sigue
+// dependiendo exclusivamente del estado real de la orden en el exchange (ver
+// chat-agent.ts). Mismo principio de nunca ser punto único de falla: sin
+// ANTHROPIC_API_KEY, si la descarga de la imagen falla, o si tarda más de
+// VISION_TIMEOUT_MS, devuelve null y el bot sigue exactamente igual que
+// antes de agregar esto (ignora la imagen en silencio).
+const VISION_MODEL = "claude-haiku-4-5";
+const VISION_TIMEOUT_MS = 8000;
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+export async function classifyImage(imageUrl: string): Promise<ImageClassifyResult | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), VISION_TIMEOUT_MS);
+  try {
+    const imgRes = await fetch(imageUrl, { signal: controller.signal });
+    if (!imgRes.ok) return null;
+    const contentType = imgRes.headers.get("content-type") || "image/jpeg";
+    const mediaType = contentType.includes("png") ? "image/png" : contentType.includes("webp") ? "image/webp" : "image/jpeg";
+    const buf = Buffer.from(await imgRes.arrayBuffer());
+    // Techo defensivo -- Binance ya comprime lo que sube por chat, esto solo
+    // evita mandar algo desproporcionado a la API si alguna vez llega distinto.
+    if (buf.byteLength > MAX_IMAGE_BYTES) return null;
+    const base64 = buf.toString("base64");
+
+    const tool = {
+      name: "clasificar_imagen",
+      description: "Clasifica una imagen enviada por un comprador en el chat de una compra P2P de USDT en Chile.",
+      input_schema: {
+        type: "object",
+        properties: {
+          documentType: {
+            type: "string",
+            enum: ["erut", "payment_receipt", "id_document", "other"],
+            description:
+              "'erut' = documento E-RUT de una empresa chilena (el certificado del SII con el RUT de la empresa). 'payment_receipt' = comprobante o captura de pantalla de una transferencia bancaria o pago (banco chileno, Mercado Pago, etc). 'id_document' = cédula de identidad u otro documento de identidad de una persona. 'other' = cualquier otra cosa (foto sin relación, captura de otra app, etc).",
+          },
+          amountClp: {
+            type: "number",
+            description:
+              "SOLO si documentType es 'payment_receipt' y el monto en pesos chilenos (CLP) aparece CLARAMENTE legible en la imagen: el monto exacto transferido, sin puntos ni separadores (ej. 225000, no 225.000). Omitir por completo el campo si no es un comprobante, o si el monto no se alcanza a leer con total certeza -- nunca adivines ni redondees un número que no se ve nítido.",
+          },
+        },
+        required: ["documentType"],
+      },
+    };
+
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: VISION_MODEL,
+        max_tokens: 300,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+              { type: "text", text: "Clasifica esta imagen." },
+            ],
+          },
+        ],
+        tools: [tool],
+        tool_choice: { type: "tool", name: "clasificar_imagen" },
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const toolUse = (data?.content ?? []).find((c: any) => c.type === "tool_use");
+    const documentType = toolUse?.input?.documentType;
+    if (!documentType) return null;
+    const result: ImageClassifyResult = { documentType };
+    if (typeof toolUse.input.amountClp === "number" && toolUse.input.amountClp > 0) {
+      result.amountClp = toolUse.input.amountClp;
+    }
+    return result;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
