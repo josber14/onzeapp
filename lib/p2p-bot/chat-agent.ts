@@ -1226,6 +1226,23 @@ async function handleClientResponse(
       const bareYesNo = ["si", "sí", "no"].includes(textLower.replace(/[.,!?¡¿]+$/g, "").trim());
       if (bareYesNo) break;
 
+      // Duda sobre el nombre que aparece en la cuenta -- se revisa temprano,
+      // antes que cualquier otro matcher, porque es una señal inequívoca y la
+      // respuesta correcta depende por completo de CUÁL nombre menciona (ver
+      // matchHolderNameConcern / mentionsExpectedHolderName más abajo).
+      if (matchHolderNameConcern(textLower)) {
+        if (mentionsExpectedHolderName(textLower)) {
+          await sendAndTrack(client, exchange, order.orderNumber, cs,
+            "Sí, es correcto — el titular real de esa cuenta en el banco es Josber Marcano, la misma persona detrás de Zinple. Puedes transferir con total confianza."
+          );
+        } else {
+          await sendAndTrack(client, exchange, order.orderNumber, cs,
+            "Entiendo tu duda, voy a ponerte en contacto con un asesor para confirmar esto — dame un momento."
+          );
+        }
+        break;
+      }
+
       // Caso real confirmado en vivo (jul 2026, Bybit): el comprador escribió
       // "esta pagado" y "envié comprobante" -- pero el estado de la orden
       // (order.status, que es lo que activa el flujo normal de "pago
@@ -2430,6 +2447,57 @@ function matchAsksRutAccount(text: string): boolean {
 // un problema real de la cuenta.
 function matchInvalidEmailProblem(text: string): boolean {
   return /correo\s*(es\s*)?inv[aá]lido/.test(text) || /email\s*(es\s*)?inv[aá]lido/.test(text);
+}
+
+// Distancia de edición simple (sin dependencias) para tolerar errores de
+// tipeo en el nombre del titular real -- ver mentionsExpectedHolderName.
+function levenshtein(a: string, b: string): number {
+  const dp: number[][] = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+// Nuestras cuentas figuran en la base de datos como "ZINPLE SPA" (lo que le
+// mandamos al comprador), pero el banco real de esas cuentas muestra el
+// nombre PERSONAL del titular real (Josber Marcano, dueño de Zinple) — un
+// mismatch esperado y confirmado con el usuario (ago 2026), no un error.
+// Compradores antiguos (de cuando se operaba con la cuenta personal) además
+// suelen preguntar puntualmente por ese nombre porque ya operaron antes y
+// lo tienen guardado así. Se tolera 1-2 letras de diferencia porque en la
+// práctica llega escrito con errores de tipeo muy seguido (ej. "Josver",
+// "Yosber", "Marcanoo") — exigirlo perfecto dejaría pasar la mayoría de los
+// casos reales directo al camino de "nombre distinto" (escalar a asesor),
+// que es exactamente lo opuesto de lo que se necesita para el nombre correcto.
+function mentionsExpectedHolderName(text: string): boolean {
+  const t = text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const words = t.match(/[a-z]+/g) || [];
+  return words.some(w =>
+    (w.length >= 4 && levenshtein(w, "josber") <= 2) ||
+    (w.length >= 5 && levenshtein(w, "marcano") <= 2)
+  );
+}
+
+// Reconoce cuando el comprador plantea una duda sobre el NOMBRE que aparece
+// en la cuenta -- caso real reportado por el usuario (ago 2026): esto pasa
+// seguido y hoy el bot no lo entiende, se pierde. Regla de negocio explícita
+// del usuario: nunca intentar resolver esto solo -- si el nombre que
+// mencionan es el titular real (mentionsExpectedHolderName), se confirma
+// directo; para CUALQUIER otro nombre (o "otro nombre" sin especificar
+// cuál), siempre escalar a un asesor humano, nunca inventar una explicación.
+function matchHolderNameConcern(text: string): boolean {
+  const t = text.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return /\botro\s+nombre\b/.test(t) ||
+    /\bnombre\s+(distinto|diferente|equivocado|raro)\b/.test(t) ||
+    /\bno\s+(dice|aparece|sale|coincide)\b[^.!?\n]{0,25}\b(zinple|nombre)\b/.test(t) ||
+    /\bnombre\s+no\s+coincide\b/.test(t) ||
+    (/\btitular\b/.test(t) && /\b(distinto|diferente|otro|no coincide)\b/.test(t)) ||
+    mentionsExpectedHolderName(t);
 }
 
 // "Procedo" (o variantes: "voy a proceder", "procediendo", "ya va", "ya
