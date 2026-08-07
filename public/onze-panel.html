@@ -14204,7 +14204,7 @@ function addP2PBotStyles(){
     `);
   };
 
-  window.botCycleShowDetail = function(id){
+  window.botCycleShowDetail = async function(id){
     const c = botCycleHistoryCache.find(x => x.id === id);
     if(!c){ alert("No se encontró el detalle de este ciclo."); return; }
     const totalClp = Math.round(Number(c.totalBinanceClp || 0) + Number(c.totalManualClp || 0));
@@ -14241,11 +14241,52 @@ function addP2PBotStyles(){
         <div style="font-weight:700;color:#cbd5e1;margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:.3px;">Ventas manuales (${manualSales.length})</div>
         <div style="max-height:150px;overflow-y:auto;">${manualRows}</div>
       </div>
+      <div style="margin-bottom:16px;">
+        <div style="font-weight:700;color:#cbd5e1;margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:.3px;">Órdenes del ciclo</div>
+        <div id="botCycleOrdersList" style="max-height:220px;overflow-y:auto;">
+          <p style="color:#64748b;font-size:12px;">Cargando órdenes...</p>
+        </div>
+      </div>
       <div style="display:flex;justify-content:flex-end;">
         <button onclick="document.getElementById('botCycleDetailModal').remove()"
           style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cerrar</button>
       </div>
     `);
+
+    // Las órdenes reales del ciclo NUNCA se guardaron en la base de datos
+    // (P2PCycle solo tiene totales + primera/última orden) -- se recalculan
+    // en vivo pidiéndolas a este endpoint nuevo, igual que ya se hace para
+    // el ciclo activo. Se carga aparte (no bloquea la apertura del modal)
+    // porque puede tardar unos segundos en paginar el historial de Binance.
+    try {
+      const ordersRes = await fetch("/api/p2p/cycle/orders?id=" + encodeURIComponent(id), { credentials: "include" });
+      const ordersData = await ordersRes.json();
+      const listEl = document.getElementById("botCycleOrdersList");
+      if (!listEl) return; // el usuario ya cerró el modal
+      if (!ordersData?.ok) {
+        listEl.innerHTML = `<p style="color:#f87171;font-size:12px;">No se pudo cargar la lista de órdenes.</p>`;
+        return;
+      }
+      const orders = ordersData.orders || [];
+      if (!orders.length) {
+        listEl.innerHTML = `<p style="color:#64748b;font-size:12px;">Sin órdenes registradas en este ciclo.</p>`;
+        return;
+      }
+      listEl.innerHTML = orders.map(o => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(148,163,184,.08);font-size:12px;">
+          <div>
+            <div style="color:#e2e8f0;font-family:monospace;">${escHtml(String(o.orderNumber || "—"))}</div>
+            <div style="color:#64748b;font-size:10px;">${o.createTime ? new Date(o.createTime).toLocaleString() : "—"}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="color:#00d4ff;font-weight:700;">$${Math.round(Number(o.totalPrice) || 0).toLocaleString()}</div>
+            <div style="color:#94a3b8;font-size:10px;">${Number(o.amount || 0).toFixed(2)} USDT</div>
+          </div>
+        </div>`).join("");
+    } catch (e) {
+      const listEl = document.getElementById("botCycleOrdersList");
+      if (listEl) listEl.innerHTML = `<p style="color:#f87171;font-size:12px;">No se pudo cargar la lista de órdenes.</p>`;
+    }
   };
 
   function formatDurationMs(ms){
