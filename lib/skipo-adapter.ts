@@ -223,8 +223,18 @@ export class SkipoV2Client {
   // Ejecuta el retiro real -- mueve dinero de forma irreversible. Nunca
   // llamar sin que medie una confirmación explícita del cliente (2FA) y,
   // mientras se prueba por primera vez, del operador.
+  //
+  // El campo se llama "assetSymbol", NUNCA "asset" -- confirmado en vivo
+  // (ago 2026) por el propio error 400 de Skipo ("property asset should
+  // not exist; assetSymbol should not be empty") tras resolver el 401 de
+  // autenticación. La doc/OpenAPI pública decía "asset" en el momento en
+  // que se leyó -- el servidor real manda, no el doc.
   async createWithdrawal(params: { asset: string; amount: string; contactId: string }): Promise<SkipoWithdrawal> {
-    return this.requestSigned("POST", "/v2/withdrawals", params);
+    return this.requestSigned("POST", "/v2/withdrawals", {
+      assetSymbol: params.asset,
+      amount: params.amount,
+      contactId: params.contactId,
+    });
   }
 
   async getWithdrawal(id: string): Promise<SkipoWithdrawal> {
