@@ -843,6 +843,24 @@ async function handleClientResponse(
   // como "ok"/"dale" arriba -- así que nunca debe disparar una repregunta.
   if (isGreetingOnly(textLower)) return;
 
+  // Pedido explícito del usuario (ago 2026, caso real orden
+  // 22919178500780380160): si el comprador menciona pagar desde la cuenta de
+  // un tercero (hermana, esposa, amigo, etc.), el bot debe decir que NO se
+  // puede de inmediato, sin importar en qué parte de la conversación esté.
+  // Antes este chequeo (matchThirdParty) solo corría DESPUÉS de haber
+  // enviado la cuenta (case "account_sent" más abajo) -- en el caso real, el
+  // comprador lo mencionó ANTES de eso (respondiendo la primera pregunta de
+  // personal/empresa), así que caía al flujo normal como si nada y el bot
+  // terminó mandando la cuenta igual, sin haberlo detectado. Se corta acá,
+  // antes del switch por estado, para que aplique sin importar en qué
+  // pregunta esté el comprador.
+  if (matchThirdParty(textLower)) {
+    await sendAndTrack(client, exchange, order.orderNumber, cs,
+      "Lo siento, la transferencia debe ser desde una cuenta a nombre del titular de la orden. No aceptamos depósitos de terceros.\n\n¿Tienes otra forma de realizar el pago?"
+    );
+    return;
+  }
+
   switch (cs.state) {
     case "awaiting_account_type": {
       const opt = matchOption(textLower, 2);
@@ -1368,10 +1386,6 @@ async function handleClientResponse(
         );
       } else if (matchProceeding(textLower)) {
         await sendAndTrack(client, exchange, order.orderNumber, cs, "Perfecto, estaré atento.");
-      } else if (matchThirdParty(textLower)) {
-        await sendAndTrack(client, exchange, order.orderNumber, cs,
-          "Lo siento, la transferencia debe ser desde una cuenta a nombre del titular de la orden. No aceptamos depósitos de terceros.\n\n¿Tienes otra forma de realizar el pago?"
-        );
       } else if (matchAsksRutAccount(textLower)) {
         await sendAndTrack(client, exchange, order.orderNumber, cs,
           "Al ser cuenta empresa, no manejamos Cuenta RUT — la que te enviamos es nuestra cuenta corriente de Banco Estado. No hay ningún problema: si tú tienes Banco Estado (aunque sea Cuenta RUT), puedes transferir igual a esa cuenta sin inconveniente."
