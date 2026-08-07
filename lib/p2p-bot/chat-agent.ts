@@ -571,10 +571,19 @@ async function processOrderLocked(
   if (cs.state === "account_sent" && !isPaid && !cs.markPaidReminderSentAt) {
     const lastReceiptTs = lastComprobantTime(msgs);
     if (lastReceiptTs > 0 && Date.now() >= lastReceiptTs + 60 * 1000) {
+      // Caso real confirmado en vivo (ago 2026): el mismo aviso se le mandó
+      // 10 VECES al mismo comprador -- el candado de la orden expiraba
+      // (LOCK_TTL_MS, ver chat-lock.ts) mientras sendAndTrack todavía estaba
+      // en curso, y el siguiente ciclo volvía a entrar antes de que se
+      // alcanzara a guardar la marca de "ya avisé". Ya se subió el TTL del
+      // candado, pero acá además se invierte el orden a propósito: se marca
+      // ANTES de mandar, no después. Preferible saltarse este aviso una vez
+      // (si el envío llega a fallar) a arriesgar que Binance marque la
+      // cuenta como spam por mandar el mismo mensaje muchas veces seguidas.
+      await prisma.p2PChatState.update({ where: { id: cs.id }, data: { markPaidReminderSentAt: new Date() } });
       await sendAndTrack(client, exchange, orderNo, cs,
         "Vi tu comprobante, gracias — pero para que podamos procesar tu pago necesitas marcar \"Pagado\" en la orden. ¿Puedes hacerlo, por favor?"
       );
-      await prisma.p2PChatState.update({ where: { id: cs.id }, data: { markPaidReminderSentAt: new Date() } });
       return;
     }
   }

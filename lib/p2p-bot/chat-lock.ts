@@ -5,7 +5,19 @@ import { prisma } from "@/lib/prisma";
 // varias instancias del mismo servidor en paralelo, cada una con su propia
 // memoria aislada, así que un lock en memoria de una instancia no lo ve otra.
 // Confirmado en vivo jul 2026.
-const LOCK_TTL_MS = 15000; // si una instancia se cae a mitad de proceso, el lock se autolibera solo tras 15s
+// Hallazgo real en vivo (ago 2026): con 15s, el lock podía expirar y
+// liberarse MIENTRAS un envío legítimo todavía estaba en curso (sendAndTrack
+// puede tardar 2-5s de espera humana + hasta 2 intentos de WS con 3s de
+// pausa entre ellos = fácil superar 15s) -- el siguiente ciclo entraba a
+// procesar la MISMA orden de nuevo antes de que la primera instancia
+// alcanzara a guardar que ya había mandado el mensaje, mandándolo otra vez.
+// Confirmado con un caso real: el mismo aviso se le mandó 10 veces al mismo
+// comprador en espacios de ~20s (justo el intervalo normal de ciclo),
+// arriesgando que Binance marque la cuenta como spam. processOrderLocked ya
+// usa 35s como su propio salvavidas para un cuelgue real -- el lock debe
+// durar MÁS que eso, nunca menos, para que sea siempre el timeout externo
+// (no este) el que detecte un cuelgue de verdad.
+const LOCK_TTL_MS = 40000; // si una instancia se cae a mitad de proceso, el lock se autolibera solo tras 40s
 
 export async function acquireChatLock(key: string): Promise<boolean> {
   const now = new Date();
