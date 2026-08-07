@@ -157,6 +157,19 @@ export class SkipoV2Client {
     return this.parseResponse(res, path);
   }
 
+  // Causa raíz real confirmada por soporte de Skipo (ago 2026, tras varios
+  // días con "Unknown API key" / "Malformed API key" en /v2/withdrawals):
+  // el header X-API-Key (y el claim "sub" del JWT) esperan solo el PREFIJO
+  // público de la llave -- los primeros 21 caracteres ("skp_live_" + 12 más),
+  // NUNCA la llave secreta completa. Mandábamos la llave entera en los dos
+  // -- Skipo nunca la reconocía como un prefijo válido porque era demasiado
+  // larga, de ahí el error. El Bearer de las lecturas (tier-1, requestRead)
+  // SÍ sigue siendo la llave completa -- ese es un esquema distinto, no se
+  // toca acá.
+  private get apiKeyPrefix(): string {
+    return this.apiKey.slice(0, 21);
+  }
+
   // Tier-2: firma JWT por petición -- ver comentario de arriba. El body se
   // serializa UNA sola vez (bodyBytes) y esos mismos bytes son los que se
   // hashean Y los que se envían -- reserializar después de firmar invalida
@@ -168,7 +181,7 @@ export class SkipoV2Client {
     const key = createPrivateKey(this.privateKeyPem);
     const jwt = await new SignJWT({ uri: `${method} ${path}`, nonce: randomUUID(), bodyHash })
       .setProtectedHeader({ alg: "EdDSA" })
-      .setSubject(this.apiKey)
+      .setSubject(this.apiKeyPrefix)
       .setIssuedAt(now)
       .setExpirationTime(now + 55)
       .sign(key);
@@ -176,7 +189,7 @@ export class SkipoV2Client {
     const res = await fetch(`${SKIPO_V2_BASE_URL}${path}`, {
       method,
       headers: {
-        "X-API-Key": this.apiKey,
+        "X-API-Key": this.apiKeyPrefix,
         Authorization: `Bearer ${jwt}`,
         "Content-Type": "application/json",
       },
