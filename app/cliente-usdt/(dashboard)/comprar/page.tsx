@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useClient } from "../client-context";
 
 type Quote = {
   clpAmount: number;
@@ -17,6 +18,7 @@ type PurchaseIntent = {
   status: "awaiting_payment" | "ready_to_buy" | "executing" | "completed" | "cancelled";
   usdtAmount: string | number | null;
   executedRate: string | number | null;
+  executedAt: string | null;
 };
 
 type PaymentAccount = {
@@ -42,6 +44,7 @@ const INTENT_POLL_MS = 6000;
 type QuoteParams = { clpAmount: number } | { usdtAmount: number };
 
 export default function ComprarPage() {
+  const { client } = useClient();
   const [clpInput, setClpInput] = useState("");
   const [usdtInput, setUsdtInput] = useState("");
   // Cuál de los 2 campos está escribiendo el cliente ahora mismo -- el otro
@@ -291,6 +294,145 @@ export default function ComprarPage() {
     setExecuteError("");
   }
 
+  const [sharingReceipt, setSharingReceipt] = useState(false);
+
+  // Dibuja el comprobante como imagen (diseño propio, mismo estilo oscuro +
+  // verde de la app) -- pedido explícito del usuario (ago 2026): quería una
+  // imagen, no solo texto, para poder emitir la factura mientras se hace la
+  // integración real con el SII.
+  function buildReceiptImageBlob(): Promise<Blob | null> {
+    return new Promise((resolve) => {
+      if (!activeIntent) { resolve(null); return; }
+      const W = 720, H = 1000;
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { resolve(null); return; }
+
+      const fecha = activeIntent.executedAt
+        ? new Date(activeIntent.executedAt).toLocaleString("es-CL", { timeZone: "America/Santiago" })
+        : new Date().toLocaleString("es-CL", { timeZone: "America/Santiago" });
+
+      // Fondo
+      const bg = ctx.createLinearGradient(0, 0, 0, H);
+      bg.addColorStop(0, "#041126");
+      bg.addColorStop(1, "#0a1830");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+
+      // Marca
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#34d399";
+      ctx.font = "bold 52px system-ui, sans-serif";
+      ctx.fillText("ZINPLE", W / 2, 100);
+      ctx.fillStyle = "#8aa0ba";
+      ctx.font = "16px system-ui, sans-serif";
+      ctx.fillText("Comprobante de compra USDT", W / 2, 130);
+
+      // Tarjeta
+      const cardX = 50, cardY = 170, cardW = W - 100, cardH = 690;
+      ctx.fillStyle = "rgba(255,255,255,0.04)";
+      ctx.strokeStyle = "rgba(148,163,184,0.18)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (typeof (ctx as any).roundRect === "function") {
+        (ctx as any).roundRect(cardX, cardY, cardW, cardH, 24);
+      } else {
+        ctx.rect(cardX, cardY, cardW, cardH);
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      // Ícono de check
+      ctx.fillStyle = "rgba(52,211,153,0.15)";
+      ctx.beginPath();
+      ctx.arc(W / 2, cardY + 70, 40, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#34d399";
+      ctx.font = "bold 42px system-ui, sans-serif";
+      ctx.fillText("✓", W / 2, cardY + 84);
+
+      ctx.fillStyle = "#e2e8f0";
+      ctx.font = "bold 24px system-ui, sans-serif";
+      ctx.fillText("Compra realizada", W / 2, cardY + 150);
+
+      const labelX = cardX + 40;
+      const valueX = cardX + cardW - 40;
+      let y = cardY + 220;
+      const rowGap = 56;
+
+      function row(label: string, value: string, big?: boolean) {
+        ctx!.textAlign = "left";
+        ctx!.fillStyle = "#8aa0ba";
+        ctx!.font = "16px system-ui, sans-serif";
+        ctx!.fillText(label, labelX, y);
+        ctx!.textAlign = "right";
+        ctx!.fillStyle = big ? "#34d399" : "#f1f5f9";
+        ctx!.font = `bold ${big ? 22 : 18}px system-ui, sans-serif`;
+        ctx!.fillText(value, valueX, y);
+        y += rowGap;
+      }
+
+      row("Cliente", client.fullName);
+      row("Código", activeIntent.referenceCode);
+      row("Fecha", fecha);
+
+      ctx.strokeStyle = "rgba(148,163,184,0.15)";
+      ctx.beginPath();
+      ctx.moveTo(labelX, y - 18);
+      ctx.lineTo(valueX, y - 18);
+      ctx.stroke();
+      y += 20;
+
+      row("Pagado", `$${Number(activeIntent.receivedClp).toLocaleString("es-CL")} CLP`);
+      row("Recibido", `${Number(activeIntent.usdtAmount || 0).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`, true);
+      if (activeIntent.executedRate) {
+        row("Tasa", `${Number(activeIntent.executedRate).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CLP/USDT`);
+      }
+
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#64748b";
+      ctx.font = "14px system-ui, sans-serif";
+      ctx.fillText("onze-pay.com", W / 2, H - 40);
+
+      canvas.toBlob((blob) => resolve(blob), "image/png");
+    });
+  }
+
+  async function handleCompartirComprobante() {
+    if (!activeIntent || activeIntent.status !== "completed") return;
+    setSharingReceipt(true);
+    try {
+      const blob = await buildReceiptImageBlob();
+      if (!blob) return;
+      const file = new File([blob], `comprobante-${activeIntent.referenceCode}.png`, { type: "image/png" });
+
+      // En celular (donde vive WhatsApp) esto abre el menú nativo de
+      // compartir con la imagen ya adjunta -- el cliente solo elige WhatsApp.
+      if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: "Comprobante de compra USDT" });
+          return;
+        } catch {
+          // El cliente canceló el share o el navegador lo rechazó -- cae a
+          // la descarga de abajo para que igual pueda adjuntarla a mano.
+        }
+      }
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `comprobante-${activeIntent.referenceCode}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setSharingReceipt(false);
+    }
+  }
+
   async function copyToClipboard(text: string, label: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -525,6 +667,13 @@ export default function ComprarPage() {
                 <> a <span className="font-semibold text-white">{Number(activeIntent.executedRate).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CLP</span>.</>
               )}
             </p>
+            <button
+              onClick={handleCompartirComprobante}
+              disabled={sharingReceipt}
+              className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg bg-[#25D366] py-3 font-semibold text-black transition hover:bg-[#20bd5a] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {sharingReceipt ? "Generando…" : "📤 Compartir comprobante"}
+            </button>
             <button onClick={handleNuevaCompra} className="w-full rounded-lg border border-white/10 bg-white/5 py-3 font-semibold">
               Hacer otra compra
             </button>
