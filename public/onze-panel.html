@@ -3490,13 +3490,12 @@
               <span id="rateHistoryCountryBtnLabel">Todos los países</span>
               <span style="font-size:10px;color:#64748b;">▾</span>
             </button>
-            <div id="rateHistoryCountryPanel" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:20;min-width:220px;background:#0f1b2c;border:1px solid rgba(148,163,184,.18);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.35);padding:8px;">
-              <div style="font-size:11px;color:#64748b;padding:4px 6px 8px;">Elige uno o varios países</div>
-              <div id="rateHistoryCountryCheckboxes" style="display:flex;flex-direction:column;gap:2px;max-height:240px;overflow:auto;"></div>
-              <div style="display:flex;justify-content:space-between;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(148,163,184,.12);">
+            <div id="rateHistoryCountryPanel" style="display:none;flex-direction:column;position:absolute;top:calc(100% + 6px);left:0;z-index:20;min-width:220px;max-height:min(320px,70vh);background:#0f1b2c;border:1px solid rgba(148,163,184,.18);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.35);">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 10px 8px;border-bottom:1px solid rgba(148,163,184,.12);flex:0 0 auto;">
                 <button type="button" id="rateHistoryCountryClearBtn" style="background:none;border:none;color:#94a3b8;font-size:12px;cursor:pointer;padding:4px 6px;">Ver todos</button>
                 <button type="button" id="rateHistoryCountryApplyBtn" class="btn" style="padding:6px 14px;font-size:12px;">Aplicar</button>
               </div>
+              <div id="rateHistoryCountryCheckboxes" style="display:flex;flex-direction:column;gap:2px;overflow:auto;padding:8px;flex:1 1 auto;"></div>
             </div>
           </div>
         </div>
@@ -5520,13 +5519,13 @@
     if(rateHistoryCountryBtn) rateHistoryCountryBtn.addEventListener("click", function(e){
       e.stopPropagation();
       if(!rateHistoryCountryPanel) return;
-      const open = rateHistoryCountryPanel.style.display === "block";
-      rateHistoryCountryPanel.style.display = open ? "none" : "block";
+      const open = rateHistoryCountryPanel.style.display === "flex";
+      rateHistoryCountryPanel.style.display = open ? "none" : "flex";
       rateHistoryCountryBtn.setAttribute("aria-expanded", open ? "false" : "true");
     });
     if(rateHistoryCountryPanel) rateHistoryCountryPanel.addEventListener("click", (e)=>e.stopPropagation());
     document.addEventListener("click", function(e){
-      if(!rateHistoryCountryPanel || rateHistoryCountryPanel.style.display !== "block") return;
+      if(!rateHistoryCountryPanel || rateHistoryCountryPanel.style.display !== "flex") return;
       if(!e.target.closest("#rateHistoryCountryPanel") && !e.target.closest("#rateHistoryCountryBtn")) closeRateHistoryCountryPanel();
     });
     document.addEventListener("keydown", function(e){
