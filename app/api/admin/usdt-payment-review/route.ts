@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { verifySessionToken } from "@/lib/session";
-import { confirmManualMatch } from "@/lib/usdt-payment-matcher";
+import { confirmManualMatch, recalculateIntentTotal } from "@/lib/usdt-payment-matcher";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,6 +59,44 @@ export async function PATCH(req: NextRequest) {
   if (!session.tenantId) return NextResponse.json({ error: "Falta tenantId" }, { status: 400 });
 
   const body = await req.json().catch(() => ({}));
+
+  // Registro manual de un pago que el operador verificó él mismo (ej. el
+  // correo del banco nunca llegó) -- crea una transferencia "sintética" ya
+  // confirmada (needsReview: false, matchMethod: "manual_no_email") y la
+  // suma con el MISMO camino (recalculateIntentTotal) que ya usan las
+  // transferencias reales, para no duplicar ninguna lógica de dinero.
+  // emailMessageId es NOT NULL/único en el modelo -- se genera uno sintético
+  // porque este registro nunca vino de un correo real.
+  if (body.manualEntry === true) {
+    const purchaseIntentId = Number(body.purchaseIntentId);
+    const amountClp = Number(body.amountClp);
+    if (!purchaseIntentId) return NextResponse.json({ error: "Falta purchaseIntentId" }, { status: 400 });
+    if (!(amountClp > 0)) return NextResponse.json({ error: "Monto inválido" }, { status: 400 });
+
+    const intent = await prisma.usdtPurchaseIntent.findUnique({ where: { id: purchaseIntentId } });
+    if (!intent || intent.tenantId !== session.tenantId) {
+      return NextResponse.json({ error: "Solicitud no encontrada" }, { status: 404 });
+    }
+
+    const transfer = await prisma.usdtIncomingTransfer.create({
+      data: {
+        tenantId: session.tenantId,
+        purchaseIntentId,
+        amountClp,
+        payerName: null,
+        rawComment: `Registrado manualmente por el operador (sin correo) — ${session.email}`,
+        matchMethod: "manual_no_email",
+        needsReview: false,
+        reviewedByUserId: session.userId,
+        emailMessageId: `manual:${randomUUID()}`,
+        sourceEmail: "manual-admin-entry",
+        authPassed: true,
+        receivedAt: new Date(),
+      },
+    });
+    await recalculateIntentTotal(purchaseIntentId);
+    return NextResponse.json({ ok: true, transfer });
+  }
 
   // Descarte masivo — "seleccionar todos" en la bandeja de revisión (ej.
   // limpiar de una vez el backlog histórico que dejó la primera lectura de

@@ -3241,6 +3241,27 @@
   <footer>ONZE © 2025</footer>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <!-- Reemplazo de confirm()/onzeAlert() nativos del navegador -- pedido
+       explícito del usuario (ago 2026): esos diálogos se ven genéricos del
+       sistema operativo, no del diseño de la web. onzeConfirm()/onzeAlert()
+       (definidas más abajo) devuelven una Promise, igual que confirm/alert
+       bloquean el flujo hasta que el usuario responde -- por eso todo
+       llamado se reemplazó por "await onzeConfirm(...)"/"onzeAlert(...)". -->
+  <div class="modal" id="onzeConfirmModal" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-card" style="width:min(420px,100%);">
+        <div class="modal-head">
+          <h3 class="modal-title" id="onzeConfirmTitle">Confirmar</h3>
+        </div>
+        <p id="onzeConfirmMessage" style="color:#cbd5e1;font-size:14px;line-height:1.55;white-space:pre-line;margin:0 0 22px;"></p>
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+          <button class="btn" type="button" id="onzeConfirmCancelBtn">Cancelar</button>
+          <button class="btn primary" type="button" id="onzeConfirmOkBtn">Aceptar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="modal" id="providerModal" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-card" style="width:min(620px,100%);">
@@ -3638,6 +3659,71 @@
     };
 
     window.currentUserContext = CURRENT_USER_CONTEXT;
+
+    // Reemplazo de confirm()/onzeAlert() nativos con el estilo de la web -- ver
+    // comentario del markup de #onzeConfirmModal más arriba. Un solo modal
+    // compartido alcanza (igual que el confirm/alert nativo, es bloqueante
+    // para el usuario -- nunca hay dos abiertos al mismo tiempo en la
+    // práctica).
+    let onzeConfirmResolve = null;
+    const onzeConfirmModalEl = document.getElementById('onzeConfirmModal');
+    const onzeConfirmTitleEl = document.getElementById('onzeConfirmTitle');
+    const onzeConfirmMessageEl = document.getElementById('onzeConfirmMessage');
+    const onzeConfirmOkBtn = document.getElementById('onzeConfirmOkBtn');
+    const onzeConfirmCancelBtn = document.getElementById('onzeConfirmCancelBtn');
+
+    function onzeCloseConfirmModal(){
+      if(!onzeConfirmModalEl) return;
+      onzeConfirmModalEl.classList.remove('open');
+      onzeConfirmModalEl.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('noscroll');
+    }
+
+    function onzeShowConfirmModal(message, opts){
+      if(!onzeConfirmModalEl) return;
+      onzeConfirmTitleEl.textContent = opts.title || (opts.isAlert ? 'Aviso' : 'Confirmar');
+      onzeConfirmMessageEl.textContent = message;
+      onzeConfirmOkBtn.textContent = opts.confirmText || 'Aceptar';
+      onzeConfirmOkBtn.className = 'btn ' + (opts.danger ? 'danger' : 'primary');
+      onzeConfirmCancelBtn.style.display = opts.isAlert ? 'none' : 'inline-flex';
+      onzeConfirmCancelBtn.textContent = opts.cancelText || 'Cancelar';
+      onzeConfirmModalEl.classList.add('open');
+      onzeConfirmModalEl.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('noscroll');
+    }
+
+    if(onzeConfirmOkBtn) onzeConfirmOkBtn.addEventListener('click', function(){
+      onzeCloseConfirmModal();
+      const resolve = onzeConfirmResolve;
+      onzeConfirmResolve = null;
+      if(resolve) resolve(true);
+    });
+    if(onzeConfirmCancelBtn) onzeConfirmCancelBtn.addEventListener('click', function(){
+      onzeCloseConfirmModal();
+      const resolve = onzeConfirmResolve;
+      onzeConfirmResolve = null;
+      if(resolve) resolve(false);
+    });
+
+    // Reemplaza window.confirm() -- devuelve una Promise<boolean>, hay que
+    // usarla con "await" (igual que confirm() bloqueaba, esto pausa el
+    // flujo async hasta que el usuario responde).
+    window.onzeConfirm = function(message, opts){
+      return new Promise(function(resolve){
+        onzeShowConfirmModal(message, opts || {});
+        onzeConfirmResolve = resolve;
+      });
+    };
+
+    // Reemplaza window.alert() -- de un solo botón ("Aceptar"), sin
+    // Cancelar. También devuelve una Promise por si se quiere esperar a que
+    // el usuario la cierre, pero no es obligatorio usarla con "await".
+    window.onzeAlert = function(message, opts){
+      return new Promise(function(resolve){
+        onzeShowConfirmModal(message, Object.assign({}, opts, { isAlert: true }));
+        onzeConfirmResolve = function(){ resolve(); };
+      });
+    };
 
     function isGlobalAdmin(){
       return CURRENT_USER_CONTEXT.role === "super_admin_global";
@@ -4076,7 +4162,7 @@
       const cleanText = String(textToShare || "").trim();
 
       if(!cleanText){
-        alert("No hay información disponible para compartir.");
+        onzeAlert("No hay información disponible para compartir.");
         return;
       }
 
@@ -4391,7 +4477,7 @@
           document.execCommand("copy");
           showToast("Copiado ✅");
         }catch{
-          alert("No se pudo copiar");
+          onzeAlert("No se pudo copiar");
         }
         ta.remove();
       }
@@ -5586,7 +5672,7 @@
     }
 
     window.deleteExpense = async function(id){
-      if(!confirm("¿Seguro que deseas eliminar este gasto?")) return;
+      if(!(await onzeConfirm("¿Seguro que deseas eliminar este gasto?"))) return;
 
       try{
         const res = await fetch(`/api/expenses/${id}`, { method: "DELETE" });
@@ -5611,7 +5697,7 @@
     };
 
     window.deleteOperation = async function(id){
-      if(!confirm("¿Seguro que deseas anular esta operación? Quedará visible en historial pero no afectará el balance.")) return;
+      if(!(await onzeConfirm("¿Seguro que deseas anular esta operación? Quedará visible en historial pero no afectará el balance."))) return;
 
       try{
         const res = await fetch(`/api/operations/${id}`, { method: "PATCH" });
@@ -5761,7 +5847,7 @@
     function requireProfileForAction(message){
       const ok = isProfileComplete();
       if(ok) return true;
-      alert(message || "Debes completar tu perfil primero.");
+      onzeAlert(message || "Debes completar tu perfil primero.");
       switchView("profile");
       setTimeout(() => {
         profileFullName?.focus();
@@ -6751,7 +6837,7 @@ function loadProviders(){
       const providerId = select ? select.value : "";
 
       if(!providerId){
-        alert("Debes seleccionar un proveedor.");
+        onzeAlert("Debes seleccionar un proveedor.");
         return;
       }
 
@@ -6759,7 +6845,7 @@ function loadProviders(){
       const provider = providers.find(p => String(p.id) === String(providerId));
 
       if(!provider){
-        alert("No encontré el proveedor seleccionado.");
+        onzeAlert("No encontré el proveedor seleccionado.");
         return;
       }
 
@@ -6767,7 +6853,7 @@ function loadProviders(){
       const movement = movements.find(item => String(item.id) === String(movementId));
 
       if(!movement){
-        alert("No encontré el movimiento pendiente.");
+        onzeAlert("No encontré el movimiento pendiente.");
         return;
       }
 
@@ -6790,7 +6876,7 @@ function loadProviders(){
       const provider = providers.find(p => String(p.id) === String(id));
 
       if(!provider){
-        alert("No encontré este proveedor.");
+        onzeAlert("No encontré este proveedor.");
         return;
       }
 
@@ -8924,13 +9010,13 @@ function refreshHistoryUI(){
         };
 
         if(!data.fullName || !data.phone || !data.residenceCountry){
-          alert("Completa nombre, teléfono y país para guardar tu perfil.");
+          onzeAlert("Completa nombre, teléfono y país para guardar tu perfil.");
           return;
         }
 
         saveProfile(data);
         updateProfileUI();
-        alert("Perfil guardado correctamente.");
+        onzeAlert("Perfil guardado correctamente.");
         switchView("dashboard");
       });
     }
@@ -8971,7 +9057,7 @@ function refreshHistoryUI(){
 if(shareProviderSummaryBtn){
   shareProviderSummaryBtn.addEventListener("click", async ()=>{
     if(!currentProviderSummaryText){
-      alert("No hay resumen para compartir.");
+      onzeAlert("No hay resumen para compartir.");
       return;
     }
 
@@ -8980,10 +9066,10 @@ if(shareProviderSummaryBtn){
       if(typeof showToast === "function"){
         showToast("Resumen copiado para compartir");
       }else{
-        alert("Resumen copiado para compartir.");
+        onzeAlert("Resumen copiado para compartir.");
       }
     }catch(e){
-      alert(currentProviderSummaryText);
+      onzeAlert(currentProviderSummaryText);
     }
   });
 }
@@ -9056,17 +9142,17 @@ if(addProviderBtn){
         const note = providerNoteInput ? providerNoteInput.value.trim() : "";
 
         if(!name){
-          alert("Debes ingresar el nombre del proveedor.");
+          onzeAlert("Debes ingresar el nombre del proveedor.");
           return;
         }
 
         if(!country){
-          alert("Debes seleccionar el país del proveedor.");
+          onzeAlert("Debes seleccionar el país del proveedor.");
           return;
         }
 
         if(!currency){
-          alert("No se pudo cargar la moneda del país seleccionado.");
+          onzeAlert("No se pudo cargar la moneda del país seleccionado.");
           return;
         }
 
@@ -9149,7 +9235,7 @@ if(addProviderBtn){
     });
 
     clearHistoryBtn.addEventListener("click", async ()=>{
-      if(!confirm("¿Seguro que quieres borrar todo el historial?")) return;
+      if(!(await onzeConfirm("¿Seguro que quieres borrar todo el historial?"))) return;
 
       try{
         const res = await fetch("/api/operations", { method: "DELETE" });
@@ -12462,7 +12548,7 @@ function addP2PBotStyles(){
     if(customPm) paymentMethods.push(customPm);
 
     if(!price || !amount){
-      alert("Completa precio y cantidad");
+      onzeAlert("Completa precio y cantidad");
       return;
     }
 
@@ -12510,15 +12596,15 @@ function addP2PBotStyles(){
         }
         window.botLoadAds();
       }else{
-        alert("Error: " + (d?.error || "Desconocido"));
+        onzeAlert("Error: " + (d?.error || "Desconocido"));
       }
     }catch(e){
-      alert("Error al guardar anuncio");
+      onzeAlert("Error al guardar anuncio");
     }
   };
 
   window.botPanelDeleteAd = async function(id, adId){
-    if(!confirm("Eliminar este anuncio?")) return;
+    if(!(await onzeConfirm("Eliminar este anuncio?"))) return;
     try{
       let url = "/api/p2p/bot/ads?id=" + id;
       if(adId) url += "&adId=" + encodeURIComponent(adId) + "&exchange=" + botSelectedExchange;
@@ -12611,10 +12697,10 @@ function addP2PBotStyles(){
         document.getElementById("p2pAdAmount").value = fmt(d.available);
         updateAdEquivalents();
       }else{
-        alert("No se pudo leer el saldo. " + (d?.error || d?.message || "API del exchange no disponible"));
+        onzeAlert("No se pudo leer el saldo. " + (d?.error || d?.message || "API del exchange no disponible"));
       }
     }catch(e){
-      alert("Error al consultar saldo");
+      onzeAlert("Error al consultar saldo");
     }
   };
 
@@ -13252,7 +13338,7 @@ function addP2PBotStyles(){
     const accountNumber = document.getElementById("botPanelAcctNumber").value.trim();
     const email = document.getElementById("botPanelAcctEmail").value.trim();
     if(!bank || !holder || !accountNumber){
-      alert("Completa banco, titular y numero de cuenta");
+      onzeAlert("Completa banco, titular y numero de cuenta");
       return;
     }
 
@@ -13525,7 +13611,7 @@ function addP2PBotStyles(){
   };
 
   window.botPanelAcceptOrder = async function(orderNumber){
-    if(!confirm("Aceptar orden #" + orderNumber + "?")) return;
+    if(!(await onzeConfirm("Aceptar orden #" + orderNumber + "?"))) return;
     try{
       await fetch("/api/p2p/bot/orders", {
         method:"POST", credentials:"include",
@@ -13565,7 +13651,7 @@ function addP2PBotStyles(){
           btn.disabled = false;
           btn.style.opacity = "1";
         }
-        alert("❌ Error: " + (d.error || "Desconocido"));
+        onzeAlert("❌ Error: " + (d.error || "Desconocido"));
       }
     }catch(e){ 
       if(btn){
@@ -13573,7 +13659,7 @@ function addP2PBotStyles(){
         btn.disabled = false;
         btn.style.opacity = "1";
       }
-      alert("❌ Error de red"); 
+      onzeAlert("❌ Error de red"); 
     }
   };
 
@@ -13823,7 +13909,7 @@ function addP2PBotStyles(){
   };
 
   window.botPanelDeleteFingerprint = async function(id){
-    if(!confirm("¿Eliminar esta huella registrada?")) return;
+    if(!(await onzeConfirm("¿Eliminar esta huella registrada?"))) return;
     try{
       await fetch("/api/security/webauthn/credentials", {
         method:"DELETE", credentials:"include",
@@ -14371,7 +14457,7 @@ function addP2PBotStyles(){
 
   window.botCycleShowDetail = async function(id){
     const c = botCycleHistoryCache.find(x => x.id === id);
-    if(!c){ alert("No se encontró el detalle de este ciclo."); return; }
+    if(!c){ onzeAlert("No se encontró el detalle de este ciclo."); return; }
     const totalClp = Math.round(Number(c.totalBinanceClp || 0) + Number(c.totalManualClp || 0));
     const start = c.startTime ? new Date(c.startTime).toLocaleString() : "—";
     const end = c.endTime ? new Date(c.endTime).toLocaleString() : "—";
@@ -14475,7 +14561,7 @@ function addP2PBotStyles(){
   }
 
   window.botCycleDelete = async function(id){
-    if(!confirm("¿Eliminar este ciclo del historial? No se puede deshacer.")) return;
+    if(!(await onzeConfirm("¿Eliminar este ciclo del historial? No se puede deshacer."))) return;
     try{
       const res = await fetch("/api/p2p/cycle/delete", {
         method:"POST", credentials:"include",
@@ -14483,14 +14569,14 @@ function addP2PBotStyles(){
         body: JSON.stringify({ id })
       });
       const data = await res.json();
-      if(!data.ok){ alert(data.error || "No se pudo eliminar"); return; }
+      if(!data.ok){ onzeAlert(data.error || "No se pudo eliminar"); return; }
       window.botCycleShowHistory();
-    }catch(e){ alert("Error al eliminar"); }
+    }catch(e){ onzeAlert("Error al eliminar"); }
   };
 
   window.botCycleDeleteAll = async function(){
     const lbl = botActiveLabel || "ONZE";
-    if(!confirm(`¿Vaciar TODO el historial de ciclos cerrados de ${lbl}? No se puede deshacer.`)) return;
+    if(!(await onzeConfirm(`¿Vaciar TODO el historial de ciclos cerrados de ${lbl}? No se puede deshacer.`))) return;
     try{
       const res = await fetch("/api/p2p/cycle/delete", {
         method:"POST", credentials:"include",
@@ -14498,9 +14584,9 @@ function addP2PBotStyles(){
         body: JSON.stringify({ all: true, label: lbl, exchange: botSelectedExchange || "binance" })
       });
       const data = await res.json();
-      if(!data.ok){ alert(data.error || "No se pudo vaciar"); return; }
+      if(!data.ok){ onzeAlert(data.error || "No se pudo vaciar"); return; }
       window.botCycleShowHistory();
-    }catch(e){ alert("Error al vaciar historial"); }
+    }catch(e){ onzeAlert("Error al vaciar historial"); }
   };
 
   function initP2PBot(){
@@ -14703,7 +14789,7 @@ function addP2PBotStyles(){
   /* --- CSV Export --- */
   function exportHistoryCSV(){
     const ops = typeof loadOperations === 'function' ? loadOperations() : [];
-    if(!ops.length){ alert('No hay operaciones para exportar.'); return; }
+    if(!ops.length){ onzeAlert('No hay operaciones para exportar.'); return; }
 
     const headers = ['Fecha','Cliente','N° Operación','Tipo','Origen','Destino','Envía','Recibe','Tasa proveedor','Tu tasa','Ganancia','Moneda ganancia','Observación'];
     const rows = ops.map(op => [
@@ -14965,22 +15051,22 @@ function addP2PBotStyles(){
       if(data.ok){
         if(typeof showToast === 'function') showToast('Respaldo guardado en la nube');
       } else {
-        alert('Error al respaldar: ' + (data.error || 'desconocido'));
+        onzeAlert('Error al respaldar: ' + (data.error || 'desconocido'));
       }
     }catch(e){
-      alert('No se pudo conectar al servidor de respaldo.');
+      onzeAlert('No se pudo conectar al servidor de respaldo.');
     }
   }
 
   async function restoreFromCloud(){
-    if(!confirm('Esto reemplazará tus datos locales con los del respaldo en la nube. ¿Continuar?')) return;
+    if(!(await onzeConfirm('Esto reemplazará tus datos locales con los del respaldo en la nube. ¿Continuar?'))) return;
     try{
       const userId = getUserId();
       const resp = await fetch(`/.netlify/functions/backup?userId=${encodeURIComponent(userId)}`);
       const data = await resp.json();
 
       if(!data.updatedAt){
-        alert('No se encontró respaldo en la nube para este dispositivo.');
+        onzeAlert('No se encontró respaldo en la nube para este dispositivo.');
         return;
       }
 
@@ -14996,7 +15082,7 @@ function addP2PBotStyles(){
       if(typeof refreshDashboard === 'function') refreshDashboard();
       if(typeof fillProfileForm === 'function') fillProfileForm();
     }catch(e){
-      alert('No se pudo conectar al servidor de respaldo.');
+      onzeAlert('No se pudo conectar al servidor de respaldo.');
     }
   }
 
@@ -17312,8 +17398,8 @@ function addP2PBotStyles(){
     if(okxClean.length !== okx.length) saveP2POkxOrders(okxClean);
   };
 
-  window.deleteManualSale = function deleteManualSale(orderId){
-    if(!confirm("¿Borrar esta venta manual? Se recalcularán las capacidades.")) return;
+  window.deleteManualSale = async function deleteManualSale(orderId){
+    if(!(await onzeConfirm("¿Borrar esta venta manual? Se recalcularán las capacidades."))) return;
     const orders = loadP2PBinanceOrders();
     const filtered = orders.filter(o => o.orderNumber !== orderId);
     saveP2PBinanceOrders(filtered);
@@ -17322,8 +17408,8 @@ function addP2PBotStyles(){
     window.recalculateP2PCapacities();
   };
 
-  window.recalculateP2PCapacities = function recalculateP2PCapacities(){
-    if(!confirm("¿Recalcular capacities desde cero? Se limpiarán todos los clpReceived, saleParts y estados finished para reasignar solo con ventas reales.")) return;
+  window.recalculateP2PCapacities = async function recalculateP2PCapacities(){
+    if(!(await onzeConfirm("¿Recalcular capacities desde cero? Se limpiarán todos los clpReceived, saleParts y estados finished para reasignar solo con ventas reales."))) return;
     const caps = loadP2PCapacity();
     for(const cap of caps){
       cap.clpReceived = "0";
@@ -17553,7 +17639,7 @@ function addP2PBotStyles(){
 
 
     }catch(error){
-      alert(error.message || "Error sincronizando Binance P2P.");
+      onzeAlert(error.message || "Error sincronizando Binance P2P.");
     }finally{
       btn.disabled = false;
       btn.textContent = oldText;
@@ -18771,12 +18857,12 @@ function addP2PBotStyles(){
       const note = document.getElementById("p2pCapacityNote")?.value || "";
 
       if(!provider.trim()){
-        alert("Coloca el proveedor.");
+        onzeAlert("Coloca el proveedor.");
         return;
       }
 
       if(capacityClp <= 0 || buyPrice <= 0 || usdtAmount <= 0){
-        alert("Coloca un monto CLP de capacity y precio de compra válido.");
+        onzeAlert("Coloca un monto CLP de capacity y precio de compra válido.");
         return;
       }
 
@@ -18900,7 +18986,7 @@ function addP2PBotStyles(){
     const content = document.getElementById("p2pCapacityDetailContent");
 
     if(!item || !content){
-      alert("No encontré el detalle de este capacity.");
+      onzeAlert("No encontré el detalle de este capacity.");
       return;
     }
 
@@ -19015,7 +19101,7 @@ function addP2PBotStyles(){
                         <strong style="color:#34d399;font-size:13px;">${p2pCapMoney(part.unitPrice, 2)} CLP/USDT</strong>
                         <div class="p2p-capacity-meta" style="margin-top:3px;">${p2pCapMoney(part.assignedClp, 0)} CLP</div>
                         <div class="p2p-capacity-meta" style="margin-top:3px;">Comisión: ${p2pCapMoney(part.commissionUsdt, 4)} USDT</div>
-                        ${String(part.orderNumber || '').startsWith('manual_') ? `<button class="btn small danger" type="button" title="Borrar venta manual" style="padding:2px 6px;font-size:12px;line-height:1;" onclick="if(confirm('¿Borrar esta venta manual? Se recalcularán las capacidades.')){document.getElementById('p2pCapacityDetailModalBackdrop')?.classList.remove('open');setTimeout(()=>window.deleteManualSale('${part.orderNumber}'),100);}">🗑️</button>` : ""}
+                        ${String(part.orderNumber || '').startsWith('manual_') ? `<button class="btn small danger" type="button" title="Borrar venta manual" style="padding:2px 6px;font-size:12px;line-height:1;" onclick="onzeConfirm('¿Borrar esta venta manual? Se recalcularán las capacidades.').then(function(ok){if(ok){document.getElementById('p2pCapacityDetailModalBackdrop')?.classList.remove('open');setTimeout(()=>window.deleteManualSale('${part.orderNumber}'),100);}})">🗑️</button>` : ""}
                       </div>
                     </div>
                   `;
@@ -19030,14 +19116,14 @@ function addP2PBotStyles(){
 
 
   // Modal para completar capacity con monto manual
-  window.openCompleteCapacityModal = function(id){
+  window.openCompleteCapacityModal = async function(id){
     const capacities = loadP2PCapacity();
     const cap = capacities.find(c => c.id === id);
-    if(!cap) { alert("Capacity no encontrado"); return; }
+    if(!cap) { onzeAlert("Capacity no encontrado"); return; }
 
     const stats = calculateP2PCapacityStats();
     const capStats = stats.capacities.find(c => c.id === id);
-    if(!capStats) { alert("No se pudo calcular el restante"); return; }
+    if(!capStats) { onzeAlert("No se pudo calcular el restante"); return; }
 
     const remainingUsdt = Number(capStats.remainingUsdt || 0);
     const buyPrice = Number(cap.buyPrice || 0);
@@ -19047,7 +19133,7 @@ function addP2PBotStyles(){
     const remainingClp = Math.max(capacityClpTotal - clpReceived, 0);
 
     if(remainingClp <= 0){
-      if(confirm("Este capacity ya está cubierto por completo. ¿Marcar como completado?")){
+      if(await onzeConfirm("Este capacity ya está cubierto por completo. ¿Marcar como completado?")){
         finishCapacityManually(id, 0);
       }
       return;
@@ -19094,7 +19180,7 @@ function addP2PBotStyles(){
     const amountClp = Number((input?.value || "").replace(/[^0-9]/g, ""));
 
     if(!amountClp || amountClp <= 0){
-      alert("Ingresa un monto válido");
+      onzeAlert("Ingresa un monto válido");
       return;
     }
 
@@ -19420,18 +19506,18 @@ function addP2PBotStyles(){
       const note = document.getElementById("editP2pNote")?.value || "";
 
       if(!provider.trim()){
-        alert("Coloca el proveedor.");
+        onzeAlert("Coloca el proveedor.");
         return;
       }
       if(capacityClp <= 0 || buyPrice <= 0 || usdtAmount <= 0){
-        alert("Coloca un monto CLP de capacity y precio de compra válido.");
+        onzeAlert("Coloca un monto CLP de capacity y precio de compra válido.");
         return;
       }
 
       const items = loadP2PCapacity().slice();
       const idx = items.findIndex(cap => cap.id === id);
       if(idx === -1){
-        alert("No encontré este capacity.");
+        onzeAlert("No encontré este capacity.");
         return;
       }
 
@@ -19463,7 +19549,7 @@ function addP2PBotStyles(){
     const stats = calculateP2PCapacityStats();
     const item = stats.capacities.find(cap => cap.id === id);
     if(!item){
-      alert("No encontré este capacity.");
+      onzeAlert("No encontré este capacity.");
       return;
     }
 
@@ -19533,12 +19619,12 @@ function addP2PBotStyles(){
     })(id, 0);
   };
 
-  window.finishP2PCapacity = function(id){
+  window.finishP2PCapacity = async function(id){
     const items = loadP2PCapacity().slice();
     const item = items.find(cap => cap.id === id);
 
     if(!item){
-      alert("No encontré este capacity.");
+      onzeAlert("No encontré este capacity.");
       return;
     }
 
@@ -19549,7 +19635,7 @@ function addP2PBotStyles(){
     const sold = Number(current?.usedUsdt || 0);
     const profit = Number(current?.profitClp || 0);
 
-    const ok = confirm(
+    const ok = await onzeConfirm(
       `¿Finalizar este capacity?\n\n` +
       `Vendido asignado: ${p2pCapMoney(sold, 2)} USDT\n` +
       `Restante: ${p2pCapMoney(remaining, 2)} USDT\n` +
@@ -19613,7 +19699,7 @@ function addP2PBotStyles(){
     const stats = calculateP2PCapacityStats();
 
     if(Number(stats.unassignedSaleUsdt || 0) <= 0){
-      alert("No hay ventas sin capacity para resolver.");
+      onzeAlert("No hay ventas sin capacity para resolver.");
       return;
     }
 
@@ -19639,18 +19725,18 @@ function addP2PBotStyles(){
     }
   };
 
-  window.resolveP2PUnassignedAsOwnCapital = function(){
+  window.resolveP2PUnassignedAsOwnCapital = async function(){
     const stats = calculateP2PCapacityStats();
     const excessUsdt = Number(stats.unassignedSaleUsdt || 0);
     const excessClp = Number(stats.unassignedSaleClp || 0);
     const excessCommissionUsdt = Number(stats.unassignedCommissionUsdt || 0);
 
     if(excessUsdt <= 0){
-      alert("No hay ventas sin capacity para marcar como capital propio.");
+      onzeAlert("No hay ventas sin capacity para marcar como capital propio.");
       return;
     }
 
-    const ok = confirm(
+    const ok = await onzeConfirm(
       `¿Marcar estas ventas sin capacity como saldo/capital P2P propio?\n\n` +
       `USDT vendido sin capacity: ${p2pCapMoney(excessUsdt, 2)} USDT\n` +
       `CLP recibido aproximado: ${p2pCapMoney(excessClp, 0)} CLP\n` +
@@ -19677,7 +19763,7 @@ function addP2PBotStyles(){
     if(typeof showToast === "function"){
       showToast("Ventas sin capacity marcadas como capital propio");
     }else{
-      alert("Ventas sin capacity marcadas como capital propio.");
+      onzeAlert("Ventas sin capacity marcadas como capital propio.");
     }
 
     renderP2PCapacityPanel();
@@ -21215,7 +21301,7 @@ function addP2PBotStyles(){
       })
       .catch(error => {
         console.warn("syncBinanceSales error:", error.message);
-        if(!silent) alert('❌ Error: ' + error.message);
+        if(!silent) onzeAlert('❌ Error: ' + error.message);
       })
       .finally(() => {
         btn.disabled = false;
@@ -21282,7 +21368,7 @@ function addP2PBotStyles(){
       })
       .catch(error => {
         console.warn("syncBybitSales error:", error.message);
-        if(!silent) alert('❌ Error: ' + error.message);
+        if(!silent) onzeAlert('❌ Error: ' + error.message);
       })
       .finally(() => {
         btn.disabled = false;
@@ -21327,8 +21413,8 @@ function addP2PBotStyles(){
     }).join("");
   };
 
-  window.deleteManualSaleBybit = function deleteManualSaleBybit(orderId){
-    if(!confirm("¿Eliminar esta venta manual de Bybit?")) return;
+  window.deleteManualSaleBybit = async function deleteManualSaleBybit(orderId){
+    if(!(await onzeConfirm("¿Eliminar esta venta manual de Bybit?"))) return;
     const orders = loadP2PBybitOrders().filter(o => o.orderNumber !== orderId);
     saveP2PBybitOrders(orders);
     if(typeof window.deleteP2PManualSaleFromServer === "function") window.deleteP2PManualSaleFromServer(orderId);
@@ -21390,8 +21476,8 @@ function addP2PBotStyles(){
     }).join("");
   };
 
-  window.deleteManualSaleOkx = function deleteManualSaleOkx(orderId){
-    if(!confirm("¿Eliminar esta venta manual de OKX?")) return;
+  window.deleteManualSaleOkx = async function deleteManualSaleOkx(orderId){
+    if(!(await onzeConfirm("¿Eliminar esta venta manual de OKX?"))) return;
     const orders = loadP2POkxOrders().filter(o => o.orderNumber !== orderId);
     saveP2POkxOrders(orders);
     if(typeof window.deleteP2PManualSaleFromServer === "function") window.deleteP2PManualSaleFromServer(orderId);
@@ -21412,7 +21498,7 @@ function addP2PBotStyles(){
   //    llegaron a guardarse ahí (el cutoff del servidor es posterior).
   //    Solo se permite este camino para registros en 0 -- una orden real
   //    con monto real jamás se borra desde acá (ver isPhantom en el HTML).
-  window.deleteP2PUnassignedManualSale = function(orderNumber, exchange, isManual){
+  window.deleteP2PUnassignedManualSale = async function(orderNumber, exchange, isManual){
     if(isManual){
       if(exchange === "bybit") window.deleteManualSaleBybit(orderNumber);
       else if(exchange === "okx") window.deleteManualSaleOkx(orderNumber);
@@ -21420,7 +21506,7 @@ function addP2PBotStyles(){
       return;
     }
 
-    if(!confirm("¿Borrar este registro en 0 USDT/0 CLP? No tiene ningún valor real, solo estorba en la lista.")) return;
+    if(!(await onzeConfirm("¿Borrar este registro en 0 USDT/0 CLP? No tiene ningún valor real, solo estorba en la lista."))) return;
 
     if(exchange === "bybit"){
       saveP2PBybitOrders(loadP2PBybitOrders().filter(o => o.orderNumber !== orderNumber));
@@ -21605,11 +21691,11 @@ function addP2PBotStyles(){
       try {
         const clpRaw = document.getElementById("manualSaleClp")?.value || "";
         const clp = p2pCapNumber(clpRaw);
-        if(clp <= 0){ alert("Ingresa el CLP recibido."); return; }
+        if(clp <= 0){ onzeAlert("Ingresa el CLP recibido."); return; }
 
         const sellPriceRaw = document.getElementById("manualSaleSellPrice")?.value || "";
         const sellPrice = p2pCapNumber(sellPriceRaw);
-        if(sellPrice <= 0){ alert("Ingresa el precio de venta."); return; }
+        if(sellPrice <= 0){ onzeAlert("Ingresa el precio de venta."); return; }
 
         const usdt = clp / sellPrice;
         const exVal = document.getElementById("manualSaleExchange")?.value || "binance";
@@ -21618,7 +21704,7 @@ function addP2PBotStyles(){
         // fuerza acá también por seguridad.
         const commissionPctRaw = document.getElementById("manualSaleCommissionPct")?.value || "0.14";
         const commissionPct = (exVal === "bybit" || exVal === "okx") ? 0 : parseFloat(commissionPctRaw);
-        if(isNaN(commissionPct) || commissionPct < 0){ alert("Comisión inválida."); return; }
+        if(isNaN(commissionPct) || commissionPct < 0){ onzeAlert("Comisión inválida."); return; }
         const commission = usdt * commissionPct / 100;
 
         const now = new Date();
@@ -21695,7 +21781,7 @@ function addP2PBotStyles(){
         if(typeof renderBinanceSalesTable === 'function') renderBinanceSalesTable();
       } catch(err){
         console.error("Error al registrar venta manual:", err);
-        alert("Error: " + err.message);
+        onzeAlert("Error: " + err.message);
       }
     });
 
@@ -22030,7 +22116,7 @@ function addP2PBotStyles(){
     const btn = document.getElementById('btn-save-binance-creds');
 
     if(!apiKey || !secretKey){
-      alert('⚠️ Debes ingresar API Key y Secret Key');
+      onzeAlert('⚠️ Debes ingresar API Key y Secret Key');
       return;
     }
 
@@ -22052,13 +22138,13 @@ function addP2PBotStyles(){
         if(typeof showToast === 'function'){
           showToast('✅ Credenciales Binance guardadas correctamente (' + ajustesCredsLabel + ')');
         } else {
-          alert('✅ Credenciales guardadas correctamente');
+          onzeAlert('✅ Credenciales guardadas correctamente');
         }
       } else {
-        alert('❌ Error: ' + (data.error || 'No se pudo guardar'));
+        onzeAlert('❌ Error: ' + (data.error || 'No se pudo guardar'));
       }
     })
-    .catch(() => alert('❌ Error de conexión'))
+    .catch(() => onzeAlert('❌ Error de conexión'))
     .finally(() => {
       btn.disabled = false;
       btn.textContent = 'Guardar credenciales';
@@ -22917,14 +23003,14 @@ function addP2PBotStyles(){
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert("Error al crear lista: " + (err.error || res.status));
+        onzeAlert("Error al crear lista: " + (err.error || res.status));
         return null;
       }
       const data = await res.json();
       return data.rateList;
     } catch (err) {
       console.error("Error en createRateList:", err);
-      alert("Error de conexión al crear la lista.");
+      onzeAlert("Error de conexión al crear la lista.");
       return null;
     }
   }
@@ -22938,14 +23024,14 @@ function addP2PBotStyles(){
 
     const profit = Number(profitStr);
     if (!Number.isFinite(profit) || profit < 0) {
-      alert("Porcentaje inválido.");
+      onzeAlert("Porcentaje inválido.");
       return;
     }
 
     try {
       const countriesRes = await fetch("/api/countries", { cache: "no-store" });
       if (!countriesRes.ok) {
-        alert("No pude cargar los países desde la base de datos.");
+        onzeAlert("No pude cargar los países desde la base de datos.");
         return;
       }
 
@@ -22981,7 +23067,7 @@ function addP2PBotStyles(){
 
       const missing = pairs.filter(function(p) { return p.missing; });
       if (missing.length) {
-        alert("Faltan países en la base de datos para crear la lista:\n\n" + missing.map(function(p) {
+        onzeAlert("Faltan países en la base de datos para crear la lista:\n\n" + missing.map(function(p) {
           return p.originName + " - " + p.destName;
         }).join("\n"));
         return;
@@ -23002,15 +23088,15 @@ function addP2PBotStyles(){
 
       if (!updateRes.ok) {
         const err = await updateRes.json().catch(function(){ return {}; });
-        alert("Se creó la lista, pero no pude agregar los pares: " + (err.error || updateRes.status));
+        onzeAlert("Se creó la lista, pero no pude agregar los pares: " + (err.error || updateRes.status));
         return;
       }
 
       await loadRateLists();
-      alert("Lista ONZE default creada ✓");
+      onzeAlert("Lista ONZE default creada ✓");
     } catch (err) {
       console.error("Error createOnzeDefaultRateList:", err);
-      alert("Error al crear la lista ONZE default.");
+      onzeAlert("Error al crear la lista ONZE default.");
     }
   }
 
@@ -23018,14 +23104,14 @@ function addP2PBotStyles(){
   // API: Eliminar lista
   // ============================================================
   async function deleteRateList(id) {
-    if (!confirm("¿Eliminar esta lista? Esta acción no se puede deshacer desde la interfaz.")) {
+    if (!(await onzeConfirm("¿Eliminar esta lista? Esta acción no se puede deshacer desde la interfaz."))) {
       return;
     }
     try {
       const res = await fetch("/api/rate-lists/" + id, { method: "DELETE" });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert("Error al eliminar: " + (err.error || res.status));
+        onzeAlert("Error al eliminar: " + (err.error || res.status));
         return;
       }
       await loadRateLists();
@@ -23171,13 +23257,13 @@ function addP2PBotStyles(){
     const logoInput = getEl("rateDayNewListLogo");
 
     if (!name) {
-      alert("Coloca el nombre de la lista.");
+      onzeAlert("Coloca el nombre de la lista.");
       return;
     }
 
     const creatorModeForValidation = getNewRateListCreatorMode();
     if (creatorModeForValidation === "operator_percent" && profitMode === "fixed" && (!Number.isFinite(profit) || profit < 0)) {
-      alert("El % de ganancia es inválido.");
+      onzeAlert("El % de ganancia es inválido.");
       return;
     }
 
@@ -23186,7 +23272,7 @@ function addP2PBotStyles(){
       logoDataUrl = await readFileAsDataUrl(logoInput && logoInput.files ? logoInput.files[0] : null);
     } catch (err) {
       console.error("Error leyendo logo:", err);
-      alert("No pude leer el logo. Intenta con otra imagen.");
+      onzeAlert("No pude leer el logo. Intenta con otra imagen.");
       return;
     }
 
@@ -23757,7 +23843,7 @@ function addP2PBotStyles(){
     const node = document.getElementById("rateListImageCanvas");
 
     if (!node) {
-      alert("Primero debes generar la imagen.");
+      onzeAlert("Primero debes generar la imagen.");
       return;
     }
 
@@ -23838,7 +23924,7 @@ function addP2PBotStyles(){
       openGeneratedRateImageForMobile(dataUrl, fileName);
     } catch (err) {
       console.error("Error descargando PNG:", err);
-      alert("No pude preparar la imagen. Intenta actualizar la vista y descargar otra vez.");
+      onzeAlert("No pude preparar la imagen. Intenta actualizar la vista y descargar otra vez.");
     } finally {
       if (btn) {
         btn.disabled = false;
@@ -23872,7 +23958,7 @@ function addP2PBotStyles(){
       }
     } catch (err) {
       console.error("Error actualizando vista tasas del día:", err);
-      alert("No pude actualizar la vista con el Sheet. Revisa consola y me mandas el error.");
+      onzeAlert("No pude actualizar la vista con el Sheet. Revisa consola y me mandas el error.");
     } finally {
       if (btn) {
         btn.disabled = false;
@@ -23898,7 +23984,7 @@ function addP2PBotStyles(){
       await loadRateListCSVSnapshot();
     } catch (err) {
       console.error("Error loadCountriesFromDB:", err);
-      alert("No pude cargar las tasas del Sheet para Crea tu tasa del día.");
+      onzeAlert("No pude cargar las tasas del Sheet para Crea tu tasa del día.");
     }
   }
 
@@ -24310,11 +24396,11 @@ function addP2PBotStyles(){
     const dest = destSel.value.trim();
 
     if (!origin || !dest) {
-      alert("Selecciona país origen y destino.");
+      onzeAlert("Selecciona país origen y destino.");
       return;
     }
     if (normalizeText(origin) === normalizeText(dest)) {
-      alert("Origen y destino no pueden ser iguales.");
+      onzeAlert("Origen y destino no pueden ser iguales.");
       return;
     }
 
@@ -24324,14 +24410,14 @@ function addP2PBotStyles(){
              normalizeText(p.destName) === normalizeText(dest);
     });
     if (exists) {
-      alert("Este par ya está en la lista.");
+      onzeAlert("Este par ya está en la lista.");
       return;
     }
 
     // Verificar que el par exista en el CSV
     const providerRate = getProviderRateFromCSV(origin, dest);
     if (providerRate == null) {
-      alert("Este par no existe en el Sheet de tasas (no hay tasa proveedor).");
+      onzeAlert("Este par no existe en el Sheet de tasas (no hay tasa proveedor).");
       return;
     }
 
@@ -24402,11 +24488,11 @@ function addP2PBotStyles(){
     const profit = Number(getEl("rateListEditorProfit").value);
 
     if (!name) {
-      if (!silent) alert("El nombre es obligatorio.");
+      if (!silent) onzeAlert("El nombre es obligatorio.");
       return false;
     }
     if (profitMode === "fixed" && (!Number.isFinite(profit) || profit < 0)) {
-      if (!silent) alert("El % de ganancia es inválido.");
+      if (!silent) onzeAlert("El % de ganancia es inválido.");
       return false;
     }
 
@@ -24426,7 +24512,7 @@ function addP2PBotStyles(){
         logoDataUrl = await readEditorLogoFileAsDataUrl(logoInput.files[0]);
       } catch (err) {
         console.error("Error leyendo logo:", err);
-        if (!silent) alert("No pude leer el logo. Intenta con otra imagen.");
+        if (!silent) onzeAlert("No pude leer el logo. Intenta con otra imagen.");
         return false;
       }
     }
@@ -24463,17 +24549,17 @@ function addP2PBotStyles(){
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        if (!silent) alert("Error al guardar: " + (err.error || res.status));
+        if (!silent) onzeAlert("Error al guardar: " + (err.error || res.status));
         else console.error("Error auto-guardando par:", err.error || res.status);
         return false;
       }
       const data = await res.json();
       currentList = data.rateList;
-      if (!silent) alert("Cambios guardados ✓");
+      if (!silent) onzeAlert("Cambios guardados ✓");
       return true;
     } catch (err) {
       console.error("Error save:", err);
-      if (!silent) alert("Error de conexión al guardar.");
+      if (!silent) onzeAlert("Error de conexión al guardar.");
       return false;
     }
   }
@@ -24516,7 +24602,7 @@ function addP2PBotStyles(){
     try {
       const res = await fetch("/api/rate-lists/" + listId, { cache: "no-store" });
       if (!res.ok) {
-        alert("No se pudo abrir la lista.");
+        onzeAlert("No se pudo abrir la lista.");
         return;
       }
       const data = await res.json();
@@ -24565,7 +24651,7 @@ function addP2PBotStyles(){
       getEl("view-rate-list-editor").classList.add("active");
     } catch (err) {
       console.error("Error openEditor:", err);
-      alert("Error al abrir el editor.");
+      onzeAlert("Error al abrir el editor.");
     }
   }
 
@@ -25302,7 +25388,7 @@ function addP2PBotStyles(){
     if (!currentList) return;
 
     if (!currentPairs.length) {
-      alert("Agrega al menos un par antes de generar la imagen.");
+      onzeAlert("Agrega al menos un par antes de generar la imagen.");
       return;
     }
 
@@ -26084,7 +26170,7 @@ try{
   };
 
   window.socioBnDisconnect = async function(){
-    if(!confirm('¿Desconectar la cuenta del socio? Vas a tener que volver a ingresar la API key para reconectarla. Los datos de capacity y ventas ya sincronizadas no se borran.')) return;
+    if(!(await onzeConfirm('¿Desconectar la cuenta del socio? Vas a tener que volver a ingresar la API key para reconectarla. Los datos de capacity y ventas ya sincronizadas no se borran.'))) return;
     const res = await socioBnFetch('/api/partner/credentials', { method: 'DELETE' });
     if(res.ok) await socioBnLoadCredsStatus();
   };
@@ -26122,7 +26208,7 @@ try{
         await socioBnLoadDashboard();
       } else if(!silent){
         if(typeof showToast === 'function') showToast(res.error || 'Error al sincronizar', 'error');
-        else alert(res.error || 'Error al sincronizar');
+        else onzeAlert(res.error || 'Error al sincronizar');
       }
     } catch(e){
       // en modo silencioso no interrumpe con un error de red pasajero
@@ -26177,8 +26263,8 @@ try{
     const sellPrice = Number(document.getElementById('socioBnManualSellPrice')?.value || 0);
     const commissionPct = Number(document.getElementById('socioBnManualCommissionPct')?.value || 0);
     const executedAtLocal = document.getElementById('socioBnManualExecutedAt')?.value;
-    if(clp <= 0){ alert('Ingresa el CLP recibido.'); return; }
-    if(sellPrice <= 0){ alert('Ingresa el precio de venta.'); return; }
+    if(clp <= 0){ onzeAlert('Ingresa el CLP recibido.'); return; }
+    if(sellPrice <= 0){ onzeAlert('Ingresa el precio de venta.'); return; }
     const executedAt = executedAtLocal ? new Date(executedAtLocal).toISOString() : new Date().toISOString();
     const res = await socioBnFetch('/api/partner/manual-sale', {
       method: 'POST',
@@ -26189,11 +26275,11 @@ try{
       if(typeof showToast === 'function') showToast('Venta manual registrada');
       await socioBnLoadDashboard();
     } else if(typeof showToast === 'function') showToast(res.error || 'Error al registrar la venta', 'error');
-    else alert(res.error || 'Error al registrar la venta');
+    else onzeAlert(res.error || 'Error al registrar la venta');
   };
 
   window.socioBnDeleteManualSale = async function(orderNumber){
-    if(!confirm('¿Borrar esta venta manual? Se recalculan las capacidades y estadísticas.')) return;
+    if(!(await onzeConfirm('¿Borrar esta venta manual? Se recalculan las capacidades y estadísticas.'))) return;
     const res = await socioBnFetch('/api/partner/manual-sale?orderNumber=' + encodeURIComponent(orderNumber), { method: 'DELETE' });
     if(res.ok){ await socioBnLoadDashboard(); }
     else if(typeof showToast === 'function') showToast(res.error || 'Error al borrar', 'error');
@@ -26450,7 +26536,7 @@ try{
   };
 
   window.socioBnDeleteCapacity = async function(id){
-    if(!confirm('¿Eliminar esta capacity? Esta acción no se puede deshacer.')) return;
+    if(!(await onzeConfirm('¿Eliminar esta capacity? Esta acción no se puede deshacer.'))) return;
     const res = await socioBnFetch('/api/partner/capacity?id=' + encodeURIComponent(id) + '&confirm=manual', { method: 'DELETE' });
     if(res.ok){ await socioBnLoadDashboard(); }
   };
@@ -27322,6 +27408,10 @@ try{
         <h3 class="section-title" style="font-size:15px;">Clientes</h3>
         <div id="usdtClientsList" style="display:flex;flex-direction:column;gap:8px;"></div>
 
+        <h3 class="section-title" style="font-size:15px;margin-top:24px;">Solicitudes abiertas</h3>
+        <p class="section-text" style="margin-bottom:10px;">Si el correo del banco nunca llega pero ya verificaste el pago tú mismo (ej. viendo la app del banco directo), puedes registrarlo acá a mano — se suma exactamente igual que una transferencia real ya confirmada.</p>
+        <div id="usdtOpenIntentsList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
+
         <h3 class="section-title" style="font-size:15px;margin-top:24px;">Pagos por revisar</h3>
         <p class="section-text" style="margin-bottom:10px;">Transferencias detectadas que no se pudieron asociar solas a una compra (sin código de referencia, o solo una coincidencia de nombre) — no cuentan para habilitar "Comprar" hasta que las asocies acá.</p>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
@@ -27469,7 +27559,7 @@ try{
   };
 
   window.usdtDeleteTier = async function(id){
-    if(!confirm('¿Eliminar este tramo de margen?')) return;
+    if(!(await onzeConfirm('¿Eliminar este tramo de margen?'))) return;
     await usdtFetch('/api/admin/usdt-margin-tiers?id=' + id, { method: 'DELETE' });
     if(window.__usdtEditingTierId === id) window.usdtCancelEditTier();
     window.usdtLoadTiers();
@@ -27532,7 +27622,7 @@ try{
 
   window.usdtSetStatus = async function(clientId, status){
     const res = await usdtFetch('/api/admin/usdt-clients', { method: 'PATCH', body: JSON.stringify({ clientId, status }) });
-    if(!res.ok){ alert(res.error || 'No se pudo actualizar'); return; }
+    if(!res.ok){ onzeAlert(res.error || 'No se pudo actualizar'); return; }
     window.usdtLoadClients();
   };
 
@@ -27552,7 +27642,7 @@ try{
         fixedMarginPct: marginRaw === '' ? null : Number(marginRaw),
       }),
     });
-    if(!res.ok){ alert(res.error || 'No se pudo guardar'); return; }
+    if(!res.ok){ onzeAlert(res.error || 'No se pudo guardar'); return; }
     window.usdtLoadClients();
   };
 
@@ -27687,7 +27777,7 @@ try{
   };
 
   window.usdtDeleteWithdrawAddr = async function(id){
-    if(!confirm('¿Quitar esta dirección? El cliente ya no podrá elegirla para retirar.')) return;
+    if(!(await onzeConfirm('¿Quitar esta dirección? El cliente ya no podrá elegirla para retirar.'))) return;
     await usdtFetch('/api/admin/usdt-withdrawal-addresses?id=' + id, { method: 'DELETE' });
     const addrRes = await usdtFetch('/api/admin/usdt-withdrawal-addresses?clientId=' + window.__usdtWithdrawAddrClientId);
     window.usdtRenderWithdrawAddrList(addrRes.ok ? (addrRes.addresses || []) : []);
@@ -27700,9 +27790,32 @@ try{
   window.usdtLoadReviewQueue = async function(){
     const res = await usdtFetch('/api/admin/usdt-payment-review');
     const list = document.getElementById('usdtReviewList');
+    const openList = document.getElementById('usdtOpenIntentsList');
     if(!list) return;
     if(!res.ok){ list.innerHTML = '<div style="color:#fb7185;font-size:12px;">' + (res.error||'Error al cargar') + '</div>'; return; }
     window.__usdtOpenIntentsCache = res.openIntents || [];
+
+    if(openList){
+      if(!window.__usdtOpenIntentsCache.length){
+        openList.innerHTML = '<div style="color:#64748b;font-size:12px;">Sin solicitudes abiertas.</div>';
+      }else{
+        openList.innerHTML = window.__usdtOpenIntentsCache.map(function(i){
+          return `<div style="background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:12px 14px;">
+            <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center;">
+              <div>
+                <strong style="color:#fff;">${i.referenceCode}</strong>
+                <span style="color:#8aa0ba;font-size:12px;"> — ${i.client?.fullName || ''} — pide ${usdtMoney(i.requestedClp)} CLP, lleva ${usdtMoney(i.receivedClp)} CLP</span>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="number" id="usdtManualAmount_${i.id}" placeholder="Monto CLP" style="width:120px;padding:6px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.7);color:#e2e8f0;font-size:12px;">
+                <button class="btn small" type="button" onclick="window.usdtRegisterManualPayment(${i.id})">Registrar pago manual</button>
+              </div>
+            </div>
+          </div>`;
+        }).join('');
+      }
+    }
+
     const selectAll = document.getElementById('usdtReviewSelectAll');
     if(selectAll) selectAll.checked = false;
     if(!res.transfers?.length){
@@ -27750,19 +27863,29 @@ try{
     });
   };
 
+  window.usdtRegisterManualPayment = async function(purchaseIntentId){
+    const input = document.getElementById('usdtManualAmount_' + purchaseIntentId);
+    const amountClp = Number(input?.value);
+    if(!(amountClp > 0)){ onzeAlert('Ingresa el monto CLP que verificaste.'); return; }
+    if(!(await onzeConfirm(`¿Confirmas que YA viste el pago de ${usdtMoney(amountClp)} CLP entrando a la cuenta? Esto habilita la compra sin depender de ningún correo.`))) return;
+    const res = await usdtFetch('/api/admin/usdt-payment-review', { method: 'PATCH', body: JSON.stringify({ manualEntry: true, purchaseIntentId, amountClp }) });
+    if(!res.ok){ onzeAlert(res.error || 'No se pudo registrar el pago'); return; }
+    window.usdtLoadReviewQueue();
+  };
+
   window.usdtConfirmReview = async function(transferId){
     const sel = document.getElementById('usdtReviewSelect_' + transferId);
     const purchaseIntentId = Number(sel?.value);
-    if(!purchaseIntentId){ alert('Elige a qué solicitud asociarla.'); return; }
+    if(!purchaseIntentId){ onzeAlert('Elige a qué solicitud asociarla.'); return; }
     const res = await usdtFetch('/api/admin/usdt-payment-review', { method: 'PATCH', body: JSON.stringify({ transferId, purchaseIntentId }) });
-    if(!res.ok){ alert(res.error || 'No se pudo asociar'); return; }
+    if(!res.ok){ onzeAlert(res.error || 'No se pudo asociar'); return; }
     window.usdtLoadReviewQueue();
   };
 
   window.usdtDiscardReview = async function(transferId){
-    if(!confirm('¿Descartar esta transferencia? (no se asociará a ninguna compra)')) return;
+    if(!(await onzeConfirm('¿Descartar esta transferencia? (no se asociará a ninguna compra)'))) return;
     const res = await usdtFetch('/api/admin/usdt-payment-review', { method: 'PATCH', body: JSON.stringify({ transferId, discard: true }) });
-    if(!res.ok){ alert(res.error || 'No se pudo descartar'); return; }
+    if(!res.ok){ onzeAlert(res.error || 'No se pudo descartar'); return; }
     window.usdtLoadReviewQueue();
   };
 
@@ -27772,10 +27895,10 @@ try{
 
   window.usdtDiscardSelectedReview = async function(){
     const ids = Array.from(document.querySelectorAll('.usdtReviewCheckbox:checked')).map(function(cb){ return Number(cb.dataset.transferId); });
-    if(!ids.length){ alert('No seleccionaste ninguna transferencia.'); return; }
-    if(!confirm(`¿Descartar ${ids.length} transferencia(s) seleccionada(s)? (no se asociarán a ninguna compra)`)) return;
+    if(!ids.length){ onzeAlert('No seleccionaste ninguna transferencia.'); return; }
+    if(!(await onzeConfirm(`¿Descartar ${ids.length} transferencia(s) seleccionada(s)? (no se asociarán a ninguna compra)`))) return;
     const res = await usdtFetch('/api/admin/usdt-payment-review', { method: 'PATCH', body: JSON.stringify({ transferIds: ids, discard: true }) });
-    if(!res.ok){ alert(res.error || 'No se pudo descartar'); return; }
+    if(!res.ok){ onzeAlert(res.error || 'No se pudo descartar'); return; }
     window.usdtLoadReviewQueue();
   };
 
@@ -28091,7 +28214,7 @@ try{
       link.click();
       document.body.removeChild(link);
     }catch(e){
-      alert("No se pudo generar la imagen: " + e.message);
+      onzeAlert("No se pudo generar la imagen: " + e.message);
     }finally{
       if(btn){ btn.disabled = false; btn.textContent = oldText; }
     }
