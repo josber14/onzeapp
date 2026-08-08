@@ -180,7 +180,7 @@ export async function resolveFirstName(fullLegalName: string): Promise<string | 
 }
 
 export interface ImageClassifyResult {
-  documentType: "erut" | "payment_receipt" | "id_document" | "other";
+  documentType: "erut" | "payment_receipt" | "id_document" | "payment_error" | "other";
   amountClp?: number;
 }
 
@@ -223,9 +223,9 @@ export async function classifyImage(imageUrl: string): Promise<ImageClassifyResu
         properties: {
           documentType: {
             type: "string",
-            enum: ["erut", "payment_receipt", "id_document", "other"],
+            enum: ["erut", "payment_receipt", "id_document", "payment_error", "other"],
             description:
-              "'erut' = documento E-RUT de una empresa chilena (el certificado del SII con el RUT de la empresa). 'payment_receipt' = comprobante o captura de pantalla de una transferencia bancaria o pago (banco chileno, Mercado Pago, etc). 'id_document' = cédula de identidad u otro documento de identidad de una persona. 'other' = cualquier otra cosa (foto sin relación, captura de otra app, etc).",
+              "'erut' = documento E-RUT de una empresa chilena (el certificado del SII con el RUT de la empresa). 'payment_receipt' = comprobante o captura de pantalla de una transferencia bancaria EXITOSA (banco chileno, Mercado Pago, etc). 'id_document' = cédula de identidad u otro documento de identidad de una persona. 'payment_error' = captura de pantalla de un ERROR o RECHAZO al intentar hacer la transferencia (ej. \"no se pudo realizar el pago\", \"transacción rechazada\", \"error al procesar\", cualquier mensaje de la app del banco indicando que la transferencia NO se completó). 'other' = cualquier otra cosa (foto sin relación, captura de otra app, etc).",
           },
           amountClp: {
             type: "number",

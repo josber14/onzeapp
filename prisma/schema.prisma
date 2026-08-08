@@ -1292,6 +1292,19 @@ model P2PChatState {
   // mismo principio que expiryWarnedAt, para no repetir el aviso en cada
   // ciclo mientras la condición se siga cumpliendo.
   markPaidReminderSentAt DateTime?
+  // Se fija cuando el bot responde una duda sobre el nombre del titular
+  // (matchHolderNameConcern) -- pedido explícito del usuario (ago 2026):
+  // caso real donde el comprador partió su duda en 2 mensajes separados
+  // ("Jorber Rafael Marcano ?" y, 3 min después, "ese nombre es suyo??" sin
+  // repetir el nombre) -- el segundo mensaje, solo, no calzaba con ningún
+  // matcher y caía al respaldo de IA, que inventó una pregunta genérica en
+  // vez de repetir la confirmación correcta. Con esta marca, un mensaje
+  // corto de seguimiento poco después (ver holderNameFollowupOk en
+  // chat-agent.ts) se sigue tratando como el mismo tema. holderNameConfirmed
+  // guarda CUÁL de las 2 respuestas se dio (nombre correcto vs. escalar a
+  // asesor) para repetir la misma si hace falta, nunca inventar una nueva.
+  holderNameConcernAt DateTime?
+  holderNameConfirmed Boolean?
   partialAmount     Decimal?  @db.Decimal(18, 8)
   totalAmount       Decimal?  @db.Decimal(18, 8)
   realName          String?

@@ -496,6 +496,19 @@ async function processOrderLocked(
             (cs as any).receivedReceiptsClp = previousTotal + gotClp;
           }
           await sendAndTrack(client, exchange, order.orderNumber, cs, "Recibí tu comprobante, gracias. Vamos a verificarlo.");
+        } else if (imgResult?.documentType === "payment_error") {
+          // Caso real confirmado en vivo (ago 2026): el comprador mandó una
+          // captura del BANCO diciendo "no se pudo realizar el pago" (un
+          // error técnico real de la transferencia), pero el bot solo sabía
+          // leer ERUT/comprobante -- esa imagen se ignoraba por completo, y
+          // el mensaje de texto que mandó después ("no me deja") se
+          // interpretó como límite del banco (por la palabra "deja"), no
+          // como el error técnico que realmente era. Se reusa el mismo
+          // camino que ya existe para cuando el comprador AVISA por texto
+          // que la transferencia falló (handleTransferFails) -- mismo
+          // manejo, ahora también quedando cubierto cuando el aviso llega
+          // como imagen en vez de texto.
+          await handleTransferFails(tenantId, exchange, client, order, cs, activeAds, "", label);
         }
       }
 
@@ -1324,7 +1337,39 @@ async function handleClientResponse(
       // respuesta correcta depende por completo de CUÁL nombre menciona (ver
       // matchHolderNameConcern / mentionsExpectedHolderName más abajo).
       if (matchHolderNameConcern(textLower)) {
-        if (mentionsExpectedHolderName(textLower)) {
+        const confirmed = mentionsExpectedHolderName(textLower);
+        await prisma.p2PChatState.update({
+          where: { id: cs.id },
+          data: { holderNameConcernAt: new Date(), holderNameConfirmed: confirmed },
+        });
+        if (confirmed) {
+          await sendAndTrack(client, exchange, order.orderNumber, cs,
+            "Sí, es correcto — el titular real de esa cuenta en el banco es Josber Marcano, la misma persona detrás de Zinple. Puedes transferir con total confianza."
+          );
+        } else {
+          await sendAndTrack(client, exchange, order.orderNumber, cs,
+            "Entiendo tu duda, voy a ponerte en contacto con un asesor para confirmar esto — dame un momento."
+          );
+        }
+        break;
+      }
+
+      // Seguimiento corto sobre el nombre SIN repetir el nombre -- ver
+      // holderNameConcernAt arriba. Caso real confirmado en vivo (ago 2026):
+      // el comprador preguntó por el nombre, el bot confirmó bien, y 3
+      // minutos después el comprador insistió con "ese nombre es suyo??" en
+      // un mensaje aparte -- ese mensaje solo, sin "Josber"/"Marcano", no
+      // calzaba con matchHolderNameConcern y caía al respaldo de IA, que
+      // inventó una pregunta genérica en vez de repetir la confirmación.
+      // Acotado a los 15 min siguientes a la duda original y a frases que
+      // buscan reconfirmar dueño/veracidad -- nunca dispara para mensajes
+      // sin relación real con esta duda puntual.
+      if (
+        cs.holderNameConcernAt &&
+        Date.now() - new Date(cs.holderNameConcernAt).getTime() < 15 * 60 * 1000 &&
+        looksLikeHolderNameFollowup(textLower)
+      ) {
+        if (cs.holderNameConfirmed) {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
             "Sí, es correcto — el titular real de esa cuenta en el banco es Josber Marcano, la misma persona detrás de Zinple. Puedes transferir con total confianza."
           );
@@ -2712,6 +2757,18 @@ function matchHolderNameConcern(text: string): boolean {
     /\bnombre\s+no\s+coincide\b/.test(t) ||
     (/\btitular\b/.test(t) && /\b(distinto|diferente|otro|no coincide)\b/.test(t)) ||
     mentionsExpectedHolderName(t);
+}
+
+// Ver holderNameConcernAt en el schema y su uso en el case "account_sent" --
+// mensaje corto de seguimiento que busca reconfirmar la duda del nombre SIN
+// repetir el nombre (ej. "es suyo??", "en serio?", "seguro?"). A propósito
+// acotado a frases de confirmación/veracidad -- nunca a cualquier pregunta
+// corta, para no disparar por accidente con algo sin relación real.
+function looksLikeHolderNameFollowup(text: string): boolean {
+  const t = text.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return /\bes\s+(suyo|suya|tuyo|tuya|de\s+(el|ella|usted|ud))\b/.test(t) ||
+    /\b(en\s+serio|de\s+verdad|seguro)\b[^.!?\n]{0,20}\?/.test(t) ||
+    /\bconfirmas?\b/.test(t);
 }
 
 // Reconoce cuando el comprador avisa EXPLÍCITAMENTE que ya mandó el ERUT
