@@ -5365,10 +5365,29 @@
         ? "date=" + encodeURIComponent(rateHistoryDateInput ? rateHistoryDateInput.value : todayISO())
         : "days=" + encodeURIComponent(rateHistoryRangeSelect ? rateHistoryRangeSelect.value : "1");
       try{
-        const res = await fetch("/api/rate-history?" + query, { credentials: "include", cache: "no-store" });
-        const data = await res.json();
+        // Timeout de seguridad -- mismo caso real que ya se vio en el
+        // historial de ciclos: el navegador puede tener la petición en cola
+        // detrás del polling constante del bot (cada ~300ms) y quedarse
+        // pegado en "Cargando..." sin límite. Sin esto no había forma de
+        // saber si de verdad estaba fallando o solo esperando en la cola.
+        const abortCtrl = new AbortController();
+        const timeoutId = setTimeout(() => abortCtrl.abort(), 15000);
+        let res;
+        try{
+          res = await fetch("/api/rate-history?" + query, { credentials: "include", cache: "no-store", signal: abortCtrl.signal });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+        let data = null;
+        try{ data = await res.json(); }catch{}
         if(!data?.ok){
-          rateHistoryBody.innerHTML = `<tr><td colspan="4" style="padding:14px;color:#f87171;font-size:12px;">No se pudo cargar el historial.</td></tr>`;
+          // Muestra el motivo real (status HTTP + mensaje del servidor) en vez
+          // de un mensaje genérico -- caso real (ago 2026): sin esto no había
+          // forma de saber si era un problema de sesión (403), del servidor
+          // (500), o de red, y quedaba imposible de diagnosticar a distancia.
+          const reason = data?.error || ("HTTP " + res.status);
+          console.error("[rate-history]", reason);
+          rateHistoryBody.innerHTML = `<tr><td colspan="4" style="padding:14px;color:#f87171;font-size:12px;">No se pudo cargar el historial (${escHtml(reason)}).</td></tr>`;
           return;
         }
         const rows = data.rows || [];
@@ -5389,7 +5408,9 @@
             </tr>`;
         }).join("");
       }catch(e){
-        rateHistoryBody.innerHTML = `<tr><td colspan="4" style="padding:14px;color:#f87171;font-size:12px;">No se pudo cargar el historial.</td></tr>`;
+        console.error("[rate-history]", e);
+        const reason = e?.name === "AbortError" ? "tardó demasiado, reintenta" : String(e?.message || e);
+        rateHistoryBody.innerHTML = `<tr><td colspan="4" style="padding:14px;color:#f87171;font-size:12px;">No se pudo cargar el historial (${escHtml(reason)}).</td></tr>`;
       }
     }
 
