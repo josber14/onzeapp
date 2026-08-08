@@ -487,15 +487,29 @@ async function processOrderLocked(
           // marca "Pagado" (ver el bloque `if (isPaid)` más abajo en este
           // archivo) -- acá solo se acumula y se agradece.
           const gotClp = Number(imgResult.amountClp) || 0;
+          let totalReceivedClp = Number(cs.receivedReceiptsClp || 0);
           if (gotClp > 0) {
-            const previousTotal = Number(cs.receivedReceiptsClp || 0);
+            totalReceivedClp += gotClp;
             await prisma.p2PChatState.update({
               where: { id: cs.id },
-              data: { receivedReceiptsClp: previousTotal + gotClp },
+              data: { receivedReceiptsClp: totalReceivedClp },
             });
-            (cs as any).receivedReceiptsClp = previousTotal + gotClp;
+            (cs as any).receivedReceiptsClp = totalReceivedClp;
           }
-          await sendAndTrack(client, exchange, order.orderNumber, cs, "Recibí tu comprobante, gracias. Vamos a verificarlo.");
+          // Caso real confirmado en vivo (ago 2026): un comprador que NUNCA
+          // avisó que pagaría en partes mandó un comprobante por menos del
+          // total, y el bot solo respondió un "gracias, lo vamos a
+          // verificar" genérico -- sin decir nada de que faltaba dinero. Si
+          // el cliente ya avisó que paga en partes (cs.splitPaymentDeclared,
+          // ver matchWantsMultipleAccounts/namedBanks/offerSplitPayment más
+          // abajo en este archivo), un monto parcial es esperado y no se
+          // avisa nada. Si NO avisó nada, se le dice de inmediato que falta
+          // plata, en vez de esperar a que marque "Pagado" para recién ahí
+          // detectarlo (ver underpaymentCheck).
+          const missingMsg = !cs.splitPaymentDeclared
+            ? missingAmountOnReceiptMsg(totalReceivedClp, Number(order.totalPrice) || 0)
+            : null;
+          await sendAndTrack(client, exchange, order.orderNumber, cs, missingMsg || "Recibí tu comprobante, gracias. Vamos a verificarlo.");
         } else if (imgResult?.documentType === "payment_error") {
           // Caso real confirmado en vivo (ago 2026): el comprador mandó una
           // captura del BANCO diciendo "no se pudo realizar el pago" (un
@@ -736,6 +750,7 @@ export async function handleVerified(
   // — es una instrucción explícita y nueva del comprador.
   if (firstMsg && matchWantsAccount(firstMsg)) {
     const wantsMultiple = matchWantsMultipleAccounts(firstMsg);
+    if (wantsMultiple) await markSplitPaymentDeclared(cs);
     const greeting = `${hello} Ya te paso ${wantsMultiple ? "las cuentas que necesites" : "la cuenta"} — antes dime: ¿transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.`;
     const sent = await sendAndTrack(client, exchange, order.orderNumber, cs, greeting, createdAtTs);
     if (sent) {
@@ -939,6 +954,7 @@ async function handleClientResponse(
           const pending = (cs.pendingFirstMsg || "").toLowerCase();
           const named = pending ? matchBank(pending, allAccounts) : null;
           if (pending && matchWantsMultipleAccounts(pending)) {
+            await markSplitPaymentDeclared(cs);
             const msg = erutNote + "\n\nEstas son nuestras cuentas disponibles:\n\n" +
               accounts.map((a: any, i: number) => `--- Cuenta ${i + 1} ---\n${formatSingleAccount(a)}`).join("\n\n") +
               "\n\nCuando realices cada pago:\n- Marca \"Pagado\" en la orden\n- Envía los comprobantes aquí en el chat";
@@ -978,6 +994,7 @@ async function handleClientResponse(
           const pending = (cs.pendingFirstMsg || "").toLowerCase();
           const named = pending ? matchBank(pending, allAccounts) : null;
           if (pending && matchWantsMultipleAccounts(pending)) {
+            await markSplitPaymentDeclared(cs);
             const msg = "Estas son nuestras cuentas disponibles:\n\n" +
               accounts.map((a: any, i: number) => `--- Cuenta ${i + 1} ---\n${formatSingleAccount(a)}`).join("\n\n") +
               "\n\nCuando realices cada pago:\n- Marca \"Pagado\" en la orden\n- Envía los comprobantes aquí en el chat";
@@ -1239,6 +1256,7 @@ async function handleClientResponse(
       }
 
       if (namedBanks.length >= 2) {
+        await markSplitPaymentDeclared(cs);
         const erutNote = cs.isCompany ? "Al realizar el pago, por favor adjunta el ERUT junto con el comprobante para emitir la factura.\n\n" : "";
         const msg = erutNote + "Sin problema, aquí tienes las cuentas:\n\n" +
           namedBanks.map((a: any, i: number) => `--- Cuenta ${i + 1} ---\n${formatSingleAccount(a)}`).join("\n\n") +
@@ -1248,6 +1266,7 @@ async function handleClientResponse(
         const sent = await sendAccountWithErutNote(tenantId, exchange, client, order, cs, chosen);
         if (sent) await updateState(cs.id, "account_sent", { chosenBank: chosen.bank, chosenAccountIds: [chosen.id], retryCount: 0 });
       } else if (wantsAll) {
+        await markSplitPaymentDeclared(cs);
         const erutNote = cs.isCompany ? "Al realizar el pago, por favor adjunta el ERUT junto con el comprobante para emitir la factura.\n\n" : "";
         const msg = erutNote + "Estas son nuestras cuentas disponibles:\n\n" +
           accounts.map((a: any, i: number) => `--- Cuenta ${i + 1} ---\n${formatSingleAccount(a)}`).join("\n\n") +
@@ -1264,6 +1283,7 @@ async function handleClientResponse(
         } else if (amount > 0 && cs.totalAmount) {
           await offerSplitPayment(tenantId, exchange, client, order, cs, amount, label);
         } else {
+          await markSplitPaymentDeclared(cs);
           await sendThenTransition(client, exchange, order.orderNumber, cs,
             pick([
               "Sin problema, podemos dividir el pago en 2 partes. ¿Cuánto te permite transferir tu banco por vez?",
@@ -1546,6 +1566,7 @@ async function handleClientResponse(
           } else if (amount > 0 && cs.totalAmount) {
             await offerSplitPayment(tenantId, exchange, client, order, cs, amount, label);
           } else {
+            await markSplitPaymentDeclared(cs);
             await sendThenTransition(client, exchange, order.orderNumber, cs,
               pick([
                 "Sí, puedes hacer el pago en 2 partes sin problema. ¿Cuánto te permite transferir tu banco por vez?",
@@ -1641,6 +1662,7 @@ async function handleClientResponse(
         } else if (amount > 0 && cs.totalAmount) {
           await offerSplitPayment(tenantId, exchange, client, order, cs, amount, label);
         } else {
+          await markSplitPaymentDeclared(cs);
           await sendThenTransition(client, exchange, order.orderNumber, cs,
             "¿Cuál es el máximo que te permite transferir tu banco?",
             "awaiting_limit_amount", { retryCount: 0 }
@@ -1753,6 +1775,7 @@ async function handleClientResponse(
         if (amount > 0 && cs.totalAmount) {
           await offerSplitPayment(tenantId, exchange, client, order, cs, amount, label);
         } else {
+          await markSplitPaymentDeclared(cs);
           await sendThenTransition(client, exchange, order.orderNumber, cs,
             "¿Cuál es el máximo que te permite transferir tu banco?",
             "awaiting_limit_amount", { retryCount: 0, preInterruptState: null }
@@ -2303,6 +2326,30 @@ function lastComprobantTime(msgs: ChatMessage[]): number {
 // nunca se pudo clasificar, o no hay ANTHROPIC_API_KEY) no se asume nada:
 // no hay forma de saber si falta algo, así que se deja pasar como un pago
 // normal (ver paymentAckMessage, el llamador).
+// Marca que el CLIENTE (no nosotros) avisó por texto que va a pagar en varias
+// partes/cuentas -- ver comentario del campo en schema.prisma. Idempotente
+// (no vuelve a escribir en la DB si ya estaba en true) para no gastar
+// updates de más en una conversación larga.
+async function markSplitPaymentDeclared(cs: any): Promise<void> {
+  if (cs.splitPaymentDeclared) return;
+  await prisma.p2PChatState.update({ where: { id: cs.id }, data: { splitPaymentDeclared: true } });
+  cs.splitPaymentDeclared = true;
+}
+
+// Mensaje proactivo cuando llega un comprobante (imagen, ya leído por IA) por
+// un monto menor al total, y el cliente NUNCA avisó que iba a pagar en
+// partes (ver cs.splitPaymentDeclared) -- a diferencia de underpaymentCheck
+// (que solo corre cuando el cliente ya marcó "Pagado"), esto avisa de
+// inmediato, apenas llega el comprobante, para que el cliente pueda
+// completar el pago sin esperar a que marque "Pagado" primero. Mismo umbral
+// (5% de margen) que underpaymentCheck para no generar falsos positivos por
+// pequeñas diferencias de redondeo.
+function missingAmountOnReceiptMsg(totalReceivedClp: number, expectedClp: number): string | null {
+  if (!(totalReceivedClp > 0) || !(expectedClp > 0) || totalReceivedClp >= expectedClp * 0.95) return null;
+  const faltante = expectedClp - totalReceivedClp;
+  return `Recibí tu comprobante, pero el monto no coincide con el total de la orden: recibimos $${formatCLP(totalReceivedClp)} y el total es $${formatCLP(expectedClp)} — te faltaría transferir $${formatCLP(faltante)}. ¿Puedes completar el pago?`;
+}
+
 function underpaymentCheck(cs: any, order: any): string | null {
   const expectedClp = Number(order.totalPrice) || 0;
   const gotClp = Number(cs.receivedReceiptsClp || 0);
@@ -3184,6 +3231,7 @@ async function offerSplitPayment(
   amount: number,
   label = "ONZE"
 ): Promise<void> {
+  await markSplitPaymentDeclared(cs);
   // cs.totalAmount está en USDT (ver create de P2PChatState, viene de
   // order.amount) — usar ese número acá era el bug real confirmado en vivo
   // (jul 2026): una compra de $225.000 CLP terminó mostrando "Monto: $238"

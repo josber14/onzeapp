@@ -1334,6 +1334,17 @@ model P2PChatState {
   // asesor) para repetir la misma si hace falta, nunca inventar una nueva.
   holderNameConcernAt DateTime?
   holderNameConfirmed Boolean?
+  // Se fija en cuanto el CLIENTE avisa (por texto) que va a pagar en varias
+  // partes/cuentas -- ej. dice que su banco tiene límite, nombra 2+ bancos,
+  // o pide "todas las cuentas". Sirve para que, al llegar un comprobante de
+  // pago por imagen (ver classifyImage en chat-brain.ts), el bot sepa si un
+  // monto menor al total es un pago dividido esperado (no avisar nada, solo
+  // acumular) o una señal real de que falta dinero (avisar de inmediato).
+  // Pedido explícito del usuario (ago 2026): caso real donde un comprador
+  // avisó que pagaría en 3 partes, mandó el primer comprobante, y el bot
+  // solo respondió un genérico "vi tu comprobante, marca Pagado" sin nunca
+  // verificar el monto contra el total.
+  splitPaymentDeclared Boolean @default(false)
   partialAmount     Decimal?  @db.Decimal(18, 8)
   totalAmount       Decimal?  @db.Decimal(18, 8)
   realName          String?
