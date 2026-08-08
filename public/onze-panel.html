@@ -3473,7 +3473,7 @@
           <button class="close-btn" id="closeRateHistoryModalBtn" type="button">×</button>
         </div>
 
-        <p class="section-text" style="margin:0 0 12px;">Cambios de compra/venta por país, con la hora en que se detectó cada cambio.</p>
+        <p class="section-text" id="rateHistorySubtitle" style="margin:0 0 12px;">Tasa actual por país y cuántas veces cambió en el rango elegido — usa "Detalle" para ver cada cambio.</p>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
           <select id="rateHistoryRangeSelect" style="max-width:180px;">
             <option value="1">Hoy</option>
@@ -3483,16 +3483,38 @@
           </select>
           <input type="date" id="rateHistoryDateInput" style="display:none;max-width:170px;">
           <button class="btn" id="rateHistorySearchBtn" type="button" style="display:none;">Buscar</button>
+
+          <div style="position:relative;">
+            <button type="button" id="rateHistoryCountryBtn" aria-haspopup="true" aria-expanded="false"
+              style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid rgba(148,163,184,.18);background:rgba(148,163,184,.06);color:#e2e8f0;cursor:pointer;font:inherit;font-size:13px;">
+              <span id="rateHistoryCountryBtnLabel">Todos los países</span>
+              <span style="font-size:10px;color:#64748b;">▾</span>
+            </button>
+            <div id="rateHistoryCountryPanel" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:20;min-width:220px;background:#0f1b2c;border:1px solid rgba(148,163,184,.18);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,.35);padding:8px;">
+              <div style="font-size:11px;color:#64748b;padding:4px 6px 8px;">Elige uno o varios países</div>
+              <div id="rateHistoryCountryCheckboxes" style="display:flex;flex-direction:column;gap:2px;max-height:240px;overflow:auto;"></div>
+              <div style="display:flex;justify-content:space-between;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(148,163,184,.12);">
+                <button type="button" id="rateHistoryCountryClearBtn" style="background:none;border:none;color:#94a3b8;font-size:12px;cursor:pointer;padding:4px 6px;">Ver todos</button>
+                <button type="button" id="rateHistoryCountryApplyBtn" class="btn" style="padding:6px 14px;font-size:12px;">Aplicar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="rateHistoryDetailBar" style="display:none;align-items:center;gap:10px;margin-bottom:10px;">
+          <button class="btn" id="rateHistoryBackBtn" type="button">← Volver a la lista</button>
+          <strong id="rateHistoryDetailTitle" style="font-size:13px;"></strong>
         </div>
 
         <div style="overflow:auto;max-height:60vh;border:1px solid rgba(255,255,255,.08);border-radius:14px;">
           <table style="width:100%;border-collapse:collapse;min-width:520px;">
             <thead>
-              <tr style="background:rgba(255,255,255,.04);">
+              <tr style="background:rgba(255,255,255,.04);" id="rateHistoryHeadRow">
                 <th style="text-align:left;padding:10px;font-size:12px;">País</th>
                 <th style="text-align:left;padding:10px;font-size:12px;">Compra</th>
                 <th style="text-align:left;padding:10px;font-size:12px;">Venta</th>
                 <th style="text-align:left;padding:10px;font-size:12px;">Detectado</th>
+                <th style="text-align:left;padding:10px;font-size:12px;" id="rateHistoryChangesHead">Cambios</th>
               </tr>
             </thead>
             <tbody id="rateHistoryBody"></tbody>
@@ -5453,7 +5475,86 @@
     const rateHistoryRangeSelect = document.getElementById("rateHistoryRangeSelect");
     const rateHistoryDateInput = document.getElementById("rateHistoryDateInput");
     const rateHistorySearchBtn = document.getElementById("rateHistorySearchBtn");
+    const rateHistoryCountryBtn = document.getElementById("rateHistoryCountryBtn");
+    const rateHistoryCountryBtnLabel = document.getElementById("rateHistoryCountryBtnLabel");
+    const rateHistoryCountryPanel = document.getElementById("rateHistoryCountryPanel");
+    const rateHistoryCountryCheckboxes = document.getElementById("rateHistoryCountryCheckboxes");
+    const rateHistoryCountryClearBtn = document.getElementById("rateHistoryCountryClearBtn");
+    const rateHistoryCountryApplyBtn = document.getElementById("rateHistoryCountryApplyBtn");
+    const rateHistoryDetailBar = document.getElementById("rateHistoryDetailBar");
+    const rateHistoryDetailTitle = document.getElementById("rateHistoryDetailTitle");
+    const rateHistoryBackBtn = document.getElementById("rateHistoryBackBtn");
+    const rateHistoryChangesHead = document.getElementById("rateHistoryChangesHead");
     const closeRateHistoryModalBtn = document.getElementById("closeRateHistoryModalBtn");
+
+    // Última respuesta cruda de la API (todas las filas del rango elegido,
+    // ordenadas país asc + hora desc) -- pedido explícito del usuario (ago
+    // 2026): la lista principal debe mostrar la tasa ACTUAL de cada país con
+    // un conteo de cuántas veces cambió en el rango, no cada fila suelta.
+    // El detalle (todas las filas de un país puntual) se arma agrupando
+    // esto mismo en el cliente, sin pedir de nuevo al servidor.
+    let rateHistoryRawRows = [];
+    let rateHistoryDetailCountry = "";
+    // Países marcados (checkboxes) -- vacío = ver todos. Pedido explícito
+    // del usuario (ago 2026): poder ver la tasa del día de 2+ países a la
+    // vez, no solo uno por uno.
+    let rateHistorySelectedCountries = new Set();
+
+    function rateHistoryCountryLabel(){
+      const n = rateHistorySelectedCountries.size;
+      if(n === 0) return "Todos los países";
+      if(n === 1) return Array.from(rateHistorySelectedCountries)[0];
+      return `${n} países`;
+    }
+
+    function rateHistoryUpdateCountryBtnLabel(){
+      if(rateHistoryCountryBtnLabel) rateHistoryCountryBtnLabel.textContent = rateHistoryCountryLabel();
+    }
+
+    function closeRateHistoryCountryPanel(){
+      if(!rateHistoryCountryPanel) return;
+      rateHistoryCountryPanel.style.display = "none";
+      if(rateHistoryCountryBtn) rateHistoryCountryBtn.setAttribute("aria-expanded", "false");
+    }
+
+    if(rateHistoryCountryBtn) rateHistoryCountryBtn.addEventListener("click", function(e){
+      e.stopPropagation();
+      if(!rateHistoryCountryPanel) return;
+      const open = rateHistoryCountryPanel.style.display === "block";
+      rateHistoryCountryPanel.style.display = open ? "none" : "block";
+      rateHistoryCountryBtn.setAttribute("aria-expanded", open ? "false" : "true");
+    });
+    if(rateHistoryCountryPanel) rateHistoryCountryPanel.addEventListener("click", (e)=>e.stopPropagation());
+    document.addEventListener("click", function(e){
+      if(!rateHistoryCountryPanel || rateHistoryCountryPanel.style.display !== "block") return;
+      if(!e.target.closest("#rateHistoryCountryPanel") && !e.target.closest("#rateHistoryCountryBtn")) closeRateHistoryCountryPanel();
+    });
+    document.addEventListener("keydown", function(e){
+      if(e.key === "Escape") closeRateHistoryCountryPanel();
+    });
+
+    if(rateHistoryCountryClearBtn) rateHistoryCountryClearBtn.addEventListener("click", function(){
+      rateHistorySelectedCountries = new Set();
+      if(rateHistoryCountryCheckboxes){
+        rateHistoryCountryCheckboxes.querySelectorAll("input[type=checkbox]").forEach(cb => cb.checked = false);
+      }
+      rateHistoryUpdateCountryBtnLabel();
+      rateHistoryDetailCountry = "";
+      closeRateHistoryCountryPanel();
+      renderRateHistory();
+    });
+    if(rateHistoryCountryApplyBtn) rateHistoryCountryApplyBtn.addEventListener("click", function(){
+      rateHistoryDetailCountry = "";
+      closeRateHistoryCountryPanel();
+      renderRateHistory();
+    });
+    if(rateHistoryCountryCheckboxes) rateHistoryCountryCheckboxes.addEventListener("change", function(e){
+      const cb = e.target.closest("input[type=checkbox]");
+      if(!cb) return;
+      if(cb.checked) rateHistorySelectedCountries.add(cb.value);
+      else rateHistorySelectedCountries.delete(cb.value);
+      rateHistoryUpdateCountryBtnLabel();
+    });
 
     function closeRateHistoryModal(){
       if(!rateHistoryModal) return;
@@ -5468,6 +5569,7 @@
       const isCustom = rateHistoryRangeSelect.value === "custom";
       if(rateHistoryDateInput) rateHistoryDateInput.style.display = isCustom ? "inline-block" : "none";
       if(rateHistorySearchBtn) rateHistorySearchBtn.style.display = isCustom ? "inline-block" : "none";
+      rateHistoryDetailCountry = "";
       if(isCustom){
         if(rateHistoryDateInput && !rateHistoryDateInput.value) rateHistoryDateInput.value = todayISO();
         loadRateHistory();
@@ -5475,7 +5577,21 @@
         loadRateHistory();
       }
     });
-    if(rateHistorySearchBtn) rateHistorySearchBtn.addEventListener("click", loadRateHistory);
+    if(rateHistorySearchBtn) rateHistorySearchBtn.addEventListener("click", function(){ rateHistoryDetailCountry = ""; loadRateHistory(); });
+    if(rateHistoryBackBtn) rateHistoryBackBtn.addEventListener("click", function(){
+      rateHistoryDetailCountry = "";
+      renderRateHistory();
+    });
+    // Delegado (no onclick inline) -- el país va como atributo data-, nunca
+    // embebido en JS dentro del HTML: un país con comillas en el JSON
+    // rompía el atributo onclick en silencio (bug real confirmado en vivo,
+    // ago 2026, el botón "Detalle" no hacía nada).
+    if(rateHistoryBody) rateHistoryBody.addEventListener("click", function(ev){
+      const btn = ev.target.closest("[data-rate-detail]");
+      if(!btn) return;
+      rateHistoryDetailCountry = btn.getAttribute("data-rate-detail") || "";
+      renderRateHistory();
+    });
 
     // Copia local de escHtml -- NO depender de la función global del mismo
     // nombre (definida en otro <script> más abajo en el archivo). Caso real
@@ -5489,10 +5605,119 @@
       return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     }
 
+    function rateHistoryFmtWhen(iso){
+      return new Intl.DateTimeFormat("es-CL", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit", second:"2-digit" }).format(new Date(iso));
+    }
+
+    function rateHistoryFmtRate(v){
+      return v != null ? fmtCL(Number(v), countDecimalsFromText(String(v))) : "—";
+    }
+
+    // Reconstruye los checkboxes de país a partir de los países presentes
+    // en el rango cargado, preservando la selección previa (rateHistorySelectedCountries)
+    // para los países que sigan existiendo en el nuevo rango.
+    function rebuildRateHistoryCountrySelect(){
+      if(!rateHistoryCountryCheckboxes) return;
+      const countries = Array.from(new Set(rateHistoryRawRows.map(r => r.country))).sort();
+      rateHistorySelectedCountries = new Set(Array.from(rateHistorySelectedCountries).filter(c => countries.includes(c)));
+      rateHistoryCountryCheckboxes.innerHTML = countries.map(c => {
+        const flag = typeof getFlagEmoji === "function" ? getFlagEmoji(c) : "";
+        const checked = rateHistorySelectedCountries.has(c) ? "checked" : "";
+        const id = "rhc_" + rateHistoryEsc(c).replace(/[^a-zA-Z0-9]/g, "_");
+        return `<label for="${id}" style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="${id}" value="${rateHistoryEsc(c)}" ${checked}>
+          ${flag} ${rateHistoryEsc(c)}
+        </label>`;
+      }).join("");
+      rateHistoryUpdateCountryBtnLabel();
+    }
+
+    // Vista agrupada: una fila por país con su tasa MÁS RECIENTE dentro del
+    // rango y cuántas veces cambió -- botón "Detalle" abre la vista de
+    // abajo con cada cambio individual y su hora. El filtro de país acepta
+    // 2 o más países a la vez (rateHistorySelectedCountries) -- pedido
+    // explícito del usuario (ago 2026): comparar varios países del mismo día
+    // sin tener que abrir uno por uno.
+    function renderRateHistoryGrouped(){
+      if(rateHistoryDetailBar) rateHistoryDetailBar.style.display = "none";
+      if(rateHistoryChangesHead) rateHistoryChangesHead.textContent = "Cambios";
+      const byCountry = new Map();
+      for(const r of rateHistoryRawRows){
+        if(rateHistorySelectedCountries.size > 0 && !rateHistorySelectedCountries.has(r.country)) continue;
+        if(!byCountry.has(r.country)) byCountry.set(r.country, []);
+        byCountry.get(r.country).push(r);
+      }
+      const countries = Array.from(byCountry.keys()).sort();
+      if(!countries.length){
+        rateHistoryBody.innerHTML = "";
+        if(rateHistoryEmpty) rateHistoryEmpty.style.display = "block";
+        return;
+      }
+      if(rateHistoryEmpty) rateHistoryEmpty.style.display = "none";
+      rateHistoryBody.innerHTML = countries.map(country => {
+        const changes = byCountry.get(country); // ya viene ordenado hora desc
+        const latest = changes[0];
+        const flag = typeof getFlagEmoji === "function" ? getFlagEmoji(country) : "";
+        const n = changes.length;
+        const changesLabel = n === 1 ? "1 cambio" : `${n} cambios`;
+        return `
+          <tr>
+            <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${flag} ${rateHistoryEsc(country)}</td>
+            <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${rateHistoryFmtRate(latest.buyRate)}</td>
+            <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${rateHistoryFmtRate(latest.sellRate)}</td>
+            <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);color:#94a3b8;">${rateHistoryFmtWhen(latest.recordedAt)}</td>
+            <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">
+              ${changesLabel}
+              <button type="button" data-rate-detail="${rateHistoryEsc(country)}" title="Ver detalle" style="margin-left:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;border:1px solid rgba(148,163,184,.18);background:rgba(148,163,184,.08);color:#94a3b8;cursor:pointer;font-size:14px;transition:all .12s;" onmouseover="this.style.background='rgba(148,163,184,.16)';this.style.color='#e2e8f0';" onmouseout="this.style.background='rgba(148,163,184,.08)';this.style.color='#94a3b8';">📖</button>
+            </td>
+          </tr>`;
+      }).join("");
+    }
+
+    // Vista de detalle: todos los cambios de UN país, más antiguo abajo,
+    // más reciente arriba (mismo orden que ya traía la API).
+    function renderRateHistoryDetail(country){
+      const changes = rateHistoryRawRows.filter(r => r.country === country);
+      if(rateHistoryDetailBar) rateHistoryDetailBar.style.display = "flex";
+      if(rateHistoryDetailTitle){
+        const flag = typeof getFlagEmoji === "function" ? getFlagEmoji(country) : "";
+        rateHistoryDetailTitle.textContent = `${flag} ${country} — ${changes.length === 1 ? "1 cambio" : changes.length + " cambios"} en este rango`;
+      }
+      if(rateHistoryChangesHead) rateHistoryChangesHead.textContent = "";
+      if(!changes.length){
+        rateHistoryBody.innerHTML = "";
+        if(rateHistoryEmpty) rateHistoryEmpty.style.display = "block";
+        return;
+      }
+      if(rateHistoryEmpty) rateHistoryEmpty.style.display = "none";
+      rateHistoryBody.innerHTML = changes.map((r, i) => {
+        const flag = typeof getFlagEmoji === "function" ? getFlagEmoji(r.country) : "";
+        const tag = i === 0 ? " <span style=\"color:#34d399;font-size:11px;\">(actual)</span>" : "";
+        return `
+          <tr>
+            <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${flag} ${rateHistoryEsc(r.country)}${tag}</td>
+            <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${rateHistoryFmtRate(r.buyRate)}</td>
+            <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${rateHistoryFmtRate(r.sellRate)}</td>
+            <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);color:#94a3b8;">${rateHistoryFmtWhen(r.recordedAt)}</td>
+            <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);"></td>
+          </tr>`;
+      }).join("");
+    }
+
+    function renderRateHistory(){
+      if(!rateHistoryBody) return;
+      if(rateHistoryDetailCountry){
+        renderRateHistoryDetail(rateHistoryDetailCountry);
+      }else{
+        renderRateHistoryGrouped();
+      }
+    }
+
     async function loadRateHistory(){
       if(!rateHistoryBody) return;
-      rateHistoryBody.innerHTML = `<tr><td colspan="4" style="padding:14px;color:#64748b;font-size:12px;">Cargando…</td></tr>`;
+      rateHistoryBody.innerHTML = `<tr><td colspan="5" style="padding:14px;color:#64748b;font-size:12px;">Cargando…</td></tr>`;
       if(rateHistoryEmpty) rateHistoryEmpty.style.display = "none";
+      if(rateHistoryDetailBar) rateHistoryDetailBar.style.display = "none";
 
       const isCustom = rateHistoryRangeSelect && rateHistoryRangeSelect.value === "custom";
       const query = isCustom
@@ -5521,30 +5746,16 @@
           // (500), o de red, y quedaba imposible de diagnosticar a distancia.
           const reason = data?.error || ("HTTP " + res.status);
           console.error("[rate-history]", reason);
-          rateHistoryBody.innerHTML = `<tr><td colspan="4" style="padding:14px;color:#f87171;font-size:12px;">No se pudo cargar el historial (${rateHistoryEsc(reason)}).</td></tr>`;
+          rateHistoryBody.innerHTML = `<tr><td colspan="5" style="padding:14px;color:#f87171;font-size:12px;">No se pudo cargar el historial (${rateHistoryEsc(reason)}).</td></tr>`;
           return;
         }
-        const rows = data.rows || [];
-        if(!rows.length){
-          rateHistoryBody.innerHTML = "";
-          if(rateHistoryEmpty) rateHistoryEmpty.style.display = "block";
-          return;
-        }
-        rateHistoryBody.innerHTML = rows.map(r => {
-          const flag = typeof getFlagEmoji === "function" ? getFlagEmoji(r.country) : "";
-          const when = new Intl.DateTimeFormat("es-CL", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit", second:"2-digit" }).format(new Date(r.recordedAt));
-          return `
-            <tr>
-              <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${flag} ${rateHistoryEsc(String(r.country || "—"))}</td>
-              <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${r.buyRate != null ? fmtCL(Number(r.buyRate), countDecimalsFromText(String(r.buyRate))) : "—"}</td>
-              <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${r.sellRate != null ? fmtCL(Number(r.sellRate), countDecimalsFromText(String(r.sellRate))) : "—"}</td>
-              <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);color:#94a3b8;">${when}</td>
-            </tr>`;
-        }).join("");
+        rateHistoryRawRows = data.rows || [];
+        rebuildRateHistoryCountrySelect();
+        renderRateHistory();
       }catch(e){
         console.error("[rate-history]", e);
         const reason = e?.name === "AbortError" ? "tardó demasiado, reintenta" : String(e?.message || e);
-        rateHistoryBody.innerHTML = `<tr><td colspan="4" style="padding:14px;color:#f87171;font-size:12px;">No se pudo cargar el historial (${rateHistoryEsc(reason)}).</td></tr>`;
+        rateHistoryBody.innerHTML = `<tr><td colspan="5" style="padding:14px;color:#f87171;font-size:12px;">No se pudo cargar el historial (${rateHistoryEsc(reason)}).</td></tr>`;
       }
     }
 
@@ -5553,6 +5764,7 @@
       rateHistoryModal.classList.add("open");
       rateHistoryModal.setAttribute("aria-hidden", "false");
       document.body.classList.add("noscroll");
+      rateHistoryDetailCountry = "";
       loadRateHistory();
     };
 
