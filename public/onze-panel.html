@@ -27583,7 +27583,7 @@ try{
           <button class="btn secondary" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtOpenKycModal(${c.id})">Ver KYC</button>
           <button class="btn secondary" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtOpenWithdrawAddrModal(${c.id},'${nameEsc}')">🔑 Direcciones de retiro</button>
           ${c.status !== 'approved' ? `<button class="btn small" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtSetStatus(${c.id},'approved')">Aprobar</button>` : ''}
-          ${c.status !== 'rejected' ? `<button class="btn small danger" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtSetStatus(${c.id},'rejected')">Rechazar</button>` : ''}
+          ${c.status !== 'rejected' && c.status !== 'approved' ? `<button class="btn small danger" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtSetStatus(${c.id},'rejected')">Rechazar</button>` : ''}
           ${c.status === 'approved' ? `<button class="btn small danger" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtSetStatus(${c.id},'suspended')">Suspender</button>` : ''}
           ${c.status === 'rejected' ? `<button class="btn small danger" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtDeleteClient(${c.id})">🗑️ Eliminar</button>` : ''}
         </div>
