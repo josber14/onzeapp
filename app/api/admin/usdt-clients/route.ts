@@ -89,3 +89,39 @@ export async function PATCH(req: NextRequest) {
     },
   });
 }
+
+// Borrado permanente -- SOLO para clientes rechazados, y solo si nunca
+// tuvieron una compra o retiro que llegó a completarse (dinero real
+// movido). Decisión explícita del usuario (ago 2026): clientes aprobados o
+// suspendidos nunca se borran, se manejan solo con estado -- borrar acá
+// haría cascade sobre UsdtPurchaseIntent/UsdtWithdrawal (onDelete: Cascade
+// en el schema) y perdería el rastro de dinero real si alguna vez lo hubo.
+export async function DELETE(req: NextRequest) {
+  const auth = await requireAdmin();
+  if ("error" in auth) return auth.error;
+  const { session } = auth;
+  if (!session.tenantId) return NextResponse.json({ error: "Falta tenantId" }, { status: 400 });
+
+  const { searchParams } = new URL(req.url);
+  const clientId = Number(searchParams.get("id"));
+  if (!clientId) return NextResponse.json({ error: "Falta id" }, { status: 400 });
+
+  const client = await prisma.usdtClient.findUnique({ where: { id: clientId } });
+  if (!client || client.tenantId !== session.tenantId) {
+    return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+  }
+  if (client.status !== "rejected") {
+    return NextResponse.json({ error: "Solo se pueden eliminar clientes rechazados" }, { status: 400 });
+  }
+
+  const [completedIntents, completedWithdrawals] = await Promise.all([
+    prisma.usdtPurchaseIntent.count({ where: { clientId, status: "completed" } }),
+    prisma.usdtWithdrawal.count({ where: { clientId, status: "completed" } }),
+  ]);
+  if (completedIntents > 0 || completedWithdrawals > 0) {
+    return NextResponse.json({ error: "Este cliente tiene compras/retiros completados con dinero real — no se puede eliminar" }, { status: 400 });
+  }
+
+  await prisma.usdtClient.delete({ where: { id: clientId } });
+  return NextResponse.json({ ok: true });
+}

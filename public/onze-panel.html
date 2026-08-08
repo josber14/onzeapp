@@ -27569,6 +27569,56 @@ try{
 
   window.__usdtClientsCache = [];
 
+  function usdtRenderClientCard(c){
+    const date = new Date(c.createdAt).toLocaleString('es-CL', { timeZone: 'America/Santiago' });
+    const nameEsc = (c.fullName||'').replace(/'/g,"\\'");
+    return `<div style="background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:12px 14px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+        <div>
+          <strong style="color:#fff;">${c.fullName}</strong>
+          <span style="background:rgba(0,0,0,.3);color:${usdtStatusColor(c.status)};padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;margin-left:8px;">${usdtStatusLabel(c.status)}</span>
+          <div style="color:#8aa0ba;font-size:12px;margin-top:3px;">${c.email} · Registrado ${date}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="btn secondary" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtOpenKycModal(${c.id})">Ver KYC</button>
+          <button class="btn secondary" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtOpenWithdrawAddrModal(${c.id},'${nameEsc}')">🔑 Direcciones de retiro</button>
+          ${c.status !== 'approved' ? `<button class="btn small" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtSetStatus(${c.id},'approved')">Aprobar</button>` : ''}
+          ${c.status !== 'rejected' ? `<button class="btn small danger" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtSetStatus(${c.id},'rejected')">Rechazar</button>` : ''}
+          ${c.status === 'approved' ? `<button class="btn small danger" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtSetStatus(${c.id},'suspended')">Suspender</button>` : ''}
+          ${c.status === 'rejected' ? `<button class="btn small danger" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtDeleteClient(${c.id})">🗑️ Eliminar</button>` : ''}
+        </div>
+      </div>
+      <div style="margin-top:10px;background:rgba(0,0,0,.2);border:1px solid rgba(148,163,184,.08);border-radius:8px;padding:10px 12px;">
+        <div style="font-size:11px;font-weight:700;color:#8aa0ba;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;">⚙️ Configuración de compra</div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:end;">
+          <label style="font-size:12px;color:#c4cdd8;">
+            <div style="margin-bottom:3px;">Límite de compra</div>
+            <div style="position:relative;">
+              <input id="usdtLimit_${c.id}" type="text" inputmode="numeric" value="${c.purchaseLimitClp ? Number(c.purchaseLimitClp).toLocaleString('es-CL') : ''}" placeholder="Sin límite" oninput="window.usdtFormatClpInput(this)" style="width:150px;padding:6px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.7);color:#e2e8f0;font-size:13px;">
+            </div>
+            <div style="font-size:10px;color:#64748b;margin-top:2px;">CLP</div>
+          </label>
+          <label style="font-size:12px;color:#c4cdd8;">
+            <div style="margin-bottom:3px;">Margen fijo</div>
+            <input id="usdtMargin_${c.id}" type="number" min="0" step="0.01" value="${c.fixedMarginPct ?? ''}" placeholder="Usa tramos" style="width:110px;padding:6px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.7);color:#e2e8f0;font-size:13px;">
+            <div style="font-size:10px;color:#64748b;margin-top:2px;">% — vacío = tramos generales</div>
+          </label>
+          <button class="btn small secondary" type="button" onclick="window.usdtSaveClientSettings(${c.id})">Guardar</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // Secciones por estado -- pedido explícito del usuario (ago 2026): los
+  // clientes suspendidos y los activos (aprobados) deben verse en su propia
+  // sección, no todos mezclados en una sola lista.
+  const USDT_CLIENT_SECTIONS = [
+    { key: 'pending', label: 'Pendientes de aprobación', match: s => s === 'pending_kyc' || s === 'pending_approval' },
+    { key: 'approved', label: 'Activos', match: s => s === 'approved' },
+    { key: 'suspended', label: 'Suspendidos', match: s => s === 'suspended' },
+    { key: 'rejected', label: 'Rechazados', match: s => s === 'rejected' },
+  ];
+
   window.usdtLoadClients = async function(){
     const res = await usdtFetch('/api/admin/usdt-clients');
     const list = document.getElementById('usdtClientsList');
@@ -27579,45 +27629,21 @@ try{
       list.innerHTML = '<div style="color:#64748b;font-size:12px;">Sin clientes registrados todavía.</div>';
       return;
     }
-    list.innerHTML = window.__usdtClientsCache.map(function(c){
-      const date = new Date(c.createdAt).toLocaleString('es-CL', { timeZone: 'America/Santiago' });
-      return `<div style="background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:12px 14px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
-          <div>
-            <strong style="color:#fff;">${c.fullName}</strong>
-            <span style="background:rgba(0,0,0,.3);color:${usdtStatusColor(c.status)};padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;margin-left:8px;">${usdtStatusLabel(c.status)}</span>
-            <div style="color:#8aa0ba;font-size:12px;margin-top:3px;">${c.email} · Registrado ${date}</div>
-          </div>
-          <div style="display:flex;gap:6px;">
-            <button class="btn secondary" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtOpenKycModal(${c.id})">Ver KYC</button>
-            <button class="btn secondary" type="button" style="padding:4px 10px;font-size:12px;" onclick="window.usdtOpenWithdrawAddrModal(${c.id},'${(c.fullName||'').replace(/'/g,"\\'")}')">🔑 Direcciones de retiro</button>
-          </div>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
-          ${c.status !== 'approved' ? `<button class="btn small" type="button" onclick="window.usdtSetStatus(${c.id},'approved')">Aprobar</button>` : ''}
-          ${c.status !== 'rejected' ? `<button class="btn small danger" type="button" onclick="window.usdtSetStatus(${c.id},'rejected')">Rechazar</button>` : ''}
-          ${c.status === 'approved' ? `<button class="btn small danger" type="button" onclick="window.usdtSetStatus(${c.id},'suspended')">Suspender</button>` : ''}
-        </div>
-        <div style="margin-top:10px;background:rgba(0,0,0,.2);border:1px solid rgba(148,163,184,.08);border-radius:8px;padding:10px 12px;">
-          <div style="font-size:11px;font-weight:700;color:#8aa0ba;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;">⚙️ Configuración de compra</div>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:end;">
-            <label style="font-size:12px;color:#c4cdd8;">
-              <div style="margin-bottom:3px;">Límite de compra</div>
-              <div style="position:relative;">
-                <input id="usdtLimit_${c.id}" type="text" inputmode="numeric" value="${c.purchaseLimitClp ? Number(c.purchaseLimitClp).toLocaleString('es-CL') : ''}" placeholder="Sin límite" oninput="window.usdtFormatClpInput(this)" style="width:150px;padding:6px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.7);color:#e2e8f0;font-size:13px;">
-              </div>
-              <div style="font-size:10px;color:#64748b;margin-top:2px;">CLP</div>
-            </label>
-            <label style="font-size:12px;color:#c4cdd8;">
-              <div style="margin-bottom:3px;">Margen fijo</div>
-              <input id="usdtMargin_${c.id}" type="number" min="0" step="0.01" value="${c.fixedMarginPct ?? ''}" placeholder="Usa tramos" style="width:110px;padding:6px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.7);color:#e2e8f0;font-size:13px;">
-              <div style="font-size:10px;color:#64748b;margin-top:2px;">% — vacío = tramos generales</div>
-            </label>
-            <button class="btn small secondary" type="button" onclick="window.usdtSaveClientSettings(${c.id})">Guardar</button>
-          </div>
-        </div>
+    list.innerHTML = USDT_CLIENT_SECTIONS.map(function(section){
+      const clients = window.__usdtClientsCache.filter(c => section.match(c.status));
+      if(!clients.length) return '';
+      return `<div style="margin-bottom:18px;">
+        <div style="font-size:11px;font-weight:700;color:#8aa0ba;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px;">${section.label} (${clients.length})</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">${clients.map(usdtRenderClientCard).join('')}</div>
       </div>`;
     }).join('');
+  };
+
+  window.usdtDeleteClient = async function(clientId){
+    if(!(await onzeConfirm('¿Eliminar permanentemente este cliente rechazado? Esta acción no se puede deshacer.', { danger: true, confirmText: 'Eliminar' }))) return;
+    const res = await usdtFetch('/api/admin/usdt-clients?id=' + clientId, { method: 'DELETE' });
+    if(!res.ok){ onzeAlert(res.error || 'No se pudo eliminar'); return; }
+    window.usdtLoadClients();
   };
 
   window.usdtSetStatus = async function(clientId, status){
