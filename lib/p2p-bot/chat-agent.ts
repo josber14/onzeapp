@@ -2604,7 +2604,19 @@ function matchWantsAnotherAccount(text: string): boolean {
 }
 
 function matchThirdParty(text: string): boolean {
-  return text.includes("tercer") || text.includes("espos") || text.includes("mamá") || text.includes("papá") || text.includes("herman") || text.includes("familiar") || text.includes("amigo") || text.includes("amiga");
+  // "tercero" es inequívoco, se acepta suelto. El resto (espos*, mamá/papá,
+  // herman*, familiar, amig[oa]) son también formas comunes de dirigirse a
+  // alguien en Chile ("amigo", "hermano") -- exigirles un posesivo/relación
+  // cerca ("mi hermana", "de un amigo") evita el falso positivo real
+  // confirmado en vivo (ago 2026, orden 22919203200969527296): el comprador
+  // respondió "Personal amigo" (solo un saludo, sin mencionar ninguna cuenta
+  // ajena) y el bot le dijo "no aceptamos depósitos de terceros" por error.
+  if (text.includes("tercer")) return true;
+  // Normaliza tildes (papá->papa, mamá->mama) -- sin esto, \b después de una
+  // vocal con tilde no cuenta como límite de palabra en JS (á no es \w por
+  // defecto) y el patrón nunca calzaba con "mi papá", "mi mamá", etc.
+  const normalized = text.normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return /\b(mi|su|tu|de\s+(un|una)|del?\s+la)\s+(espos\w*|mama|papa|herman\w*|famili\w*|amig[oa])\b/.test(normalized);
 }
 
 function matchERUT(text: string): boolean {
