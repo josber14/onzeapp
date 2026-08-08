@@ -5355,6 +5355,18 @@
     });
     if(rateHistorySearchBtn) rateHistorySearchBtn.addEventListener("click", loadRateHistory);
 
+    // Copia local de escHtml -- NO depender de la función global del mismo
+    // nombre (definida en otro <script> más abajo en el archivo). Caso real
+    // (ago 2026): en un momento esa función no estaba disponible todavía y
+    // el ReferenceError resultante quedaba SIN CAPTURAR justo dentro del
+    // catch de abajo, dejando el modal pegado en "Cargando..." para siempre
+    // en vez de mostrar el error real -- la función de arriba nunca llegaba
+    // a actualizar el HTML porque el error nuevo interrumpía todo antes.
+    function rateHistoryEsc(str){
+      if(!str) return "";
+      return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
     async function loadRateHistory(){
       if(!rateHistoryBody) return;
       rateHistoryBody.innerHTML = `<tr><td colspan="4" style="padding:14px;color:#64748b;font-size:12px;">Cargando…</td></tr>`;
@@ -5387,7 +5399,7 @@
           // (500), o de red, y quedaba imposible de diagnosticar a distancia.
           const reason = data?.error || ("HTTP " + res.status);
           console.error("[rate-history]", reason);
-          rateHistoryBody.innerHTML = `<tr><td colspan="4" style="padding:14px;color:#f87171;font-size:12px;">No se pudo cargar el historial (${escHtml(reason)}).</td></tr>`;
+          rateHistoryBody.innerHTML = `<tr><td colspan="4" style="padding:14px;color:#f87171;font-size:12px;">No se pudo cargar el historial (${rateHistoryEsc(reason)}).</td></tr>`;
           return;
         }
         const rows = data.rows || [];
@@ -5401,7 +5413,7 @@
           const when = new Intl.DateTimeFormat("es-CL", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit", second:"2-digit" }).format(new Date(r.recordedAt));
           return `
             <tr>
-              <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${flag} ${escHtml(String(r.country || "—"))}</td>
+              <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${flag} ${rateHistoryEsc(String(r.country || "—"))}</td>
               <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${r.buyRate != null ? fmtCL(Number(r.buyRate), countDecimalsFromText(String(r.buyRate))) : "—"}</td>
               <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);">${r.sellRate != null ? fmtCL(Number(r.sellRate), countDecimalsFromText(String(r.sellRate))) : "—"}</td>
               <td style="padding:10px;border-top:1px solid rgba(255,255,255,.06);color:#94a3b8;">${when}</td>
@@ -5410,7 +5422,7 @@
       }catch(e){
         console.error("[rate-history]", e);
         const reason = e?.name === "AbortError" ? "tardó demasiado, reintenta" : String(e?.message || e);
-        rateHistoryBody.innerHTML = `<tr><td colspan="4" style="padding:14px;color:#f87171;font-size:12px;">No se pudo cargar el historial (${escHtml(reason)}).</td></tr>`;
+        rateHistoryBody.innerHTML = `<tr><td colspan="4" style="padding:14px;color:#f87171;font-size:12px;">No se pudo cargar el historial (${rateHistoryEsc(reason)}).</td></tr>`;
       }
     }
 
