@@ -1507,6 +1507,27 @@ model P2PCycleManualSale {
   @@index([cycleId])
 }
 
+// Historial de cambios de la tabla "tasa de compra venta" (hoja "tasas web",
+// columnas G:pais H:compra I:venta) -- pedido explícito del usuario (ago
+// 2026), visible SOLO para super_admin_global en el panel ("Historial de
+// tasa" dentro de "Crea tu tasa del día"). Un cron (ver vercel.json,
+// /api/internal/rate-history-check) revisa la hoja publicada cada 5 min y
+// SOLO inserta una fila nueva por país cuando compra o venta cambiaron
+// respecto al último valor guardado -- así la tabla queda como una línea de
+// tiempo de cambios reales, no un snapshot repetido cada 5 min. La hora
+// guardada es la hora en que el cron detectó el cambio, no el segundo exacto
+// en que se editó en Sheets (esa precisión requeriría la API de edición de
+// Google, fuera de alcance por ahora -- decisión explícita del usuario).
+model CountryRateHistory {
+  id         Int      @id @default(autoincrement())
+  country    String
+  buyRate    Decimal? @db.Decimal(18, 6)
+  sellRate   Decimal? @db.Decimal(18, 6)
+  recordedAt DateTime @default(now())
+
+  @@index([country, recordedAt])
+}
+
 model P2PBotMarketSnapshot {
   id          Int      @id @default(autoincrement())
   tenantId    Int
