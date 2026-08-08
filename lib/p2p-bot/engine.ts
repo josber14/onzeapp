@@ -928,6 +928,7 @@ async function runBinanceCycle(
     // manual desde el panel, nunca automática.
     {
       const duplicateLimitAdIds = new Set<number>();
+      const duplicateLimitBinanceAdIds = new Set<string>();
       for (let i = 0; i < managedAds.length; i++) {
         for (let j = i + 1; j < managedAds.length; j++) {
           const adA = managedAds[i];
@@ -950,6 +951,8 @@ async function runBinanceCycle(
           if (!sameLimit) continue;
           duplicateLimitAdIds.add(adA.id);
           duplicateLimitAdIds.add(adB.id);
+          duplicateLimitBinanceAdIds.add(String(adA.adId));
+          duplicateLimitBinanceAdIds.add(String(adB.adId));
           await log("error", "binance",
             `🚫 Anuncios ${adA.adId} y ${adB.adId} tienen el MISMO límite (${sellA.minAmount}-${sellA.maxAmount} CLP) -- Binance puede cerrarlos por esto (ver Merchant Guidelines: "order limit" duplicado). Se desactivó el bot en ambos automáticamente. Corrige el límite en la app de Binance y vuelve a activarlos manualmente desde el panel cuando el límite sea distinto.`
           );
@@ -960,6 +963,21 @@ async function runBinanceCycle(
           where: { id: { in: [...duplicateLimitAdIds] } },
           data: { botEnabled: false },
         });
+        // Pedido explícito del usuario (ago 2026): apagar el bot de NUESTRO
+        // lado no alcanza -- el anuncio seguía visible/operativo EN BINANCE,
+        // que es justo lo que Binance vigila para cerrar cuentas por límites
+        // duplicados. Se oculta el anuncio directo en Binance (visible: 0,
+        // mismo mecanismo ya probado como freno de emergencia más abajo en
+        // este archivo) sin borrarlo -- se reactiva manual desde el panel,
+        // nunca solo, a diferencia del freno de emergencia por precio.
+        for (const binanceAdId of duplicateLimitBinanceAdIds) {
+          try {
+            await client.updateAd({ adId: binanceAdId, visible: 0 });
+            await log("warn", "binance", `🔒 Ad ${binanceAdId}: ocultado en Binance (visible: 0) por límite duplicado.`);
+          } catch (e: any) {
+            await log("warn", "binance", `Ad ${binanceAdId}: no se pudo ocultar en Binance (${e.message}) -- igual quedó apagado de nuestro lado.`);
+          }
+        }
         managedAds = managedAds.filter(ma => !duplicateLimitAdIds.has(ma.id));
         if (managedAds.length === 0) {
           await log("warn", "binance", "Todos los anuncios gestionados quedaron desactivados por límites duplicados.");
