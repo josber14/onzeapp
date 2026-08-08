@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { BybitP2PClient, bybitOrderGroup, bybitOrderStatusLabel } from "./bybit-adapter";
 import { BinanceP2PClient } from "./binance-adapter";
 import { canCallPriority, canCallNonUrgent, recordCall, getUsage } from "./rate-limiter";
-import { computeCycleOrderStats, computeLocalCycleStats } from "./cycle-stats";
+import { computeCycleOrderStats, computeLocalCycleStats, mapCycleOrdersForDisplay } from "./cycle-stats";
 import { processChats } from "./chat-agent";
 import type {
   P2PBotConfigData,
@@ -2247,7 +2247,7 @@ async function autoCloseCycle(
 
   const startMs = Number(cycle.startTime);
   const endMs = Date.now();
-  const { totalUsdt, totalBinanceClp, firstOrder, lastOrder } =
+  const { totalUsdt, totalBinanceClp, firstOrder, lastOrder, orders } =
     exchange === "binance"
       ? await computeCycleOrderStats(client, startMs, endMs, recentOrders)
       : await computeLocalCycleStats(prisma, tenantId, exchange, startMs, endMs);
@@ -2268,6 +2268,10 @@ async function autoCloseCycle(
       lastOrderNumber: lastOrder?.orderNumber ?? null,
       lastOrderClp: lastOrder ? Math.round(Number(lastOrder.totalPrice)) || 0 : null,
       lastOrderTime: lastOrder ? new Date(Number(lastOrder.createTime)) : null,
+      // Ver mismo comentario en app/api/p2p/cycle/close/route.ts -- guarda la
+      // lista exacta que generó los totales de arriba, para que el detalle
+      // del ciclo cerrado no dependa de volver a preguntarle a Binance.
+      ordersJson: mapCycleOrdersForDisplay(orders),
     },
   });
 

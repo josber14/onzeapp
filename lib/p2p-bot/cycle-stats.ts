@@ -20,6 +20,21 @@ import { BinanceP2PClient } from "./binance-adapter";
 // sin su última orden (ya completada, ya vista como "no pendiente" por el
 // chequeo previo) porque el buscador de historial todavía no la reflejaba en
 // el instante exacto del cierre. Pasar esa lectura fresca acá evita perderla.
+// Forma final (liviana) en la que se muestran/guardan las órdenes de un
+// ciclo -- usado tanto para el detalle en vivo como para el snapshot que se
+// persiste al cerrar (P2PCycle.ordersJson), así las dos vistas son
+// exactamente el mismo formato.
+export function mapCycleOrdersForDisplay(orders: any[]) {
+  return (orders || [])
+    .map((o: any) => ({
+      orderNumber: o.orderNumber ?? o.orderNo ?? null,
+      totalPrice: Number(o.totalPrice) || 0,
+      amount: Number(o.amount) || 0,
+      createTime: Number(o.createTime) || Number(o.createDate) || (o.executedAt ? new Date(o.executedAt).getTime() : null),
+    }))
+    .sort((a: any, b: any) => (a.createTime || 0) - (b.createTime || 0));
+}
+
 export async function computeCycleOrderStats(
   client: BinanceP2PClient,
   startMs: number,

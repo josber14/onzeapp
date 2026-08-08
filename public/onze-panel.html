@@ -14259,7 +14259,18 @@ function addP2PBotStyles(){
     // el ciclo activo. Se carga aparte (no bloquea la apertura del modal)
     // porque puede tardar unos segundos en paginar el historial de Binance.
     try {
-      const ordersRes = await fetch("/api/p2p/cycle/orders?id=" + encodeURIComponent(id), { credentials: "include" });
+      // Timeout de seguridad -- caso real (ago 2026): sin esto, si la
+      // petición se demoraba de más (navegador ocupado con el polling del
+      // bot cada ~300ms, o Binance lento) el modal se quedaba en "Cargando
+      // órdenes..." para siempre, sin ningún error ni forma de reintentar.
+      const abortCtrl = new AbortController();
+      const timeoutId = setTimeout(() => abortCtrl.abort(), 15000);
+      let ordersRes;
+      try {
+        ordersRes = await fetch("/api/p2p/cycle/orders?id=" + encodeURIComponent(id), { credentials: "include", signal: abortCtrl.signal });
+      } finally {
+        clearTimeout(timeoutId);
+      }
       const ordersData = await ordersRes.json();
       const listEl = document.getElementById("botCycleOrdersList");
       if (!listEl) return; // el usuario ya cerró el modal

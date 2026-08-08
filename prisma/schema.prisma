@@ -1474,6 +1474,19 @@ model P2PCycle {
   lastOrderNumber  String?
   lastOrderClp     Decimal?             @db.Decimal(18, 2)
   lastOrderTime    DateTime?
+  // Snapshot de las órdenes reales que se usaron para calcular los totales
+  // de ARRIBA, guardado en el momento del cierre -- pedido explícito del
+  // usuario (ago 2026): "las mismas órdenes que se ven afuera cuando está
+  // el ciclo activo son las que se tienen que ver una vez finalizado". Antes
+  // el detalle de un ciclo cerrado volvía a pedirle a Binance el historial
+  // en vivo (ver /api/p2p/cycle/orders), pero ese endpoint de Binance es
+  // eventualmente consistente (ya documentado en este proyecto) -- dos
+  // llamadas casi idénticas podían traer una lista distinta a la que generó
+  // los totales guardados. Guardando acá exactamente la misma lista que
+  // produjo totalUsdt/totalBinanceClp, el detalle queda coherente siempre,
+  // sin depender de una nueva consulta a Binance. Null para ciclos cerrados
+  // ANTES de este cambio (fallback: la ruta re-consulta en vivo para esos).
+  ordersJson       Json?
   createdAt        DateTime             @default(now())
   updatedAt        DateTime             @updatedAt
   manualSales      P2PCycleManualSale[]

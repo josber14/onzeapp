@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { BinanceP2PClient } from "@/lib/p2p-bot/binance-adapter";
-import { computeCycleOrderStats, computeLocalCycleStats } from "@/lib/p2p-bot/cycle-stats";
+import { computeCycleOrderStats, computeLocalCycleStats, mapCycleOrdersForDisplay } from "@/lib/p2p-bot/cycle-stats";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const startMs = Number(cycle.startTime);
     const endMs = Date.now();
 
-    let totalUsdt: number, totalBinanceClp: number, orderCount: number, firstOrder: any, lastOrder: any;
+    let totalUsdt: number, totalBinanceClp: number, orderCount: number, firstOrder: any, lastOrder: any, orders: any[];
     if (exchange === "binance") {
       const creds = await prisma.binanceCredentials.findFirst({
         where: { tenantId: session.tenantId, isActive: true, label },
@@ -46,12 +46,12 @@ export async function POST(req: NextRequest) {
         return Response.json({ ok: false, error: "Sin credenciales Binance" });
       }
       const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
-      ({ totalUsdt, totalBinanceClp, orderCount, firstOrder, lastOrder } =
+      ({ totalUsdt, totalBinanceClp, orderCount, firstOrder, lastOrder, orders } =
         await computeCycleOrderStats(client, startMs, endMs));
     } else {
       // Bybit/OKX: sin API de historial propia integrada acá todavía --
       // usamos las órdenes que el ciclo del bot ya sincroniza a P2PBotOrder.
-      ({ totalUsdt, totalBinanceClp, orderCount, firstOrder, lastOrder } =
+      ({ totalUsdt, totalBinanceClp, orderCount, firstOrder, lastOrder, orders } =
         await computeLocalCycleStats(prisma, session.tenantId, exchange, startMs, endMs));
     }
 
@@ -71,6 +71,13 @@ export async function POST(req: NextRequest) {
         lastOrderNumber: lastOrder?.orderNumber ?? null,
         lastOrderClp: lastOrder ? Math.round(Number(lastOrder.totalPrice)) || 0 : null,
         lastOrderTime: lastOrder ? new Date(Number(lastOrder.createTime) || Number(lastOrder.createDate)) : null,
+        // Pedido explícito del usuario (ago 2026): las órdenes que se ven en
+        // el detalle de un ciclo YA CERRADO deben ser las mismas que se
+        // vieron mientras estaba activo -- se guarda acá la misma lista que
+        // acaba de generar los totales de arriba, en vez de dejar que el
+        // detalle vuelva a pedírsela a Binance más tarde (ver
+        // mapCycleOrdersForDisplay / P2PCycle.ordersJson).
+        ordersJson: mapCycleOrdersForDisplay(orders),
       },
       include: { manualSales: true },
     });

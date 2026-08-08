@@ -3,16 +3,21 @@ import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { BinanceP2PClient } from "@/lib/p2p-bot/binance-adapter";
-import { computeCycleOrderStats, computeLocalCycleStats } from "@/lib/p2p-bot/cycle-stats";
+import { computeCycleOrderStats, computeLocalCycleStats, mapCycleOrdersForDisplay } from "@/lib/p2p-bot/cycle-stats";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Lista de órdenes reales que entraron en un ciclo YA CERRADO -- P2PCycle
-// solo guarda totales + primera/última orden, nunca la lista completa (ver
-// comentario en computeCycleOrderStats). Se recalcula en vivo con el mismo
-// rango [startTime, endTime] del ciclo guardado, igual que ya se hace para
-// el ciclo activo en /api/p2p/cycle/status.
+// Lista de órdenes reales que entraron en un ciclo YA CERRADO. Pedido
+// explícito del usuario (ago 2026): tienen que ser LAS MISMAS que se vieron
+// mientras el ciclo estaba activo -- así que primero se sirve el snapshot
+// guardado al momento del cierre (P2PCycle.ordersJson, ver close/route.ts y
+// autoCloseCycle en engine.ts). Solo para ciclos cerrados ANTES de que
+// existiera ese snapshot (ordersJson null) se recalcula en vivo pidiéndole
+// de nuevo el historial a Binance -- ese es el camino viejo, que puede
+// diferir del que generó los totales guardados porque el endpoint de
+// historial de Binance es eventualmente consistente (ya documentado en este
+// proyecto).
 export async function GET(req: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -30,6 +35,10 @@ export async function GET(req: NextRequest) {
       where: { id, tenantId: session.tenantId },
     });
     if (!cycle) return Response.json({ ok: false, error: "Ciclo no encontrado" }, { status: 404 });
+
+    if (Array.isArray(cycle.ordersJson)) {
+      return Response.json({ ok: true, orders: cycle.ordersJson });
+    }
 
     const startMs = new Date(cycle.startTime).getTime();
     const endMs = cycle.endTime ? new Date(cycle.endTime).getTime() : Date.now();
@@ -50,16 +59,7 @@ export async function GET(req: NextRequest) {
       orders = stats.orders || [];
     }
 
-    const mapped = orders
-      .map((o: any) => ({
-        orderNumber: o.orderNumber ?? o.orderNo ?? null,
-        totalPrice: Number(o.totalPrice) || 0,
-        amount: Number(o.amount) || 0,
-        createTime: Number(o.createTime) || Number(o.createDate) || (o.executedAt ? new Date(o.executedAt).getTime() : null),
-      }))
-      .sort((a: any, b: any) => (a.createTime || 0) - (b.createTime || 0));
-
-    return Response.json({ ok: true, orders: mapped });
+    return Response.json({ ok: true, orders: mapCycleOrdersForDisplay(orders) });
   } catch (error: any) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });
   }
