@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   if (!clientId) return NextResponse.json({ ok: false, error: "Falta clientId" }, { status: 400 });
 
   const addresses = await prisma.usdtWithdrawalAddress.findMany({
-    where: { tenantId: session.tenantId!, clientId },
+    where: { tenantId: session.tenantId!, clientId, active: true },
     orderBy: { createdAt: "desc" },
   });
   return NextResponse.json({ ok: true, addresses });
