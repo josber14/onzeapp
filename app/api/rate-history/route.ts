@@ -18,11 +18,21 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const days = Math.min(Math.max(Number(searchParams.get("days")) || 1, 1), 30);
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const dateParam = searchParams.get("date"); // "YYYY-MM-DD", hora de Chile (UTC-4 fijo, igual que el resto del proyecto)
+
+  let where: any;
+  if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+    const dayStart = new Date(`${dateParam}T00:00:00.000-04:00`);
+    const dayEnd = new Date(`${dateParam}T23:59:59.999-04:00`);
+    where = { recordedAt: { gte: dayStart, lte: dayEnd } };
+  } else {
+    const days = Math.min(Math.max(Number(searchParams.get("days")) || 1, 1), 30);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    where = { recordedAt: { gte: since } };
+  }
 
   const rows = await prisma.countryRateHistory.findMany({
-    where: { recordedAt: { gte: since } },
+    where,
     orderBy: [{ country: "asc" }, { recordedAt: "desc" }],
   });
 

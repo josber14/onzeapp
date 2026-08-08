@@ -3416,13 +3416,16 @@
           <button class="close-btn" id="closeRateHistoryModalBtn" type="button">×</button>
         </div>
 
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
-          <p class="section-text" style="margin:0;">Cambios de compra/venta por país, con la hora exacta en que se detectó cada cambio.</p>
+        <p class="section-text" style="margin:0 0 12px;">Cambios de compra/venta por país, con la hora en que se detectó cada cambio.</p>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
           <select id="rateHistoryRangeSelect" style="max-width:180px;">
             <option value="1">Hoy</option>
             <option value="7">Últimos 7 días</option>
             <option value="30">Últimos 30 días</option>
+            <option value="custom">Fecha específica…</option>
           </select>
+          <input type="date" id="rateHistoryDateInput" style="display:none;max-width:170px;">
+          <button class="btn" id="rateHistorySearchBtn" type="button" style="display:none;">Buscar</button>
         </div>
 
         <div style="overflow:auto;max-height:60vh;border:1px solid rgba(255,255,255,.08);border-radius:14px;">
@@ -5326,6 +5329,8 @@
     const rateHistoryBody = document.getElementById("rateHistoryBody");
     const rateHistoryEmpty = document.getElementById("rateHistoryEmpty");
     const rateHistoryRangeSelect = document.getElementById("rateHistoryRangeSelect");
+    const rateHistoryDateInput = document.getElementById("rateHistoryDateInput");
+    const rateHistorySearchBtn = document.getElementById("rateHistorySearchBtn");
     const closeRateHistoryModalBtn = document.getElementById("closeRateHistoryModalBtn");
 
     function closeRateHistoryModal(){
@@ -5336,16 +5341,31 @@
     }
 
     if(closeRateHistoryModalBtn) closeRateHistoryModalBtn.addEventListener("click", closeRateHistoryModal);
-    if(rateHistoryRangeSelect) rateHistoryRangeSelect.addEventListener("change", loadRateHistory);
+
+    if(rateHistoryRangeSelect) rateHistoryRangeSelect.addEventListener("change", function(){
+      const isCustom = rateHistoryRangeSelect.value === "custom";
+      if(rateHistoryDateInput) rateHistoryDateInput.style.display = isCustom ? "inline-block" : "none";
+      if(rateHistorySearchBtn) rateHistorySearchBtn.style.display = isCustom ? "inline-block" : "none";
+      if(isCustom){
+        if(rateHistoryDateInput && !rateHistoryDateInput.value) rateHistoryDateInput.value = todayISO();
+        loadRateHistory();
+      }else{
+        loadRateHistory();
+      }
+    });
+    if(rateHistorySearchBtn) rateHistorySearchBtn.addEventListener("click", loadRateHistory);
 
     async function loadRateHistory(){
       if(!rateHistoryBody) return;
       rateHistoryBody.innerHTML = `<tr><td colspan="4" style="padding:14px;color:#64748b;font-size:12px;">Cargando…</td></tr>`;
       if(rateHistoryEmpty) rateHistoryEmpty.style.display = "none";
 
-      const days = rateHistoryRangeSelect ? rateHistoryRangeSelect.value : "1";
+      const isCustom = rateHistoryRangeSelect && rateHistoryRangeSelect.value === "custom";
+      const query = isCustom
+        ? "date=" + encodeURIComponent(rateHistoryDateInput ? rateHistoryDateInput.value : todayISO())
+        : "days=" + encodeURIComponent(rateHistoryRangeSelect ? rateHistoryRangeSelect.value : "1");
       try{
-        const res = await fetch("/api/rate-history?days=" + encodeURIComponent(days), { credentials: "include", cache: "no-store" });
+        const res = await fetch("/api/rate-history?" + query, { credentials: "include", cache: "no-store" });
         const data = await res.json();
         if(!data?.ok){
           rateHistoryBody.innerHTML = `<tr><td colspan="4" style="padding:14px;color:#f87171;font-size:12px;">No se pudo cargar el historial.</td></tr>`;
