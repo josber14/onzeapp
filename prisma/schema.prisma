@@ -74,6 +74,7 @@ model Tenant {
   usdtPurchaseIntents   UsdtPurchaseIntent[]
   usdtIncomingTransfers UsdtIncomingTransfer[]
   usdtPriceTicks        UsdtPriceTick[]
+  adminNotifications    AdminNotification[]
   usdtWithdrawalAddresses UsdtWithdrawalAddress[]
   usdtWithdrawals       UsdtWithdrawal[]
   partnerAccounts       PartnerAccount[]
@@ -824,6 +825,34 @@ model UsdtPriceTick {
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, createdAt])
+}
+
+// Notificaciones para el admin sobre actividad de clientes USDT -- pedido
+// explícito del usuario (ago 2026).
+// "purchase_requested"/"purchase_cancelled": saber apenas un cliente pide
+// comprar (para poder fondear Skipo a tiempo, ANTES de que el cliente
+// apriete "Comprar") y si cancela. requestedClp es lo que pidió el cliente;
+// skipoClpNeeded es lo que el admin debe mandar a Skipo -- son DISTINTOS
+// porque el cliente paga a la tasa CON margen y el admin compra en Skipo a
+// la tasa SIN margen (más barata), así que skipoClpNeeded siempre es menor.
+// "wallet_added": el cliente guardó/cambió su wallet de retiro en su
+// perfil -- para que el admin pueda ir a agregarla como contacto en Skipo
+// sin tener que pedírsela por WhatsApp.
+model AdminNotification {
+  id               Int      @id @default(autoincrement())
+  tenantId         Int
+  type             String   // "purchase_requested" | "purchase_cancelled" | "wallet_added"
+  clientName       String
+  requestedClp     Decimal? @db.Decimal(18, 2)
+  skipoClpNeeded   Decimal? @db.Decimal(18, 2)
+  walletAddress    String?
+  withdrawalNetwork String?
+  purchaseIntentId Int?
+  read             Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, read, createdAt])
 }
 
 model PasswordResetCode {

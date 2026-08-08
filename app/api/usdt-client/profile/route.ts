@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { verifyUsdtClientSessionToken, USDT_CLIENT_SESSION_COOKIE } from "@/lib/usdt-client-session";
+import { notifyWalletAdded } from "@/lib/admin-notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,18 @@ export async function PATCH(req: NextRequest) {
       ...(withdrawalNetwork !== undefined ? { withdrawalNetwork: withdrawalNetwork || null } : {}),
     },
   });
+
+  // Avisa al admin SOLO si la dirección realmente cambió (no en cada
+  // guardado del perfil con el mismo valor) -- para que pueda agregarla
+  // como contacto en Skipo sin tener que pedírsela por WhatsApp.
+  if (updated.walletAddress && updated.walletAddress !== client.walletAddress) {
+    notifyWalletAdded({
+      tenantId: client.tenantId,
+      clientName: client.fullName,
+      walletAddress: updated.walletAddress,
+      withdrawalNetwork: updated.withdrawalNetwork,
+    }).catch(() => {});
+  }
 
   return NextResponse.json({
     ok: true,

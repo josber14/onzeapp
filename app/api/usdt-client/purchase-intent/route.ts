@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { verifyUsdtClientSessionToken, USDT_CLIENT_SESSION_COOKIE } from "@/lib/usdt-client-session";
 import { generateReferenceCode, toClientPurchaseIntent } from "@/lib/usdt-purchase";
 import { getUsdtPaymentAccount } from "@/lib/usdt-payment-account";
+import { notifyPurchaseRequested } from "@/lib/admin-notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +52,15 @@ export async function POST(req: NextRequest) {
           requestedClp: clpAmount,
         },
       });
+      // Fire-and-forget -- nunca debe demorar ni romper la respuesta al
+      // cliente si Skipo tarda o falla acá.
+      notifyPurchaseRequested({
+        tenantId: client.tenantId,
+        clientName: client.fullName,
+        purchaseIntentId: intent.id,
+        requestedClp: clpAmount,
+        fixedMarginPct: client.fixedMarginPct !== null ? Number(client.fixedMarginPct) : null,
+      }).catch(() => {});
       return NextResponse.json({ ok: true, intent: toClientPurchaseIntent(intent), paymentAccount: getUsdtPaymentAccount() });
     } catch (e: any) {
       if (e.code === "P2002" && attempt < 4) continue;

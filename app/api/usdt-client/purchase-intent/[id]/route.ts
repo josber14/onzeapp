@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { verifyUsdtClientSessionToken, USDT_CLIENT_SESSION_COOKIE } from "@/lib/usdt-client-session";
 import { toClientPurchaseIntent } from "@/lib/usdt-purchase";
+import { notifyPurchaseCancelled } from "@/lib/admin-notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,5 +45,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 
   const updated = await prisma.usdtPurchaseIntent.update({ where: { id: intent.id }, data: { status: "cancelled" } });
+
+  const client = await prisma.usdtClient.findUnique({ where: { id: intent.clientId }, select: { fullName: true } });
+  notifyPurchaseCancelled({
+    tenantId: intent.tenantId,
+    clientName: client?.fullName || "Cliente",
+    purchaseIntentId: intent.id,
+    requestedClp: Number(intent.requestedClp),
+  }).catch(() => {});
+
   return NextResponse.json({ ok: true, intent: toClientPurchaseIntent(updated) });
 }

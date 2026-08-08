@@ -2167,7 +2167,14 @@
   <div class="mobile-topbar">
     <div class="mobile-topbar-inner">
       <div class="mobile-brand">ONZE</div>
-      <button class="menu-toggle" id="menuToggleBtn" type="button">Menú</button>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button id="usdtNotifBellMobile" type="button" onclick="window.usdtOpenNotifModal && window.usdtOpenNotifModal()"
+          style="display:none;position:relative;width:36px;height:36px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#e2e8f0;font-size:16px;cursor:pointer;">
+          🔔
+          <span id="usdtNotifBadgeMobile" style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;border-radius:999px;padding:1px 5px;"></span>
+        </button>
+        <button class="menu-toggle" id="menuToggleBtn" type="button">Menú</button>
+      </div>
     </div>
   </div>
 
@@ -2177,6 +2184,11 @@
         <div class="brand-title">ONZE</div>
         <div class="brand-sub">Panel operativo</div>
         <button class="sidebar-profile-btn profile-jump" id="sidebarProfileBtn" type="button" onclick="switchView('profile')">Perfil</button>
+        <button id="usdtNotifBellDesktop" type="button" onclick="window.usdtOpenNotifModal && window.usdtOpenNotifModal()"
+          style="display:none;position:relative;margin-top:8px;width:100%;padding:8px 10px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#e2e8f0;font-size:13px;cursor:pointer;text-align:left;">
+          🔔 Notificaciones
+          <span id="usdtNotifBadgeDesktop" style="display:none;position:absolute;top:6px;right:8px;background:#ef4444;color:#fff;font-size:10px;font-weight:700;border-radius:999px;padding:1px 6px;"></span>
+        </button>
       </div>
 
       <nav class="nav">
@@ -3257,6 +3269,30 @@
         <div style="display:flex;justify-content:flex-end;gap:10px;">
           <button class="btn" type="button" id="onzeConfirmCancelBtn">Cancelar</button>
           <button class="btn primary" type="button" id="onzeConfirmOkBtn">Aceptar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="usdtNotifModal" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-card" style="width:min(480px,100%);">
+        <div class="modal-head">
+          <h3 class="modal-title">🔔 Notificaciones</h3>
+          <button class="close-btn" id="usdtNotifModalCloseBtn" type="button">×</button>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding:10px 12px;border:1px solid rgba(148,163,184,.12);border-radius:8px;background:rgba(15,23,42,.4);">
+          <span style="font-size:13px;color:#c4cdd8;">🔊 Sonido al llegar una nueva</span>
+          <label style="position:relative;display:inline-block;width:40px;height:22px;">
+            <input type="checkbox" id="usdtNotifSoundToggle" style="opacity:0;width:0;height:0;">
+            <span id="usdtNotifSoundSlider" style="position:absolute;inset:0;background:#334155;border-radius:999px;transition:background .2s;cursor:pointer;">
+              <span id="usdtNotifSoundKnob" style="position:absolute;top:2px;left:2px;width:18px;height:18px;background:#fff;border-radius:50%;transition:transform .2s;"></span>
+            </span>
+          </label>
+        </div>
+        <div id="usdtNotifList" style="display:flex;flex-direction:column;gap:8px;max-height:50vh;overflow-y:auto;"></div>
+        <div class="empty-state" id="usdtNotifEmpty" style="display:none;margin-top:8px;">
+          Sin notificaciones todavía.
         </div>
       </div>
     </div>
@@ -27361,6 +27397,157 @@ try{
     return n.toLocaleString('es-CL', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
   }
 
+  /* ————— Notificaciones de compra USDT (solo admin) ————— */
+  // Pedido explícito del usuario (ago 2026): saber apenas un cliente pide
+  // comprar (para fondear Skipo a tiempo) y si cancela. Polling simple (el
+  // panel no tiene websockets) cada 20s -- solo corre para super_admin_global.
+
+  let usdtNotifLastMaxId = null; // null = todavía no se hizo el primer poll
+  let usdtNotifPollTimer = null;
+
+  function usdtNotifSoundGetEnabled(){
+    try { return localStorage.getItem('onze_usdt_notif_sound') !== 'off'; } catch { return true; }
+  }
+  function usdtNotifSoundSetEnabled(on){
+    try { localStorage.setItem('onze_usdt_notif_sound', on ? 'on' : 'off'); } catch {}
+  }
+  function usdtNotifApplySoundToggleUI(){
+    const toggle = document.getElementById('usdtNotifSoundToggle');
+    const slider = document.getElementById('usdtNotifSoundSlider');
+    const knob = document.getElementById('usdtNotifSoundKnob');
+    const on = usdtNotifSoundGetEnabled();
+    if(toggle) toggle.checked = on;
+    if(slider) slider.style.background = on ? '#34d399' : '#334155';
+    if(knob) knob.style.transform = on ? 'translateX(18px)' : 'translateX(0)';
+  }
+
+  // Beep corto generado con Web Audio API -- sin depender de ningún archivo
+  // de sonido externo.
+  function usdtNotifPlayBeep(){
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+    } catch {}
+  }
+
+  function usdtNotifUpdateBadges(count){
+    [['usdtNotifBadgeDesktop', 'usdtNotifBellDesktop'], ['usdtNotifBadgeMobile', 'usdtNotifBellMobile']].forEach(function(pair){
+      const badge = document.getElementById(pair[0]);
+      const bell = document.getElementById(pair[1]);
+      if(bell) bell.style.display = 'inline-flex';
+      if(badge){
+        if(count > 0){ badge.style.display = 'block'; badge.textContent = count > 99 ? '99+' : String(count); }
+        else badge.style.display = 'none';
+      }
+    });
+  }
+
+  function usdtNotifRenderList(notifications){
+    const list = document.getElementById('usdtNotifList');
+    const empty = document.getElementById('usdtNotifEmpty');
+    if(!list) return;
+    if(!notifications.length){
+      list.innerHTML = '';
+      if(empty) empty.style.display = 'block';
+      return;
+    }
+    if(empty) empty.style.display = 'none';
+    list.innerHTML = notifications.map(function(n){
+      const when = new Date(n.createdAt).toLocaleString('es-CL', { timeZone: 'America/Santiago' });
+      if(n.type === 'purchase_cancelled'){
+        return `<div style="border:1px solid rgba(239,68,68,.25);background:rgba(239,68,68,.08);border-radius:10px;padding:10px 12px;">
+          <div style="font-size:13px;color:#fca5a5;font-weight:700;">❌ ${n.clientName} canceló su compra</div>
+          <div style="font-size:12px;color:#8aa0ba;margin-top:2px;">Pedía ${usdtMoney(n.requestedClp)} CLP · ${when}</div>
+        </div>`;
+      }
+      if(n.type === 'wallet_added'){
+        return `<div style="border:1px solid rgba(96,165,250,.25);background:rgba(96,165,250,.08);border-radius:10px;padding:10px 12px;">
+          <div style="font-size:13px;color:#93c5fd;font-weight:700;">💼 ${n.clientName} agregó su wallet</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
+            <span style="font-family:monospace;font-size:12px;color:#e2e8f0;word-break:break-all;">${escHtml(n.walletAddress || '')}</span>
+            ${n.withdrawalNetwork ? `<span style="font-size:10px;font-weight:700;color:#93c5fd;border:1px solid rgba(96,165,250,.3);border-radius:999px;padding:1px 7px;">${escHtml(n.withdrawalNetwork)}</span>` : ''}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+            <div style="font-size:11px;color:#64748b;">${when}</div>
+            <button type="button" onclick="copyText('${(n.walletAddress || '').replace(/'/g, "\\'")}')" style="padding:3px 9px;font-size:11px;border-radius:6px;border:1px solid rgba(96,165,250,.3);background:rgba(96,165,250,.12);color:#93c5fd;cursor:pointer;">Copiar dirección</button>
+          </div>
+        </div>`;
+      }
+      const skipoLine = n.skipoClpNeeded !== null
+        ? `<div style="font-size:12px;color:#34d399;margin-top:2px;">Manda a Skipo: <strong>${usdtMoney(n.skipoClpNeeded)} CLP</strong></div>`
+        : `<div style="font-size:11px;color:#64748b;margin-top:2px;">No se pudo calcular el monto para Skipo.</div>`;
+      return `<div style="border:1px solid rgba(52,211,153,.2);background:rgba(52,211,153,.06);border-radius:10px;padding:10px 12px;">
+        <div style="font-size:13px;color:#e2e8f0;font-weight:700;">🛒 ${n.clientName} pidió comprar ${usdtMoney(n.requestedClp)} CLP</div>
+        ${skipoLine}
+        <div style="font-size:11px;color:#64748b;margin-top:4px;">${when}</div>
+      </div>`;
+    }).join('');
+  }
+
+  async function usdtNotifPoll(){
+    if(typeof isGlobalAdmin !== 'function' || !isGlobalAdmin()) return;
+    try {
+      const res = await usdtFetch('/api/admin/notifications');
+      if(!res.ok) return;
+      usdtNotifUpdateBadges(res.unreadCount || 0);
+      window.__usdtNotifCache = res.notifications || [];
+
+      const maxId = res.notifications.reduce(function(m, n){ return Math.max(m, n.id); }, 0);
+      if(usdtNotifLastMaxId !== null && maxId > usdtNotifLastMaxId && usdtNotifSoundGetEnabled()){
+        usdtNotifPlayBeep();
+      }
+      usdtNotifLastMaxId = maxId;
+
+      const modal = document.getElementById('usdtNotifModal');
+      if(modal && modal.classList.contains('open')) usdtNotifRenderList(window.__usdtNotifCache);
+    } catch {}
+  }
+
+  window.usdtOpenNotifModal = async function(){
+    const modal = document.getElementById('usdtNotifModal');
+    if(!modal) return;
+    usdtNotifApplySoundToggleUI();
+    usdtNotifRenderList(window.__usdtNotifCache || []);
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('noscroll');
+    // Se marcan como leídas al abrir -- el admin ya las está viendo.
+    usdtNotifUpdateBadges(0);
+    await usdtFetch('/api/admin/notifications', { method: 'PATCH', body: JSON.stringify({ all: true }) }).catch(function(){});
+  };
+
+  function usdtCloseNotifModal(){
+    const modal = document.getElementById('usdtNotifModal');
+    if(!modal) return;
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('noscroll');
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    const closeBtn = document.getElementById('usdtNotifModalCloseBtn');
+    if(closeBtn) closeBtn.addEventListener('click', usdtCloseNotifModal);
+    const soundToggle = document.getElementById('usdtNotifSoundToggle');
+    if(soundToggle) soundToggle.addEventListener('change', function(){
+      usdtNotifSoundSetEnabled(soundToggle.checked);
+      usdtNotifApplySoundToggleUI();
+    });
+    if(typeof isGlobalAdmin === 'function' && isGlobalAdmin()){
+      usdtNotifPoll();
+      usdtNotifPollTimer = setInterval(usdtNotifPoll, 20000);
+    }
+  });
+
   function usdtStatusLabel(status){
     const map = {
       pending_kyc: 'KYC pendiente', pending_approval: 'En revisión',
@@ -27826,6 +28013,7 @@ try{
         openList.innerHTML = '<div style="color:#64748b;font-size:12px;">Sin solicitudes abiertas.</div>';
       }else{
         openList.innerHTML = window.__usdtOpenIntentsCache.map(function(i){
+          const remaining = Number(i.requestedClp) - Number(i.receivedClp || 0);
           return `<div style="background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:12px 14px;">
             <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center;">
               <div>
@@ -27833,8 +28021,10 @@ try{
                 <span style="color:#8aa0ba;font-size:12px;"> — ${i.client?.fullName || ''} — pide ${usdtMoney(i.requestedClp)} CLP, lleva ${usdtMoney(i.receivedClp)} CLP</span>
               </div>
               <div style="display:flex;gap:8px;align-items:center;">
-                <input type="number" id="usdtManualAmount_${i.id}" placeholder="Monto CLP" style="width:120px;padding:6px 8px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:rgba(15,23,42,.7);color:#e2e8f0;font-size:12px;">
-                <button class="btn small" type="button" onclick="window.usdtRegisterManualPayment(${i.id})">Registrar pago manual</button>
+                <span style="color:#8aa0ba;font-size:12px;">¿Llegó el pago de <strong style="color:#e2e8f0;">${usdtMoney(remaining)} CLP</strong>?</span>
+                <button type="button" title="Sí, llegó completo" onclick="window.usdtRegisterManualPayment(${i.id})"
+                  style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(52,211,153,.35);background:rgba(52,211,153,.14);color:#34d399;font-size:16px;font-weight:700;cursor:pointer;">✓</button>
+                <button type="button" title="No, todavía no" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.1);color:#fca5a5;font-size:16px;font-weight:700;cursor:pointer;">✗</button>
               </div>
             </div>
           </div>`;
@@ -27889,11 +28079,16 @@ try{
     });
   };
 
+  // Check = confirma el monto PENDIENTE completo (requestedClp - receivedClp)
+  // automáticamente, sin escribir nada -- pedido explícito del usuario (ago
+  // 2026). La X no hace nada (a propósito): es solo la opción de "todavía
+  // no", no registra ni cambia nada.
   window.usdtRegisterManualPayment = async function(purchaseIntentId){
-    const input = document.getElementById('usdtManualAmount_' + purchaseIntentId);
-    const amountClp = Number(input?.value);
-    if(!(amountClp > 0)){ onzeAlert('Ingresa el monto CLP que verificaste.'); return; }
-    if(!(await onzeConfirm(`¿Confirmas que YA viste el pago de ${usdtMoney(amountClp)} CLP entrando a la cuenta? Esto habilita la compra sin depender de ningún correo.`))) return;
+    const intent = window.__usdtOpenIntentsCache.find(function(i){ return i.id === purchaseIntentId; });
+    if(!intent) return;
+    const amountClp = Number(intent.requestedClp) - Number(intent.receivedClp || 0);
+    if(!(amountClp > 0)) return;
+    if(!(await onzeConfirm(`¿Confirmas que YA viste el pago de ${usdtMoney(amountClp)} CLP entrando a la cuenta? Esto habilita la compra sin depender de ningún correo.`, { confirmText: 'Sí, lo recibí' }))) return;
     const res = await usdtFetch('/api/admin/usdt-payment-review', { method: 'PATCH', body: JSON.stringify({ manualEntry: true, purchaseIntentId, amountClp }) });
     if(!res.ok){ onzeAlert(res.error || 'No se pudo registrar el pago'); return; }
     window.usdtLoadReviewQueue();
