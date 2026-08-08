@@ -12,6 +12,31 @@ type WithdrawalAddress = {
   address: string;
 };
 
+type WithdrawalHistoryItem = {
+  id: number;
+  amountUsdt: number;
+  totalUsdt: number | null;
+  status: "pending" | "completed" | "failed" | "error";
+  addressAlias: string | null;
+  networkSymbol: string | null;
+  createdAt: string;
+  completedAt: string | null;
+};
+
+const WITHDRAWAL_STATUS_LABEL: Record<string, string> = {
+  pending: "En proceso",
+  completed: "Completado",
+  failed: "Falló",
+  error: "Error",
+};
+
+const WITHDRAWAL_STATUS_COLOR: Record<string, string> = {
+  pending: "text-amber-300",
+  completed: "text-emerald-400",
+  failed: "text-rose-400",
+  error: "text-rose-400",
+};
+
 export default function RetirarPage() {
   const [twoFaEnabled, setTwoFaEnabled] = useState<boolean | null>(null);
   const [available, setAvailable] = useState<number | null>(null);
@@ -24,6 +49,21 @@ export default function RetirarPage() {
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [history, setHistory] = useState<WithdrawalHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [minWithdrawal, setMinWithdrawal] = useState<number | null>(null);
+  const [withdrawalFee, setWithdrawalFee] = useState<number | null>(null);
+  const [withdrawalInfoError, setWithdrawalInfoError] = useState(false);
+
+  async function loadHistory() {
+    try {
+      const res = await fetch("/api/usdt-client/withdrawal-history");
+      const data = await res.json();
+      if (res.ok && data.ok) setHistory(data.withdrawals);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
 
   useEffect(() => {
     fetch("/api/usdt-client/2fa/status")
@@ -36,6 +76,18 @@ export default function RetirarPage() {
       .then((data) => { if (data.ok) setAvailable(data.availableUsdt); })
       .catch(() => {});
 
+    fetch("/api/usdt-client/withdrawal-info")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.ok) {
+          setMinWithdrawal(data.minimumWithdrawal);
+          setWithdrawalFee(data.withdrawalFee);
+        } else {
+          setWithdrawalInfoError(true);
+        }
+      })
+      .catch(() => setWithdrawalInfoError(true));
+
     fetch("/api/usdt-client/withdrawal-addresses")
       .then((r) => r.json())
       .then((data) => {
@@ -45,6 +97,8 @@ export default function RetirarPage() {
         }
       })
       .finally(() => setAddressesLoading(false));
+
+    loadHistory();
   }, []);
 
   useEffect(() => {
@@ -61,6 +115,24 @@ export default function RetirarPage() {
     setShowPicker(false);
   }
 
+  // Teclado numérico propio (igual que Skipo) en vez de un <input type="number">
+  // nativo -- pedido explícito del usuario (ago 2026).
+  function handleKeypadPress(key: string) {
+    if (key === "back") {
+      setAmount((a) => a.slice(0, -1));
+      return;
+    }
+    if (key === ".") {
+      setAmount((a) => (a.includes(".") ? a : a === "" ? "0." : a + "."));
+      return;
+    }
+    setAmount((a) => (a === "0" ? key : a + key));
+  }
+
+  const amountNumber = Number(amount) || 0;
+  const belowMinimum = minWithdrawal !== null && amountNumber > 0 && amountNumber < minWithdrawal;
+  const aboveAvailable = available !== null && amountNumber > available;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMessage("");
@@ -75,6 +147,7 @@ export default function RetirarPage() {
       if (data.ok) {
         setSuccess(true);
         setMessage("Retiro enviado, lo estamos procesando.");
+        loadHistory();
       } else {
         setMessage(data.error || "No se pudo procesar");
       }
@@ -90,10 +163,7 @@ export default function RetirarPage() {
   return (
     <div className="mx-auto max-w-lg">
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-        <h2 className="mb-1 text-base font-semibold">Retirar USDT</h2>
-        <p className="mb-4 text-xs text-slate-500">
-          Disponible: {available === null ? "…" : available.toFixed(2)} USDT
-        </p>
+        <h2 className="mb-4 text-base font-semibold">Retirar USDT</h2>
 
         {twoFaEnabled === false && (
           <div className="mb-4 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-sm text-amber-300">
@@ -110,8 +180,17 @@ export default function RetirarPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit}>
-            <label className="mb-1 block text-xs text-slate-400">Monto a retirar (USDT)</label>
-            <div className="mb-4 flex gap-2">
+            {/* Móvil: número grande + teclado táctil (como Skipo). En PC alcanza con
+                escribir el monto con el teclado físico -- ver el input de abajo. */}
+            <div className="mb-4 rounded-2xl border border-white/10 bg-black/20 p-5 text-center md:hidden">
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-4xl font-bold text-white">{amount || "0"}</span>
+                <span className="text-lg font-medium text-slate-400">USDT</span>
+              </div>
+            </div>
+
+            <div className="mb-4 hidden md:block">
+              <label className="mb-1 block text-xs text-slate-400">Monto a retirar (USDT)</label>
               <input
                 type="number"
                 step="0.00000001"
@@ -119,16 +198,64 @@ export default function RetirarPage() {
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 outline-none focus:border-emerald-400"
+                className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 outline-none focus:border-emerald-400"
               />
+            </div>
+
+            <div className="mb-4 flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm">
+              <span className="text-slate-400">
+                Disponible: <span className="font-semibold text-slate-200">{available === null ? "…" : available.toFixed(8)} USDT</span>
+              </span>
               <button
                 type="button"
                 onClick={() => setAmount(available !== null ? String(available) : "")}
-                className="rounded-lg border border-white/10 px-3 text-sm text-slate-300 transition hover:bg-white/5"
+                className="rounded-md border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-1 text-xs font-semibold text-emerald-400 transition hover:bg-emerald-400/20"
               >
                 Max
               </button>
             </div>
+
+            {withdrawalInfoError && (
+              <p className="mb-4 text-xs text-rose-400">
+                No se pudo obtener el mínimo/comisión de retiro — recarga la página.
+              </p>
+            )}
+            {(minWithdrawal !== null || withdrawalFee !== null) && (
+              <div className="mb-4 divide-y divide-white/5 rounded-lg border border-white/10 bg-black/10 px-3 text-sm">
+                {minWithdrawal !== null && (
+                  <div className="flex justify-between py-2">
+                    <span className="text-slate-400">Envío mínimo</span>
+                    <span className="text-slate-200">{minWithdrawal} USDT</span>
+                  </div>
+                )}
+                {withdrawalFee !== null && (
+                  <div className="flex justify-between py-2">
+                    <span className="text-slate-400">Comisión de envío</span>
+                    <span className="text-slate-200">{withdrawalFee} USDT</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="mb-4 grid grid-cols-3 gap-2 md:hidden">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "back"].map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => handleKeypadPress(key)}
+                  className="rounded-xl border border-white/5 bg-white/[0.02] py-3 text-xl font-medium text-slate-100 transition hover:bg-white/5 active:bg-white/10"
+                >
+                  {key === "back" ? "⌫" : key}
+                </button>
+              ))}
+            </div>
+
+            {belowMinimum && (
+              <p className="mb-3 text-xs text-amber-300">El monto mínimo de retiro es {minWithdrawal} USDT.</p>
+            )}
+            {aboveAvailable && (
+              <p className="mb-3 text-xs text-rose-400">Superas tu saldo disponible.</p>
+            )}
 
             <div className="mb-1 flex items-center justify-between">
               <label className="block text-xs text-slate-400">Dirección de destino</label>
@@ -173,7 +300,7 @@ export default function RetirarPage() {
 
             <button
               type="submit"
-              disabled={busy || !twoFaEnabled || !hasAddress}
+              disabled={busy || !twoFaEnabled || !hasAddress || amountNumber <= 0 || belowMinimum || aboveAvailable}
               className="w-full rounded-lg bg-emerald-500 py-3 font-semibold text-black transition hover:bg-emerald-400 disabled:opacity-50"
             >
               Retirar
@@ -245,6 +372,39 @@ export default function RetirarPage() {
           </div>
         </div>
       )}
+
+      <div className="mt-8">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Historial de retiros</h2>
+        {historyLoading && <p className="text-sm text-slate-400">Cargando…</p>}
+        {!historyLoading && history.length === 0 && (
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center">
+            <p className="text-sm text-slate-400">Sin retiros todavía.</p>
+          </div>
+        )}
+        {!historyLoading && history.length > 0 && (
+          <div className="flex flex-col gap-3">
+            {history.map((w) => (
+              <div key={w.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div className="flex justify-between text-sm text-slate-300">
+                  <span>{new Date(w.createdAt).toLocaleString("es-CL", { timeZone: "America/Santiago" })}</span>
+                  <span className={`font-semibold ${WITHDRAWAL_STATUS_COLOR[w.status] || "text-slate-300"}`}>
+                    {WITHDRAWAL_STATUS_LABEL[w.status] || w.status}
+                  </span>
+                </div>
+                <div className="mt-1 flex justify-between text-sm">
+                  <span className="text-slate-400">
+                    {w.addressAlias || "—"}
+                    {w.networkSymbol ? ` · ${w.networkSymbol}` : ""}
+                  </span>
+                  <span className="font-semibold text-slate-50">
+                    {(w.totalUsdt ?? w.amountUsdt).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

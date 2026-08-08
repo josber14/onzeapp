@@ -240,4 +240,17 @@ export class SkipoV2Client {
   async getWithdrawal(id: string): Promise<SkipoWithdrawal> {
     return this.requestRead("GET", `/v2/withdrawals/${id}`);
   }
+
+  // Mínimo y comisión de retiro REALES de la cuenta -- confirmado en vivo
+  // (ago 2026) contra GET /v2/assets/USDT: minimumWithdrawal="5",
+  // withdrawalFee="0.5" (BEP20). Se piden en vivo en vez de fijarlos a mano
+  // en el código porque Skipo puede cambiarlos sin avisar.
+  async getAssetInfo(assetSymbol: string): Promise<{
+    assetSymbol: string;
+    minimumWithdrawal: string;
+    withdrawalFee: string;
+    networks: Array<{ networkSymbol: string; networkName: string; withdrawalFee: string }>;
+  }> {
+    return this.requestRead("GET", `/v2/assets/${assetSymbol}`);
+  }
 }

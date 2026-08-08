@@ -27,11 +27,27 @@ type PaymentAccount = {
   email: string;
 };
 
+type PurchaseHistoryItem = {
+  id: number;
+  requestedClp: number;
+  receivedClp: number;
+  usdtAmount: number | null;
+  executedRate: number | null;
+  executedAt: string | null;
+};
+
 const REFRESH_SECONDS = 5;
 const INTENT_POLL_MS = 6000;
 
+type QuoteParams = { clpAmount: number } | { usdtAmount: number };
+
 export default function ComprarPage() {
   const [clpInput, setClpInput] = useState("");
+  const [usdtInput, setUsdtInput] = useState("");
+  // Cuál de los 2 campos está escribiendo el cliente ahora mismo -- el otro
+  // se actualiza solo con el resultado de la cotización, sin disparar una
+  // cotización nueva por su cuenta (evita un ping-pong entre los 2 campos).
+  const [activeField, setActiveField] = useState<"clp" | "usdt">("clp");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [error, setError] = useState("");
   const [countdown, setCountdown] = useState(REFRESH_SECONDS);
@@ -46,6 +62,8 @@ export default function ComprarPage() {
   const [cancelError, setCancelError] = useState("");
   const [copiedLabel, setCopiedLabel] = useState<string | null>(null);
   const [showComprarQuote, setShowComprarQuote] = useState(false);
+  const [history, setHistory] = useState<PurchaseHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
 
   const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -59,12 +77,12 @@ export default function ComprarPage() {
     countdownIntervalRef.current = null;
   }
 
-  async function fetchQuote(clpAmount: number) {
+  async function fetchQuote(params: QuoteParams) {
     try {
       const res = await fetch("/api/usdt-client/quote", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ clpAmount }),
+        body: JSON.stringify(params),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -76,24 +94,35 @@ export default function ComprarPage() {
       setError("");
       setQuote(data.quote);
       setCountdown(REFRESH_SECONDS);
+      // Refleja el resultado en el OTRO campo (el que el cliente no está
+      // escribiendo activamente), sin tocar el que sí está editando.
+      if ("clpAmount" in params) {
+        setUsdtInput(data.quote.usdtAmount.toFixed(2));
+      } else {
+        setClpInput(String(Math.round(data.quote.clpAmount)));
+      }
     } catch {
       setError("Ocurrió un error inesperado");
     }
   }
 
-  function startTicking(clpAmount: number) {
+  function startTicking(params: QuoteParams) {
     stopTicking();
-    fetchQuote(clpAmount);
-    refreshIntervalRef.current = setInterval(() => fetchQuote(clpAmount), REFRESH_SECONDS * 1000);
+    fetchQuote(params);
+    refreshIntervalRef.current = setInterval(() => fetchQuote(params), REFRESH_SECONDS * 1000);
     countdownIntervalRef.current = setInterval(() => {
       setCountdown((c) => (c <= 1 ? REFRESH_SECONDS : c - 1));
     }, 1000);
   }
 
   // Cotiza en vivo mientras el cliente decide cuánto comprar — solo mientras
-  // no tiene ninguna solicitud de compra en curso todavía.
+  // no tiene ninguna solicitud de compra en curso todavía. Cada campo tiene
+  // su propio efecto, pero solo actúa cuando es el campo que el cliente
+  // está escribiendo activamente (activeField) -- así actualizar el otro
+  // campo con el resultado no dispara una segunda cotización en cadena.
   useEffect(() => {
     if (activeIntent) return;
+    if (activeField !== "clp") return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     const amount = Number(clpInput);
     if (!clpInput || !(amount >= 500)) {
@@ -102,12 +131,30 @@ export default function ComprarPage() {
       setError("");
       return;
     }
-    debounceRef.current = setTimeout(() => startTicking(amount), 500);
+    debounceRef.current = setTimeout(() => startTicking({ clpAmount: amount }), 500);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clpInput, activeIntent]);
+  }, [clpInput, activeIntent, activeField]);
+
+  useEffect(() => {
+    if (activeIntent) return;
+    if (activeField !== "usdt") return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const amount = Number(usdtInput);
+    if (!usdtInput || !(amount > 0)) {
+      stopTicking();
+      setQuote(null);
+      setError("");
+      return;
+    }
+    debounceRef.current = setTimeout(() => startTicking({ usdtAmount: amount }), 500);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usdtInput, activeIntent, activeField]);
 
   useEffect(() => () => stopTicking(), []);
 
@@ -159,6 +206,20 @@ export default function ComprarPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function loadHistory() {
+    try {
+      const res = await fetch("/api/usdt-client/purchase-history");
+      const data = await res.json();
+      if (res.ok && data.ok) setHistory(data.purchases);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
   async function handleSolicitarCompra() {
     const amount = Number(clpInput);
     if (!(amount >= 500)) return;
@@ -189,7 +250,7 @@ export default function ComprarPage() {
   function handleVerCotizacionCompra() {
     if (!activeIntent) return;
     setShowComprarQuote(true);
-    startTicking(Number(activeIntent.receivedClp));
+    startTicking({ clpAmount: Number(activeIntent.receivedClp) });
   }
 
   function handleCancelarCotizacionCompra() {
@@ -213,6 +274,7 @@ export default function ComprarPage() {
       stopTicking();
       setShowComprarQuote(false);
       setActiveIntent(data.intent);
+      loadHistory();
     } catch {
       setExecuteError("Ocurrió un error inesperado");
     } finally {
@@ -223,6 +285,8 @@ export default function ComprarPage() {
   function handleNuevaCompra() {
     setActiveIntent(null);
     setClpInput("");
+    setUsdtInput("");
+    setActiveField("clp");
     setQuote(null);
     setExecuteError("");
   }
@@ -275,17 +339,30 @@ export default function ComprarPage() {
               inputMode="numeric"
               placeholder="Ej: 100.000"
               value={clpInput ? Number(clpInput).toLocaleString("es-CL") : ""}
-              onChange={(e) => setClpInput(e.target.value.replace(/\D/g, ""))}
+              onChange={(e) => {
+                setActiveField("clp");
+                setClpInput(e.target.value.replace(/\D/g, ""));
+              }}
               className="mb-4 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-3 text-lg outline-none focus:border-emerald-400"
             />
 
             {error && <p className="mb-4 text-sm text-rose-400">{error}</p>}
 
-            <label className="mb-1 block text-xs text-slate-400">Recibes (referencial)</label>
-            <div className="flex items-center justify-between rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-4 py-4">
-              <div className="text-2xl font-bold text-emerald-400">
-                {quote ? quote.usdtAmount.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"} USDT
-              </div>
+            <label className="mb-1 block text-xs text-slate-400">Recibes (USDT)</label>
+            <div className="flex items-center justify-between rounded-xl border border-emerald-400/30 bg-emerald-400/5 px-4 py-2">
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={usdtInput}
+                onChange={(e) => {
+                  setActiveField("usdt");
+                  const v = e.target.value.replace(/[^0-9.]/g, "");
+                  setUsdtInput(v.includes(".") ? v.slice(0, v.indexOf(".") + 1) + v.slice(v.indexOf(".") + 1).replace(/\./g, "") : v);
+                }}
+                className="w-full bg-transparent text-2xl font-bold text-emerald-400 outline-none placeholder:text-emerald-400/40"
+              />
+              <span className="pl-2 text-sm font-medium text-emerald-400/70">USDT</span>
             </div>
             {quote && (
               <div className="mt-2 flex items-center justify-center gap-2 text-base text-white">
@@ -451,6 +528,40 @@ export default function ComprarPage() {
             <button onClick={handleNuevaCompra} className="w-full rounded-lg border border-white/10 bg-white/5 py-3 font-semibold">
               Hacer otra compra
             </button>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-8">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-400">Historial de compras</h2>
+        {historyLoading && <p className="text-sm text-slate-400">Cargando…</p>}
+        {!historyLoading && history.length === 0 && (
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center">
+            <p className="text-sm text-slate-400">Sin compras todavía.</p>
+          </div>
+        )}
+        {!historyLoading && history.length > 0 && (
+          <div className="flex flex-col gap-3">
+            {history.map((p) => (
+              <div key={p.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div className="flex justify-between text-sm text-slate-300">
+                  <span>{p.executedAt ? new Date(p.executedAt).toLocaleString("es-CL", { timeZone: "America/Santiago" }) : ""}</span>
+                  <span className="font-semibold text-slate-50">${p.receivedClp.toLocaleString("es-CL")} CLP</span>
+                </div>
+                <div className="mt-1 flex justify-between text-sm">
+                  <span className="text-slate-400">Recibiste</span>
+                  <span className="font-semibold text-emerald-400">
+                    {(p.usdtAmount ?? 0).toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+                  </span>
+                </div>
+                {p.executedRate && (
+                  <div className="mt-1 flex justify-between text-sm text-slate-300">
+                    <span>Precio</span>
+                    <span className="font-semibold text-white">{p.executedRate.toLocaleString("es-CL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CLP</span>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
       </div>

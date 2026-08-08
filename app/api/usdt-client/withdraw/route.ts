@@ -39,6 +39,21 @@ export async function POST(req: NextRequest) {
   if (!(amount > 0)) return NextResponse.json({ ok: false, error: "Ingresa un monto válido" }, { status: 400 });
   if (!/^\d{6}$/.test(code)) return NextResponse.json({ ok: false, error: "Ingresa el código de 6 dígitos de tu 2FA" }, { status: 400 });
 
+  // Defensa en profundidad -- la pantalla ya deshabilita "Revisar" bajo el
+  // mínimo, pero el mínimo real (consultado en vivo a Skipo) también se
+  // valida acá antes de intentar el retiro, no solo confiar en el front.
+  try {
+    const skipoInfo = new SkipoV2Client();
+    const assetInfo = await skipoInfo.getAssetInfo("USDT");
+    const minimumWithdrawal = Number(assetInfo.minimumWithdrawal);
+    if (Number.isFinite(minimumWithdrawal) && amount < minimumWithdrawal) {
+      return NextResponse.json({ ok: false, error: `El monto mínimo de retiro es ${minimumWithdrawal} USDT` }, { status: 400 });
+    }
+  } catch {
+    // Si Skipo no responde acá, no bloqueamos el retiro solo por esto -- el
+    // proveedor igual va a rechazarlo si de verdad está bajo su mínimo.
+  }
+
   const validCode = await verifyTotpForClient(client.id, code);
   if (!validCode) return NextResponse.json({ ok: false, error: "Código de 2FA incorrecto" }, { status: 401 });
 

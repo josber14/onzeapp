@@ -40,32 +40,75 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const clpAmount = Number(body.clpAmount);
-  if (!(clpAmount >= 500)) {
-    return NextResponse.json({ ok: false, error: "El monto mínimo es 500 CLP" }, { status: 400 });
-  }
-  if (client.purchaseLimitClp !== null && clpAmount > Number(client.purchaseLimitClp)) {
-    return NextResponse.json({ ok: false, error: `Superas tu límite de compra (${Number(client.purchaseLimitClp).toLocaleString("es-CL")} CLP)` }, { status: 400 });
+  const clpAmountInput = body.clpAmount !== undefined ? Number(body.clpAmount) : undefined;
+  const usdtAmountInput = body.usdtAmount !== undefined ? Number(body.usdtAmount) : undefined;
+  if (clpAmountInput === undefined && usdtAmountInput === undefined) {
+    return NextResponse.json({ ok: false, error: "Falta el monto" }, { status: 400 });
   }
 
   try {
-    // Si el cliente tiene un % fijo asignado, manda sobre los tramos
-    // generales — solo cae a los tramos por monto si quedó en blanco.
-    const marginPct = client.fixedMarginPct !== null
-      ? Number(client.fixedMarginPct)
-      : await findMarginPct(session.tenantId, clpAmount);
     const skipoClient = new SkipoClient();
-    const skipoQuote = await skipoClient.getQuotation({
-      baseCurrencyId: "USDT",
-      quoteCurrencyId: "CLP",
-      qtyCurrencyId: "CLP",
-      side: "BUY",
-      quantity: String(clpAmount),
-    });
+    let clpAmount: number;
+    let usdtAmount: number;
+    let marginPct: number;
+    let clientRate: number;
 
-    const skipoRate = Number(skipoQuote.rate);
-    const clientRate = skipoRate * (1 + marginPct / 100);
-    const usdtAmount = clpAmount / clientRate;
+    if (clpAmountInput !== undefined) {
+      if (!(clpAmountInput >= 500)) {
+        return NextResponse.json({ ok: false, error: "El monto mínimo es 500 CLP" }, { status: 400 });
+      }
+      if (client.purchaseLimitClp !== null && clpAmountInput > Number(client.purchaseLimitClp)) {
+        return NextResponse.json({ ok: false, error: `Superas tu límite de compra (${Number(client.purchaseLimitClp).toLocaleString("es-CL")} CLP)` }, { status: 400 });
+      }
+      // Si el cliente tiene un % fijo asignado, manda sobre los tramos
+      // generales — solo cae a los tramos por monto si quedó en blanco.
+      marginPct = client.fixedMarginPct !== null
+        ? Number(client.fixedMarginPct)
+        : await findMarginPct(session.tenantId, clpAmountInput);
+      const skipoQuote = await skipoClient.getQuotation({
+        baseCurrencyId: "USDT",
+        quoteCurrencyId: "CLP",
+        qtyCurrencyId: "CLP",
+        side: "BUY",
+        quantity: String(clpAmountInput),
+      });
+      const skipoRate = Number(skipoQuote.rate);
+      clientRate = skipoRate * (1 + marginPct / 100);
+      clpAmount = clpAmountInput;
+      usdtAmount = clpAmount / clientRate;
+    } else {
+      // Cliente escribió cuánto USDT quiere recibir -- se cotiza directo en
+      // USDT (confirmado en vivo, ago 2026: qtyCurrencyId="USDT" es válido y
+      // Skipo devuelve quoteQty = CLP equivalente SIN margen). Ese CLP sin
+      // margen se usa para elegir el tramo correcto (el margen depende del
+      // monto en CLP, no del monto en USDT), y recién ahí se calcula el CLP
+      // final que el cliente debe transferir.
+      if (!(usdtAmountInput! > 0)) {
+        return NextResponse.json({ ok: false, error: "Ingresa una cantidad de USDT válida" }, { status: 400 });
+      }
+      const skipoQuote = await skipoClient.getQuotation({
+        baseCurrencyId: "USDT",
+        quoteCurrencyId: "CLP",
+        qtyCurrencyId: "USDT",
+        side: "BUY",
+        quantity: String(usdtAmountInput),
+      });
+      const skipoRate = Number(skipoQuote.rate);
+      const estimatedClp = Number(skipoQuote.quoteQty);
+      marginPct = client.fixedMarginPct !== null
+        ? Number(client.fixedMarginPct)
+        : await findMarginPct(session.tenantId, estimatedClp);
+      clientRate = skipoRate * (1 + marginPct / 100);
+      usdtAmount = usdtAmountInput!;
+      clpAmount = usdtAmount * clientRate;
+
+      if (!(clpAmount >= 500)) {
+        return NextResponse.json({ ok: false, error: "El monto mínimo es 500 CLP" }, { status: 400 });
+      }
+      if (client.purchaseLimitClp !== null && clpAmount > Number(client.purchaseLimitClp)) {
+        return NextResponse.json({ ok: false, error: `Superas tu límite de compra (${Number(client.purchaseLimitClp).toLocaleString("es-CL")} CLP)` }, { status: 400 });
+      }
+    }
 
     // No bloquea la respuesta al cliente — es solo para el historial visual
     // de los últimos minutos, no una fuente de verdad para ejecutar compras.
