@@ -471,10 +471,19 @@ async function processOrderLocked(
       // explícito del usuario (ago 2026). Es puramente informativo/best-effort
       // (ver classifyImage en chat-brain.ts): si falla, tarda, o no hay
       // ANTHROPIC_API_KEY, no pasa nada -- el bot sigue exactamente igual
-      // que antes de agregar esto. Acotado a "account_sent" (el único
-      // momento donde ERUT/comprobante tienen sentido) para no gastar
-      // llamadas de más en otros estados donde una imagen no aporta nada.
-      if (cs.state === "account_sent" && !isPaid) {
+      // que antes de agregar esto.
+      //
+      // Se activa si YA se le mandó una cuenta al comprador (chosenAccountIds
+      // no vacío), no solo si el estado es exactamente "account_sent" --
+      // caso real confirmado en vivo (ago 2026, orden de 1.000.000 CLP): el
+      // aviso automático de "tu orden está por vencer" movió la conversación
+      // a "awaiting_problem" justo cuando el comprador mandó una captura de
+      // un error del banco, y el bot la ignoró por completo porque exigía el
+      // estado exacto. Usar "¿ya se le mandó una cuenta?" en vez de un
+      // estado puntual cubre esta interrupción y cualquier otra parecida sin
+      // tener que enumerar cada estado posible a mano.
+      const accountAlreadySent = Array.isArray(cs.chosenAccountIds) && cs.chosenAccountIds.length > 0;
+      if (accountAlreadySent && !isPaid) {
         const imgResult = await classifyImage(lastClientMsg.imageUrl);
         if (imgResult?.documentType === "erut" && cs.isCompany && cs.erutRequested && !cs.erutReceived) {
           await sendThenTransition(client, exchange, order.orderNumber, cs,
