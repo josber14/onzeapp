@@ -108,9 +108,19 @@ export async function PUT(req: NextRequest) {
       update.enabled = true;
       update.pauseUntil = null;
       update.lastStartedAt = new Date();
+      // P2PBotConfig.exchanges es de TODO el tenant, no de una cuenta puntual
+      // -- NO se filtra por label acá. Bug real confirmado en vivo (ago
+      // 2026): filtrar por label hacía que iniciar un exchange bajo una
+      // cuenta (ej. Bybit, que siempre usa "ONZE") sobreescribiera esta
+      // lista con SOLO lo que está prendido bajo ESE label, borrando de la
+      // lista cualquier exchange que solo estuviera prendido bajo OTRA
+      // cuenta (ej. Binance bajo "ZINPLE") -- el servidor dejaba de ciclar
+      // ese exchange por completo, aunque su propia fila siguiera diciendo
+      // "activo". Por eso cambiar de pestaña Binance/Bybit "apagaba" al otro.
       const allEnabledExchanges = await prisma.p2PBotExchangeConfig.findMany({
-        where: { tenantId: session.tenantId, label, enabled: true },
+        where: { tenantId: session.tenantId, enabled: true },
         select: { exchange: true },
+        distinct: ["exchange"],
       });
       let enabledList = allEnabledExchanges.map(e => e.exchange);
       if (!enabledList.includes(exchange)) enabledList.push(exchange);
