@@ -158,7 +158,11 @@ export async function processChats(
 // Candado por ORDEN (no por cuenta completa) — dos instancias del servidor
 // (o dos ciclos superpuestos) nunca procesan la MISMA orden a la vez, pero
 // distintas órdenes sí se pueden atender en paralelo sin esperar en fila.
-async function processOrder(
+// Exportada SOLO para el harness de pruebas (ver test/support/) -- deja que
+// las pruebas manden mensajes contra UNA orden sin pasar por processChats
+// (que necesita una lista completa de órdenes en vivo de Binance/Bybit).
+// No cambia nada del comportamiento real del bot.
+export async function processOrder(
   tenantId: number,
   exchange: "binance" | "bybit",
   client: any,
