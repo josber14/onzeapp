@@ -9717,16 +9717,35 @@ if(addProviderBtn){
 /* ===== ONZE P2P BOT ===== */
 (function(){
   let botSelectedExchange = "binance";
-  let botCycleTimer = null;
-  let chatCycleTimer = null;
-  let botCycleActive = false;
-  let chatCycleActive = false;
-  // La cuenta (ONZE/ZINPLE) que el ciclo en vivo está atendiendo de verdad.
-  // Se fija al presionar "Iniciar" y NO cambia solo por cambiar de pestaña —
-  // antes el timer leía botActiveLabel en vivo en cada vuelta, así que mirar
-  // la otra cuenta (si estaba apagada) hacía que el backend respondiera
-  // running:false y el timer se detuviera solo, cortando el ciclo real.
-  let botCyclingLabel = null;
+  // Cronómetros del ciclo en vivo, UNO POR CUENTA (label) -- Bybit/OKX
+  // siempre corren bajo "ONZE" (cuenta única) mientras Binance puede correr
+  // bajo "ONZE" o "ZINPLE". Antes había un solo cronómetro compartido para
+  // todo el panel: si Binance corría bajo ZINPLE y el usuario entraba a la
+  // pestaña Bybit (que fuerza "ONZE") y tocaba Iniciar/Detener, el código
+  // veía una cuenta distinta a la que estaba corriendo y apagaba el único
+  // cronómetro que existía -- dejando a Binance/ZINPLE sin nadie pidiéndole
+  // ciclos al servidor, aunque en la base de datos siguiera "activo". Bug
+  // real confirmado en vivo (ago 2026): "al cambiar a Bybit se para
+  // Binance, y al volver a Binance se para Bybit". Con un cronómetro por
+  // cuenta, entrar/salir de las pestañas Binance/Bybit nunca toca el
+  // cronómetro de la otra cuenta.
+  // Forma: { [label]: { active, timer, chatActive, chatTimer } }
+  let botCyclesByLabel = {};
+  function getBotCycleEntry(label){
+    const key = label || "ONZE";
+    if(!botCyclesByLabel[key]) botCyclesByLabel[key] = { active: false, timer: null, chatActive: false, chatTimer: null };
+    return botCyclesByLabel[key];
+  }
+  function botStopCycleForLabel(label){
+    const entry = botCyclesByLabel[label || "ONZE"];
+    if(!entry) return;
+    entry.active = false;
+    entry.chatActive = false;
+    if(entry.timer) clearTimeout(entry.timer);
+    entry.timer = null;
+    if(entry.chatTimer) clearTimeout(entry.chatTimer);
+    entry.chatTimer = null;
+  }
   // Cronómetro local del contador "Límite Binance" — el dato real (resetEnMs)
   // solo llega cada vez que responde /api/p2p/bot/cycle (varios segundos entre
   // respuestas, no cada 1s), así que mostrarlo directo se ve "pegado" y salta.
@@ -11278,19 +11297,19 @@ function addP2PBotStyles(){
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ exchange: ex, action: "start", label: startLabel })
     });
-    // Si ya había un ciclo corriendo para OTRA cuenta, lo reemplaza por esta
-    // (solo puede haber un ciclo en vivo por pestaña del navegador a la vez).
-    if(botCycleActive && botCyclingLabel === startLabel) return;
+    // Cada cuenta (label) tiene su propio cronómetro -- si esta cuenta ya
+    // tiene uno corriendo, no hace falta reiniciarlo (y nunca se toca el
+    // cronómetro de OTRA cuenta que pueda estar corriendo en paralelo).
+    const startEntry = getBotCycleEntry(startLabel);
+    if(startEntry.active) return;
     // Save interval to backend (used for rate-limit cooldown)
     const interval = Math.round(parseFloat(document.getElementById("botCycleInterval").value)) || 10;
     // Timer runs every 1 second — backend handles rate limits internally
     const botStopExchange = window.botStopExchange;
-    botStopCycle();
-    botCycleActive = true;
-    botCyclingLabel = startLabel;
+    startEntry.active = true;
     async function scheduleBotCycle(){
       try{
-        const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ label: botCyclingLabel }) });
+        const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ label: startLabel }) });
         const data = await res.json();
         if(data?.state?.binance){
           const st = data.state.binance;
@@ -11341,7 +11360,7 @@ function addP2PBotStyles(){
         botCycleRefresh();
         // If backend says nothing is running, stop the cycle
         if(data?.ok && data?.running === false){
-          botStopCycle();
+          botStopCycleForLabel(startLabel);
           return;
         }
       }catch(e){}
@@ -11351,34 +11370,25 @@ function addP2PBotStyles(){
       // (ago 2026, la cuenta quedó bloqueada por exceder el límite de uso
       // justo). 1000ms calza con el freno del servidor -- pedir más seguido
       // que eso solo generaba pedidos que el servidor iba a ignorar igual.
-      if(botCycleActive) botCycleTimer = setTimeout(scheduleBotCycle, 1000);
+      if(startEntry.active) startEntry.timer = setTimeout(scheduleBotCycle, 1000);
     }
     scheduleBotCycle();
     await window.botRefreshExchange();
   };
 
   function botStartChatCycle(){
-    if(chatCycleTimer) return;
     const chatLabel = botActiveLabel; // fija la cuenta, misma razón que en botStartExchange
-    chatCycleActive = true;
+    const entry = getBotCycleEntry(chatLabel);
+    if(entry.chatTimer) return;
+    entry.chatActive = true;
     async function scheduleBotCycle(){
       try{
         const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ label: chatLabel }) });
         window.botRefreshExchange(true);
       }catch(e){}
-      if(chatCycleActive) chatCycleTimer = setTimeout(scheduleBotCycle, 2000);
+      if(entry.chatActive) entry.chatTimer = setTimeout(scheduleBotCycle, 2000);
     }
     scheduleBotCycle();
-  }
-
-  function botStopCycle(){
-    botCycleActive = false;
-    chatCycleActive = false;
-    botCyclingLabel = null;
-    if(botCycleTimer) clearTimeout(botCycleTimer);
-    botCycleTimer = null;
-    if(chatCycleTimer) clearTimeout(chatCycleTimer);
-    chatCycleTimer = null;
   }
 
   window.botStopExchange = async function(){
@@ -11399,12 +11409,10 @@ function addP2PBotStyles(){
         console.error("[Stop] Error del servidor:", r.status, errData);
       }
     }).finally(() => window.botRefreshExchange());
-    // Solo corta el ciclo en vivo si la cuenta que se detiene es la que
-    // realmente está corriendo — si estás viendo la otra cuenta (que ya
-    // estaba detenida) esto no debe apagar el ciclo real de la que sigue activa.
-    if(botCyclingLabel !== null && botCyclingLabel !== botActiveLabel) return;
-    // Stop all cycles (main + chat)
-    botStopCycle();
+    // Cada cuenta tiene su propio cronómetro (ver getBotCycleEntry) -- esto
+    // solo apaga el de la cuenta que se está mirando ahora mismo, nunca el
+    // de otra cuenta que pueda seguir corriendo en paralelo.
+    botStopCycleForLabel(botActiveLabel);
   };
 
   async function botRefreshExchange(skipConfig){
@@ -11689,12 +11697,13 @@ function addP2PBotStyles(){
     botUpdateBuyPrice();
     window.botRefreshExchange(true);
     // Start/stop chat-only cycle based on toggle
-    if(chatBotEnabled && !botCycleTimer && !chatCycleTimer){
+    var cycleEntry = getBotCycleEntry(botActiveLabel || "ONZE");
+    if(chatBotEnabled && !cycleEntry.timer && !cycleEntry.chatTimer){
       botStartChatCycle();
-    }else if(!chatBotEnabled && chatCycleTimer){
-      if(chatCycleTimer) clearTimeout(chatCycleTimer);
-      chatCycleTimer = null;
-      chatCycleActive = false;
+    }else if(!chatBotEnabled && cycleEntry.chatTimer){
+      clearTimeout(cycleEntry.chatTimer);
+      cycleEntry.chatTimer = null;
+      cycleEntry.chatActive = false;
     }
   };
 
@@ -14857,7 +14866,8 @@ function addP2PBotStyles(){
     setTimeout(botCycleRefresh, 800);
     setTimeout(function(){
       var chatCb = document.getElementById("botChatBotEnabled");
-      if(chatCb?.checked && !botCycleTimer && !chatCycleTimer) botStartChatCycle();
+      var initEntry = getBotCycleEntry(botActiveLabel || "ONZE");
+      if(chatCb?.checked && !initEntry.timer && !initEntry.chatTimer) botStartChatCycle();
     }, 1500);
     setTimeout(botInitSound, 1000);
   }
