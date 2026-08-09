@@ -1226,37 +1226,18 @@ async function handleClientResponse(
       // era el problema, así que agotó los reintentos y cerró con "voy a
       // comunicarte con un asesor" (que nunca llegó), y el comprador
       // canceló. matchProblemType YA reconoce esto como "limit" (revisa
-      // "permite"/"deja"/etc.) — solo faltaba consultarlo acá.
+      // "permite"/"deja"/etc.) — solo faltaba consultarlo acá. También
+      // cubre "mándame las 3 cuentas" (jul 2026, mismo motivo) vía el
+      // respaldo de IA de resolveProblemType.
       let resolvedProblem: "limit" | "not_working" | null = null;
       if (!chosen && !wantsAll) {
-        const problemType = matchProblemType(textLower);
-        resolvedProblem = problemType === "limit" ? "limit" : problemType === "not_working" ? "not_working" : null;
-
-        // Bug real confirmado en vivo (jul 2026): a diferencia de
-        // awaiting_account_type y account_sent, este estado nunca supo
-        // reconocer "mándame las 3 cuentas" — solo entendía UN banco
-        // puntual, así que terminaba en "No entendí" y cerraba la
-        // conversación con un asesor que nunca llegó. Se agrega el mismo
-        // respaldo de IA que ya tienen los otros dos puntos (y ahora también
-        // cubre "reporta un problema", no solo "quiere todas las cuentas").
-        if (!resolvedProblem) {
-          const ai = await classifyIntent({
-            state: "awaiting_bank_choice",
-            text,
-            validIntents: ["wants_all_accounts", "limit", "not_working", "unclear"],
-            context: `Se le pidió al comprador que elija un banco de esta lista para transferir: ${accounts.map((a: any) => a.bank).join(", ")}.`,
-            exchange,
-          });
-          if (ai) {
-            if (ai.intent === "wants_all_accounts") {
-              wantsAll = true;
-              await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "wants_all_accounts"`);
-            } else if (ai.intent === "limit" || ai.intent === "not_working") {
-              resolvedProblem = ai.intent;
-              await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
-            }
-          }
-        }
+        const resolved = await resolveProblemType({
+          tenantId, exchange, orderNumber: order.orderNumber, state: "awaiting_bank_choice", text, textLower,
+          context: `Se le pidió al comprador que elija un banco de esta lista para transferir: ${accounts.map((a: any) => a.bank).join(", ")}.`,
+          alsoDetectWantsAllAccounts: true,
+        });
+        resolvedProblem = resolved.resolvedProblem;
+        if (resolved.wantsAllAccounts) wantsAll = true;
       }
 
       if (namedBanks.length >= 2) {
@@ -1513,8 +1494,7 @@ async function handleClientResponse(
         const accounts = await getAccountsForAd(tenantId, exchange, ad, label, { includeHidden: true });
         const chosen = matchBank(textLower, accounts);
         const problemType = matchProblemType(textLower);
-        let resolvedProblem: "limit" | "not_working" | null =
-          problemType === "limit" ? "limit" : (problemType === "not_working" || textLower.includes("no me")) ? "not_working" : null;
+        let resolvedProblem: "limit" | "not_working" | null = problemType === "limit" ? "limit" : problemType === "not_working" ? "not_working" : null;
         // "me puede enviar otra cuenta por favor" -- pide otra cuenta sin
         // nombrar un banco puntual y sin reportar ningún problema técnico.
         // Se resuelve directo (manda la siguiente cuenta disponible), nunca
@@ -1527,20 +1507,12 @@ async function handleClientResponse(
         // caso simplemente no respondía nada).
         let aiFollowUp: string | undefined;
         if (!chosen && !resolvedProblem && !wantsAnother) {
-          const ai = await classifyIntent({
-            state: "account_sent",
-            text,
-            validIntents: ["limit", "not_working", "unclear"],
+          const resolved = await resolveProblemType({
+            tenantId, exchange, orderNumber: order.orderNumber, state: "account_sent", text, textLower,
             context: "Ya se le mandaron los datos de una cuenta bancaria al comprador para que pague. Está escribiendo algo relacionado con ese pago.",
-            exchange,
           });
-          if (ai) {
-            aiFollowUp = ai.followUpText;
-            if (ai.intent !== "unclear") {
-              resolvedProblem = ai.intent as any;
-              await logMsg(tenantId, exchange, `[Chat] ${order.orderNumber}: IA clasificó "${textLower.slice(0, 60)}" como "${ai.intent}"`);
-            }
-          }
+          resolvedProblem = resolved.resolvedProblem;
+          aiFollowUp = resolved.aiFollowUp;
         }
 
         // Bug real confirmado en vivo (jul 2026): un comprador mandó "1"
@@ -2338,6 +2310,62 @@ async function markSplitPaymentDeclared(cs: any): Promise<void> {
   if (cs.splitPaymentDeclared) return;
   await prisma.p2PChatState.update({ where: { id: cs.id }, data: { splitPaymentDeclared: true } });
   cs.splitPaymentDeclared = true;
+}
+
+// Resuelve si el mensaje del comprador reporta un límite de banco ("no me
+// permite transferir el monto completo") o un problema técnico puntual
+// ("me da error") -- primero por palabra clave (matchProblemType, gratis y
+// sin latencia), y solo si eso no da nada claro, consulta a la IA como
+// respaldo. Extraído (ago 2026) porque awaiting_bank_choice y account_sent
+// tenían esta misma lógica casi duplicada -- un arreglo aplicado a uno se
+// olvidaba fácilmente en el otro (pasó de verdad con el respaldo de IA:
+// awaiting_bank_choice lo tuvo mucho antes que account_sent). Cubierto por
+// test/chat-agent/problem-type-resolution.test.ts antes y después de este
+// cambio, para confirmar que ningún estado quedó con un comportamiento
+// distinto al que ya tenía.
+async function resolveProblemType(params: {
+  tenantId: number;
+  exchange: string;
+  orderNumber: string;
+  state: string;
+  text: string;
+  textLower: string;
+  context: string;
+  // Solo awaiting_bank_choice necesita distinguir "quiere TODAS las
+  // cuentas" del resto -- account_sent no ofrece esa opción en este punto
+  // de la conversación (ya se le mandó una cuenta puntual).
+  alsoDetectWantsAllAccounts?: boolean;
+}): Promise<{ resolvedProblem: "limit" | "not_working" | null; wantsAllAccounts: boolean; aiFollowUp?: string }> {
+  const problemType = matchProblemType(params.textLower);
+  let resolvedProblem: "limit" | "not_working" | null =
+    problemType === "limit" ? "limit" : problemType === "not_working" ? "not_working" : null;
+  let wantsAllAccounts = false;
+  let aiFollowUp: string | undefined;
+
+  if (!resolvedProblem) {
+    const validIntents = params.alsoDetectWantsAllAccounts
+      ? ["wants_all_accounts", "limit", "not_working", "unclear"]
+      : ["limit", "not_working", "unclear"];
+    const ai = await classifyIntent({
+      state: params.state,
+      text: params.text,
+      validIntents,
+      context: params.context,
+      exchange: params.exchange,
+    });
+    if (ai) {
+      aiFollowUp = ai.followUpText;
+      if (ai.intent === "wants_all_accounts") {
+        wantsAllAccounts = true;
+        await logMsg(params.tenantId, params.exchange, `[Chat] ${params.orderNumber}: IA clasificó "${params.textLower.slice(0, 60)}" como "wants_all_accounts"`);
+      } else if (ai.intent === "limit" || ai.intent === "not_working") {
+        resolvedProblem = ai.intent;
+        await logMsg(params.tenantId, params.exchange, `[Chat] ${params.orderNumber}: IA clasificó "${params.textLower.slice(0, 60)}" como "${ai.intent}"`);
+      }
+    }
+  }
+
+  return { resolvedProblem, wantsAllAccounts, aiFollowUp };
 }
 
 // Mensaje proactivo cuando llega un comprobante (imagen, ya leído por IA) por
