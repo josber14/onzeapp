@@ -91,6 +91,17 @@ export interface BybitAdUpdateParams {
   [key: string]: any;
 }
 
+// Bybit bloquea (vía CloudFront) las peticiones que llegan desde la región de
+// EE.UU. donde corren las funciones de Vercel -- el bloqueo es geográfico y
+// permanente, no un error transitorio, así que reintentar en cada llamada
+// (cada ~60s desde el panel de Socio) solo desperdicia una llamada de red
+// completa que sabemos que va a fallar. Este caché a nivel de módulo (se
+// mantiene mientras la instancia serverless siga "tibia") evita ese
+// desperdicio: tras el primer bloqueo confirmado, las siguientes llamadas
+// fallan de inmediato sin tocar la red durante `CLOUDFRONT_BLOCK_BACKOFF_MS`.
+const CLOUDFRONT_BLOCK_BACKOFF_MS = 5 * 60 * 1000;
+let cloudfrontBlockedUntil = 0;
+
 export class BybitP2PClient {
   private apiKey: string;
   private secretKey: string;
@@ -109,6 +120,13 @@ export class BybitP2PClient {
   }
 
   private async request(endpoint: string, body: Record<string, any> = {}, method = "POST"): Promise<any> {
+    if (Date.now() < cloudfrontBlockedUntil) {
+      const remainingSec = Math.ceil((cloudfrontBlockedUntil - Date.now()) / 1000);
+      throw new Error(
+        `Bybit bloqueado por CloudFront (país de origen del servidor) -- en espera ${remainingSec}s antes de reintentar`
+      );
+    }
+
     const timestamp = Date.now().toString();
     const isGet = method === "GET";
     const sortedKeys = isGet ? Object.keys(body).sort() : [];
@@ -136,6 +154,9 @@ export class BybitP2PClient {
     try {
       data = JSON.parse(text);
     } catch {
+      if (text.includes("CloudFront") && text.includes("block access from your country")) {
+        cloudfrontBlockedUntil = Date.now() + CLOUDFRONT_BLOCK_BACKOFF_MS;
+      }
       throw new Error(`Bybit respuesta inválida (HTTP ${res.status}) para ${endpoint}: ${text.slice(0, 200)}`);
     }
     const retCode = data.retCode ?? data.ret_code;
