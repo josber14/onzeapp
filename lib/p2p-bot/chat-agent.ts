@@ -440,13 +440,11 @@ async function processOrderLocked(
   // Handle paid status BEFORE processing client messages
   if (isPaid) {
     if (cs.state === "account_sent") {
-      const ackMsg = underpaymentCheck(cs, order) || paymentAckMessage(cs.firstName || firstNameFrom(cs.realName));
-      await sendThenTransition(client, exchange, orderNo, cs, ackMsg, "payment_made", { paidAt: new Date() });
+      await sendPaymentAckAndTransition(client, exchange, orderNo, cs, order);
       return;
     }
     if (!["account_sent", "payment_made", "awaiting_comprobant", "completed", "closed", "awaiting_verification"].includes(cs.state)) {
-      const ackMsg = underpaymentCheck(cs, order) || paymentAckMessage(cs.firstName || firstNameFrom(cs.realName));
-      await sendThenTransition(client, exchange, orderNo, cs, ackMsg, "payment_made", { paidAt: new Date() });
+      await sendPaymentAckAndTransition(client, exchange, orderNo, cs, order);
       return;
     }
   }
@@ -1417,11 +1415,7 @@ async function handleClientResponse(
         // (el estado real de la orden en Binance/Bybit puede tener lag), pero
         // el chequeo de monto debe correr igual, no solo cuando confirma el
         // exchange directamente.
-        const ackMsg = underpaymentCheck(cs, order) || paymentAckMessage(cs.firstName || firstNameFrom(cs.realName));
-        await sendThenTransition(client, exchange, order.orderNumber, cs,
-          ackMsg,
-          "payment_made", { paidAt: new Date() }
-        );
+        await sendPaymentAckAndTransition(client, exchange, order.orderNumber, cs, order);
       } else if (cs.isCompany && cs.erutRequested && !cs.erutReceived && (matchAlreadySentErut(textLower) || matchVagueAlreadySent(textLower))) {
         // Caso real confirmado en vivo (ago 2026): el comprador confirmó de
         // forma vaga ("ya se la envie", sin repetir "erut") que ya había
@@ -1604,11 +1598,7 @@ async function handleClientResponse(
       // aviso real de pago ya hecho. Mismo chequeo que account_sent, en el
       // mismo orden de prioridad.
       if (matchClaimsAlreadyPaid(textLower) || matchAsksConfirmation(textLower)) {
-        const ackMsg = underpaymentCheck(cs, order) || paymentAckMessage(cs.firstName || firstNameFrom(cs.realName));
-        await sendThenTransition(client, exchange, order.orderNumber, cs,
-          ackMsg,
-          "payment_made", { paidAt: new Date() }
-        );
+        await sendPaymentAckAndTransition(client, exchange, order.orderNumber, cs, order);
         break;
       }
 
@@ -2816,17 +2806,25 @@ function levenshtein(a: string, b: string): number {
 // mismatch esperado y confirmado con el usuario (ago 2026), no un error.
 // Compradores antiguos (de cuando se operaba con la cuenta personal) además
 // suelen preguntar puntualmente por ese nombre porque ya operaron antes y
-// lo tienen guardado así. Se tolera 1-2 letras de diferencia porque en la
+// lo tienen guardado así. Se tolera 1 letra de diferencia porque en la
 // práctica llega escrito con errores de tipeo muy seguido (ej. "Josver",
 // "Yosber", "Marcanoo") — exigirlo perfecto dejaría pasar la mayoría de los
 // casos reales directo al camino de "nombre distinto" (escalar a asesor),
 // que es exactamente lo opuesto de lo que se necesita para el nombre correcto.
+//
+// Tolerancia bajada de 2 a 1 letra (ago 2026, orden real de 1.540.000 CLP):
+// con 2 letras de margen, "mercado" (de "Mercado Pago", un método de pago
+// real y común, nada que ver con el titular) cae a distancia 2 de
+// "marcano" -- el bot le confirmó a un comprador que jamás preguntó por el
+// nombre que "el titular real es Josber Marcano", totalmente fuera de
+// contexto. Con tolerancia 1, "mercado" ya no matchea, pero los 3 typos
+// reales documentados arriba siguen reconociéndose (todos a distancia 1).
 function mentionsExpectedHolderName(text: string): boolean {
   const t = text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   const words = t.match(/[a-z]+/g) || [];
   return words.some(w =>
-    (w.length >= 4 && levenshtein(w, "josber") <= 2) ||
-    (w.length >= 5 && levenshtein(w, "marcano") <= 2)
+    (w.length >= 4 && levenshtein(w, "josber") <= 1) ||
+    (w.length >= 5 && levenshtein(w, "marcano") <= 1)
   );
 }
 
@@ -2837,7 +2835,8 @@ function mentionsExpectedHolderName(text: string): boolean {
 // mencionan es el titular real (mentionsExpectedHolderName), se confirma
 // directo; para CUALQUIER otro nombre (o "otro nombre" sin especificar
 // cuál), siempre escalar a un asesor humano, nunca inventar una explicación.
-function matchHolderNameConcern(text: string): boolean {
+// Exportada solo para la prueba de regresión (ver test/chat-agent/).
+export function matchHolderNameConcern(text: string): boolean {
   const t = text.normalize("NFD").replace(/[̀-ͯ]/g, "");
   return /\botro\s+nombre\b/.test(t) ||
     /\bnombre\s+(distinto|diferente|equivocado|raro)\b/.test(t) ||
@@ -3361,6 +3360,26 @@ function paymentAckMessage(name?: string | null): string {
     "Perfecto, aviso de pago recibido ✅ Un momento mientras confirmamos.",
   ]);
   return name ? `${name}, ${msg}` : msg;
+}
+
+// Aviso de "recibimos tu pago" + transición a payment_made -- compartido por
+// los 4 lugares donde se detecta que el comprador ya pagó (por el status
+// real de la orden, o porque lo avisó por texto). Pedido explícito del
+// usuario (ago 2026): si es cuenta EMPRESA y el pago está completo (sin
+// aviso de underpayment -- no tiene sentido ofrecer factura de un pago que
+// todavía falta completar), se manda un segundo mensaje aparte ofreciendo
+// la factura por WT, con una pausa corta (no instantánea) para que se sienta
+// como una persona escribiendo dos mensajes seguidos, no un bloque de texto.
+async function sendPaymentAckAndTransition(client: any, exchange: string, orderNo: string, cs: any, order: any): Promise<void> {
+  const underpayMsg = underpaymentCheck(cs, order);
+  const ackMsg = underpayMsg || paymentAckMessage(cs.firstName || firstNameFrom(cs.realName));
+  const sent = await sendThenTransition(client, exchange, orderNo, cs, ackMsg, "payment_made", { paidAt: new Date() });
+  if (sent && !underpayMsg && cs.isCompany) {
+    await sendAndTrack(client, exchange, orderNo, cs,
+      "Si deseas factura de tu compra, por favor escribe a este WT 951333777 solicitando la factura — debes enviar tu comprobante de pago + tu E-RUT.",
+      undefined, shortDelay
+    );
+  }
 }
 
 async function buildCompletionMessage(cs: any, tenantId: number, exchange: string): Promise<string> {
