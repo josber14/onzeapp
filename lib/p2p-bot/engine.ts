@@ -53,7 +53,7 @@ const binanceStates = new Map<number, BinanceState>();
 // executeBotCycle) -- clave "tenantId:label:exchange" para no mezclar ONZE
 // con ZINPLE ni Binance con Bybit.
 const lastFullCycleAt = new Map<string, number>();
-const MIN_CYCLE_GAP_MS = 1000;
+const MIN_CYCLE_GAP_MS = 700;
 
 // Captura del lado de compra (side="0") para el Oráculo de mercado -- es
 // solo para el panel de análisis, no alimenta ninguna decisión de precio,
