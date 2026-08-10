@@ -198,6 +198,41 @@ const VISION_MODEL = "claude-haiku-4-5";
 const VISION_TIMEOUT_MS = 8000;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
+// Causa raíz REAL confirmada en vivo (ago 2026, orden de 400.000 CLP): el
+// bot llevaba semanas "sin leer" comprobantes reales -- classifyImage()
+// siempre devolvía null en silencio (nunca logueaba por qué) para
+// cualquier imagen que en realidad fuera PNG. El CDN de Binance
+// (bin.bnbstatic.com) manda el header Content-Type como "binary/octet-stream"
+// genérico (no "image/png" ni "image/jpeg") para al menos algunas imágenes,
+// aunque la URL termine en ".jpg" -- el código anterior confiaba en ese
+// header y por default asumía "image/jpeg". La API de Anthropic valida los
+// bytes reales contra el media_type declarado y RECHAZA (400) el envío si
+// no coinciden -- "the image was specified using the image/jpeg media
+// type, but the image appears to be a image/png image". Como el error caía
+// en el `if (!res.ok) return null;` sin loguear nada, esto pasaba
+// completamente desapercibido: se veía igual que "no hay ANTHROPIC_API_KEY"
+// o "tardó más de 8s", nunca como un bug real. Se verificó en vivo con la
+// imagen real de esa orden: con media_type incorrecto -> 400 (rechazado);
+// con el media_type real (detectado por los bytes, no por el header) -> la
+// IA la lee perfecto y devuelve el monto exacto. Nunca más confiar en el
+// Content-Type que manda el CDN de Binance para esto -- se detecta el
+// formato real mirando los primeros bytes del archivo (la forma estándar y
+// confiable de saber el tipo real de una imagen, sin depender de ningún
+// header ni de la extensión de la URL).
+// Exportada solo para la prueba de regresión (ver test/chat-brain/) -- no
+// cambia nada de cómo la usa classifyImage.
+export function detectImageMediaType(buf: Buffer, contentTypeHeader: string): "image/png" | "image/jpeg" | "image/webp" {
+  if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "image/png";
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  if (buf.length >= 12 && buf.toString("ascii", 0, 4) === "RIFF" && buf.toString("ascii", 8, 12) === "WEBP") return "image/webp";
+  // Si los primeros bytes no calzan con ningún formato conocido (raro), se
+  // usa el header como último recurso -- mejor que nada, pero ya no es el
+  // camino principal.
+  if (contentTypeHeader.includes("png")) return "image/png";
+  if (contentTypeHeader.includes("webp")) return "image/webp";
+  return "image/jpeg";
+}
+
 export async function classifyImage(imageUrl: string): Promise<ImageClassifyResult | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return null;
@@ -207,12 +242,14 @@ export async function classifyImage(imageUrl: string): Promise<ImageClassifyResu
   try {
     const imgRes = await fetch(imageUrl, { signal: controller.signal });
     if (!imgRes.ok) return null;
-    const contentType = imgRes.headers.get("content-type") || "image/jpeg";
-    const mediaType = contentType.includes("png") ? "image/png" : contentType.includes("webp") ? "image/webp" : "image/jpeg";
     const buf = Buffer.from(await imgRes.arrayBuffer());
     // Techo defensivo -- Binance ya comprime lo que sube por chat, esto solo
     // evita mandar algo desproporcionado a la API si alguna vez llega distinto.
     if (buf.byteLength > MAX_IMAGE_BYTES) return null;
+    // NUNCA usar el Content-Type del CDN de Binance como fuente principal --
+    // ver detectImageMediaType arriba, confirmado en vivo que miente (manda
+    // "binary/octet-stream" para imágenes que en realidad son PNG).
+    const mediaType = detectImageMediaType(buf, imgRes.headers.get("content-type") || "");
     const base64 = buf.toString("base64");
 
     const tool = {
