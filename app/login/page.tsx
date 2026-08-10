@@ -237,17 +237,15 @@ export default function LoginPage() {
                   />
                 </div>
 
-                {accountType === "operador" && (
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Acceso seguro</div>
-                    <a
-                      href="/forgot-password"
-                      className="text-sm font-medium text-emerald-700 transition hover:text-emerald-800"
-                    >
-                      Olvidé mi contraseña
-                    </a>
-                  </div>
-                )}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Acceso seguro</div>
+                  <a
+                    href={accountType === "operador" ? "/forgot-password" : "/cliente-usdt/forgot-password"}
+                    className="text-sm font-medium text-emerald-700 transition hover:text-emerald-800"
+                  >
+                    Olvidé mi contraseña
+                  </a>
+                </div>
 
                 <button
                   type="submit"
