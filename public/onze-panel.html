@@ -20762,6 +20762,10 @@ function addP2PBotStyles(){
 
     return y && m && day ? `${y}-${m}-${day}` : "";
   }
+  // window.-scoped a propósito -- este archivo tiene varios <script> con su
+  // propio scope IIFE, y el modal de completados del socio (socioBn*, en
+  // OTRO bloque <script>) también necesita esta misma conversión de fecha.
+  window.p2pChileDayKey = p2pChileDayKey;
 
   function p2pChileMonthKey(raw){
     const key = p2pChileDayKey(raw);
