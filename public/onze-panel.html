@@ -19515,7 +19515,7 @@ function addP2PBotStyles(){
 
 
   window.openCompletedCapacitiesModal = function(){
-    const capacities = loadP2PCapacity().filter(c => c.status === "finished" && c.provider !== "_initial_capital")
+    const allCapacities = loadP2PCapacity().filter(c => c.status === "finished" && c.provider !== "_initial_capital")
       .sort((a,b)=> new Date(b.finishedAt || 0) - new Date(a.finishedAt || 0));
 
     let modal = document.getElementById("completedCapacitiesModal");
@@ -19525,46 +19525,66 @@ function addP2PBotStyles(){
     modal.id = "completedCapacitiesModal";
     modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;";
 
-    const cardsHtml = capacities.length === 0
-      ? '<div style="text-align:center;color:#8aa0ba;padding:40px;">No hay capacities completados todavía.</div>'
-      : capacities.map((cap, index) => {
-          const finishedDate = cap.finishedAt ? new Date(cap.finishedAt).toLocaleString("es-CL", { timeZone:"America/Santiago", day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" }) : "";
-          const finalSoldUsdt = Number(cap.finalSoldUsdt || 0);
-          const finalClpReceived = Number(cap.finalClpReceived || 0);
-          const finalCommissionUsdt = Number(cap.finalCommissionUsdt || 0);
-          const buyPrice = Number(cap.buyPrice || 0);
-          const costUsed = finalSoldUsdt * buyPrice;
-          const profitClp = finalClpReceived - costUsed - (finalCommissionUsdt * buyPrice);
-          const manualPayment = Number(cap.manualPaymentsClp || cap.manualPaymentClp || 0);
+    function cardHtml(cap, index){
+      const finishedDate = cap.finishedAt ? new Date(cap.finishedAt).toLocaleString("es-CL", { timeZone:"America/Santiago", day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" }) : "";
+      const finalSoldUsdt = Number(cap.finalSoldUsdt || 0);
+      const finalClpReceived = Number(cap.finalClpReceived || 0);
+      const finalCommissionUsdt = Number(cap.finalCommissionUsdt || 0);
+      const buyPrice = Number(cap.buyPrice || 0);
+      const costUsed = finalSoldUsdt * buyPrice;
+      const profitClp = finalClpReceived - costUsed - (finalCommissionUsdt * buyPrice);
+      const manualPayment = Number(cap.manualPaymentsClp || cap.manualPaymentClp || 0);
 
-          return `
-            <div style="background:#0d2137;border:1px solid #1a3a5a;border-radius:12px;padding:16px;margin-bottom:12px;">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-                <div>
-                  <strong style="color:#fff;font-size:15px;">#${index + 1} · ${cap.provider || "Proveedor"}</strong>
-                  <div style="color:#8aa0ba;font-size:12px;margin-top:2px;">Finalizado: ${finishedDate}</div>
-                </div>
-                <span style="background:#1a3a5a;color:#00d4ff;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:bold;">COMPLETADO</span>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;font-size:13px;">
-                <div><span style="color:#8aa0ba;">Capacity:</span><br><strong style="color:#fff;">${Math.round(Number(cap.capacityClp || 0)).toLocaleString("es-CL")} CLP</strong></div>
-                <div><span style="color:#8aa0ba;">Tasa:</span><br><strong style="color:#fff;">${buyPrice.toFixed(2)} CLP/USDT</strong></div>
-                <div><span style="color:#8aa0ba;">USDT vendido:</span><br><strong style="color:#fff;">${finalSoldUsdt.toFixed(2)} USDT</strong></div>
-                <div><span style="color:#8aa0ba;">CLP recibido:</span><br><strong style="color:#fff;">${Math.round(finalClpReceived).toLocaleString("es-CL")} CLP</strong></div>
-                <div><span style="color:#8aa0ba;">USDT recibidos:</span><br><strong style="color:#34d399;">${(buyPrice > 0 ? finalClpReceived / buyPrice : 0).toFixed(2)}</strong></div>
-                ${manualPayment > 0 ? `<div><span style="color:#8aa0ba;">Pago manual:</span><br><strong style="color:#fbbf24;">${Math.round(manualPayment).toLocaleString("es-CL")} CLP</strong></div>` : ''}
-                <div><span style="color:#8aa0ba;">Ganancia:</span><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};">${profitClp >= 0 ? '+' : ''}${Math.round(profitClp).toLocaleString("es-CL")} CLP</strong><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};font-size:12px;">${profitClp >= 0 ? '+' : ''}${(buyPrice > 0 ? profitClp / buyPrice : 0).toFixed(2)} USDT</strong></div>
-              </div>
-              <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
-                <button class="p2p-action-icon-btn" onclick="openP2PCapacityDetail('${cap.id}'); document.getElementById('completedCapacitiesModal').remove();" style="width:38px;height:38px;border-radius:12px;">
-                  <svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.7"/></svg></button>
-                <button class="p2p-action-icon-btn danger" onclick="deleteP2PCapacity('${cap.id}')" style="width:38px;height:38px;border-radius:12px;">
-                  <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-                </button>
-              </div>
+      return `
+        <div style="background:#0d2137;border:1px solid #1a3a5a;border-radius:12px;padding:16px;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+            <div>
+              <strong style="color:#fff;font-size:15px;">#${index + 1} · ${cap.provider || "Proveedor"}</strong>
+              <div style="color:#8aa0ba;font-size:12px;margin-top:2px;">Finalizado: ${finishedDate || "sin fecha"}</div>
             </div>
-          `;
-        }).join("");
+            <span style="background:#1a3a5a;color:#00d4ff;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:bold;">COMPLETADO</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;font-size:13px;">
+            <div><span style="color:#8aa0ba;">Capacity:</span><br><strong style="color:#fff;">${Math.round(Number(cap.capacityClp || 0)).toLocaleString("es-CL")} CLP</strong></div>
+            <div><span style="color:#8aa0ba;">Tasa:</span><br><strong style="color:#fff;">${buyPrice.toFixed(2)} CLP/USDT</strong></div>
+            <div><span style="color:#8aa0ba;">USDT vendido:</span><br><strong style="color:#fff;">${finalSoldUsdt.toFixed(2)} USDT</strong></div>
+            <div><span style="color:#8aa0ba;">CLP recibido:</span><br><strong style="color:#fff;">${Math.round(finalClpReceived).toLocaleString("es-CL")} CLP</strong></div>
+            <div><span style="color:#8aa0ba;">USDT recibidos:</span><br><strong style="color:#34d399;">${(buyPrice > 0 ? finalClpReceived / buyPrice : 0).toFixed(2)}</strong></div>
+            ${manualPayment > 0 ? `<div><span style="color:#8aa0ba;">Pago manual:</span><br><strong style="color:#fbbf24;">${Math.round(manualPayment).toLocaleString("es-CL")} CLP</strong></div>` : ''}
+            <div><span style="color:#8aa0ba;">Ganancia:</span><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};">${profitClp >= 0 ? '+' : ''}${Math.round(profitClp).toLocaleString("es-CL")} CLP</strong><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};font-size:12px;">${profitClp >= 0 ? '+' : ''}${(buyPrice > 0 ? profitClp / buyPrice : 0).toFixed(2)} USDT</strong></div>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+            <button class="p2p-action-icon-btn" onclick="openP2PCapacityDetail('${cap.id}'); document.getElementById('completedCapacitiesModal').remove();" style="width:38px;height:38px;border-radius:12px;">
+              <svg viewBox="0 0 24 24"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.7"/></svg></button>
+            <button class="p2p-action-icon-btn danger" onclick="deleteP2PCapacity('${cap.id}')" style="width:38px;height:38px;border-radius:12px;">
+              <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 15H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Items sin finishedAt (dato legado, no debería pasar de aquí en más)
+    // se muestran SIEMPRE sin importar el filtro elegido -- así nunca
+    // desaparecen de la vista solo por no tener fecha.
+    function renderCards(fromStr, toStr){
+      const filtered = allCapacities.filter(cap => {
+        const day = p2pChileDayKey(cap.finishedAt);
+        return !day || (day >= fromStr && day <= toStr);
+      });
+      const container = document.getElementById("completedCapacitiesCards");
+      if(!container) return;
+      container.innerHTML = filtered.length === 0
+        ? '<div style="text-align:center;color:#8aa0ba;padding:40px;">No hay capacities completados en este rango.</div>'
+        : filtered.map(cardHtml).join("");
+    }
+
+    const today = p2pChileDayKey();
+    function yesterdayStr(){
+      const d = new Date(today + "T12:00:00");
+      d.setDate(d.getDate() - 1);
+      return d.toISOString().slice(0, 10);
+    }
 
     modal.innerHTML = `
       <div style="background:#071828;border:1px solid #1a3a5a;border-radius:16px;padding:24px;max-width:700px;width:100%;max-height:90vh;overflow-y:auto;">
@@ -19573,11 +19593,56 @@ function addP2PBotStyles(){
           <button onclick="document.getElementById('completedCapacitiesModal').remove()"
             style="padding:8px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cerrar</button>
         </div>
-        <p style="color:#8aa0ba;font-size:13px;margin-bottom:16px;">Capacities cerrados (vendidos completamente o completados manualmente).</p>
-        ${cardsHtml}
+        <p style="color:#8aa0ba;font-size:13px;margin-bottom:12px;">Capacities cerrados (vendidos completamente o completados manualmente).</p>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+          <button class="btn" type="button" id="completedCapacitiesQuickToday" style="padding:5px 10px;font-size:12px;">Hoy</button>
+          <button class="btn secondary" type="button" id="completedCapacitiesQuickYesterday" style="padding:5px 10px;font-size:12px;">Ayer</button>
+          <button class="btn secondary" type="button" id="completedCapacitiesRangeToggle" style="padding:5px 10px;font-size:12px;">Rango de fechas</button>
+        </div>
+        <div id="completedCapacitiesRangeRow" style="display:none;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+          <label style="font-size:12px;color:#8aa0ba;display:flex;align-items:center;gap:4px;">Desde <input type="date" id="completedCapacitiesFrom" value="${today}" style="font-size:12px;" /></label>
+          <label style="font-size:12px;color:#8aa0ba;display:flex;align-items:center;gap:4px;">Hasta <input type="date" id="completedCapacitiesTo" value="${today}" style="font-size:12px;" /></label>
+          <button class="btn" type="button" id="completedCapacitiesRangeApply" style="padding:5px 14px;font-size:12px;">Ver</button>
+        </div>
+        <div id="completedCapacitiesCards"></div>
       </div>
     `;
     document.body.appendChild(modal);
+
+    const btnToday = document.getElementById("completedCapacitiesQuickToday");
+    const btnYesterday = document.getElementById("completedCapacitiesQuickYesterday");
+    const btnRangeToggle = document.getElementById("completedCapacitiesRangeToggle");
+    const rangeRow = document.getElementById("completedCapacitiesRangeRow");
+
+    function setActiveQuick(which){
+      btnToday.className = which === "today" ? "btn" : "btn secondary";
+      btnYesterday.className = which === "yesterday" ? "btn" : "btn secondary";
+      btnRangeToggle.className = which === "range" ? "btn" : "btn secondary";
+    }
+
+    btnToday.addEventListener("click", function(){
+      rangeRow.style.display = "none";
+      setActiveQuick("today");
+      renderCards(today, today);
+    });
+    btnYesterday.addEventListener("click", function(){
+      rangeRow.style.display = "none";
+      setActiveQuick("yesterday");
+      const y = yesterdayStr();
+      renderCards(y, y);
+    });
+    btnRangeToggle.addEventListener("click", function(){
+      setActiveQuick("range");
+      rangeRow.style.display = rangeRow.style.display === "none" ? "flex" : "none";
+    });
+    document.getElementById("completedCapacitiesRangeApply").addEventListener("click", function(){
+      const from = document.getElementById("completedCapacitiesFrom").value || today;
+      const to = document.getElementById("completedCapacitiesTo").value || today;
+      renderCards(from, to);
+    });
+
+    setActiveQuick("today");
+    renderCards(today, today);
   };
 
   function ensureP2PCapacityDeleteModal(){
@@ -26665,7 +26730,8 @@ try{
   // servido por /api/partner/dashboard (window.__socioBnCapacityCache), no
   // de finalSaleParts manuales (ese modelo de datos no existe acá a propósito).
   window.socioBnOpenCompletedModal = function(){
-    const items = (window.__socioBnCapacityCache || []).filter(function(it){ return it.status === 'finished'; });
+    const allItems = (window.__socioBnCapacityCache || []).filter(function(it){ return it.status === 'finished'; })
+      .sort(function(a,b){ return new Date(b.finishedAt || 0) - new Date(a.finishedAt || 0); });
 
     let modal = document.getElementById('socioBnCompletedModal');
     if(modal) modal.remove();
@@ -26674,37 +26740,57 @@ try{
     modal.id = 'socioBnCompletedModal';
     modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;';
 
-    const cardsHtml = items.length === 0
-      ? '<div style="text-align:center;color:#8aa0ba;padding:40px;">No hay capacities completados todavía.</div>'
-      : items.map(function(it, index){
-          const profitClp = it.clpCovered - it.costClp;
-          const profitUsdt = it.buyPrice > 0 ? profitClp / it.buyPrice : 0;
-          const minSellPrice = it.buyPrice > 0 ? it.buyPrice / (1 - 0.0014) : 0;
-          return `
-            <div style="background:#0d2137;border:1px solid #1a3a5a;border-radius:12px;padding:16px;margin-bottom:12px;">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-                <div>
-                  <strong style="color:#fff;font-size:15px;">#${index + 1} · ${it.provider || 'Proveedor'}</strong>
-                  <div style="color:#8aa0ba;font-size:12px;margin-top:2px;">${it.date || ''}</div>
-                </div>
-                <span style="background:#1a3a5a;color:#00d4ff;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:bold;">COMPLETADO</span>
-              </div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;font-size:13px;">
-                <div><span style="color:#8aa0ba;">Capacity:</span><br><strong style="color:#fff;">${socioBnMoney(it.capacityClp,0)} CLP</strong></div>
-                <div><span style="color:#8aa0ba;">Tasa:</span><br><strong style="color:#fff;">${socioBnMoney(it.buyPrice,2)} CLP/USDT</strong></div>
-                <div><span style="color:#8aa0ba;">USDT consumido:</span><br><strong style="color:#fff;">${socioBnMoney(it.usdtConsumed,2)} USDT</strong></div>
-                <div><span style="color:#8aa0ba;">CLP cubierto:</span><br><strong style="color:#fff;">${socioBnMoney(it.clpCovered,0)} CLP</strong></div>
-                <div><span style="color:#8aa0ba;">Mín. venta:</span><br><strong style="color:#facc15;">${socioBnMoney(minSellPrice,2)} CLP</strong></div>
-                <div><span style="color:#8aa0ba;">Ganancia:</span><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};">${profitClp >= 0 ? '+' : ''}${socioBnMoney(profitClp,0)} CLP</strong><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};font-size:12px;">${profitClp >= 0 ? '+' : ''}${socioBnMoney(profitUsdt,2)} USDT</strong></div>
-              </div>
-              <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
-                <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnOpenCapacityOrders('${it.id}')" title="Ver el detalle de las órdenes que cubrieron este capacity">👁 Detalle</button>
-                <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnToggleCapacityStatus('${it.id}'); document.getElementById('socioBnCompletedModal').remove();">Reactivar</button>
-                <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;color:#ef4444;" onclick="window.socioBnDeleteCapacity('${it.id}'); document.getElementById('socioBnCompletedModal').remove();">Eliminar</button>
-              </div>
+    function cardHtml(it, index){
+      const profitClp = it.clpCovered - it.costClp;
+      const profitUsdt = it.buyPrice > 0 ? profitClp / it.buyPrice : 0;
+      const minSellPrice = it.buyPrice > 0 ? it.buyPrice / (1 - 0.0014) : 0;
+      return `
+        <div style="background:#0d2137;border:1px solid #1a3a5a;border-radius:12px;padding:16px;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+            <div>
+              <strong style="color:#fff;font-size:15px;">#${index + 1} · ${it.provider || 'Proveedor'}</strong>
+              <div style="color:#8aa0ba;font-size:12px;margin-top:2px;">${it.date || ''}</div>
             </div>
-          `;
-        }).join('');
+            <span style="background:#1a3a5a;color:#00d4ff;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:bold;">COMPLETADO</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;font-size:13px;">
+            <div><span style="color:#8aa0ba;">Capacity:</span><br><strong style="color:#fff;">${socioBnMoney(it.capacityClp,0)} CLP</strong></div>
+            <div><span style="color:#8aa0ba;">Tasa:</span><br><strong style="color:#fff;">${socioBnMoney(it.buyPrice,2)} CLP/USDT</strong></div>
+            <div><span style="color:#8aa0ba;">USDT consumido:</span><br><strong style="color:#fff;">${socioBnMoney(it.usdtConsumed,2)} USDT</strong></div>
+            <div><span style="color:#8aa0ba;">CLP cubierto:</span><br><strong style="color:#fff;">${socioBnMoney(it.clpCovered,0)} CLP</strong></div>
+            <div><span style="color:#8aa0ba;">Mín. venta:</span><br><strong style="color:#facc15;">${socioBnMoney(minSellPrice,2)} CLP</strong></div>
+            <div><span style="color:#8aa0ba;">Ganancia:</span><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};">${profitClp >= 0 ? '+' : ''}${socioBnMoney(profitClp,0)} CLP</strong><br><strong style="color:${profitClp >= 0 ? '#34d399' : '#fb7185'};font-size:12px;">${profitClp >= 0 ? '+' : ''}${socioBnMoney(profitUsdt,2)} USDT</strong></div>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+            <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnOpenCapacityOrders('${it.id}')" title="Ver el detalle de las órdenes que cubrieron este capacity">👁 Detalle</button>
+            <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnToggleCapacityStatus('${it.id}'); document.getElementById('socioBnCompletedModal').remove();">Reactivar</button>
+            <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;color:#ef4444;" onclick="window.socioBnDeleteCapacity('${it.id}'); document.getElementById('socioBnCompletedModal').remove();">Eliminar</button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Items sin finishedAt (dato legado) se muestran SIEMPRE sin importar
+    // el filtro elegido -- así nunca desaparecen de la vista solo por no
+    // tener fecha guardada.
+    function renderCards(fromStr, toStr){
+      const filtered = allItems.filter(function(it){
+        const day = p2pChileDayKey(it.finishedAt);
+        return !day || (day >= fromStr && day <= toStr);
+      });
+      const container = document.getElementById('socioBnCompletedCards');
+      if(!container) return;
+      container.innerHTML = filtered.length === 0
+        ? '<div style="text-align:center;color:#8aa0ba;padding:40px;">No hay capacities completados en este rango.</div>'
+        : filtered.map(cardHtml).join('');
+    }
+
+    const today = p2pChileDayKey();
+    function yesterdayStr(){
+      const d = new Date(today + 'T12:00:00');
+      d.setDate(d.getDate() - 1);
+      return d.toISOString().slice(0, 10);
+    }
 
     modal.innerHTML = `
       <div style="background:#071828;border:1px solid #1a3a5a;border-radius:16px;padding:24px;max-width:700px;width:100%;max-height:90vh;overflow-y:auto;">
@@ -26713,11 +26799,56 @@ try{
           <button onclick="document.getElementById('socioBnCompletedModal').remove()"
             style="padding:8px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cerrar</button>
         </div>
-        <p style="color:#8aa0ba;font-size:13px;margin-bottom:16px;">Capacities cubiertos al 100% (vendidos completamente).</p>
-        ${cardsHtml}
+        <p style="color:#8aa0ba;font-size:13px;margin-bottom:12px;">Capacities cubiertos al 100% (vendidos completamente).</p>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+          <button class="btn" type="button" id="socioBnCompletedQuickToday" style="padding:5px 10px;font-size:12px;">Hoy</button>
+          <button class="btn secondary" type="button" id="socioBnCompletedQuickYesterday" style="padding:5px 10px;font-size:12px;">Ayer</button>
+          <button class="btn secondary" type="button" id="socioBnCompletedRangeToggle" style="padding:5px 10px;font-size:12px;">Rango de fechas</button>
+        </div>
+        <div id="socioBnCompletedRangeRow" style="display:none;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+          <label style="font-size:12px;color:#8aa0ba;display:flex;align-items:center;gap:4px;">Desde <input type="date" id="socioBnCompletedFrom" value="${today}" style="font-size:12px;" /></label>
+          <label style="font-size:12px;color:#8aa0ba;display:flex;align-items:center;gap:4px;">Hasta <input type="date" id="socioBnCompletedTo" value="${today}" style="font-size:12px;" /></label>
+          <button class="btn" type="button" id="socioBnCompletedRangeApply" style="padding:5px 14px;font-size:12px;">Ver</button>
+        </div>
+        <div id="socioBnCompletedCards"></div>
       </div>
     `;
     document.body.appendChild(modal);
+
+    const btnToday = document.getElementById('socioBnCompletedQuickToday');
+    const btnYesterday = document.getElementById('socioBnCompletedQuickYesterday');
+    const btnRangeToggle = document.getElementById('socioBnCompletedRangeToggle');
+    const rangeRow = document.getElementById('socioBnCompletedRangeRow');
+
+    function setActiveQuick(which){
+      btnToday.className = which === 'today' ? 'btn' : 'btn secondary';
+      btnYesterday.className = which === 'yesterday' ? 'btn' : 'btn secondary';
+      btnRangeToggle.className = which === 'range' ? 'btn' : 'btn secondary';
+    }
+
+    btnToday.addEventListener('click', function(){
+      rangeRow.style.display = 'none';
+      setActiveQuick('today');
+      renderCards(today, today);
+    });
+    btnYesterday.addEventListener('click', function(){
+      rangeRow.style.display = 'none';
+      setActiveQuick('yesterday');
+      const y = yesterdayStr();
+      renderCards(y, y);
+    });
+    btnRangeToggle.addEventListener('click', function(){
+      setActiveQuick('range');
+      rangeRow.style.display = rangeRow.style.display === 'none' ? 'flex' : 'none';
+    });
+    document.getElementById('socioBnCompletedRangeApply').addEventListener('click', function(){
+      const from = document.getElementById('socioBnCompletedFrom').value || today;
+      const to = document.getElementById('socioBnCompletedTo').value || today;
+      renderCards(from, to);
+    });
+
+    setActiveQuick('today');
+    renderCards(today, today);
   };
 
   function socioBnParseClp(value){

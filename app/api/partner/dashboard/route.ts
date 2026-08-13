@@ -99,12 +99,16 @@ export async function GET(req: NextRequest) {
     (c) => c.isCompleted && c.status === "active"
   );
   if (newlyCompleted.length > 0) {
+    const justFinishedAt = new Date();
     await prisma.partnerCapacity.updateMany({
       where: { id: { in: newlyCompleted.map((c) => c.id) }, tenantId: session.tenantId, label: LABEL },
-      data: { status: "finished", finishedAt: new Date() },
+      data: { status: "finished", finishedAt: justFinishedAt },
     });
     for (const c of stats.perCapacityBreakdown) {
-      if (newlyCompleted.some((n) => n.id === c.id)) c.status = "finished";
+      if (newlyCompleted.some((n) => n.id === c.id)) {
+        c.status = "finished";
+        c.finishedAt = justFinishedAt;
+      }
     }
   }
 

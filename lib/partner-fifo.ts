@@ -151,6 +151,7 @@ export function computeFifo(
       provider: c.provider,
       date: c.date,
       status: c.status,
+      finishedAt: c.finishedAt || null,
       buyPrice: Number(c.buyPrice),
       capacityClp,
       usdtAmount,
