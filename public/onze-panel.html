@@ -17725,6 +17725,8 @@ function addP2PBotStyles(){
       .find(el => el.textContent.includes("Sin operaciones P2P") || el.textContent.includes("sincronizadas") || el.closest(".p2p-dashboard-panel")?.innerText.includes("Ventas Binance"));
 
     if(typeof loadP2PInitialCapitalFromServer === 'function') loadP2PInitialCapitalFromServer();
+    if(typeof loadP2PWithdrawalsFromServer === 'function') loadP2PWithdrawalsFromServer();
+    if(typeof p2pMonthlyCapitalRollover === 'function') p2pMonthlyCapitalRollover();
 
     if(historyEmpty){
       if(!completedSales.length){
@@ -20341,25 +20343,133 @@ function addP2PBotStyles(){
         body:JSON.stringify({value}),
       });
       const data = await res.json();
-      if(!data.ok) console.warn("Error sync capital al servidor:", data.error);
+      if(!data.ok){
+        console.warn("Error sync capital al servidor:", data.error);
+        return;
+      }
+      // Un ajuste manual resetea la ganancia acumulada a 0 en el servidor
+      // (ver /api/p2p/initial-capital) -- se refleja acá también para que
+      // la tarjeta no siga sumando la acumulada vieja encima del nuevo
+      // valor hasta el próximo refresco de página.
+      window.__p2pAccumulatedProfitUsdt = Number(data.accumulatedProfit || 0);
+      updateP2PCapitalCard();
     }catch(e){
       console.warn("Error sync capital al servidor:", e);
     }
   }
 
+  // Ganancia acumulada de meses YA TERMINADOS -- separada del capital
+  // inicial (que queda FIJO para siempre, pedido explícito del usuario ago
+  // 2026) y de la ganancia de ESTE MES (que sí se resetea a 0 cada mes).
+  // Capital P2P = inicial + acumulada + este mes. Ver
+  // p2pMonthlyCapitalRollover() más abajo, que es quien la va sumando.
+  window.__p2pAccumulatedProfitUsdt = 0;
   window.loadP2PInitialCapitalFromServer = async function loadP2PInitialCapitalFromServer(){
     try{
       const res = await fetch("/api/p2p/initial-capital");
       const data = await res.json();
       if(data.ok && typeof data.value === "number" && data.value >= 0){
+        window.__p2pAccumulatedProfitUsdt = Number(data.accumulatedProfit || 0);
         const local = getP2PInitialCapital();
         if(Math.abs(data.value - local) > 0.01){
           localStorage.setItem(P2P_INITIAL_CAPITAL_KEY, String(data.value));
-          updateP2PCapitalCard();
         }
+        updateP2PCapitalCard();
       }
     }catch(e){
       // silent — server may not have it yet
+    }
+  }
+
+  // Pedido explícito del usuario (ago 2026): mismo mecanismo de Retiros y
+  // gastos que ya tiene el socio, ahora para el Capital P2P propio de ONZE.
+  // Cacheado en window.__p2pTotalWithdrawnUsdt (todo el historial, sin
+  // filtro de rango) -- updateP2PCapitalCard() y el modal de Métricas P2P
+  // lo restan del capital mostrado.
+  window.__p2pTotalWithdrawnUsdt = 0;
+  window.loadP2PWithdrawalsFromServer = async function loadP2PWithdrawalsFromServer(){
+    try{
+      const res = await fetch("/api/p2p/withdrawals");
+      const data = await res.json();
+      if(data.ok){
+        window.__p2pTotalWithdrawnUsdt = (data.withdrawals || []).reduce((sum, w) => sum + Number(w.amountUsdt), 0);
+        updateP2PCapitalCard();
+      }
+    }catch(e){
+      // silent
+    }
+  }
+
+  // Pedido explícito del usuario (ago 2026), confirmado con un ejemplo
+  // numérico: "Capital P2P" = inicial (FIJO para siempre) + ganancia
+  // acumulada de meses YA TERMINADOS + ganancia de ESTE MES (en vivo, sube
+  // con cada orden). Al pasar de mes, la ganancia de ese mes se suma a la
+  // ACUMULADA (nunca al inicial) y "este mes" vuelve a 0 -- el total
+  // (Capital P2P) no baja, porque lo que se resetea ya quedó guardado en
+  // la acumulada un instante antes.
+  //
+  // Guarda en el servidor (campo "date" del registro de capital inicial,
+  // vía throughMonth) hasta qué mes ya quedó sumado a la acumulada. Corre
+  // una vez al cargar el panel: si el mes guardado quedó atrás, suma la
+  // ganancia de ESE mes completo (el que ya terminó) a la acumulada y
+  // avanza el marcador -- nunca suma el mes actual (todavía en curso, ese
+  // se sigue mostrando en vivo como "Este mes"). Si el usuario estuvo
+  // varios meses sin abrir el panel, se pone al día de a un mes por carga,
+  // no todo de una vez.
+  window.p2pMonthlyCapitalRollover = async function p2pMonthlyCapitalRollover(){
+    try{
+      const res = await fetch("/api/p2p/initial-capital");
+      const data = await res.json();
+      if(!data.ok) return;
+      const currentMonth = p2pChileMonthKey(new Date());
+
+      if(!data.throughMonth){
+        // Primera vez que corre este mecanismo para este tenant -- se
+        // marca el mes actual como punto de partida SIN sumar nada a la
+        // acumulada, para no sumar de golpe todo el historial hasta ahora.
+        await fetch("/api/p2p/initial-capital", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ throughMonth: currentMonth, accumulatedProfit: Number(data.accumulatedProfit || 0) }),
+        });
+        return;
+      }
+
+      const [y, m] = data.throughMonth.split("-").map(Number);
+      const rollDate = new Date(y, m, 1); // m ya es 1-indexado del string -> cae en el mes siguiente
+      const rollMonth = `${rollDate.getFullYear()}-${String(rollDate.getMonth() + 1).padStart(2, "0")}`;
+      if(rollMonth >= currentMonth) return; // al día -- nada terminado que sumar todavía
+
+      const monthStart = rollMonth + "-01";
+      const monthEndDate = new Date(rollDate.getFullYear(), rollDate.getMonth() + 1, 0);
+      const monthEnd = p2pChileDayKey(monthEndDate) || monthEndDate.toISOString().slice(0, 10);
+
+      const stats = calculateP2PCapacityStats();
+      const savedFrom = window.__p2pCustomFrom, savedTo = window.__p2pCustomTo;
+      window.__p2pCustomFrom = monthStart;
+      window.__p2pCustomTo = monthEnd;
+      const monthData = getP2PRangeStatsFromCapacity(stats, "custom");
+      window.__p2pCustomFrom = savedFrom;
+      window.__p2pCustomTo = savedTo;
+
+      const profitUsdt = Number(monthData.profitUsdt || 0);
+      const newAccumulated = Number(data.accumulatedProfit || 0) + profitUsdt;
+
+      const postRes = await fetch("/api/p2p/initial-capital", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ throughMonth: rollMonth, accumulatedProfit: newAccumulated }),
+      });
+      const postData = await postRes.json();
+      if(postData.ok){
+        window.__p2pAccumulatedProfitUsdt = Number(postData.accumulatedProfit || 0);
+        updateP2PCapitalCard();
+        if(profitUsdt !== 0 && typeof showToast === "function"){
+          showToast(`Capital P2P: se sumó la ganancia de ${rollMonth} (mes ya terminado)`);
+        }
+      }
+    }catch(e){
+      console.warn("Error en rollover mensual de capital P2P:", e);
     }
   }
 
@@ -20397,29 +20507,16 @@ function addP2PBotStyles(){
     return totalUsdt > 0 ? totalClp / totalUsdt : 0;
   }
 
-  window.carryOverP2PCapital = function carryOverP2PCapital(){
-    const CARRY_DATE_KEY = '__p2pCapitalCarryoverDate';
-    const CARRY_PROFIT_KEY = '__p2pCapitalCarryoverProfit';
-    const lastDate = localStorage.getItem(CARRY_DATE_KEY) || '';
-    const today = p2pChileDayKey(new Date());
-    if(lastDate === today) return;
-
-    const stats = typeof calculateP2PCapacityStats === 'function' ? calculateP2PCapacityStats() : null;
-    if(!stats) return;
-
-    const allTimeProfit = Number(getP2PRangeStatsFromCapacity(stats, "total").profitUsdt || 0);
-    const todayProfit = Number(getP2PRangeStatsFromCapacity(stats, "today").profitUsdt || 0);
-    const profitToCarry = Math.max(allTimeProfit - todayProfit, 0);
-    const alreadyCarried = Number(localStorage.getItem(CARRY_PROFIT_KEY) || 0);
-    const newProfit = profitToCarry - alreadyCarried;
-
-    if(newProfit > 0){
-      const initial = getP2PInitialCapital();
-      saveP2PInitialCapital(initial + newProfit);
-      localStorage.setItem(CARRY_PROFIT_KEY, String(profitToCarry));
-    }
-    localStorage.setItem(CARRY_DATE_KEY, today);
-  }
+  // BUG REAL encontrado y eliminado (ago 2026): acá vivía carryOverP2PCapital(),
+  // pensada para que la ganancia acumulada no se perdiera al pasar de mes,
+  // pero guardaba el "arrastre" SOLO en localStorage (nunca en el
+  // servidor) -- cada recarga de página, loadP2PInitialCapitalFromServer()
+  // pisaba ese valor local con el del servidor, y al otro día esta función
+  // volvía a sumar ganancia que el servidor nunca supo que ya se había
+  // sumado antes, con riesgo de duplicarla. Reemplazada por
+  // p2pMonthlyCapitalRollover() (ver más abajo), que guarda el progreso en
+  // el servidor (campo "date" del registro de capital inicial) y solo
+  // suma el mes que ya terminó, una sola vez.
 
   function calculateP2PProfitUsdtFromStats(stats){
     if(typeof stats?.realProfitUsdt === "number" && isFinite(stats.realProfitUsdt)){
@@ -20440,20 +20537,23 @@ function addP2PBotStyles(){
     const capitalEl = document.getElementById("p2pDashVolume");
     const subEl = document.getElementById("p2pDashVolumeSub");
 
-    // Bug real confirmado en vivo (jul 2026): el total sumaba el capital
-    // inicial + la ganancia de ESTE MES solamente -- al empezar un mes
-    // nuevo, "este mes" vuelve a 0 (correcto) pero el total mostrado
-    // también bajaba, perdiendo visualmente todos los meses anteriores.
-    // Pedido explícito del usuario: el capital inicial NUNCA se toca solo
-    // (es fijo, con eso arrancó), y el capital TOTAL debe ser inicial + TODA
-    // la ganancia acumulada desde ese arranque (no solo la de este mes) --
-    // "este mes" queda solo como dato informativo aparte, no como lo único
-    // que se suma al total. getP2PRangeStatsFromCapacity(..., "total") ya
-    // existe y respeta el mismo baseline de reinicio del módulo P2P.
+    // Definición confirmada con el usuario (ago 2026), con un ejemplo
+    // numérico verificado: Capital P2P = capital inicial (FIJO para
+    // siempre, solo cambia si se edita a mano) + ganancia ACUMULADA de
+    // meses YA TERMINADOS (ver p2pMonthlyCapitalRollover, la va sumando
+    // sola sin tocar el inicial) + ganancia de ESTE MES calendario (en
+    // vivo, sube con cada orden, se resetea a 0 al pasar de mes SIN que el
+    // total baje, porque ya quedó guardada en la acumulada un instante
+    // antes). NO volver a fusionar la acumulada con el inicial sin
+    // confirmar con el usuario primero -- ya se probó y el inicial debe
+    // quedar fijo siempre.
     const safeStats = stats || (typeof calculateP2PCapacityStats === "function" ? calculateP2PCapacityStats() : {});
     const monthlyProfit = Number(getP2PRangeStatsFromCapacity(safeStats, "month").profitUsdt || 0);
-    const totalProfit = Number(getP2PRangeStatsFromCapacity(safeStats, "total").profitUsdt || 0);
-    const total = getP2PInitialCapital() + totalProfit;
+    const accumulatedProfit = Number(window.__p2pAccumulatedProfitUsdt || 0);
+    // Pedido explícito del usuario (ago 2026): igual que en el capital del
+    // socio, cada retiro/gasto registrado resta al instante del total.
+    const withdrawn = Number(window.__p2pTotalWithdrawnUsdt || 0);
+    const total = getP2PInitialCapital() + accumulatedProfit + monthlyProfit - withdrawn;
 
     if(capitalEl){
       capitalEl.textContent = `${p2pCapMoney(total, 2)} USDT`;
@@ -20461,7 +20561,7 @@ function addP2PBotStyles(){
 
     if(subEl){
       const sign = monthlyProfit >= 0 ? "+" : "-";
-      subEl.innerHTML = `Inicial: <strong>${p2pCapMoney(getP2PInitialCapital(), 2)} USDT</strong><br>Este mes: ${sign}${p2pCapMoney(Math.abs(monthlyProfit), 2)} USDT`;
+      subEl.innerHTML = `Inicial: <strong>${p2pCapMoney(getP2PInitialCapital(), 2)} USDT</strong>${accumulatedProfit > 0 ? `<br>Acumulado: +${p2pCapMoney(accumulatedProfit, 2)} USDT` : ''}<br>Este mes: ${sign}${p2pCapMoney(Math.abs(monthlyProfit), 2)} USDT${withdrawn > 0 ? `<br>Retirado: -${p2pCapMoney(withdrawn, 2)} USDT` : ''}`;
     }
   }
 
@@ -21052,6 +21152,14 @@ function addP2PBotStyles(){
     // sentido comparar semana/mes/histórico mezclando los 3 exchanges acá,
     // cada uno se revisa por separado si hace falta más detalle.
     if(modalExchange === "all") range = "today";
+    // Cacheado para poder re-renderizar con el mismo rango después de
+    // registrar/borrar un retiro o gasto (ver p2pWithdrawRegister/Delete).
+    window.__p2pLastRange = range;
+    // El formulario de Retiros y gastos se reconstruye entero en cada
+    // render (como el resto de este modal) -- vuelve siempre a "Retiro" por
+    // defecto para no mostrar un toggle "Gasto" desincronizado del HTML
+    // recién creado.
+    window.__p2pWithdrawKind = 'retiro';
     const exLabel = p2pExchangeDisplayLabel(modalExchange);
     const stats = calculateP2PCapacityStats();
     const data = getP2PRangeStatsFromCapacity(stats, range, modalExchange);
@@ -21060,7 +21168,29 @@ function addP2PBotStyles(){
     const dataAll = getP2PRangeStatsFromCapacity(stats, range);
 
     const initialCapital = typeof getP2PInitialCapital === "function" ? getP2PInitialCapital() : 0;
-    const capitalByRange = initialCapital + Number(dataAll.profitUsdt || 0);
+    // Pedido explícito del usuario (ago 2026): igual que en el capital del
+    // socio, cada retiro/gasto registrado resta al instante del total.
+    const totalWithdrawnUsdt = Number(window.__p2pTotalWithdrawnUsdt || 0);
+    // "Capital P2P" NO usa el rango elegido arriba (Hoy/Semana/Mes/Total) --
+    // siempre es inicial (fijo) + acumulada de meses terminados + ganancia
+    // de ESTE MES calendario, igual que updateP2PCapitalCard() (definición
+    // confirmada con el usuario, ago 2026 -- ver el comentario largo ahí
+    // antes de volver a tocar esto).
+    const capitalMonthProfit = Number(getP2PRangeStatsFromCapacity(stats, "month").profitUsdt || 0);
+    const capitalAccumulatedProfit = Number(window.__p2pAccumulatedProfitUsdt || 0);
+    const capitalByRange = initialCapital + capitalAccumulatedProfit + capitalMonthProfit - totalWithdrawnUsdt;
+
+    // PPM (SII) del rango elegido -- sobre el CLP recibido TOTAL (todos los
+    // exchanges juntos, como el Capital P2P), igual que la tarjeta del socio.
+    const p2pPpmPct = window.__p2pPpmPct;
+    const p2pHasPpmPct = p2pPpmPct !== null && p2pPpmPct !== undefined;
+    const p2pPpmClp = p2pHasPpmPct ? Number(dataAll.clpReceived || 0) * (p2pPpmPct / 100) : null;
+    const p2pPpmUsdt = (p2pHasPpmPct && dataAll.avgSellPrice > 0) ? p2pPpmClp / dataAll.avgSellPrice : null;
+
+    const p2pTodayStr = p2pChileDayKey(new Date());
+    const p2pPrevMonthDate = new Date(p2pTodayStr + "T12:00:00");
+    p2pPrevMonthDate.setMonth(p2pPrevMonthDate.getMonth() - 1);
+    const p2pPrevMonth = p2pPrevMonthDate.toISOString().slice(0, 7);
 
     const capacitiesInRange = (stats.capacities || []).filter(cap => {
       const capDate = cap.createdAt || cap.finishedAt || cap.date || "";
@@ -21188,7 +21318,7 @@ function addP2PBotStyles(){
         <div class="p2p-capacity-mini">
           <span>Capital P2P</span>
           <strong>${p2pCapMoney(capitalByRange, 2)} USDT</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">Inicial: ${p2pCapMoney(initialCapital, 2)} · Resultado: ${sign}${p2pCapMoney(Math.abs(data.profitUsdt), 2)}</div>
+          <div class="p2p-capacity-meta" style="margin-top:5px;">Inicial: ${p2pCapMoney(initialCapital, 2)}${capitalAccumulatedProfit > 0 ? ` · Acumulado: +${p2pCapMoney(capitalAccumulatedProfit, 2)}` : ''} · Resultado: ${sign}${p2pCapMoney(Math.abs(data.profitUsdt), 2)}${totalWithdrawnUsdt > 0 ? ` · Retirado: -${p2pCapMoney(totalWithdrawnUsdt, 2)}` : ''}</div>
         </div>
 
         <div class="p2p-capacity-mini">
@@ -21308,6 +21438,37 @@ function addP2PBotStyles(){
           <div class="p2p-capacity-meta" style="margin-top:5px;">Pendiente por vender/cubrir</div>
         </div>
       </div>
+
+      <h3 class="section-title" style="margin:18px 0 8px;">PPM (SII)</h3>
+      <div class="p2p-detail-summary-grid">
+        <div class="p2p-capacity-mini" style="cursor:pointer;" onclick="window.p2pOpenPpmModal()" title="Click para editar el % de PPM">
+          <span>PPM a pagar (rango actual)</span>
+          <strong>${p2pHasPpmPct ? p2pCapMoney(p2pPpmClp, 0) + ' CLP' : 'Configura el %'}</strong>
+          <div class="p2p-capacity-meta" style="margin-top:5px;">
+            ${p2pHasPpmPct
+              ? `${p2pPpmUsdt !== null ? p2pCapMoney(p2pPpmUsdt, 2) + ' USDT · ' : ''}${p2pCapMoney(p2pPpmPct, 2)}% del CLP recibido — click para editar`
+              : 'Click para definir el % (pendiente con tu contadora)'}
+          </div>
+        </div>
+      </div>
+
+      <h3 class="section-title" style="margin:18px 0 8px;">💸 Retiros y gastos</h3>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+        <button class="btn" type="button" id="p2pWithdrawKindRetiro" style="padding:5px 10px;font-size:12px;" onclick="window.p2pWithdrawSetKind('retiro')">💸 Retiro</button>
+        <button class="btn secondary" type="button" id="p2pWithdrawKindGasto" style="padding:5px 10px;font-size:12px;" onclick="window.p2pWithdrawSetKind('gasto')">🧾 Gasto</button>
+        <input type="month" id="p2pPpmMonthInput" value="${p2pPrevMonth}" style="font-size:12px;padding:5px;">
+        <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.p2pUseMonthPpm()" title="Cambia a Gasto y completa el monto con el PPM calculado de ese mes">Usar PPM de ese mes</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+        <input id="p2pWithdrawPerson" type="text" placeholder="Quién retira" style="font-size:12px;padding:6px;width:130px;">
+        <input id="p2pWithdrawConcept" type="text" placeholder="Concepto (ej: PPM agosto)" style="font-size:12px;padding:6px;width:160px;display:none;">
+        <input id="p2pWithdrawAmount" type="number" step="0.01" min="0" placeholder="Monto USDT" style="font-size:12px;padding:6px;width:110px;">
+        <input id="p2pWithdrawDate" type="date" value="${p2pTodayStr}" style="font-size:12px;padding:6px;">
+        <input id="p2pWithdrawNote" type="text" placeholder="Nota (opcional)" style="font-size:12px;padding:6px;flex:1;min-width:100px;">
+        <button class="btn" type="button" id="p2pWithdrawSubmitBtn" style="padding:6px 12px;font-size:12px;" onclick="window.p2pWithdrawRegister()">Registrar retiro</button>
+      </div>
+      <div id="p2pWithdrawError" style="color:#fca5a5;font-size:12px;min-height:16px;margin-bottom:6px;"></div>
+      <div id="p2pWithdrawList" style="margin-bottom:8px;"></div>
     `;
   };
 
@@ -21386,7 +21547,224 @@ function addP2PBotStyles(){
     `;
 
     document.body.appendChild(modal);
+    // % de PPM y total retirado se cargan frescos cada vez que se abre el
+    // modal (no cambian seguido) -- mismo patrón que el modal de
+    // Estadísticas del socio.
+    Promise.all([
+      fetch('/api/p2p/ppm-config').then(r => r.json()).catch(() => ({ ok: false })),
+      fetch('/api/p2p/withdrawals').then(r => r.json()).catch(() => ({ ok: false })),
+    ]).then(([ppmRes, wRes]) => {
+      window.__p2pPpmPct = (ppmRes.ok && ppmRes.value !== null && ppmRes.value !== undefined) ? Number(ppmRes.value) : null;
+      if(wRes.ok){
+        window.__p2pTotalWithdrawnUsdt = (wRes.withdrawals || []).reduce((sum, w) => sum + Number(w.amountUsdt), 0);
+      }
+      renderP2PRangeDetailContent(range || "today");
+      window.p2pWithdrawRenderList();
+    });
     renderP2PRangeDetailContent(range || "today");
+  };
+
+  // ───────── Retiros y gastos (Capital P2P propio) — pedido explícito del
+  // usuario (ago 2026): mismo mecanismo que ya tiene el socio (ver
+  // socioBnRegisterWithdrawal más abajo en este archivo), llevado a
+  // Métricas P2P. "Retiro" = alguien saca plata, "Gasto" = un gasto del
+  // negocio (ej: pago del PPM) -- ambos restan igual del Capital P2P.
+  window.__p2pWithdrawKind = 'retiro';
+  window.p2pWithdrawSetKind = function(kind){
+    window.__p2pWithdrawKind = kind === 'gasto' ? 'gasto' : 'retiro';
+    const isGasto = window.__p2pWithdrawKind === 'gasto';
+    const btnRetiro = document.getElementById('p2pWithdrawKindRetiro');
+    const btnGasto = document.getElementById('p2pWithdrawKindGasto');
+    const personEl = document.getElementById('p2pWithdrawPerson');
+    const conceptEl = document.getElementById('p2pWithdrawConcept');
+    const submitBtn = document.getElementById('p2pWithdrawSubmitBtn');
+    if(btnRetiro) btnRetiro.className = isGasto ? 'btn secondary' : 'btn';
+    if(btnGasto) btnGasto.className = isGasto ? 'btn' : 'btn secondary';
+    if(personEl) personEl.style.display = isGasto ? 'none' : '';
+    if(conceptEl) conceptEl.style.display = isGasto ? '' : 'none';
+    if(submitBtn) submitBtn.textContent = isGasto ? 'Registrar gasto' : 'Registrar retiro';
+  };
+
+  window.p2pWithdrawRegister = async function(){
+    const kind = window.__p2pWithdrawKind === 'gasto' ? 'gasto' : 'retiro';
+    const personEl = document.getElementById('p2pWithdrawPerson');
+    const conceptEl = document.getElementById('p2pWithdrawConcept');
+    const amountEl = document.getElementById('p2pWithdrawAmount');
+    const dateEl = document.getElementById('p2pWithdrawDate');
+    const noteEl = document.getElementById('p2pWithdrawNote');
+    const errorEl = document.getElementById('p2pWithdrawError');
+    if(errorEl) errorEl.textContent = '';
+
+    const person = kind === 'gasto' ? (conceptEl?.value || '').trim() : (personEl?.value || '').trim();
+    if(!person){
+      if(errorEl) errorEl.textContent = kind === 'gasto' ? 'Ingresa el concepto del gasto (ej: PPM agosto).' : 'Ingresa quién retira.';
+      return;
+    }
+    const amount = Number(amountEl?.value);
+    if(!isFinite(amount) || amount <= 0){
+      if(errorEl) errorEl.textContent = 'Ingresa un monto válido en USDT.';
+      return;
+    }
+    const res = await fetch('/api/p2p/withdrawals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        kind,
+        person,
+        amountUsdt: amount,
+        withdrawnAt: dateEl?.value ? dateEl.value + 'T12:00:00.000Z' : undefined,
+        note: noteEl?.value || undefined,
+      }),
+    });
+    const r = await res.json();
+    if(r.ok){
+      if(amountEl) amountEl.value = '';
+      if(noteEl) noteEl.value = '';
+      if(conceptEl) conceptEl.value = '';
+      if(personEl) personEl.value = '';
+      await window.loadP2PWithdrawalsFromServer();
+      window.p2pWithdrawRenderList();
+      if(typeof renderP2PRangeDetailContent === 'function') renderP2PRangeDetailContent(window.__p2pLastRange || 'today');
+      if(typeof showToast === 'function') showToast(kind === 'gasto' ? 'Gasto registrado' : 'Retiro registrado');
+    } else if(errorEl){
+      errorEl.textContent = r.error || (kind === 'gasto' ? 'Error al registrar el gasto' : 'Error al registrar el retiro');
+    }
+  };
+
+  window.p2pWithdrawDelete = async function(id){
+    const res = await fetch('/api/p2p/withdrawals', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const r = await res.json();
+    if(r.ok){
+      await window.loadP2PWithdrawalsFromServer();
+      window.p2pWithdrawRenderList();
+      if(typeof renderP2PRangeDetailContent === 'function') renderP2PRangeDetailContent(window.__p2pLastRange || 'today');
+    } else if(typeof showToast === 'function'){
+      showToast(r.error || 'Error al borrar', 'error');
+    }
+  };
+
+  // Lista TODO el historial (no filtrado por el rango Hoy/Semana/Mes de
+  // arriba) -- el capital es siempre acumulado, así que ver todos los
+  // movimientos acá es más simple y directo que atarlo al filtro de rango.
+  window.p2pWithdrawRenderList = async function(){
+    const listEl = document.getElementById('p2pWithdrawList');
+    if(!listEl) return;
+    const res = await fetch('/api/p2p/withdrawals');
+    const r = await res.json();
+    const rows = r.ok ? (r.withdrawals || []) : [];
+    if(!rows.length){
+      listEl.innerHTML = '<div style="font-size:12px;color:#64748b;">Sin retiros ni gastos registrados.</div>';
+      return;
+    }
+    listEl.innerHTML = rows.map(function(w){
+      const d = new Date(w.withdrawnAt).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const isGasto = w.kind === 'gasto';
+      const label = isGasto ? ('🧾 ' + w.person) : ('💸 ' + w.person);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(148,163,184,.08);font-size:12px;">
+        <span style="color:#cbd5e1;"><strong>${label}</strong> · ${d}${w.note ? ' · ' + w.note.replace(/</g,'&lt;') : ''}</span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span style="color:#fb7185;font-weight:800;">-${p2pCapMoney(w.amountUsdt, 2)} USDT</span>
+          <button type="button" onclick="window.p2pWithdrawDelete(${w.id})" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:14px;" title="Borrar">×</button>
+        </span>
+      </div>`;
+    }).join('');
+  };
+
+  // Autocompleta el formulario de arriba en modo "Gasto" con el PPM del mes
+  // elegido en el selector -- el PPM se paga los primeros días del mes
+  // SIGUIENTE (ej: el 5 de agosto se retira el PPM de julio), por eso el
+  // selector arranca en el mes anterior. Todo el cálculo es en el navegador
+  // (los datos de ventas de ONZE ya están cargados en memoria vía
+  // calculateP2PCapacityStats), no hace falta ir al servidor por eso.
+  window.p2pUseMonthPpm = async function(){
+    const monthInput = document.getElementById('p2pPpmMonthInput');
+    const month = monthInput?.value;
+    if(!month){
+      if(typeof showToast === 'function') showToast('Elige el mes del PPM a retirar', 'error');
+      return;
+    }
+    const res = await fetch('/api/p2p/ppm-config');
+    const ppmRes = await res.json();
+    const pct = (ppmRes.ok && ppmRes.value !== null && ppmRes.value !== undefined) ? Number(ppmRes.value) : null;
+    if(pct === null){
+      if(typeof showToast === 'function') showToast('Configura primero el % de PPM (tarjeta de arriba)', 'error');
+      return;
+    }
+
+    const stats = calculateP2PCapacityStats();
+    const savedFrom = window.__p2pCustomFrom, savedTo = window.__p2pCustomTo;
+    window.__p2pCustomFrom = month + '-01';
+    window.__p2pCustomTo = month + '-31';
+    const data = getP2PRangeStatsFromCapacity(stats, 'custom'); // sin exchange = combinado, como Capital P2P
+    window.__p2pCustomFrom = savedFrom;
+    window.__p2pCustomTo = savedTo;
+
+    const clpReceived = Number(data.clpReceived || 0);
+    const avgSell = Number(data.avgSellPrice || 0);
+    const ppmUsdt = avgSell > 0 ? (clpReceived * (pct / 100)) / avgSell : 0;
+
+    window.p2pWithdrawSetKind('gasto');
+    const conceptEl = document.getElementById('p2pWithdrawConcept');
+    const amountEl = document.getElementById('p2pWithdrawAmount');
+    const monthLabel = new Date(month + '-01T12:00:00').toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
+    if(conceptEl) conceptEl.value = 'PPM ' + monthLabel;
+    if(amountEl) amountEl.value = ppmUsdt.toFixed(2);
+  };
+
+  // % de PPM propio de ONZE -- espejo de socioBnOpenPpmModal, guardado en
+  // Tenant.p2pPpmPct (una sola bolsa por tenant, ver /api/p2p/ppm-config).
+  window.p2pOpenPpmModal = function(){
+    let modal = document.getElementById('p2pPpmModal');
+    if(modal) modal.remove();
+
+    modal = document.createElement('div');
+    modal.id = 'p2pPpmModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:1000002;display:flex;align-items:center;justify-content:center;padding:20px;';
+
+    const current = window.__p2pPpmPct;
+    modal.innerHTML = `
+      <div style="background:#071828;border:1px solid #1a3a5a;border-radius:16px;padding:24px;max-width:420px;width:100%;">
+        <h3 style="color:#00d4ff;margin-bottom:8px;">% de PPM (SII)</h3>
+        <p style="color:#aaa;font-size:13px;margin-bottom:16px;">Porcentaje a aplicar sobre el CLP recibido del período para estimar el PPM a pagar. Confírmalo con tu contadora.</p>
+        <input id="p2pPpmInput" type="number" step="0.01" min="0" max="100" placeholder="Ej: 1.5" value="${current !== null && current !== undefined ? current : ''}" style="
+          width:100%;padding:10px;border-radius:8px;border:1px solid #2a4a6a;background:#0a1929;color:#fff;font-size:14px;margin-bottom:8px;
+        ">
+        <div id="p2pPpmError" style="color:#fca5a5;font-size:12px;min-height:16px;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button type="button" onclick="document.getElementById('p2pPpmModal')?.remove()" style="padding:8px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
+          <button type="button" onclick="window.p2pSavePpm()" style="padding:8px 16px;background:#00d4ff;color:#001824;border:none;border-radius:6px;cursor:pointer;font-weight:800;">Guardar</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  };
+
+  window.p2pSavePpm = async function(){
+    const input = document.getElementById('p2pPpmInput');
+    const error = document.getElementById('p2pPpmError');
+    const value = Number(input?.value);
+    if(!isFinite(value) || value < 0 || value > 100){
+      if(error) error.textContent = 'Ingresa un porcentaje válido (0-100).';
+      return;
+    }
+    const res = await fetch('/api/p2p/ppm-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value }),
+    });
+    const r = await res.json();
+    if(r.ok){
+      window.__p2pPpmPct = r.value;
+      document.getElementById('p2pPpmModal')?.remove();
+      if(typeof renderP2PRangeDetailContent === 'function') renderP2PRangeDetailContent(window.__p2pLastRange || 'today');
+      if(typeof showToast === 'function') showToast('% de PPM guardado');
+    } else if(error){
+      error.textContent = r.error || 'Error al guardar';
+    }
   };
 
   // Pestaña activa del "Resumen P2P" (Binance/Bybit). Capital P2P (más abajo)
@@ -21412,7 +21790,6 @@ function addP2PBotStyles(){
   }
 
   window.updateP2PDashboardWithCapacity = function updateP2PDashboardWithCapacity(){
-    if(typeof carryOverP2PCapital === 'function') carryOverP2PCapital();
     const stats = calculateP2PCapacityStats();
     const activeExchange = window.__p2pResumenExchange || "binance";
     const today = getP2PRangeStatsFromCapacity(stats, "today", activeExchange);
@@ -21458,25 +21835,17 @@ function addP2PBotStyles(){
       realProfitSubEl.textContent = `Hoy · ${signClp}${p2pCapMoney(Math.abs(profitClp), 0)} CLP`;
     }
 
-    // Capital = inicial (fijo) + ganancia acumulada total (todos los días)
-    if(capitalEl){
-      const monthlyStats = getP2PRangeStatsFromCapacity(stats, "month");
-      const profit = Number(monthlyStats.profitUsdt || 0);
-      const total = getP2PInitialCapital() + profit;
-      const sign = profit >= 0 ? "+" : "-";
-      capitalEl.textContent = `${p2pCapMoney(total, 2)} USDT`;
-    }
-
-    if(capitalSubEl){
-      const monthlyStats = getP2PRangeStatsFromCapacity(stats, "month");
-      const totalProfit = Number(monthlyStats.profitUsdt || 0);
-      const sign = totalProfit >= 0 ? "+" : "-";
-      capitalSubEl.innerHTML = `
-        <div style="text-align:center;color:#8aa0ba;line-height:1.6;">
-          Inicial: <strong style="color:#cbd5e1;">${p2pCapMoney(getP2PInitialCapital(), 2)} USDT</strong><br>
-          Este mes: ${sign}${p2pCapMoney(Math.abs(totalProfit), 2)} USDT
-        </div>
-      `;
+    // BUG REAL encontrado y arreglado (ago 2026): esta función tenía SU
+    // PROPIA copia del cálculo de "Capital P2P" (capitalEl/capitalSubEl),
+    // separada de updateP2PCapitalCard() -- y esa copia nunca recibió el
+    // arreglo de jul 2026 (usaba solo la ganancia de ESTE MES, no el total
+    // acumulado). Como esta función corre en casi cada sync, competía con
+    // updateP2PCapitalCard() por escribir los MISMOS elementos del DOM, y
+    // el número visible "parpadeaba" entre las dos fórmulas cada pocos
+    // segundos (confirmado en vivo por el usuario, ago 2026). Arreglo:
+    // una sola fuente de verdad -- delega siempre en updateP2PCapitalCard().
+    if(capitalEl || capitalSubEl){
+      updateP2PCapitalCard(stats);
     }
 
     if(salesCountEl){

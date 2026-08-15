@@ -36,6 +36,7 @@ model Tenant {
   planId                Int?
   isOnzeInternal        Boolean                @default(false)
   active                Boolean                @default(true)
+  p2pPpmPct             Decimal?               @db.Decimal(6, 3)
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   auditLogs             AuditLog[]
@@ -66,6 +67,7 @@ model Tenant {
   p2pCapacities         P2PCapacity[]
   p2pManualSales        P2PManualSale[]
   p2pCycles             P2PCycle[]
+  p2pWithdrawals        P2PWithdrawal[]
   p2pWebAuthnCredentials P2PWebAuthnCredential[]
   p2pWebAuthnChallenges P2PWebAuthnChallenge[]
   p2pReleaseAuthTokens  P2PReleaseAuthToken[]
@@ -1054,6 +1056,23 @@ model PartnerWithdrawal {
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, label])
+}
+
+// Espejo de PartnerWithdrawal pero para el "Capital P2P" propio de ONZE (no
+// del socio) -- ver Métricas P2P en el panel. Una sola bolsa compartida por
+// tenant, sin "label" (a diferencia del socio, acá no se separa por cuenta).
+model P2PWithdrawal {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int
+  kind        String   @default("retiro") // "retiro" (persona) | "gasto" (ej: PPM)
+  person      String
+  amountUsdt  Decimal  @db.Decimal(18, 8)
+  note        String?
+  withdrawnAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
 }
 
 // Historial de cuándo se sumó ganancia sin retirar al capital inicial --
