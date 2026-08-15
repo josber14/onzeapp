@@ -13,10 +13,13 @@ async function getSession() {
   return verifySessionToken(token);
 }
 
-// Registro libre de retiros reales (Hector / Josber) -- pedido explícito del
-// usuario (ago 2026): cada retiro se resta al instante del "Capital P2P"
-// (ver socioBnLoadDashboard en onze-panel.html: capital = inicial + ganancia
-// acumulada - suma de TODOS los retiros, sin "cerrar período").
+// Registro libre de movimientos que restan del capital -- dos tipos (`kind`):
+// "retiro" (Hector / Josber sacan plata) y "gasto" (ej: pago del PPM, un
+// gasto del negocio). Ambos se tratan exactamente igual para el cálculo del
+// capital -- pedido explícito del usuario (ago 2026): cada uno se resta al
+// instante del "Capital P2P" (ver socioBnLoadDashboard en onze-panel.html:
+// capital = inicial + ganancia acumulada - suma de TODOS los movimientos,
+// sin "cerrar período"). Solo cambia cómo se muestran en la lista.
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session?.tenantId) {
@@ -40,6 +43,7 @@ export async function GET(req: NextRequest) {
     ok: true,
     withdrawals: withdrawals.map((w) => ({
       id: w.id,
+      kind: w.kind,
       person: w.person,
       amountUsdt: Number(w.amountUsdt),
       note: w.note,
@@ -54,13 +58,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
   const body = await req.json().catch(() => ({}));
+  const kind = body?.kind === "gasto" ? "gasto" : "retiro";
   const person = String(body?.person || "").trim();
   const amountUsdt = Number(body?.amountUsdt);
   const note = body?.note ? String(body.note).slice(0, 300) : null;
   const withdrawnAt = body?.withdrawnAt ? new Date(body.withdrawnAt) : new Date();
 
   if (!person) {
-    return NextResponse.json({ ok: false, error: "Falta indicar quién retiró" }, { status: 400 });
+    return NextResponse.json({
+      ok: false,
+      error: kind === "gasto" ? "Falta indicar el concepto del gasto" : "Falta indicar quién retiró",
+    }, { status: 400 });
   }
   if (!Number.isFinite(amountUsdt) || amountUsdt <= 0) {
     return NextResponse.json({ ok: false, error: "Monto inválido" }, { status: 400 });
@@ -77,13 +85,14 @@ export async function POST(req: NextRequest) {
   }
 
   const withdrawal = await prisma.partnerWithdrawal.create({
-    data: { tenantId: session.tenantId, label: LABEL, person, amountUsdt, note, withdrawnAt },
+    data: { tenantId: session.tenantId, label: LABEL, kind, person, amountUsdt, note, withdrawnAt },
   });
 
   return NextResponse.json({
     ok: true,
     withdrawal: {
       id: withdrawal.id,
+      kind: withdrawal.kind,
       person: withdrawal.person,
       amountUsdt: Number(withdrawal.amountUsdt),
       note: withdrawal.note,

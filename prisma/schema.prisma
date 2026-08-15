@@ -1045,6 +1045,7 @@ model PartnerWithdrawal {
   id          Int      @id @default(autoincrement())
   tenantId    Int
   label       String   @default("SOCIO")
+  kind        String   @default("retiro") // "retiro" (persona) | "gasto" (ej: PPM)
   person      String
   amountUsdt  Decimal  @db.Decimal(18, 8)
   note        String?

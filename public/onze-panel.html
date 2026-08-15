@@ -27249,8 +27249,14 @@ try{
         { color: profitColor, sub: profitUsdt !== null ? profitSign + socioBnMoney(profitUsdt, 2) + ' USDT' : '', subColor: profitColor }
       ),
       socioBnDashCard('Ganancia %', stats.profitPct !== null ? socioBnMoney(stats.profitPct, 2) + '%' : '—', { color: profitColor }),
-      socioBnDashCard('Precio prom. venta', stats.avgSalePrice !== null ? socioBnMoney(stats.avgSalePrice, 2) + ' CLP' : '—', { color: WHITE }),
-      socioBnDashCard('Tasa prom. compra', stats.weightedAvgBuyPrice !== null ? socioBnMoney(stats.weightedAvgBuyPrice, 2) + ' CLP' : '—', { color: WHITE }),
+      // Pedido explícito del usuario (ago 2026): venta y compra juntas en la
+      // misma tarjeta (antes eran 2 tarjetas separadas), cada una con su
+      // propio color.
+      socioBnDashCard(
+        'Tasas promedio',
+        '<span style="font-size:13px;">Tasa promedio venta: <strong style="color:' + GREEN + ';">' + (stats.avgSalePrice !== null ? socioBnMoney(stats.avgSalePrice, 2) + ' CLP' : '—') + '</strong></span>',
+        { color: WHITE, sub: 'Tasa promedio compra: <strong style="color:#38bdf8;">' + (stats.weightedAvgBuyPrice !== null ? socioBnMoney(stats.weightedAvgBuyPrice, 2) + ' CLP' : '—') + '</strong>' }
+      ),
       socioBnDashCard('Comisión Binance', socioBnMoney(stats.totalCommissionUsdt, 2) + ' USDT', { color: WHITE })
     );
     grid.innerHTML = cards.join('');
@@ -27324,6 +27330,13 @@ try{
 
     const today = socioBnChileToday();
     const monthStart = today.slice(0, 7) + '-01';
+    // El PPM se paga los primeros días del mes SIGUIENTE al que corresponde
+    // (ej: el 5 de agosto se paga el PPM de julio) -- pedido explícito del
+    // usuario (ago 2026): que el mes por defecto del selector sea el mes
+    // ANTERIOR, no el actual.
+    const prevMonthDate = new Date(today + 'T12:00:00');
+    prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
+    const prevMonth = prevMonthDate.toISOString().slice(0, 7);
 
     modal.innerHTML = `
       <div style="background:#071828;border:1px solid #1a3a5a;border-radius:16px;padding:24px;max-width:700px;width:100%;max-height:90vh;overflow-y:auto;">
@@ -27347,16 +27360,23 @@ try{
         <h4 style="font-size:12px;color:#64748b;margin:16px 0 4px;">Por día</h4>
         <div id="socioBnStatsDaily"></div>
 
-        <h4 style="font-size:12px;color:#64748b;margin:20px 0 8px;">💸 Retiros</h4>
+        <h4 style="font-size:12px;color:#64748b;margin:20px 0 8px;">💸 Retiros y gastos</h4>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+          <button class="btn" type="button" id="socioBnWithdrawKindRetiro" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnSetWithdrawKind('retiro')">💸 Retiro</button>
+          <button class="btn secondary" type="button" id="socioBnWithdrawKindGasto" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnSetWithdrawKind('gasto')">🧾 Gasto</button>
+          <input type="month" id="socioBnPpmMonthInput" value="${prevMonth}" style="font-size:12px;padding:5px;">
+          <button class="btn secondary" type="button" style="padding:5px 10px;font-size:12px;" onclick="window.socioBnUseMonthPpm()" title="Cambia a Gasto y completa el monto con el PPM calculado de ese mes">Usar PPM de ese mes</button>
+        </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
           <select id="socioBnWithdrawPerson" style="font-size:12px;padding:6px;">
             <option value="Hector">Hector</option>
             <option value="Josber">Josber</option>
           </select>
+          <input id="socioBnWithdrawConcept" type="text" placeholder="Concepto (ej: PPM agosto)" style="font-size:12px;padding:6px;width:160px;display:none;">
           <input id="socioBnWithdrawAmount" type="number" step="0.01" min="0" placeholder="Monto USDT" style="font-size:12px;padding:6px;width:110px;">
           <input id="socioBnWithdrawDate" type="date" value="${today}" style="font-size:12px;padding:6px;">
           <input id="socioBnWithdrawNote" type="text" placeholder="Nota (opcional)" style="font-size:12px;padding:6px;flex:1;min-width:100px;">
-          <button class="btn" type="button" style="padding:6px 12px;font-size:12px;" onclick="window.socioBnRegisterWithdrawal()">Registrar retiro</button>
+          <button class="btn" type="button" id="socioBnWithdrawSubmitBtn" style="padding:6px 12px;font-size:12px;" onclick="window.socioBnRegisterWithdrawal()">Registrar retiro</button>
         </div>
         <div id="socioBnWithdrawError" style="color:#fca5a5;font-size:12px;min-height:16px;margin-bottom:6px;"></div>
         <div id="socioBnWithdrawList" style="margin-bottom:16px;"></div>
@@ -27475,7 +27495,14 @@ try{
         ),
         socioBnDashCard('Ganancia %', s.profitPct !== null ? socioBnMoney(s.profitPct, 2) + '%' : '—', { color: profitColor }),
         socioBnDashCard('Comisión Binance', socioBnMoney(s.totalCommissionUsdt, 2) + ' USDT', { color: WHITE }),
-        socioBnDashCard('Precio prom. venta', s.avgSalePrice !== null ? socioBnMoney(s.avgSalePrice, 2) + ' CLP' : '—', { color: WHITE }),
+        // Pedido explícito del usuario (ago 2026): venta y compra juntas en
+        // la misma tarjeta (antes eran 2 tarjetas separadas, y la de compra
+        // se había sacado de este modal en jul 2026), cada una con su color.
+        socioBnDashCard(
+          'Tasas promedio',
+          '<span style="font-size:13px;">Tasa promedio venta: <strong style="color:' + GREEN + ';">' + (s.avgSalePrice !== null ? socioBnMoney(s.avgSalePrice, 2) + ' CLP' : '—') + '</strong></span>',
+          { color: WHITE, sub: 'Tasa promedio compra: <strong style="color:#38bdf8;">' + (s.weightedAvgBuyPrice !== null ? socioBnMoney(s.weightedAvgBuyPrice, 2) + ' CLP' : '—') + '</strong>' }
+        ),
         (function(){
           // Pedido explícito del usuario (jul 2026): reemplaza "Tasa prom.
           // compra" en el panel de estadísticas -- mismo cálculo que la
@@ -27578,18 +27605,81 @@ try{
     window.socioBnRenderWithdrawals(fromEl.value, toEl.value || fromEl.value);
   };
 
-  // Pedido explícito del usuario (jul 2026): registro libre de retiros
-  // (Hector / Josber) en cualquier momento. Cada retiro registrado se resta
-  // al instante del "Capital P2P" (ver socioBnLoadDashboard) -- ya no hace
-  // falta "cerrar período" para que se refleje.
-  window.socioBnRegisterWithdrawal = async function(){
+  // Pedido explícito del usuario (ago 2026): además del retiro (Hector /
+  // Josber sacan plata), un segundo tipo "gasto" (ej: pago del PPM, un gasto
+  // del negocio) -- mismo mecanismo, ambos restan al instante del "Capital
+  // P2P" (ver socioBnLoadDashboard), solo cambia cómo se guardan/muestran.
+  window.__socioBnWithdrawKind = 'retiro';
+  window.socioBnSetWithdrawKind = function(kind){
+    window.__socioBnWithdrawKind = kind === 'gasto' ? 'gasto' : 'retiro';
+    const isGasto = window.__socioBnWithdrawKind === 'gasto';
+    const btnRetiro = document.getElementById('socioBnWithdrawKindRetiro');
+    const btnGasto = document.getElementById('socioBnWithdrawKindGasto');
     const personEl = document.getElementById('socioBnWithdrawPerson');
+    const conceptEl = document.getElementById('socioBnWithdrawConcept');
+    const submitBtn = document.getElementById('socioBnWithdrawSubmitBtn');
+    if(btnRetiro) btnRetiro.className = isGasto ? 'btn secondary' : 'btn';
+    if(btnGasto) btnGasto.className = isGasto ? 'btn' : 'btn secondary';
+    if(personEl) personEl.style.display = isGasto ? 'none' : '';
+    if(conceptEl) conceptEl.style.display = isGasto ? '' : 'none';
+    if(submitBtn) submitBtn.textContent = isGasto ? 'Registrar gasto' : 'Registrar retiro';
+  };
+
+  // Autocompleta el formulario de arriba en modo "Gasto" con el PPM del mes
+  // elegido en el selector de al lado -- pedido explícito del usuario (ago
+  // 2026): el PPM se paga los primeros días del mes SIGUIENTE (ej: el 5 de
+  // agosto se retira el PPM de julio), así que NO puede ser siempre "el mes
+  // actual" -- calcula el rango de ese mes en vivo (mismo endpoint que usa
+  // el panel de estadísticas para cualquier rango) y aplica el % de PPM ya
+  // configurado en la tarjeta "PPM a pagar (SII)".
+  window.socioBnUseMonthPpm = async function(){
+    const monthInput = document.getElementById('socioBnPpmMonthInput');
+    const month = monthInput?.value;
+    if(!month){
+      if(typeof showToast === 'function') showToast('Elige el mes del PPM a retirar', 'error');
+      return;
+    }
+    const [ppmRes, rangeRes] = await Promise.all([
+      socioBnFetch('/api/partner/ppm-config'),
+      socioBnFetch('/api/partner/dashboard?' + new URLSearchParams({ from: month + '-01', to: month + '-31' }).toString()),
+    ]);
+    const pct = (ppmRes.ok && ppmRes.value !== null && ppmRes.value !== undefined) ? Number(ppmRes.value) : null;
+    if(pct === null){
+      if(typeof showToast === 'function') showToast('Configura primero el % de PPM (tarjeta de arriba)', 'error');
+      return;
+    }
+    if(!rangeRes.ok || !rangeRes.rangeStats){
+      if(typeof showToast === 'function') showToast('No se pudo calcular el PPM de ese mes', 'error');
+      return;
+    }
+    const s = rangeRes.rangeStats;
+    const avgSell = s.avgSalePrice ? Number(s.avgSalePrice) : 0;
+    const clpReceived = Number(s.totalClpReceived || 0);
+    const ppmUsdt = avgSell > 0 ? (clpReceived * (pct / 100)) / avgSell : 0;
+
+    window.socioBnSetWithdrawKind('gasto');
+    const conceptEl = document.getElementById('socioBnWithdrawConcept');
+    const amountEl = document.getElementById('socioBnWithdrawAmount');
+    const monthLabel = new Date(month + '-01T12:00:00').toLocaleDateString('es-CL', { month: 'long', year: 'numeric' });
+    if(conceptEl) conceptEl.value = 'PPM ' + monthLabel;
+    if(amountEl) amountEl.value = ppmUsdt.toFixed(2);
+  };
+
+  window.socioBnRegisterWithdrawal = async function(){
+    const kind = window.__socioBnWithdrawKind === 'gasto' ? 'gasto' : 'retiro';
+    const personEl = document.getElementById('socioBnWithdrawPerson');
+    const conceptEl = document.getElementById('socioBnWithdrawConcept');
     const amountEl = document.getElementById('socioBnWithdrawAmount');
     const dateEl = document.getElementById('socioBnWithdrawDate');
     const noteEl = document.getElementById('socioBnWithdrawNote');
     const errorEl = document.getElementById('socioBnWithdrawError');
     if(errorEl) errorEl.textContent = '';
 
+    const person = kind === 'gasto' ? (conceptEl?.value || '').trim() : (personEl?.value || 'Hector');
+    if(kind === 'gasto' && !person){
+      if(errorEl) errorEl.textContent = 'Ingresa el concepto del gasto (ej: PPM agosto).';
+      return;
+    }
     const amount = Number(amountEl?.value);
     if(!isFinite(amount) || amount <= 0){
       if(errorEl) errorEl.textContent = 'Ingresa un monto válido en USDT.';
@@ -27598,7 +27688,8 @@ try{
     const r = await socioBnFetch('/api/partner/withdrawals', {
       method: 'POST',
       body: JSON.stringify({
-        person: personEl?.value || 'Hector',
+        kind,
+        person,
         amountUsdt: amount,
         withdrawnAt: dateEl?.value ? dateEl.value + 'T12:00:00.000Z' : undefined,
         note: noteEl?.value || undefined,
@@ -27607,10 +27698,11 @@ try{
     if(r.ok){
       if(amountEl) amountEl.value = '';
       if(noteEl) noteEl.value = '';
+      if(conceptEl) conceptEl.value = '';
       window.socioBnStatsRefresh();
-      if(typeof showToast === 'function') showToast('Retiro registrado');
+      if(typeof showToast === 'function') showToast(kind === 'gasto' ? 'Gasto registrado' : 'Retiro registrado');
     } else if(errorEl){
-      errorEl.textContent = r.error || 'Error al registrar el retiro';
+      errorEl.textContent = r.error || (kind === 'gasto' ? 'Error al registrar el gasto' : 'Error al registrar el retiro');
     }
   };
 
@@ -27629,13 +27721,15 @@ try{
     const r = await socioBnFetch('/api/partner/withdrawals?' + new URLSearchParams({ from, to }).toString());
     const rows = r.ok ? (r.withdrawals || []) : [];
     if(!rows.length){
-      listEl.innerHTML = '<div style="font-size:12px;color:#64748b;">Sin retiros registrados en este rango.</div>';
+      listEl.innerHTML = '<div style="font-size:12px;color:#64748b;">Sin retiros ni gastos registrados en este rango.</div>';
       return;
     }
     listEl.innerHTML = rows.map(function(w){
       const d = new Date(w.withdrawnAt).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const isGasto = w.kind === 'gasto';
+      const label = isGasto ? ('🧾 ' + w.person) : ('💸 ' + w.person);
       return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(148,163,184,.08);font-size:12px;">
-        <span style="color:#cbd5e1;"><strong>${w.person}</strong> · ${d}${w.note ? ' · ' + w.note.replace(/</g,'&lt;') : ''}</span>
+        <span style="color:#cbd5e1;"><strong>${label}</strong> · ${d}${w.note ? ' · ' + w.note.replace(/</g,'&lt;') : ''}</span>
         <span style="display:flex;align-items:center;gap:8px;">
           <span style="color:#fb7185;font-weight:800;">-${socioBnMoney(w.amountUsdt, 2)} USDT</span>
           <button type="button" onclick="window.socioBnDeleteWithdrawal(${w.id})" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:14px;" title="Borrar">×</button>
