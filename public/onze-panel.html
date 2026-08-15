@@ -10336,7 +10336,11 @@ function addP2PBotStyles(){
               </label>
               <label>
                 Margen seguridad (%)
-                <input id="botExSafeMarginPct" type="number" step="0.01" value="0" onchange="window.botSaveExchangeConfig();window.botExUpdateSafeMarginHint()" oninput="window.botExUpdateSafeMarginHint()">
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <button type="button" class="btn small ghost" onclick="window.botMarginStep('botExSafeMarginPct',-0.01)" style="flex:0 0 auto;padding:6px 12px;font-size:15px;line-height:1;">−</button>
+                  <input id="botExSafeMarginPct" type="number" step="0.01" value="0" onchange="window.botSaveExchangeConfig();window.botExUpdateSafeMarginHint()" oninput="window.botExUpdateSafeMarginHint()" style="flex:1;min-width:0;text-align:center;">
+                  <button type="button" class="btn small ghost" onclick="window.botMarginStep('botExSafeMarginPct',0.01)" style="flex:0 0 auto;padding:6px 12px;font-size:15px;line-height:1;">+</button>
+                </div>
                 <span id="botExSafeMarginHint" style="font-size:10px;color:#64748b;"></span>
                 <span class="help-text">No competir si el #1 está a menos de este % sobre tu costo real</span>
               </label>
@@ -11071,7 +11075,11 @@ function addP2PBotStyles(){
             <span id="adCfg_${realId}_RealCost" style="font-size:11px;color:#34d399;font-weight:600;"></span>
           </label>
           <form autocomplete="off" style="display:contents"><label>Margen seguridad (%)
-            <input id="adCfg_${realId}_SafeMarginPct" type="number" step="0.01" value="${safeMargin}" placeholder="0" autocomplete="off" oninput="botAdUpdateSafeMarginHint(${realId});window.botSafeSave(${realId},this)">
+            <div style="display:flex;align-items:center;gap:4px;">
+              <button type="button" class="btn small ghost" onclick="window.botMarginStep('adCfg_${realId}_SafeMarginPct',-0.01)" style="flex:0 0 auto;padding:6px 12px;font-size:15px;line-height:1;">−</button>
+              <input id="adCfg_${realId}_SafeMarginPct" type="number" step="0.01" value="${safeMargin}" placeholder="0" autocomplete="off" oninput="botAdUpdateSafeMarginHint(${realId});window.botSafeSave(${realId},this)" style="flex:1;min-width:0;text-align:center;">
+              <button type="button" class="btn small ghost" onclick="window.botMarginStep('adCfg_${realId}_SafeMarginPct',0.01)" style="flex:0 0 auto;padding:6px 12px;font-size:15px;line-height:1;">+</button>
+            </div>
             <span id="adCfg_${realId}_SafeMarginHint" style="font-size:10px;color:#34d399;"></span>
           </label></form>
           <label>Capital min competidor (USDT)
@@ -11120,6 +11128,27 @@ function addP2PBotStyles(){
     var s = document.getElementById("adCfg_" + realId + "_SpreadPctLabel");
     if(t) t.style.display = value === 'spread' ? 'none' : '';
     if(s) s.style.display = value === 'top1' ? 'none' : '';
+  };
+
+  // Botones +/- para "Margen seguridad (%)" -- pedido explícito del usuario
+  // (ago 2026): en móvil el <input type="number"> no muestra flechitas
+  // nativas, así que solo se podía escribir el número a mano, sin forma de
+  // hacer ajustes finos a golpe de dedo. Paso de 0.01 en ambos botones (mismo
+  // paso que el input ya tenía, subida y bajada se mueven igual). Dispara
+  // 'input' Y 'change' porque el campo del anuncio
+  // solo escucha 'input' (botAdUpdateSafeMarginHint + botSafeSave) mientras
+  // que el de la config del exchange solo escucha 'change'
+  // (botSaveExchangeConfig) -- así el mismo botón sirve para los dos sin
+  // duplicar la lógica de guardado que ya existe en cada uno.
+  window.botMarginStep = function(inputId, delta){
+    var el = document.getElementById(inputId);
+    if(!el) return;
+    var cur = parseFloat(el.value);
+    if(isNaN(cur)) cur = 0;
+    var next = Math.round((cur + delta) * 100) / 100;
+    el.value = next;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
   };
 
   window.botSafeSave = function(realId, el){
