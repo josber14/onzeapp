@@ -190,9 +190,8 @@ const TZ = "America/Santiago";
 // Día calendario en hora de Chile (no UTC) — el socio y su propio bot cuentan
 // "hoy" por hora de Chile, así que medianoche UTC no sirve como corte de día
 // (queda desfasado ~4h, mezcla parte de ayer-tarde con hoy-temprano en Chile).
-// Compartida entre /api/partner/dashboard y /api/partner/capital-ledger (el
-// cierre de período necesita agregar el mismo rango exacto que ya se le
-// muestra al usuario en el panel de estadísticas).
+// Usada por /api/partner/dashboard para agregar por día/mes en la misma
+// zona horaria que ve el usuario en el panel de estadísticas.
 export function chileDateStr(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }

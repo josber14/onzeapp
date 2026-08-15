@@ -27111,19 +27111,24 @@ try{
     // en la MISMA respuesta -- mismas fórmulas, mismos números, solo sin
     // repetir el trabajo 3 veces.
     const params = new URLSearchParams({ date: today, page: String(window.__socioBnSalesPage), limit: '20', includeRanges: '1' });
-    const [res, capRes] = await Promise.all([
+    const [res, capRes, withdrawalsRes] = await Promise.all([
       socioBnFetch('/api/partner/dashboard?' + params.toString()),
       socioBnFetch('/api/partner/initial-capital'),
+      socioBnFetch('/api/partner/withdrawals'), // sin from/to = TODO el historial
     ]);
     if(!res.ok) return;
 
-    // ── Capital P2P — mismo cálculo que la tarjeta "Capital P2P" del
-    // dashboard ONZE (updateP2PCapitalCard): capital inicial (editable) +
-    // ganancia TOTAL acumulada expresada en USDT. La ganancia se convierte a
-    // USDT dividiendo el CLP ganado por el precio de venta PROMEDIO del
-    // rango (no por la tasa de compra) — misma fórmula que usa
-    // getP2PRangeStatsFromCapacity en ONZE (profitClp / avgSellPrice).
+    // ── Capital P2P — pedido explícito del usuario (ago 2026): el capital
+    // inicial NUNCA se toca solo (solo se edita a mano acá), y el total
+    // mostrado es siempre: inicial + ganancia acumulada de TODO el
+    // historial - retiros acumulados de TODO el historial. Cada retiro
+    // registrado se refleja al instante acá, sin necesidad de "cerrar" nada
+    // (la función de "cerrar período" que sumaba al capital se eliminó por
+    // ser la causa de que un retiro terminara SUMANDO en vez de restar).
     const initial = capRes.ok ? Number(capRes.value || 0) : 0;
+    const totalWithdrawnUsdt = withdrawalsRes.ok
+      ? (withdrawalsRes.withdrawals || []).reduce((sum, w) => sum + Number(w.amountUsdt), 0)
+      : 0;
     const monthStats = res.monthStats || null;
     const totalStats = res.totalStats || null;
     const avgSell = monthStats && monthStats.avgSalePrice ? Number(monthStats.avgSalePrice) : 0;
@@ -27139,8 +27144,9 @@ try{
     // principal, sin tener que recalcularlo ahí.
     window.__socioBnMonthProfitUsdt = monthProfitUsdt;
     window.__socioBnTotalProfitUsdt = totalProfitUsdt;
+    window.__socioBnTotalWithdrawnUsdt = totalWithdrawnUsdt;
 
-    socioBnRenderStats(res.stats, { initial, monthProfitUsdt, totalProfitUsdt });
+    socioBnRenderStats(res.stats, { initial, monthProfitUsdt, totalProfitUsdt, totalWithdrawnUsdt });
     window.__socioBnCapacityCache = res.stats.perCapacityBreakdown || [];
     socioBnRenderCapacityList();
     socioBnRenderSales(res.recentSales || []);
@@ -27220,14 +27226,15 @@ try{
 
     const cards = [];
     if(capital){
-      const capTotal = capital.initial + capital.totalProfitUsdt;
+      const withdrawn = capital.totalWithdrawnUsdt || 0;
+      const capTotal = capital.initial + capital.totalProfitUsdt - withdrawn;
       const capSign = capital.monthProfitUsdt >= 0 ? '+' : '-';
       cards.push(socioBnDashCard(
         'Capital P2P',
         socioBnMoney(capTotal, 2) + ' USDT',
         {
           main: true, color: GREEN,
-          sub: `Inicial: <strong>${socioBnMoney(capital.initial, 2)} USDT</strong> · Este mes: ${capSign}${socioBnMoney(Math.abs(capital.monthProfitUsdt), 2)} USDT`,
+          sub: `Inicial: <strong>${socioBnMoney(capital.initial, 2)} USDT</strong> · Este mes: ${capSign}${socioBnMoney(Math.abs(capital.monthProfitUsdt), 2)} USDT${withdrawn > 0 ? ` · Retirado: -${socioBnMoney(withdrawn, 2)} USDT` : ''}`,
           onClick: 'window.socioBnOpenCapitalModal()', title: 'Click para definir el capital inicial',
         }
       ));
@@ -27353,14 +27360,6 @@ try{
         </div>
         <div id="socioBnWithdrawError" style="color:#fca5a5;font-size:12px;min-height:16px;margin-bottom:6px;"></div>
         <div id="socioBnWithdrawList" style="margin-bottom:16px;"></div>
-
-        <h4 style="font-size:12px;color:#64748b;margin:20px 0 8px;">📦 Cerrar período (suma lo no retirado al capital)</h4>
-        <p style="font-size:11px;color:#64748b;margin-bottom:8px;">Usa el rango "Desde/Hasta" de arriba. Calcula la ganancia neta (ya con PPM descontado) de ese rango, le resta lo que Hector y Josber ya retiraron en esas fechas, y suma la diferencia al capital inicial — queda guardado en el historial de abajo con fecha.</p>
-        <button class="btn secondary" type="button" style="padding:6px 14px;font-size:12px;margin-bottom:6px;" onclick="window.socioBnClosePeriod()">Cerrar período seleccionado</button>
-        <div id="socioBnClosePeriodError" style="color:#fca5a5;font-size:12px;min-height:16px;margin-bottom:10px;"></div>
-
-        <h4 style="font-size:12px;color:#64748b;margin:16px 0 8px;">📜 Historial de capital</h4>
-        <div id="socioBnCapitalLedgerList"></div>
       </div>
     `;
     document.body.appendChild(modal);
@@ -27486,12 +27485,13 @@ try{
           const initial = window.__socioBnInitialCapital || 0;
           const totalProfitUsdt = window.__socioBnTotalProfitUsdt || 0;
           const monthProfitUsdt = window.__socioBnMonthProfitUsdt || 0;
-          const capTotal = initial + totalProfitUsdt;
+          const withdrawn = window.__socioBnTotalWithdrawnUsdt || 0;
+          const capTotal = initial + totalProfitUsdt - withdrawn;
           const sign = monthProfitUsdt >= 0 ? '+' : '-';
           return socioBnDashCard(
             'Capital P2P',
             socioBnMoney(capTotal, 2) + ' USDT',
-            { color: GREEN, sub: `Inicial: ${socioBnMoney(initial, 2)} USDT · Este mes: ${sign}${socioBnMoney(Math.abs(monthProfitUsdt), 2)} USDT` }
+            { color: GREEN, sub: `Inicial: ${socioBnMoney(initial, 2)} USDT · Este mes: ${sign}${socioBnMoney(Math.abs(monthProfitUsdt), 2)} USDT${withdrawn > 0 ? ` · Retirado: -${socioBnMoney(withdrawn, 2)} USDT` : ''}` }
           );
         })(),
         (function(){
@@ -27576,13 +27576,12 @@ try{
     }
 
     window.socioBnRenderWithdrawals(fromEl.value, toEl.value || fromEl.value);
-    window.socioBnRenderCapitalLedger();
   };
 
   // Pedido explícito del usuario (jul 2026): registro libre de retiros
-  // (Hector / Josber) en cualquier momento -- alimenta el cálculo de
-  // "cerrar período" (ver socioBnClosePeriod) pero también sirve solo como
-  // anotación de "esto ya se retiró".
+  // (Hector / Josber) en cualquier momento. Cada retiro registrado se resta
+  // al instante del "Capital P2P" (ver socioBnLoadDashboard) -- ya no hace
+  // falta "cerrar período" para que se refleje.
   window.socioBnRegisterWithdrawal = async function(){
     const personEl = document.getElementById('socioBnWithdrawPerson');
     const amountEl = document.getElementById('socioBnWithdrawAmount');
@@ -27643,74 +27642,6 @@ try{
         </span>
       </div>`;
     }).join('');
-  };
-
-  // Pedido explícito del usuario (jul 2026): "cerrar" el período seleccionado
-  // -- calcula la ganancia neta (ya con PPM descontado) de ese rango, le
-  // resta lo ya retirado por los dos en esas fechas, y suma la diferencia al
-  // capital inicial (bloqueado si retiraron de más). Queda guardado con
-  // fecha en el historial de capital para siempre.
-  window.socioBnClosePeriod = async function(){
-    const fromEl = document.getElementById('socioBnStatsFrom');
-    const toEl = document.getElementById('socioBnStatsTo');
-    const errorEl = document.getElementById('socioBnClosePeriodError');
-    if(errorEl) errorEl.textContent = '';
-    if(!fromEl || !toEl) return;
-
-    const r = await socioBnFetch('/api/partner/capital-ledger', {
-      method: 'POST',
-      body: JSON.stringify({ periodFrom: fromEl.value, periodTo: toEl.value || fromEl.value }),
-    });
-    if(r.ok){
-      if(typeof showToast === 'function') showToast(`Período cerrado: +${Number(r.entry.addedUsdt).toFixed(2)} USDT sumados al capital`);
-      window.socioBnLoadDashboard();
-      window.socioBnStatsRefresh();
-    } else if(errorEl){
-      errorEl.textContent = r.error || 'Error al cerrar el período';
-    }
-  };
-
-  window.socioBnRenderCapitalLedger = async function(){
-    const listEl = document.getElementById('socioBnCapitalLedgerList');
-    if(!listEl) return;
-    const r = await socioBnFetch('/api/partner/capital-ledger');
-    const rows = r.ok ? (r.entries || []) : [];
-    if(!rows.length){
-      listEl.innerHTML = '<div style="font-size:12px;color:#64748b;">Todavía no se ha cerrado ningún período.</div>';
-      return;
-    }
-    listEl.innerHTML = rows.map(function(e){
-      const created = new Date(e.createdAt).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
-      return `<div style="padding:8px 0;border-bottom:1px solid rgba(148,163,184,.08);font-size:12px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;color:#cbd5e1;font-weight:700;">
-          <span>${e.periodFrom} → ${e.periodTo}</span>
-          <span style="display:flex;align-items:center;gap:8px;">
-            <span style="color:#64748b;font-weight:600;">cerrado ${created}</span>
-            <button type="button" onclick="window.socioBnDeleteCapitalLedger(${e.id})" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:14px;" title="Borrar este cierre (revierte lo sumado al capital)">×</button>
-          </span>
-        </div>
-        <div style="color:#8aa0ba;margin-top:2px;">
-          Neto: ${socioBnMoney(e.netProfitUsdt, 2)} USDT · Retirado: ${socioBnMoney(e.totalWithdrawnUsdt, 2)} USDT ·
-          <span style="color:#34d399;font-weight:700;">+${socioBnMoney(e.addedUsdt, 2)} USDT al capital</span>
-        </div>
-        <div style="color:#64748b;margin-top:2px;">Capital: ${socioBnMoney(e.previousCapitalUsdt, 2)} → <strong style="color:#f8fafc;">${socioBnMoney(e.newCapitalUsdt, 2)} USDT</strong></div>
-      </div>`;
-    }).join('');
-  };
-
-  // Borra un cierre de período y revierte lo que sumó al capital (resta
-  // addedUsdt del capital ACTUAL, no lo pisa con el valor histórico de la
-  // fila) -- pedido explícito del usuario tras cerrar el mismo período por
-  // accidente varias veces seguidas.
-  window.socioBnDeleteCapitalLedger = async function(id){
-    const r = await socioBnFetch('/api/partner/capital-ledger', { method: 'DELETE', body: JSON.stringify({ id }) });
-    if(r.ok){
-      window.socioBnLoadDashboard();
-      window.socioBnStatsRefresh();
-      if(typeof showToast === 'function') showToast('Cierre borrado, capital corregido');
-    } else if(typeof showToast === 'function'){
-      showToast(r.error || 'Error al borrar', 'error');
-    }
   };
 
   // Auto-sync cada 15s — mismo patrón que initBinanceSalesSync() del

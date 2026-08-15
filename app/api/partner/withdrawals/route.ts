@@ -14,9 +14,9 @@ async function getSession() {
 }
 
 // Registro libre de retiros reales (Hector / Josber) -- pedido explícito del
-// usuario (jul 2026): poder anotar un retiro en cualquier momento, no solo al
-// "cerrar" un período. Ver /api/partner/capital-ledger para el cierre que
-// suma lo NO retirado al capital inicial.
+// usuario (ago 2026): cada retiro se resta al instante del "Capital P2P"
+// (ver socioBnLoadDashboard en onze-panel.html: capital = inicial + ganancia
+// acumulada - suma de TODOS los retiros, sin "cerrar período").
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session?.tenantId) {
