@@ -19193,6 +19193,60 @@ function addP2PBotStyles(){
         margin-top:14px;
       }
 
+      /* Pedido explícito del usuario (ago 2026): "Por día" ocupaba mucho
+         espacio en el modal -- se colapsa por defecto (<details> nativo,
+         sin JS) y se despliega solo si el usuario quiere verlo. */
+      .p2p-collapsible{
+        border:1px solid rgba(148,163,184,.14);
+        border-radius:14px;
+        background:rgba(15,23,42,.4);
+        margin:16px 0 4px;
+        overflow:hidden;
+      }
+
+      .p2p-collapsible summary{
+        list-style:none;
+        cursor:pointer;
+        padding:11px 14px;
+        font-size:12px;
+        font-weight:900;
+        color:#8aa0ba;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        user-select:none;
+        transition:color .15s ease;
+      }
+
+      .p2p-collapsible summary:hover{
+        color:#cbd5e1;
+      }
+
+      .p2p-collapsible summary::-webkit-details-marker{
+        display:none;
+      }
+
+      .p2p-collapsible summary::after{
+        content:'▾';
+        color:#64748b;
+        transition:transform .18s ease;
+        font-size:11px;
+      }
+
+      .p2p-collapsible[open] summary{
+        border-bottom:1px solid rgba(148,163,184,.1);
+      }
+
+      .p2p-collapsible[open] summary::after{
+        transform:rotate(180deg);
+      }
+
+      .p2p-collapsible-body{
+        padding:2px 14px 6px;
+        max-height:360px;
+        overflow-y:auto;
+      }
+
       .p2p-withdraw-empty{
         font-size:12.5px;
         color:#64748b;
@@ -28021,8 +28075,12 @@ try{
           <button class="btn" type="button" style="padding:5px 14px;font-size:12px;" onclick="window.socioBnStatsRefresh()">Ver</button>
         </div>
         <div class="p2p-dashboard-grid" id="socioBnStatsModalGrid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));"></div>
-        <h4 style="font-size:12px;color:#64748b;margin:16px 0 4px;">Por día</h4>
-        <div id="socioBnStatsDaily"></div>
+        <details class="p2p-collapsible">
+          <summary>Ganancia por día</summary>
+          <div class="p2p-collapsible-body">
+            <div id="socioBnStatsDaily"></div>
+          </div>
+        </details>
 
         <h4 style="font-size:12px;color:#64748b;margin:20px 0 8px;">💸 Retiros y gastos</h4>
         <div class="p2p-withdraw-card">
