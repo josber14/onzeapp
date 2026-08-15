@@ -46,16 +46,31 @@ export default async function DashboardPage() {
   const params = new URLSearchParams();
 
   if (session?.tenantId) {
-    const settings = await prisma.tenantSettings.findUnique({
-      where: { tenantId: session.tenantId },
-      select: {
-        sheetUrl: true,
-      },
-    });
+    const [settings, tenant] = await Promise.all([
+      prisma.tenantSettings.findUnique({
+        where: { tenantId: session.tenantId },
+        select: { sheetUrl: true },
+      }),
+      prisma.tenant.findUnique({
+        where: { id: session.tenantId },
+        select: { p2pMultiAccount: true, skipoEnabled: true, hasOnzeCoreBusiness: true },
+      }),
+    ]);
 
     if (settings?.sheetUrl) {
       params.set("sheetUrl", settings.sheetUrl);
     }
+
+    // Pedido explícito del usuario (ago 2026), pensando el sistema como
+    // vendible a otros clientes: el selector ONZE/ZINPLE y la pestaña
+    // Skipo del panel P2P son específicos del negocio de ONZE -- se
+    // muestran solo si el tenant los tiene habilitados.
+    params.set("p2pMultiAccount", tenant?.p2pMultiAccount ? "1" : "0");
+    params.set("skipoEnabled", tenant?.skipoEnabled ? "1" : "0");
+    // Inicio, Noticias, Dashboard/Calculadora ONZE en modo completo, AKI
+    // TRANSFERS, Clientes USDT -- el resto de las líneas de negocio de
+    // ONZE que no son el bot P2P vendible.
+    params.set("hasOnzeCoreBusiness", tenant?.hasOnzeCoreBusiness ? "1" : "0");
   }
 
   if (session?.role) {

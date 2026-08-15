@@ -2211,7 +2211,7 @@
           <div style="background:#0d2137; border:1px solid #1a3a5a; border-radius:12px; padding:24px; margin-bottom:24px;">
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
               <h3 style="color:#fff; margin:0;">🔑 Credenciales Binance P2P</h3>
-              <div style="display:flex;gap:4px;border:1px solid rgba(148,163,184,.15);border-radius:8px;overflow:hidden;">
+              <div id="ajustesAcctSwitcher" style="display:flex;gap:4px;border:1px solid rgba(148,163,184,.15);border-radius:8px;overflow:hidden;">
                 <button class="btn ajustes-acct-btn active" data-label="ONZE" onclick="window.ajustesSetCredsLabel('ONZE')" style="border-radius:0;padding:5px 14px;font-size:12px;font-weight:700;">ONZE</button>
                 <button class="btn ajustes-acct-btn" data-label="ZINPLE" onclick="window.ajustesSetCredsLabel('ZINPLE')" style="border-radius:0;padding:5px 14px;font-size:12px;font-weight:700;">ZINPLE</button>
               </div>
@@ -3981,6 +3981,58 @@
     const IS_ADMIN_ROLE =
       SESSION_ROLE === "super_admin_global" ||
       SESSION_ROLE === "super_admin_cliente";
+    // Pedido explícito del usuario (ago 2026), pensando el sistema como
+    // vendible a otros clientes: el selector ONZE/ZINPLE (2 cuentas
+    // Binance) y la pestaña Skipo del panel P2P son específicos del
+    // negocio de ONZE -- vienen del tenant (ver app/dashboard/page.tsx),
+    // no del rol. Un tenant nuevo (ej. un cliente al que se le vende esta
+    // herramienta) no los ve por defecto.
+    window.P2P_MULTI_ACCOUNT = PANEL_QUERY.get("p2pMultiAccount") === "1";
+    window.SKIPO_ENABLED = PANEL_QUERY.get("skipoEnabled") === "1";
+    // Inicio, Noticias, Dashboard/Calculadora ONZE en modo completo, AKI
+    // TRANSFERS, Clientes USDT -- confirmado con el usuario (ago 2026):
+    // un tenant nuevo (vendible) solo ve Perfil, Calculadora ONZE (fijo en
+    // modo "libre"), Calculadora P2P, Dashboard P2P, Crea tu tasa del día,
+    // P2P Bot, Historial y Ajustes.
+    window.HAS_ONZE_CORE_BUSINESS = PANEL_QUERY.get("hasOnzeCoreBusiness") === "1";
+
+    // Pedido explícito del usuario (ago 2026): "que nada se pueda mezclar
+    // con lo mío de ninguna manera" -- ahora que dos tenants distintos
+    // (ONZE y el de un cliente nuevo) pueden entrar al mismo dominio, hay
+    // que blindar el caché local. Varias partes del panel (órdenes
+    // sincronizadas de Binance/Bybit/OKX, capacity, capital inicial, etc.)
+    // se guardan en localStorage del navegador -- eso vive POR NAVEGADOR,
+    // no por tenant, así que si alguna vez el MISMO navegador se usa para
+    // entrar con dos tenants distintos (ej. alguien prueba con la sesión
+    // de otra persona en su compu), quedaría caché de un tenant mezclado
+    // con el otro. Esto detecta si el tenant activo cambió respecto a la
+    // última vez que se usó ESTE navegador y, si cambió, borra todo el
+    // caché local relacionado (prefijos onze_ y aki_transfer_) ANTES de
+    // que cualquier otra función del panel llegue a leerlo -- el servidor
+    // (Neon) sigue siendo la fuente de verdad real, así que no se pierde
+    // nada, solo se refresca desde cero.
+    (function enforceTenantLocalStorageFence(){
+      try{
+        const currentTenantId = String(PANEL_QUERY.get("tenantId") || "").trim();
+        if(!currentTenantId) return;
+        const MARKER_KEY = "onze_last_tenant_id";
+        const lastTenantId = localStorage.getItem(MARKER_KEY);
+        if(lastTenantId !== null && lastTenantId !== currentTenantId){
+          const keysToRemove = [];
+          for(let i = 0; i < localStorage.length; i++){
+            const key = localStorage.key(i);
+            if(key && key !== MARKER_KEY && (key.indexOf("onze_") === 0 || key.indexOf("aki_transfer_") === 0)){
+              keysToRemove.push(key);
+            }
+          }
+          keysToRemove.forEach(function(k){ localStorage.removeItem(k); });
+          console.log("[ONZE] Cambió el tenant activo en este navegador -- caché local limpiado (" + keysToRemove.length + " claves) para que no se mezcle nada.");
+        }
+        localStorage.setItem(MARKER_KEY, currentTenantId);
+      }catch(e){
+        console.warn("No se pudo verificar el tenant del caché local:", e);
+      }
+    })();
 
     const sel = document.getElementById("country");
     const destSel = document.getElementById("destination");
@@ -4028,7 +4080,14 @@
       }
     }
 
-    if((isGlobalAdmin() || isTenantAdmin()) && adminCalcModeWrap && adminCalcMode){
+    // Pedido explícito del usuario (ago 2026), confirmado con ejemplo
+    // concreto: un tenant sin negocio ONZE (ej. un cliente al que se le
+    // vende el bot P2P) solo puede usar la Calculadora ONZE en modo
+    // "libre" -- nunca ve el selector de modo ni puede cambiar a
+    // porcentaje/socio/manual. Se gatea por el FLAG del tenant
+    // (window.HAS_ONZE_CORE_BUSINESS), no por el rol, para que esto quede
+    // correcto sin importar qué rol tenga el usuario que entra.
+    if((isGlobalAdmin() || isTenantAdmin()) && window.HAS_ONZE_CORE_BUSINESS && adminCalcModeWrap && adminCalcMode){
       adminCalcModeWrap.style.display = "flex";
 
       try{
@@ -4119,6 +4178,13 @@
           }
         });
       }
+    } else if((isGlobalAdmin() || isTenantAdmin()) && !window.HAS_ONZE_CORE_BUSINESS){
+      // Tenant sin negocio ONZE (ej. Hector) -- Calculadora ONZE fija en
+      // modo "libre", sin selector de modo visible.
+      adminCalculatorMode = "libre";
+      window.adminCalculatorMode = "libre";
+      if(adminCalcModeWrap) adminCalcModeWrap.style.display = "none";
+      syncAdminCalculatorControls();
     }
 
     if(isFixedPercentOperator() || isPartnerOperator() || isOnzeCalculator()){
@@ -17531,10 +17597,16 @@ function addP2PBotStyles(){
       { label:"Calculadora P2P", view:"p2p-calculator" }
     ]);
 
-    const dashGroup = createMenuGroup("Dashboard", [
-      { label:"Dashboard ONZE", view:"dashboard" },
-      { label:"Dashboard P2P", view:"p2p-dashboard" }
-    ]);
+    // Pedido explícito del usuario (ago 2026): un tenant sin negocio ONZE
+    // (ej. Hector) no ve "Dashboard ONZE", solo "Dashboard P2P".
+    const dashGroup = createMenuGroup("Dashboard", window.HAS_ONZE_CORE_BUSINESS
+      ? [
+          { label:"Dashboard ONZE", view:"dashboard" },
+          { label:"Dashboard P2P", view:"p2p-dashboard" }
+        ]
+      : [
+          { label:"Dashboard P2P", view:"p2p-dashboard" }
+        ]);
 
     const anchor = calcOnze || dashOnze || calcP2P || dashP2P;
     nav.insertBefore(calcGroup, anchor);
@@ -20883,7 +20955,7 @@ function addP2PBotStyles(){
 
     if(subEl){
       const sign = monthlyProfit >= 0 ? "+" : "-";
-      subEl.innerHTML = `Inicial: <strong>${p2pCapMoney(getP2PInitialCapital(), 2)} USDT</strong>${accumulatedProfit > 0 ? `<br>Acumulado: +${p2pCapMoney(accumulatedProfit, 2)} USDT` : ''}<br>Este mes: ${sign}${p2pCapMoney(Math.abs(monthlyProfit), 2)} USDT${withdrawn > 0 ? `<br>Retirado: -${p2pCapMoney(withdrawn, 2)} USDT` : ''}`;
+      subEl.innerHTML = `Inicial: <strong>${p2pCapMoney(getP2PInitialCapital(), 2)} USDT</strong>${accumulatedProfit !== 0 ? `<br>Acumulado: ${accumulatedProfit >= 0 ? '+' : '-'}${p2pCapMoney(Math.abs(accumulatedProfit), 2)} USDT` : ''}<br>Este mes: ${sign}${p2pCapMoney(Math.abs(monthlyProfit), 2)} USDT${withdrawn > 0 ? `<br>Retirado: -${p2pCapMoney(withdrawn, 2)} USDT` : ''}`;
     }
   }
 
@@ -21640,7 +21712,7 @@ function addP2PBotStyles(){
         <div class="p2p-capacity-mini">
           <span>Capital P2P</span>
           <strong>${p2pCapMoney(capitalByRange, 2)} USDT</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">Inicial: ${p2pCapMoney(initialCapital, 2)}${capitalAccumulatedProfit > 0 ? ` · Acumulado: +${p2pCapMoney(capitalAccumulatedProfit, 2)}` : ''} · Resultado: ${sign}${p2pCapMoney(Math.abs(data.profitUsdt), 2)}${totalWithdrawnUsdt > 0 ? ` · Retirado: -${p2pCapMoney(totalWithdrawnUsdt, 2)}` : ''}</div>
+          <div class="p2p-capacity-meta" style="margin-top:5px;">Inicial: ${p2pCapMoney(initialCapital, 2)}${capitalAccumulatedProfit !== 0 ? ` · Acumulado: ${capitalAccumulatedProfit >= 0 ? '+' : '-'}${p2pCapMoney(Math.abs(capitalAccumulatedProfit), 2)}` : ''} · Resultado: ${sign}${p2pCapMoney(Math.abs(data.profitUsdt), 2)}${totalWithdrawnUsdt > 0 ? ` · Retirado: -${p2pCapMoney(totalWithdrawnUsdt, 2)}` : ''}</div>
         </div>
 
         <div class="p2p-capacity-mini">
@@ -21772,6 +21844,46 @@ function addP2PBotStyles(){
               : 'Click para definir el % (pendiente con tu contadora)'}
           </div>
         </div>
+        ${!window.HAS_ONZE_CORE_BUSINESS ? (function(){
+          // Pedido explícito del usuario (ago 2026): reparto 50/50 de la
+          // ganancia del rango YA descontado el PPM -- mismo cálculo que ya
+          // existe para el socio (AKI Transfers), ahora también en el
+          // Dashboard P2P propio de un tenant sin negocio ONZE (ej.
+          // Hector), que sigue repartiendo su ganancia 50/50 con Josber
+          // aunque ahora opere en su propia cuenta separada.
+          const pct = p2pPpmPct;
+          const hasPct = p2pHasPpmPct;
+          const avgSell = dataAll.avgSellPrice ? Number(dataAll.avgSellPrice) : 0;
+          const ganancia = dataAll.profitClp !== null && dataAll.profitClp !== undefined ? Number(dataAll.profitClp) : null;
+          const ppmClp2 = (hasPct && ganancia !== null) ? Number(dataAll.clpReceived || 0) * (pct / 100) : null;
+          const netoClp = (hasPct && ganancia !== null) ? ganancia - ppmClp2 : null;
+          const netoUsdt = (netoClp !== null && avgSell > 0) ? netoClp / avgSell : null;
+          const perPersonClp = netoClp !== null ? netoClp / 2 : null;
+          const perPersonUsdt = (perPersonClp !== null && avgSell > 0) ? perPersonClp / avgSell : null;
+          const signN = netoClp !== null && netoClp >= 0 ? '+' : '';
+          const colorN = netoClp === null ? '#f8fafc' : (netoClp >= 0 ? '#34d399' : '#fb7185');
+
+          if(netoClp === null){
+            return `<div class="p2p-capacity-mini">
+              <span>Ganancia neta a repartir</span>
+              <strong style="font-size:13px;">Configura el % de PPM</strong>
+            </div>`;
+          }
+
+          const personRowP2P = (name, usdt, clp) => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid rgba(148,163,184,.1);font-size:12px;">
+              <span style="color:#cbd5e1;font-weight:800;">${name}</span>
+              <span style="color:${colorN};font-weight:800;">${signN}${p2pCapMoney(usdt, 2)} USDT <span style="color:#8aa0ba;font-weight:600;">· ${signN}${p2pCapMoney(clp, 0)} CLP</span></span>
+            </div>`;
+
+          return `<div class="p2p-capacity-mini">
+            <span>Ganancia neta a repartir</span>
+            <strong style="color:${colorN};">${signN}${p2pCapMoney(netoUsdt, 2)} USDT</strong>
+            <div class="p2p-capacity-meta" style="margin-top:2px;">${signN}${p2pCapMoney(netoClp, 0)} CLP</div>
+            ${personRowP2P('Hector', perPersonUsdt, perPersonClp)}
+            ${personRowP2P('Josber', perPersonUsdt, perPersonClp)}
+          </div>`;
+        })() : ''}
       </div>
 
       <h3 class="section-title" style="margin:18px 0 8px;">💸 Retiros y gastos</h3>
@@ -26901,6 +27013,61 @@ function addP2PBotStyles(){
   }, true);
 
   window.forceAdminVisibility = forceAdminVisibility;
+
+  // Pedido explícito del usuario (ago 2026), pensando el sistema como
+  // vendible a otros clientes: el selector ONZE/ZINPLE y la pestaña Skipo
+  // del panel P2P son específicos del negocio de ONZE (tenant id=1) -- se
+  // ocultan por completo para cualquier tenant que no los tenga habilitados
+  // (ver window.P2P_MULTI_ACCOUNT / window.SKIPO_ENABLED, cargados desde
+  // app/dashboard/page.tsx). Mismo patrón de reintentos que
+  // forceAdminVisibility, porque estos botones ya están en el HTML desde
+  // el arranque (no hace falta esperar un fetch), pero por las dudas.
+  function applyTenantFeatureFlags(){
+    if(!window.P2P_MULTI_ACCOUNT){
+      const acctSwitchers = document.querySelectorAll("#botAcctSwitcher, #ajustesAcctSwitcher");
+      acctSwitchers.forEach(el => { el.style.display = "none"; });
+    }
+    if(!window.SKIPO_ENABLED){
+      const skipoTab = document.querySelector('.bot-panel-tab[data-paneltab="skipo"]');
+      if(skipoTab) skipoTab.style.display = "none";
+      const skipoContent = document.getElementById("botPanelSkipo");
+      if(skipoContent) skipoContent.style.display = "none";
+    }
+    if(!window.HAS_ONZE_CORE_BUSINESS){
+      // Pedido explícito del usuario (ago 2026): Noticias, AKI TRANSFERS y
+      // Clientes USDT son líneas de negocio de ONZE que no tienen que ver
+      // con el bot P2P vendible -- se ocultan por completo para cualquier
+      // tenant sin negocio ONZE. Inicio SÍ se mantiene visible (pedido
+      // explícito del usuario, ago 2026 -- no es específico de ONZE).
+      const hiddenNav = document.querySelectorAll(
+        '[data-view-target="noticias"], [data-view-target="socio-bn"], [data-view-target="usdt-clients"]'
+      );
+      let wasOnHiddenView = false;
+      hiddenNav.forEach(el => {
+        if(el.classList.contains("active")) wasOnHiddenView = true;
+        el.style.display = "none";
+        el.setAttribute("aria-hidden", "true");
+      });
+      ["view-noticias", "view-socio-bn", "view-usdt-clients"].forEach(id => {
+        const view = document.getElementById(id);
+        if(view && view.classList.contains("active")){
+          wasOnHiddenView = true;
+          view.classList.remove("active");
+          view.style.display = "none";
+        }
+      });
+      if(wasOnHiddenView && !document.querySelector(".view.active")){
+        const fallback = document.getElementById("view-p2p-bot") || document.getElementById("view-p2p-dashboard");
+        fallback?.classList.add("active");
+        document.querySelector('[data-view-target="p2p-bot"]')?.classList.add("active");
+      }
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", applyTenantFeatureFlags);
+  setTimeout(applyTenantFeatureFlags, 50);
+  setTimeout(applyTenantFeatureFlags, 300);
+  setTimeout(applyTenantFeatureFlags, 1000);
 })();
 </script>
 
@@ -27154,6 +27321,11 @@ try{
   }
 
   function addSocioBnNavButton(){
+    // Pedido explícito del usuario (ago 2026): AKI TRANSFERS es una línea
+    // de negocio de ONZE, no del bot P2P vendible -- nunca se crea el
+    // botón para un tenant sin negocio ONZE (evita la carrera con
+    // applyTenantFeatureFlags, que corre ANTES de que este botón exista).
+    if(!window.HAS_ONZE_CORE_BUSINESS) return;
     const btn = document.querySelector('[data-view-target="socio-bn"]')
       || (() => {
         const target = document.querySelector('[data-view-target="p2p-bot"]')
@@ -28785,6 +28957,11 @@ try{
   }
 
   function addUsdtClientsNavButton(){
+    // Pedido explícito del usuario (ago 2026): Clientes USDT es una línea
+    // de negocio de ONZE, no del bot P2P vendible -- nunca se crea el
+    // botón para un tenant sin negocio ONZE (evita la carrera con
+    // applyTenantFeatureFlags, que corre ANTES de que este botón exista).
+    if(!window.HAS_ONZE_CORE_BUSINESS) return;
     const btn = document.querySelector('[data-view-target="usdt-clients"]')
       || (() => {
         const target = document.querySelector('[data-view-target="socio-bn"]')

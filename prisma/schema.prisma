@@ -37,6 +37,19 @@ model Tenant {
   isOnzeInternal        Boolean                @default(false)
   active                Boolean                @default(true)
   p2pPpmPct             Decimal?               @db.Decimal(6, 3)
+  // Pedido explícito del usuario (ago 2026), pensando el sistema como
+  // vendible a otros clientes: el selector "ONZE/ZINPLE" (2 cuentas
+  // Binance) y la pestaña "Skipo" del panel P2P son cosas específicas del
+  // negocio de ONZE (tenant id=1) -- un tenant nuevo (ej. un cliente al que
+  // se le vende esta herramienta) arranca SIN ellas por defecto (false).
+  p2pMultiAccount       Boolean                @default(false)
+  skipoEnabled          Boolean                @default(false)
+  // Cubre el resto de las líneas de negocio de ONZE que no tienen que ver
+  // con el bot P2P vendible (Inicio, Noticias, Dashboard/Calculadora ONZE
+  // en modo completo, AKI TRANSFERS, Clientes USDT) -- pedido explícito
+  // del usuario (ago 2026): un tenant nuevo solo debe ver las herramientas
+  // del bot P2P, nada de esto.
+  hasOnzeCoreBusiness   Boolean                @default(false)
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   auditLogs             AuditLog[]

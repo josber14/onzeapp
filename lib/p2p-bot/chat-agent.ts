@@ -18,6 +18,26 @@ const MAX_RETRIES = 3;
 const cancelledSeenAt = new Map<string, number>();
 const CANCEL_CONFIRM_MS = 60_000;
 
+// La marca "Zinple" y la explicación "es la misma persona detrás de Zinple"
+// son específicas del negocio propio de ONZE (Tenant.hasOnzeCoreBusiness) --
+// para cualquier otro tenant (ej. Hector) esa mención no aplica: su cuenta no
+// tiene relación con Zinple aunque el titular real del banco también sea
+// Josber Marcano. Se cachea por tenant porque este chequeo puede repetirse
+// varias veces en la misma conversación.
+const zinpleTenantCache = new Map<number, boolean>();
+async function isZinpleTenant(tenantId: number): Promise<boolean> {
+  if (zinpleTenantCache.has(tenantId)) return zinpleTenantCache.get(tenantId)!;
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { hasOnzeCoreBusiness: true } });
+  const result = !!tenant?.hasOnzeCoreBusiness;
+  zinpleTenantCache.set(tenantId, result);
+  return result;
+}
+async function holderNameConfirmedMessage(tenantId: number): Promise<string> {
+  return (await isZinpleTenant(tenantId))
+    ? "Sí, es correcto — el titular real de esa cuenta en el banco es Josber Marcano, la misma persona detrás de Zinple. Puedes transferir con total confianza."
+    : "Sí, es correcto — puedes transferir con total confianza.";
+}
+
 /* ─── Public entry point ─────────────────────────────────────── */
 
 export async function processChats(
@@ -1356,7 +1376,7 @@ async function handleClientResponse(
         });
         if (confirmed) {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
-            "Sí, es correcto — el titular real de esa cuenta en el banco es Josber Marcano, la misma persona detrás de Zinple. Puedes transferir con total confianza."
+            await holderNameConfirmedMessage(tenantId)
           );
         } else {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
@@ -1383,7 +1403,7 @@ async function handleClientResponse(
       ) {
         if (cs.holderNameConfirmed) {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
-            "Sí, es correcto — el titular real de esa cuenta en el banco es Josber Marcano, la misma persona detrás de Zinple. Puedes transferir con total confianza."
+            await holderNameConfirmedMessage(tenantId)
           );
         } else {
           await sendAndTrack(client, exchange, order.orderNumber, cs,
