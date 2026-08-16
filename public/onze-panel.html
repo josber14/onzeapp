@@ -21106,11 +21106,20 @@ function addP2PBotStyles(){
       modal.addEventListener("mousedown", (e) => { if(e.target === modal) modal.remove(); });
       document.body.appendChild(modal);
     }
+    // Pedido explícito del usuario (ago 2026): tardaba 20-25s en mostrar las
+    // órdenes al abrir -- la consulta en vivo a Binance de TODO el día tarda
+    // eso en horas de mucho volumen. El poller de afuera (cada 20s, ver
+    // p2pEnsureBankQuotaPolling) ya viene guardando el último resultado en
+    // caché -- si existe, se muestra DE INMEDIATO acá y el fetch fresco
+    // corre atrás, sin bloquear la apertura. Sin caché (primera vez), se
+    // muestra "Cargando..." como antes.
+    const cached = window.__p2pBankQuotaCache;
     modal.innerHTML = `
-      <div style="width:min(480px,100%);border:1px solid rgba(52,211,153,.28);background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(2,6,23,.98));border-radius:20px;padding:22px;">
-        <h3 style="color:#00d4ff;margin-bottom:4px;">🏦 Banco Estado</h3>
+      <div style="width:min(480px,100%);border:1px solid rgba(52,211,153,.28);background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(2,6,23,.98));border-radius:20px;padding:22px;position:relative;">
+        <button type="button" onclick="document.getElementById('p2pBankQuotaModal').remove()" title="Cerrar" aria-label="Cerrar" style="position:absolute;top:16px;right:16px;width:28px;height:28px;border-radius:8px;border:1px solid rgba(148,163,184,.2);background:rgba(148,163,184,.1);color:#cbd5e1;cursor:pointer;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;">✕</button>
+        <h3 style="color:#00d4ff;margin-bottom:4px;padding-right:30px;">🏦 Banco Estado</h3>
         <p style="color:#8aa0ba;font-size:12px;margin-bottom:14px;">Cupo de HOY -- se reinicia solo a las 12 AM del día siguiente.</p>
-        <div id="p2pBankQuotaBody" style="color:#94a3b8;font-size:13px;">Cargando...</div>
+        <div id="p2pBankQuotaBody" style="color:#94a3b8;font-size:13px;">${cached ? p2pRenderBankQuotaBody(cached) : "Cargando..."}</div>
         <div style="display:flex;justify-content:flex-end;margin-top:16px;">
           <button type="button" onclick="document.getElementById('p2pBankQuotaModal').remove()" style="padding:9px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cerrar</button>
         </div>
@@ -21124,6 +21133,44 @@ function addP2PBotStyles(){
     const exchange = window.botSelectedExchange || "binance";
     const res = await fetch(`/api/p2p/bank-quota?label=${encodeURIComponent(label)}&exchange=${encodeURIComponent(exchange)}&bank=estado`, { credentials: "include" });
     return res.json();
+  }
+
+  // Arma el HTML del cuerpo del modal a partir de {total, limit, orders} --
+  // extraído para poder pintar de inmediato con la caché al abrir el modal,
+  // y también con la respuesta fresca cuando llega (misma función, mismo
+  // resultado visual, sin duplicar el armado del HTML en dos lugares).
+  function p2pRenderBankQuotaBody(data){
+    const total = Number(data.total || 0);
+    const limit = Number(data.limit || 0);
+    const pct = limit > 0 ? Math.min(100, (total / limit) * 100) : 0;
+    const barColor = pct >= 100 ? "#fb7185" : pct >= 80 ? "#fbbf24" : "#34d399";
+    const orders = data.orders || [];
+
+    const rowsHtml = orders.length
+      ? orders.map(o => `
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(148,163,184,.08);${o.excluded ? "opacity:.45;" : ""}">
+            <div style="min-width:0;">
+              <div style="color:#e2e8f0;font-size:12px;font-weight:700;${o.excluded ? "text-decoration:line-through;" : ""}">${p2pCapMoney(o.amountClp, 0)} CLP</div>
+              <div style="color:#64748b;font-size:10px;">${o.time ? new Date(o.time).toLocaleTimeString("es-CL", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit" }) : "—"}${o.buyerName ? " · " + p2pBankQuotaEsc(o.buyerName) : ""}</div>
+            </div>
+            <button type="button" onclick="window.p2pToggleBankQuotaExclusion('${o.orderNumber}')" title="${o.excluded ? "Volver a contar esta orden" : "Sacar del cupo (transfirió a otro banco)"}" style="flex:0 0 auto;padding:5px 10px;font-size:11px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:${o.excluded ? "rgba(52,211,153,.12)" : "rgba(251,113,133,.12)"};color:${o.excluded ? "#34d399" : "#fb7185"};cursor:pointer;">
+              ${o.excluded ? "↩ Restaurar" : "🗑 Quitar"}
+            </button>
+          </div>
+        `).join("")
+      : `<p style="color:#64748b;font-size:12px;text-align:center;padding:12px 0;">Todavía no entró ninguna orden por Banco Estado hoy.</p>`;
+
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+        <strong style="color:#f8fafc;font-size:18px;">${p2pCapMoney(total, 0)} CLP</strong>
+        <span style="color:#64748b;font-size:12px;">de ${p2pCapMoney(limit, 0)} CLP</span>
+      </div>
+      <div style="width:100%;height:10px;border-radius:6px;background:rgba(148,163,184,.15);overflow:hidden;margin-bottom:16px;">
+        <div style="height:100%;width:${pct}%;background:${barColor};transition:width .3s;"></div>
+      </div>
+      <div style="font-weight:700;color:#cbd5e1;font-size:11px;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;">Órdenes de hoy</div>
+      ${rowsHtml}
+    `;
   }
 
   // Badge + barra afuera del botón (siempre visible, no solo al abrir el
@@ -21145,7 +21192,7 @@ function addP2PBotStyles(){
       }
       const total = Number(data.total || 0);
       const limit = Number(data.limit || 0);
-      window.__p2pBankQuotaCache = { total, limit };
+      window.__p2pBankQuotaCache = { total, limit, orders: data.orders || [] };
       const pct = limit > 0 ? Math.min(100, (total / limit) * 100) : 0;
       const color = pct >= 100 ? "#fb7185" : pct >= 80 ? "#fbbf24" : "#34d399";
       if(badge){
@@ -21174,47 +21221,20 @@ function addP2PBotStyles(){
   };
 
   window.p2pRefreshBankQuotaModal = async function(){
-    const body = document.getElementById("p2pBankQuotaBody");
-    if(!body) return;
+    if(!document.getElementById("p2pBankQuotaBody")) return;
     try{
       const data = await p2pFetchBankQuotaData();
+      const body = document.getElementById("p2pBankQuotaBody");
+      if(!body) return; // el modal se cerró mientras esperaba la respuesta
       if(!data.ok){
         body.innerHTML = `<p style="color:#fca5a5;">${p2pBankQuotaEsc(data.error || "Error cargando el cupo")}</p>`;
         return;
       }
-      const total = Number(data.total || 0);
-      const limit = Number(data.limit || 0);
-      const pct = limit > 0 ? Math.min(100, (total / limit) * 100) : 0;
-      const barColor = pct >= 100 ? "#fb7185" : pct >= 80 ? "#fbbf24" : "#34d399";
-      const orders = data.orders || [];
-
-      const rowsHtml = orders.length
-        ? orders.map(o => `
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(148,163,184,.08);${o.excluded ? "opacity:.45;" : ""}">
-              <div style="min-width:0;">
-                <div style="color:#e2e8f0;font-size:12px;font-weight:700;${o.excluded ? "text-decoration:line-through;" : ""}">${p2pCapMoney(o.amountClp, 0)} CLP</div>
-                <div style="color:#64748b;font-size:10px;">${o.time ? new Date(o.time).toLocaleTimeString("es-CL", { timeZone: "America/Santiago", hour: "2-digit", minute: "2-digit" }) : "—"}${o.buyerName ? " · " + p2pBankQuotaEsc(o.buyerName) : ""}</div>
-              </div>
-              <button type="button" onclick="window.p2pToggleBankQuotaExclusion('${o.orderNumber}')" title="${o.excluded ? "Volver a contar esta orden" : "Sacar del cupo (transfirió a otro banco)"}" style="flex:0 0 auto;padding:5px 10px;font-size:11px;border-radius:6px;border:1px solid rgba(148,163,184,.2);background:${o.excluded ? "rgba(52,211,153,.12)" : "rgba(251,113,133,.12)"};color:${o.excluded ? "#34d399" : "#fb7185"};cursor:pointer;">
-                ${o.excluded ? "↩ Restaurar" : "🗑 Quitar"}
-              </button>
-            </div>
-          `).join("")
-        : `<p style="color:#64748b;font-size:12px;text-align:center;padding:12px 0;">Todavía no entró ninguna orden por Banco Estado hoy.</p>`;
-
-      body.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
-          <strong style="color:#f8fafc;font-size:18px;">${p2pCapMoney(total, 0)} CLP</strong>
-          <span style="color:#64748b;font-size:12px;">de ${p2pCapMoney(limit, 0)} CLP</span>
-        </div>
-        <div style="width:100%;height:10px;border-radius:6px;background:rgba(148,163,184,.15);overflow:hidden;margin-bottom:16px;">
-          <div style="height:100%;width:${pct}%;background:${barColor};transition:width .3s;"></div>
-        </div>
-        <div style="font-weight:700;color:#cbd5e1;font-size:11px;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;">Órdenes de hoy</div>
-        ${rowsHtml}
-      `;
+      window.__p2pBankQuotaCache = { total: Number(data.total || 0), limit: Number(data.limit || 0), orders: data.orders || [] };
+      body.innerHTML = p2pRenderBankQuotaBody(data);
     }catch(e){
-      body.innerHTML = `<p style="color:#fca5a5;">Error cargando el cupo</p>`;
+      const body = document.getElementById("p2pBankQuotaBody");
+      if(body) body.innerHTML = `<p style="color:#fca5a5;">Error cargando el cupo</p>`;
     }
   };
 

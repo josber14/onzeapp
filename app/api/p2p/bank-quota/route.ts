@@ -80,13 +80,16 @@ export async function GET(req: NextRequest) {
     const startMs = santiagoStartOfDayMs(now);
     const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
 
-    const allOrders: any[] = [];
-    for (let page = 1; page <= 5; page++) {
-      const pageRes = await client.getOrders({ page, rows: 100, startTimestamp: startMs, endTimestamp: now.getTime() });
-      const pageData = pageRes?.data || [];
-      if (pageData.length === 0) break;
-      allOrders.push(...pageData);
-    }
+    // Pedido explícito del usuario (ago 2026): el modal tardaba 20-25s en
+    // abrir en horas de mucho volumen -- las 5 páginas se pedían UNA POR UNA
+    // (secuencial), así que el tiempo se sumaba (5 × 2-5s cada una). Binance
+    // no permite pedir "cuántas páginas hay" de antemano, así que se piden
+    // las 5 en PARALELO (mismo techo de siempre, nunca se pide de más) y el
+    // tiempo total pasa a ser el de la página más lenta, no la suma de todas.
+    const pageResults = await Promise.all(
+      [1, 2, 3, 4, 5].map((page) => client.getOrders({ page, rows: 100, startTimestamp: startMs, endTimestamp: now.getTime() }))
+    );
+    const allOrders: any[] = pageResults.flatMap((pageRes: any) => pageRes?.data || []);
 
     const todayOrders = allOrders.filter((o: any) => o.orderStatus === "COMPLETED" && o.fiat === "CLP");
 
