@@ -1593,6 +1593,26 @@ model P2PCycleManualSale {
   @@index([cycleId])
 }
 
+// Pedido explícito del usuario (ago 2026, tenant de Hector): algunas cuentas
+// tienen un límite diario de recepción por un banco específico (ej. Banco
+// Estado, 5.000.000 CLP/día) impuesto por el propio banco, no por Binance.
+// El tracker de cupo suma las órdenes del día donde P2PChatState.chosenBank
+// coincide con ese banco -- pero a veces un comprador ELIGE "Banco Estado" en
+// el chat y termina transfiriendo a otro banco (ej. Santander) por error, lo
+// que infla el cupo con una orden que en realidad no pasó por ese banco. Esta
+// tabla guarda qué órdenes se excluyeron manualmente del conteo para que el
+// cupo se mantenga exacto, sin borrar ni tocar la orden real ni su venta.
+model P2PBankQuotaExclusion {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int
+  exchange    String
+  orderNumber String
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, exchange, orderNumber])
+  @@index([tenantId])
+}
+
 // Historial de cambios de la tabla "tasa de compra venta" (hoja "tasas web",
 // columnas G:pais H:compra I:venta) -- pedido explícito del usuario (ago
 // 2026), visible SOLO para super_admin_global en el panel ("Historial de

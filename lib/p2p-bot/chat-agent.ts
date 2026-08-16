@@ -1246,6 +1246,19 @@ async function handleClientResponse(
       // puntuales — no el primer banco que calce.
       const namedBanks = !opt ? matchAllBanks(textLower, allAccounts) : [];
 
+      // Pedido explícito del usuario (ago 2026): el tenant de Hector no
+      // tiene cuenta BCI (solo Banco de Chile y Santander) -- si el
+      // comprador pide pagar justo a esa cuenta, hay que avisarle que no la
+      // tenemos en vez de caer al flujo genérico de "no entendí"/reintentos.
+      // ONZE se mantiene sin cambios (isZinpleTenant), esto es específico de
+      // cuentas que no ofrecen BCI.
+      if (!chosen && namedBanks.length === 0 && mentionsBci(textLower) && !(await isZinpleTenant(tenantId))) {
+        await sendAndTrack(client, exchange, order.orderNumber, cs,
+          `No contamos con cuenta BCI, disculpa. Por ahora solo tenemos disponible ${joinNaturally(accounts.map((a: any) => a.bank))}.`
+        );
+        break;
+      }
+
       let wantsAll = matchWantsMultipleAccounts(textLower);
       // Bug real confirmado en vivo (jul 2026): un comprador dijo "no me
       // permite hacer la transferencia" justo en este punto (antes de elegir
@@ -3010,6 +3023,25 @@ function isSingleBankAd(ad: any): boolean {
 
 function normalizeBankName(name: string): string {
   return (name || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+}
+
+// Detecta que el comprador pidi\u00f3 pagar puntualmente a BCI -- ver uso en
+// awaiting_bank_choice (tenant de Hector, que no tiene esa cuenta). Con
+// l\u00edmite de palabra para no matchear "bcia"/"bcio" sueltos por accidente.
+function mentionsBci(text: string): boolean {
+  return /\bbci\b/i.test(text);
+}
+
+// Une nombres de banco en una frase natural en espa\u00f1ol ("Banco de Chile y
+// Santander", o "Banco de Chile, Santander y BCI" con 3+) -- usado para el
+// aviso de "no tenemos esa cuenta, solo tenemos X" con la lista real de
+// cuentas configuradas en vez de un texto fijo que quede desactualizado si
+// se agregan o quitan bancos m\u00e1s adelante.
+function joinNaturally(items: string[]): string {
+  const list = items.filter(Boolean);
+  if (list.length === 0) return "ninguna cuenta configurada";
+  if (list.length === 1) return list[0];
+  return list.slice(0, -1).join(", ") + " y " + list[list.length - 1];
 }
 
 // Bug real confirmado en vivo (jul 2026, comprador real "Gonzalez", Bybit):
