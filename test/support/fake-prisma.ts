@@ -176,10 +176,21 @@ export function createFakePrisma() {
     },
   };
 
+  // Todas las pruebas de chat-agent usan tenantId=1 representando a ONZE
+  // (isZinpleTenant en chat-agent.ts lo consulta para decidir si mencionar
+  // "Zinple" y qué número de WT ofrecer para factura). Cualquier otro
+  // tenantId se trata como un tenant sin negocio ONZE propio (ej. Hector).
+  const tenant = {
+    async findUnique({ where }: any) {
+      return { hasOnzeCoreBusiness: where.id === 1 };
+    },
+  };
+
   return {
     p2PChatState,
     p2PBuyerIdentity,
     p2PAccount,
+    tenant,
     // Helpers de prueba, no parte de la API real de Prisma -- para sembrar
     // datos y para inspeccionar el estado final de una conversación.
     __seedAccounts(rows: any[]) {

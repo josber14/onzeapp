@@ -460,11 +460,11 @@ async function processOrderLocked(
   // Handle paid status BEFORE processing client messages
   if (isPaid) {
     if (cs.state === "account_sent") {
-      await sendPaymentAckAndTransition(client, exchange, orderNo, cs, order);
+      await sendPaymentAckAndTransition(tenantId, client, exchange, orderNo, cs, order);
       return;
     }
     if (!["account_sent", "payment_made", "awaiting_comprobant", "completed", "closed", "awaiting_verification"].includes(cs.state)) {
-      await sendPaymentAckAndTransition(client, exchange, orderNo, cs, order);
+      await sendPaymentAckAndTransition(tenantId, client, exchange, orderNo, cs, order);
       return;
     }
   }
@@ -1435,7 +1435,7 @@ async function handleClientResponse(
         // (el estado real de la orden en Binance/Bybit puede tener lag), pero
         // el chequeo de monto debe correr igual, no solo cuando confirma el
         // exchange directamente.
-        await sendPaymentAckAndTransition(client, exchange, order.orderNumber, cs, order);
+        await sendPaymentAckAndTransition(tenantId, client, exchange, order.orderNumber, cs, order);
       } else if (cs.isCompany && cs.erutRequested && !cs.erutReceived && (matchAlreadySentErut(textLower) || matchVagueAlreadySent(textLower))) {
         // Caso real confirmado en vivo (ago 2026): el comprador confirmó de
         // forma vaga ("ya se la envie", sin repetir "erut") que ya había
@@ -1618,7 +1618,7 @@ async function handleClientResponse(
       // aviso real de pago ya hecho. Mismo chequeo que account_sent, en el
       // mismo orden de prioridad.
       if (matchClaimsAlreadyPaid(textLower) || matchAsksConfirmation(textLower)) {
-        await sendPaymentAckAndTransition(client, exchange, order.orderNumber, cs, order);
+        await sendPaymentAckAndTransition(tenantId, client, exchange, order.orderNumber, cs, order);
         break;
       }
 
@@ -3390,13 +3390,17 @@ function paymentAckMessage(name?: string | null): string {
 // todavía falta completar), se manda un segundo mensaje aparte ofreciendo
 // la factura por WT, con una pausa corta (no instantánea) para que se sienta
 // como una persona escribiendo dos mensajes seguidos, no un bloque de texto.
-async function sendPaymentAckAndTransition(client: any, exchange: string, orderNo: string, cs: any, order: any): Promise<void> {
+async function sendPaymentAckAndTransition(tenantId: number, client: any, exchange: string, orderNo: string, cs: any, order: any): Promise<void> {
   const underpayMsg = underpaymentCheck(cs, order);
   const ackMsg = underpayMsg || paymentAckMessage(cs.firstName || firstNameFrom(cs.realName));
   const sent = await sendThenTransition(client, exchange, orderNo, cs, ackMsg, "payment_made", { paidAt: new Date() });
   if (sent && !underpayMsg && cs.isCompany) {
+    // Número de WT para factura -- pedido explícito del usuario (ago 2026):
+    // cada tenant tiene su propio número, no se puede mezclar con el de
+    // ONZE. Mismo patrón que isZinpleTenant para la duda del titular.
+    const invoiceWaNumber = (await isZinpleTenant(tenantId)) ? "951333777" : "965117971";
     await sendAndTrack(client, exchange, orderNo, cs,
-      "Si deseas factura de tu compra, por favor escribe a este WT 951333777 solicitando la factura — debes enviar tu comprobante de pago + tu E-RUT.",
+      `Si deseas factura de tu compra, por favor escribe a este WT ${invoiceWaNumber} solicitando la factura — debes enviar tu comprobante de pago + tu E-RUT.`,
       undefined, shortDelay
     );
   }

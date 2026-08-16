@@ -10440,8 +10440,8 @@ function addP2PBotStyles(){
                   <div class="bot-cycle-tile-label">Total CLP</div>
                   <div class="bot-cycle-tile-value" id="botCycleTotalClp" style="color:#00d4ff;">0</div>
                 </div>
-                <div class="bot-cycle-tile">
-                  <div class="bot-cycle-tile-label">Auto-cierre en</div>
+                <div class="bot-cycle-tile" onclick="window.botCycleEditMinClose()" style="cursor:pointer;" title="Click para editar el monto de auto-cierre">
+                  <div class="bot-cycle-tile-label">Auto-cierre en ✏️</div>
                   <div class="bot-cycle-tile-value" id="botCycleMinClose" style="font-size:13px;">—</div>
                 </div>
               </div>
@@ -14493,6 +14493,7 @@ function addP2PBotStyles(){
         const totalClpNum = Number(cycle.totalBinanceClp || 0) + Number(cycle.totalManualClp || 0);
         document.getElementById("botCycleTotalClp").textContent = "$" + Math.round(totalClpNum).toLocaleString();
         document.getElementById("botCycleMinClose").textContent = cycle.minCloseBalance ? Number(cycle.minCloseBalance).toFixed(2) + " USDT" : "—";
+        window.__botCycleActiveMinClose = cycle.minCloseBalance ? Number(cycle.minCloseBalance) : 0;
 
         // Ganancia estimada (viene calculada del servidor con el costo de la
         // capacity activa AHORA -- se marca como estimado, no contabilidad exacta).
@@ -14624,6 +14625,57 @@ function addP2PBotStyles(){
       botCycleRefresh();
     }catch(e){
       if(errEl){ errEl.textContent = "Error al iniciar ciclo"; errEl.style.display = "block"; }
+    }
+  };
+
+  // Pedido explícito del usuario (ago 2026): poder editar el monto mínimo de
+  // auto-cierre del ciclo YA ACTIVO en cualquier momento, no solo al
+  // iniciarlo -- tanto en la cuenta propia (ONZE) como en la de Hector, cada
+  // una con su propio ciclo aislado por tenant.
+  window.botCycleEditMinClose = function(){
+    const current = Number(window.__botCycleActiveMinClose || 0);
+    botCycleModalShell("botCycleEditMinCloseModal", "✏️ Editar auto-cierre", `
+      <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
+        Cuando el saldo del bot baje a este nivel, el ciclo se cerrará solo.
+      </p>
+      <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">Monto mínimo USDT para auto-cierre</label>
+      <input id="botCycleEditMinInput" type="text" inputmode="decimal" value="${current}"
+        style="width:100%;box-sizing:border-box;padding:10px;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#fff;margin-bottom:8px;">
+      <p id="botCycleEditMinErr" style="color:#fca5a5;font-size:12px;margin-bottom:8px;display:none;"></p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
+        <button onclick="document.getElementById('botCycleEditMinCloseModal').remove()"
+          style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
+        <button onclick="window.botCycleEditMinCloseConfirm()"
+          style="padding:10px 16px;background:#00ff88;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Guardar</button>
+      </div>
+    `);
+    setTimeout(() => { const el = document.getElementById("botCycleEditMinInput"); el?.focus(); el?.select(); }, 50);
+  };
+
+  window.botCycleEditMinCloseConfirm = async function(){
+    const lbl = botActiveLabel || "ONZE";
+    const errEl = document.getElementById("botCycleEditMinErr");
+    const raw = document.getElementById("botCycleEditMinInput")?.value;
+    const minClose = parseFloat(raw || "");
+    if(raw === "" || isNaN(minClose) || minClose < 0){
+      if(errEl){ errEl.textContent = "Ingresa un monto válido (0 o mayor)"; errEl.style.display = "block"; }
+      return;
+    }
+    try{
+      const res = await fetch("/api/p2p/cycle/min-close", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ label: lbl, exchange: botSelectedExchange || "binance", minCloseBalance: minClose })
+      });
+      const data = await res.json();
+      if(!data.ok){
+        if(errEl){ errEl.textContent = data.error || "Error al guardar"; errEl.style.display = "block"; }
+        return;
+      }
+      document.getElementById("botCycleEditMinCloseModal")?.remove();
+      botCycleRefresh();
+    }catch(e){
+      if(errEl){ errEl.textContent = "Error al guardar"; errEl.style.display = "block"; }
     }
   };
 
@@ -20984,7 +21036,13 @@ function addP2PBotStyles(){
 
     if(subEl){
       const sign = monthlyProfit >= 0 ? "+" : "-";
-      subEl.innerHTML = `Inicial: <strong>${p2pCapMoney(getP2PInitialCapital(), 2)} USDT</strong>${accumulatedProfit !== 0 ? `<br>Acumulado: ${accumulatedProfit >= 0 ? '+' : '-'}${p2pCapMoney(Math.abs(accumulatedProfit), 2)} USDT` : ''}<br>Este mes: ${sign}${p2pCapMoney(Math.abs(monthlyProfit), 2)} USDT${withdrawn > 0 ? `<br>Retirado: -${p2pCapMoney(withdrawn, 2)} USDT` : ''}`;
+      // Pedido explícito del usuario (ago 2026): la tarjeta resumen no
+      // muestra "Acumulado" ni "Retirado" -- ambos siguen existiendo y
+      // afectando el total de arriba (ver `total` más arriba), solo que acá
+      // no se listan para mantenerla simple. El detalle de los retiros ya
+      // se puede ver en la sección "Retiros y gastos" del modal de Métricas
+      // P2P (renderP2PRangeDetailContent).
+      subEl.innerHTML = `Inicial: <strong>${p2pCapMoney(getP2PInitialCapital(), 2)} USDT</strong><br>Este mes: ${sign}${p2pCapMoney(Math.abs(monthlyProfit), 2)} USDT`;
     }
   }
 
