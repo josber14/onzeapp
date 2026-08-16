@@ -71,10 +71,17 @@ export async function POST(req: NextRequest) {
       : `${chileMonth}-01`;
 
     // Dos llamadas distintas usan esta misma ruta:
-    // 1) Ajuste MANUAL (botón 💰 Capital, siempre manda "value"): pisa el
-    //    capital inicial y RESETEA la ganancia acumulada a 0 -- se asume
-    //    que el número que el usuario escribió ya refleja todo lo ganado
-    //    hasta ahora, así que no hay que seguir sumando lo viejo encima.
+    // 1) Ajuste MANUAL (botón 💰 Capital, siempre manda "value"): pisa
+    //    ÚNICAMENTE el capital inicial. NO toca la ganancia acumulada --
+    //    son dos números independientes (capital inicial = aporte fijo
+    //    original; acumulado = ganancia de meses ya terminados, la va
+    //    sumando sola el rollover). Bug real confirmado en vivo (ago 2026,
+    //    tenant de Hector): esto SÍ reseteaba usdtAmount a 0 en cada edición
+    //    manual del inicial, borrando de un plumazo el acumulado migrado y
+    //    haciendo caer el total de Capital P2P a un número absurdamente
+    //    bajo. Si el usuario quiere ajustar también el acumulado, debe
+    //    hacerlo aparte (no hay UI para eso todavía -- se edita a mano en DB
+    //    caso por caso, como se hizo para Hector).
     // 2) Rollover automático de fin de mes (manda "accumulatedProfit" y
     //    "throughMonth", SIN "value"): solo suma a la ganancia acumulada,
     //    nunca toca el capital inicial.
@@ -82,7 +89,6 @@ export async function POST(req: NextRequest) {
     const updateData: { capacityClp?: number; usdtAmount?: number; date: string } = { date: dateValue };
     if (isManualEdit) {
       updateData.capacityClp = Number(value || 0);
-      updateData.usdtAmount = 0;
     } else if (typeof accumulatedProfit === "number") {
       updateData.usdtAmount = accumulatedProfit;
     }
