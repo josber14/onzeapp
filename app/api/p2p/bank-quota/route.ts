@@ -80,18 +80,39 @@ export async function GET(req: NextRequest) {
     const startMs = santiagoStartOfDayMs(now);
     const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
 
-    // Pedido explícito del usuario (ago 2026): el modal tardaba 20-25s en
-    // abrir en horas de mucho volumen -- las 5 páginas se pedían UNA POR UNA
-    // (secuencial), así que el tiempo se sumaba (5 × 2-5s cada una). Binance
-    // no permite pedir "cuántas páginas hay" de antemano, así que se piden
-    // las 5 en PARALELO (mismo techo de siempre, nunca se pide de más) y el
-    // tiempo total pasa a ser el de la página más lenta, no la suma de todas.
-    const pageResults = await Promise.all(
-      [1, 2, 3, 4, 5].map((page) => client.getOrders({ page, rows: 100, startTimestamp: startMs, endTimestamp: now.getTime() }))
-    );
-    const allOrders: any[] = pageResults.flatMap((pageRes: any) => pageRes?.data || []);
+    // REVERTIDO (ago 2026) -- se probó pedir las 5 páginas en PARALELO para
+    // que el modal abriera más rápido, pero causó un bug real de dinero: con
+    // mucho volumen (una orden nueva cada pocos segundos), Binance pagina
+    // sobre una lista que se sigue moviendo. Pedir 5 páginas al mismo
+    // instante multiplica la ventana en la que eso puede pasar (las 5
+    // "fotos" quedan tomadas casi al mismo tiempo, sin ningún orden temporal
+    // entre ellas), y confirmado en vivo: el cupo de Banco Estado empezó a
+    // BAJAR con el tiempo (se perdían órdenes reales entre una página y la
+    // siguiente). Mismo tipo de bug ya documentado en cycle-stats.ts para la
+    // paginación secuencial -- acá, en paralelo, era mucho peor. Se vuelve a
+    // pedir una página a la vez (como hace computeCycleOrderStats, que nunca
+    // tuvo este problema) -- la app ya muestra el último valor en caché al
+    // instante desde el cliente mientras esta consulta corre atrás, así que
+    // la lentitud de la paginación secuencial ya no se nota al abrir el
+    // modal.
+    const allOrders: any[] = [];
+    for (let page = 1; page <= 5; page++) {
+      const pageRes = await client.getOrders({ page, rows: 100, startTimestamp: startMs, endTimestamp: now.getTime() });
+      const pageData = pageRes?.data || [];
+      if (pageData.length === 0) break;
+      allOrders.push(...pageData);
+    }
+    // Red de seguridad extra: si de todos modos hubiera solape entre
+    // páginas (drift de paginación), no contar la misma orden 2 veces.
+    const seenOrderNumbers = new Set<string>();
+    const dedupedOrders = allOrders.filter((o: any) => {
+      const id = String(o.orderNumber);
+      if (seenOrderNumbers.has(id)) return false;
+      seenOrderNumbers.add(id);
+      return true;
+    });
 
-    const todayOrders = allOrders.filter((o: any) => o.orderStatus === "COMPLETED" && o.fiat === "CLP");
+    const todayOrders = dedupedOrders.filter((o: any) => o.orderStatus === "COMPLETED" && o.fiat === "CLP");
 
     const exclusions = await prisma.p2PBankQuotaExclusion.findMany({
       where: { tenantId, exchange, orderNumber: { in: todayOrders.map((o: any) => String(o.orderNumber)) } },

@@ -17257,7 +17257,8 @@ function addP2PBotStyles(){
         color:#f8fafc;
         font-size:28px;
         font-weight:950;
-        line-height:1;
+        line-height:1.15;
+        overflow-wrap:anywhere;
       }
 
       .p2p-dashboard-value.green{
@@ -20906,6 +20907,11 @@ function addP2PBotStyles(){
       const data = await res.json();
       if(data.ok){
         window.__p2pTotalWithdrawnUsdt = (data.withdrawals || []).reduce((sum, w) => sum + Number(w.amountUsdt), 0);
+        // Lista cruda -- la usa "Ganancia neta a repartir" para descontarle
+        // a cada persona lo que ella misma ya retiró en el rango (solo
+        // tenant de Hector, ver el resto del comentario en
+        // renderP2PRangeDetailContent).
+        window.__p2pWithdrawalsRaw = data.withdrawals || [];
         updateP2PCapitalCard();
       }
     }catch(e){
@@ -21096,6 +21102,60 @@ function addP2PBotStyles(){
   function p2pBankQuotaEsc(str){
     return String(str == null ? "" : str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
+
+  // Pedido explícito del usuario (ago 2026): el detalle de retiros por
+  // persona ("Ganancia neta a repartir") no debe expandir la tarjeta -- debe
+  // abrir una pantalla aparte, igual que el modal de "Capital P2P". Modal
+  // genérico, compartido entre la cuenta de Hector (ONZE) y AKI Transfers
+  // (SOCIO, otro <script> distinto) -- por eso vive en window y no depende
+  // de ninguna variable de otro bloque. Escape propio (no reusar escHtml/
+  // p2pBankQuotaEsc de otros bloques) para poder llamarse desde cualquiera.
+  function p2pPersonNetEsc(str){
+    return String(str == null ? "" : str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  window.p2pOpenPersonNetModal = function(payload){
+    let modal = document.getElementById("p2pPersonNetModal");
+    if(!modal){
+      modal = document.createElement("div");
+      modal.id = "p2pPersonNetModal";
+      modal.style.cssText = "position:fixed;inset:0;z-index:1000001;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;background:rgba(2,6,23,.72);backdrop-filter:blur(10px);";
+      modal.addEventListener("mousedown", (e) => { if(e.target === modal) modal.remove(); });
+      document.body.appendChild(modal);
+    }
+    const rowsHtml = (payload.withdrawals && payload.withdrawals.length)
+      ? payload.withdrawals.map((w) => `
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;font-size:13px;border-top:1px solid rgba(148,163,184,.08);">
+          <span style="color:#8aa0ba;">Retiro · ${p2pPersonNetEsc(w.date)}${w.note ? " · " + p2pPersonNetEsc(w.note) : ""}</span>
+          <span style="color:#fb7185;font-weight:700;white-space:nowrap;">-${p2pPersonNetEsc(w.amount)} USDT</span>
+        </div>`).join("")
+      : `<div style="padding:8px 0;font-size:13px;color:#64748b;">Sin retiros en este rango.</div>`;
+    modal.innerHTML = `
+      <div style="width:min(420px,100%);border:1px solid rgba(52,211,153,.28);background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(2,6,23,.98));border-radius:20px;padding:22px;position:relative;">
+        <button type="button" onclick="document.getElementById('p2pPersonNetModal').remove()" title="Cerrar" aria-label="Cerrar" style="position:absolute;top:16px;right:16px;width:28px;height:28px;border-radius:8px;border:1px solid rgba(148,163,184,.2);background:rgba(148,163,184,.1);color:#cbd5e1;cursor:pointer;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;">✕</button>
+        <h3 style="color:#00d4ff;margin-bottom:14px;padding-right:30px;">👤 ${p2pPersonNetEsc(payload.name)}</h3>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;">
+          <span style="color:#8aa0ba;">Ganancia total del mes</span>
+          <span style="color:#f8fafc;font-weight:700;">${p2pPersonNetEsc(payload.gananciaSign)}${p2pPersonNetEsc(payload.ganancia)} USDT</span>
+        </div>
+        ${rowsHtml}
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:12px 0 2px;font-size:14px;border-top:1px solid rgba(148,163,184,.14);margin-top:6px;">
+          <span style="color:#cbd5e1;font-weight:800;">Total a recibir</span>
+          <span style="color:${p2pPersonNetEsc(payload.color)};font-weight:900;white-space:nowrap;">${p2pPersonNetEsc(payload.sign)}${p2pPersonNetEsc(payload.share)} USDT · ${p2pPersonNetEsc(payload.sign)}${p2pPersonNetEsc(payload.shareClp)} CLP</span>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+          <button type="button" onclick="document.getElementById('p2pPersonNetModal').remove()" style="padding:9px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cerrar</button>
+        </div>
+      </div>
+    `;
+  };
+
+  window.p2pOpenPersonNetModalFromEl = function(el){
+    try {
+      const payload = JSON.parse(el.getAttribute("data-detail"));
+      window.p2pOpenPersonNetModal(payload);
+    } catch(e){}
+  };
 
   window.p2pOpenBankQuotaModal = async function(){
     let modal = document.getElementById("p2pBankQuotaModal");
@@ -21603,6 +21663,25 @@ function addP2PBotStyles(){
     if(range === "today") return p2pChileDayKey(raw) === p2pChileDayKey(new Date());
     if(range === "week") return isP2PInCurrentWeek(raw);
     if(range === "month") return p2pChileMonthKey(raw) === p2pChileMonthKey(new Date());
+    // "Ayer" y "Últimos 7 días" -- pedido explícito del usuario (ago 2026),
+    // mismos botones rápidos que ya existían en el panel de Estadísticas del
+    // socio (AKI Transfers), ahora también acá.
+    if(range === "yesterday"){
+      const day = p2pChileDayKey(raw);
+      if(!day) return false;
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      return day === p2pChileDayKey(yesterday);
+    }
+    if(range === "7d"){
+      const day = p2pChileDayKey(raw);
+      if(!day) return false;
+      const from = new Date();
+      from.setDate(from.getDate() - 6);
+      const fromKey = p2pChileDayKey(from);
+      const todayKey = p2pChileDayKey(new Date());
+      return day >= fromKey && day <= todayKey;
+    }
     if(range === "custom"){
       const day = p2pChileDayKey(raw);
       if(!day) return false;
@@ -21615,8 +21694,10 @@ function addP2PBotStyles(){
 
   function p2pRangeLabel(range){
     if(range === "today") return "Hoy";
+    if(range === "yesterday") return "Ayer";
+    if(range === "7d") return "Últimos 7 días";
     if(range === "week") return "Semana";
-    if(range === "month") return "Mes";
+    if(range === "month") return "Este mes";
     if(range === "total") return "Total";
     if(range === "custom") return "Personalizado";
     return "Hoy";
@@ -21828,6 +21909,62 @@ function addP2PBotStyles(){
     `;
   }
 
+  // Mismo patrón visual que socioBnDashCard (AKI Transfers) -- pedido
+  // explícito del usuario (ago 2026): unificar el look de "Métricas P2P"
+  // (propio y de Hector) con el de Estadísticas del socio. No se reusa
+  // socioBnDashCard directo porque vive en OTRO bloque <script> (ver el
+  // comentario de p2pBankQuotaEsc más arriba sobre este mismo problema).
+  function p2pDashCard(label, value, opts){
+    opts = opts || {};
+    const cls = "p2p-dashboard-card" + (opts.main ? " main" : "");
+    const clickAttrs = opts.onClick ? ` style="cursor:pointer;" onclick="${opts.onClick}" title="${opts.title || ''}"` : "";
+    return `<div class="${cls}"${clickAttrs}>
+      <div class="p2p-dashboard-label">${label}</div>
+      <div class="p2p-dashboard-value" style="color:${opts.color || '#f8fafc'};">${value}</div>
+      ${opts.sub ? `<div class="p2p-dashboard-small" style="${opts.subColor ? 'color:' + opts.subColor + ';' : ''}">${opts.sub}</div>` : ''}
+    </div>`;
+  }
+
+  // "Ganancia por día" del rango elegido -- mismo desglose que ya existía
+  // para el socio (ahí viene del servidor, acá se arma en el cliente con
+  // los mismos saleParts que ya usa getP2PRangeStatsFromCapacity, agrupados
+  // por día en vez de sumados todos juntos).
+  function getP2PDailyBreakdownFromCapacity(stats, range, exchange){
+    const byDay = new Map();
+    (stats.capacities || []).forEach(cap => {
+      const buyPrice = Number(cap.buyPrice || 0);
+      (cap.saleParts || []).forEach(part => {
+        if(!part.createdAt) return;
+        if(!isP2PInRange(part.createdAt, range)) return;
+        if(exchange && exchange !== "all" && (part.exchange || "binance") !== exchange) return;
+        const day = p2pChileDayKey(part.createdAt);
+        if(!day) return;
+
+        const assignedUsdt = Number(part.assignedUsdt || 0);
+        const assignedClp = Number(part.assignedClp || 0);
+        const unitPrice = Number(part.unitPrice || 0);
+        const commissionUsdt = Number(part.commissionUsdt || 0);
+        const commissionClp = commissionUsdt * (unitPrice || 0);
+        const partBuyPrice = Number(part.buyPrice || buyPrice);
+        const costClp = assignedUsdt * partBuyPrice;
+        const profitClp = assignedClp - costClp - commissionClp;
+
+        let entry = byDay.get(day);
+        if(!entry){
+          entry = { date: day, clpReceived: 0, profitClp: 0, costClp: 0, soldUsdt: 0 };
+          byDay.set(day, entry);
+        }
+        entry.clpReceived += assignedClp;
+        entry.profitClp += profitClp;
+        entry.costClp += costClp;
+        entry.soldUsdt += assignedUsdt;
+      });
+    });
+    return Array.from(byDay.values())
+      .map(e => ({ ...e, avgBuyPrice: e.soldUsdt > 0 ? e.costClp / e.soldUsdt : 0 }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }
+
   window.renderP2PRangeDetailContent = function renderP2PRangeDetailContent(range){
     const content = document.getElementById("p2pRangeDetailContent");
     if(!content) return;
@@ -21877,68 +22014,10 @@ function addP2PBotStyles(){
     p2pPrevMonthDate.setMonth(p2pPrevMonthDate.getMonth() - 1);
     const p2pPrevMonth = p2pPrevMonthDate.toISOString().slice(0, 7);
 
-    const capacitiesInRange = (stats.capacities || []).filter(cap => {
-      const capDate = cap.createdAt || cap.finishedAt || cap.date || "";
-      return isP2PInRange(capDate, range);
-    });
-
-    const activeCapacities = (stats.capacities || []).filter(cap => {
-      if(cap.status === "finished") return false;
-      const capDate = cap.createdAt || cap.finishedAt || cap.date || "";
-      return isP2PInRange(capDate, range);
-    });
-
-    // En métricas, "Capacity comprado" debe representar el capacity activo actual,
-    // no ciclos finalizados/viejos que ya fueron cerrados.
-    const activeCapacitiesInRange = capacitiesInRange.filter(cap => cap.status !== "finished");
-
-    const capacityBoughtClp = activeCapacitiesInRange.reduce((sum, cap)=> sum + Number(cap.totalCost || cap.capacityClp || 0), 0);
-    const capacityBoughtUsdt = activeCapacitiesInRange.reduce((sum, cap)=> sum + Number(cap.usdtAmount || 0), 0);
-    const avgBuyPriceRange = capacityBoughtUsdt > 0 ? capacityBoughtClp / capacityBoughtUsdt : 0;
-
-    const activeRemainingUsdt = activeCapacities.reduce((sum, cap)=> sum + Number(cap.remainingUsdt || 0), 0);
-    const activeRemainingClp = activeCapacities.reduce((sum, cap)=> sum + Math.max(Number(cap.capacityClp || cap.totalCost || 0) - Number(cap.clpReceived || 0), 0), 0);
-
-    const usedCapacityUsdt = data.soldUsdt;
-    const usedCapacityClp = data.costClp;
-
     const avgSellPrice = Number(data.avgSellPrice || 0);
     const avgBuyUsed = data.soldUsdt > 0 ? data.costClp / data.soldUsdt : 0;
-    const spread = avgSellPrice > 0 && avgBuyUsed > 0 ? avgSellPrice - avgBuyUsed : 0;
-    const netProfitPerUsdt = data.soldUsdt > 0 ? data.profitUsdt / data.soldUsdt : 0;
-
     const sign = data.profitUsdt >= 0 ? "+" : "-";
-    const growthPct = initialCapital > 0 ? (data.profitUsdt / initialCapital) * 100 : 0;
-
-    const providerList = Object.values(data.providers)
-      .map(item => {
-        const avg = item.soldUsdt > 0 ? item.clpReceived / item.soldUsdt : 0;
-        const profitUsdt = avg > 0 ? item.profitClp / avg : 0;
-        const pct = item.costClp > 0 ? (item.profitClp / item.costClp) * 100 : 0;
-        return { ...item, avgSell: avg, profitUsdt, pct };
-      })
-      .sort((a,b)=> b.profitUsdt - a.profitUsdt);
-
-    const bestProvider = providerList[0];
-
-    const providerRows = providerList.map(item => {
-      return `
-        <div class="p2p-detail-row">
-          <div>
-            <strong style="color:#f8fafc;font-size:13px;">${item.provider}</strong>
-            <div class="p2p-capacity-meta" style="margin-top:3px;">USDT movidos: ${p2pCapMoney(item.soldUsdt, 2)} USDT</div>
-            <div class="p2p-capacity-meta" style="margin-top:3px;">Venta promedio: ${p2pCapMoney(item.avgSell, 2)} CLP/USDT</div>
-          </div>
-          <div style="text-align:right;">
-            <strong style="color:${item.profitUsdt >= 0 ? "#34d399" : "#fb7185"};font-size:13px;">
-              ${item.profitUsdt >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(item.profitUsdt), 2)} USDT
-            </strong>
-            <div class="p2p-capacity-meta" style="margin-top:3px;">CLP recibido: ${p2pCapMoney(item.clpReceived, 0)} CLP</div>
-            <div class="p2p-capacity-meta" style="margin-top:3px;">Rentabilidad: ${p2pCapMoney(item.pct, 2)}%</div>
-          </div>
-        </div>
-      `;
-    }).join("");
+    const dailyBreakdown = getP2PDailyBreakdownFromCapacity(stats, range, modalExchange);
 
     content.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
@@ -21948,10 +22027,10 @@ function addP2PBotStyles(){
         </div>
         ` : `
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          ${p2pDetailFilterButton("today", range)}
-          ${p2pDetailFilterButton("week", range)}
           ${p2pDetailFilterButton("month", range)}
-          ${p2pDetailFilterButton("total", range)}
+          ${p2pDetailFilterButton("today", range)}
+          ${p2pDetailFilterButton("yesterday", range)}
+          ${p2pDetailFilterButton("7d", range)}
         </div>
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
           <label style="font-size:12px;color:#94a3b8;display:flex;align-items:center;gap:4px;">
@@ -21973,209 +22052,155 @@ function addP2PBotStyles(){
             background:${range === "custom" ? "rgba(52,211,153,.16)" : "rgba(15,23,42,.82)"};
             color:${range === "custom" ? "#34d399" : "#cbd5e1"};
             border-radius:999px;padding:6px 14px;font-size:12px;font-weight:950;cursor:pointer;
-          ">Aplicar</button>
+          ">Ver</button>
         </div>
         `}
       </div>
 
-      <h3 class="section-title" style="margin-bottom:8px;">Resumen principal</h3>
-      <div class="p2p-detail-summary-grid">
-        <div class="p2p-capacity-mini">
-          <span>USDT vendidos ${exLabel}</span>
-          <strong>${p2pCapMoney(data.soldUsdt, 2)} USDT</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">Movimiento vendido en el rango</div>
-        </div>
+      <div class="p2p-dashboard-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
+        ${(function(){
+          // Mismas 9 tarjetas y mismo orden que "Estadísticas" del socio
+          // (AKI Transfers) -- pedido explícito del usuario (ago 2026):
+          // unificar el look de Métricas P2P (propio y de Hector) con esa
+          // pantalla. La lógica de cada número es la que ya existía acá
+          // (capitalByRange, PPM, Ganancia neta a repartir), solo cambia
+          // cómo se presenta.
+          const GREEN = "#34d399", RED = "#fb7185", WHITE = "#f8fafc";
+          const profitColor = data.profitUsdt >= 0 ? GREEN : RED;
+          const cards = [
+            p2pDashCard(`CLP recibido ${exLabel}`, p2pCapMoney(data.clpReceived, 0) + " CLP", { main: true, color: GREEN }),
+            p2pDashCard(`USDT vendido ${exLabel}`, p2pCapMoney(data.soldUsdt, 2) + " USDT", { color: GREEN }),
+            p2pDashCard(
+              "Ganancia (ya con comisión descontada)",
+              sign + p2pCapMoney(Math.abs(data.profitUsdt), 2) + " USDT",
+              { color: profitColor, sub: sign + p2pCapMoney(Math.abs(data.profitClp), 0) + " CLP", subColor: profitColor }
+            ),
+            p2pDashCard("Ganancia %", p2pCapMoney(data.profitPct, 2) + "%", { color: profitColor }),
+            p2pDashCard(`Comisión ${exLabel}`, p2pCapMoney(data.commissionUsdt, 2) + " USDT", { color: WHITE }),
+            p2pDashCard(
+              "Tasas promedio",
+              `<span style="font-size:13px;">Tasa promedio venta: <strong style="color:${GREEN};">${p2pCapMoney(avgSellPrice, 2)} CLP</strong></span>`,
+              { color: WHITE, sub: `Tasa promedio compra: <strong style="color:#38bdf8;">${p2pCapMoney(avgBuyUsed, 2)} CLP</strong>` }
+            ),
+            p2pDashCard(
+              "Capital P2P",
+              p2pCapMoney(capitalByRange, 2) + " USDT",
+              { color: GREEN, sub: `Inicial: ${p2pCapMoney(initialCapital, 2)} USDT · Este mes: ${sign}${p2pCapMoney(Math.abs(capitalMonthProfit), 2)} USDT${totalWithdrawnUsdt > 0 ? ` · Retirado: -${p2pCapMoney(totalWithdrawnUsdt, 2)} USDT` : ''}` }
+            ),
+            p2pDashCard(
+              "PPM a pagar (SII)",
+              p2pHasPpmPct ? p2pCapMoney(p2pPpmClp, 0) + " CLP" : "Configura el %",
+              {
+                color: "#fbbf24",
+                sub: p2pHasPpmPct
+                  ? `${p2pPpmUsdt !== null ? p2pCapMoney(p2pPpmUsdt, 2) + " USDT · " : ""}${p2pCapMoney(p2pPpmPct, 2)}% del CLP recibido — click para editar`
+                  : "Click para definir el % (pendiente con tu contadora)",
+                onClick: "window.p2pOpenPpmModal()", title: "Click para editar el % de PPM",
+              }
+            ),
+          ];
 
-        <div class="p2p-capacity-mini">
-          <span>CLP recibido ${exLabel}</span>
-          <strong>${p2pCapMoney(data.clpReceived, 0)} CLP</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">Dinero recibido por ventas</div>
-        </div>
+          if(!window.HAS_ONZE_CORE_BUSINESS){
+            // Pedido explícito del usuario (ago 2026): reparto 50/50 de la
+            // ganancia del rango YA descontado el PPM -- el capital inicial
+            // nunca se toca, esto es solo sobre la ganancia.
+            const pct = p2pPpmPct;
+            const hasPct = p2pHasPpmPct;
+            const avgSell = dataAll.avgSellPrice ? Number(dataAll.avgSellPrice) : 0;
+            const ganancia = dataAll.profitClp !== null && dataAll.profitClp !== undefined ? Number(dataAll.profitClp) : null;
+            const ppmClp2 = (hasPct && ganancia !== null) ? Number(dataAll.clpReceived || 0) * (pct / 100) : null;
+            const netoClp = (hasPct && ganancia !== null) ? ganancia - ppmClp2 : null;
+            const netoUsdt = (netoClp !== null && avgSell > 0) ? netoClp / avgSell : null;
+            const perPersonUsdt = (netoUsdt !== null) ? netoUsdt / 2 : null;
+            const signN = netoClp !== null && netoClp >= 0 ? "+" : "";
+            const colorN = netoClp === null ? WHITE : (netoClp >= 0 ? GREEN : RED);
 
-        <div class="p2p-capacity-mini">
-          <span>Ganancia real P2P</span>
-          <strong style="color:${data.profitUsdt >= 0 ? "#34d399" : "#fb7185"};">
-            ${sign}${p2pCapMoney(Math.abs(data.profitUsdt), 2)} USDT
-          </strong>
+            if(netoClp === null){
+              cards.push(`<div class="p2p-dashboard-card">
+                <div class="p2p-dashboard-label">Ganancia neta a repartir</div>
+                <div class="p2p-dashboard-value" style="font-size:15px;color:${WHITE};">Configura el % de PPM en la tarjeta anterior</div>
+              </div>`);
+            } else {
+              // Pedido explícito del usuario (ago 2026): si alguien ya
+              // retiró parte de su mitad DURANTE el mes (sin que el período
+              // haya cerrado), acá tiene que descontarse de SU propia
+              // columna, no solo del Capital P2P general -- ej: 500/500 de
+              // reparto, Hector retira 200, debe quedar Hector 300 / Josber
+              // 500. Solo para el tenant de Hector (arrancó desde 0 en este
+              // reset, así que cada retiro que se registre de acá en
+              // adelante SÍ es del mes real que dice ser) -- en AKI
+              // Transfers se revirtió porque los retiros viejos están
+              // fechados el día que se registraron, no el mes que liquidan.
+              const rawWithdrawals = Array.isArray(window.__p2pWithdrawalsRaw) ? window.__p2pWithdrawalsRaw : [];
 
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>Capital P2P</span>
-          <strong>${p2pCapMoney(capitalByRange, 2)} USDT</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">Inicial: ${p2pCapMoney(initialCapital, 2)}${capitalAccumulatedProfit !== 0 ? ` · Acumulado: ${capitalAccumulatedProfit >= 0 ? '+' : '-'}${p2pCapMoney(Math.abs(capitalAccumulatedProfit), 2)}` : ''} · Resultado: ${sign}${p2pCapMoney(Math.abs(data.profitUsdt), 2)}${totalWithdrawnUsdt > 0 ? ` · Retirado: -${p2pCapMoney(totalWithdrawnUsdt, 2)}` : ''}</div>
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>Ventas completadas</span>
-          <strong>${data.ordersCount}</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">Órdenes tomadas para este rango</div>
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>Precio venta promedio</span>
-          <strong>${p2pCapMoney(data.avgSellPrice, 2)} CLP</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">Rentabilidad: ${p2pCapMoney(data.profitPct, 2)}%</div>
-        </div>
-      </div>
-
-      <h3 class="section-title" style="margin:18px 0 8px;">Capacity y capital</h3>
-      <div class="p2p-detail-summary-grid">
-        <div class="p2p-capacity-mini">
-          <span>Capacity comprado</span>
-          <strong>${p2pCapMoney(capacityBoughtClp, 0)} CLP</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">Registrado en el rango</div>
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>USDT recibidos por capacity</span>
-          <strong>${p2pCapMoney(capacityBoughtUsdt, 2)} USDT</strong>
-
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>Precio compra promedio</span>
-          <strong>${p2pCapMoney(avgBuyPriceRange, 2)} CLP</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">Sobre capacity registrado</div>
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>Capacity usado</span>
-          <strong>${p2pCapMoney(usedCapacityUsdt, 2)} USDT</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">Costo usado: ${p2pCapMoney(usedCapacityClp, 0)} CLP</div>
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>Capacity restante activo</span>
-          <strong>${p2pCapMoney(activeRemainingUsdt, 2)} USDT</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">${p2pCapMoney(activeRemainingClp, 0)} CLP aprox.</div>
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>Crecimiento capital</span>
-          <strong style="color:${data.profitUsdt >= 0 ? "#34d399" : "#fb7185"};">${sign}${p2pCapMoney(Math.abs(data.profitUsdt), 2)} USDT</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">${p2pCapMoney(growthPct, 2)}% sobre capital inicial</div>
-        </div>
-      </div>
-
-      <h3 class="section-title" style="margin:18px 0 8px;">Rendimiento operativo</h3>
-      <div class="p2p-detail-summary-grid">
-        <div class="p2p-capacity-mini">
-          <span>Venta promedio</span>
-          <strong>${p2pCapMoney(avgSellPrice, 2)} CLP</strong>
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>Compra promedio usada</span>
-          <strong>${p2pCapMoney(avgBuyUsed, 2)} CLP</strong>
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>Spread promedio</span>
-          <strong style="color:${spread >= 0 ? "#34d399" : "#fb7185"};">${spread >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(spread), 2)} CLP</strong>
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>Comisión ${exLabel}</span>
-          <strong>${p2pCapMoney(data.commissionUsdt, 2)} USDT</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">${p2pCapMoney(data.commissionClp, 0)} CLP aprox.</div>
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>Ganancia neta por USDT</span>
-          <strong style="color:${netProfitPerUsdt >= 0 ? "#34d399" : "#fb7185"};">
-            ${netProfitPerUsdt >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(netProfitPerUsdt), 4)} USDT
-          </strong>
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>Rentabilidad neta</span>
-          <strong>${p2pCapMoney(data.profitPct, 2)}%</strong>
-        </div>
-      </div>
-
-      <h3 class="section-title" style="margin:18px 0 8px;">Resumen por proveedor</h3>
-      ${
-        providerRows
-          ? `<div class="p2p-capacity-card">${providerRows}</div>`
-          : `<div class="p2p-dashboard-empty">No hay datos de proveedores para este rango.</div>`
-      }
-
-      <h3 class="section-title" style="margin:18px 0 8px;">Diagnóstico</h3>
-      <div class="p2p-detail-summary-grid">
-        <div class="p2p-capacity-mini">
-          <span>Mejor proveedor del rango</span>
-          <strong>${bestProvider ? bestProvider.provider : "Sin datos"}</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">
-            ${bestProvider ? `${bestProvider.profitUsdt >= 0 ? "+" : "-"}${p2pCapMoney(Math.abs(bestProvider.profitUsdt), 2)} USDT` : "No hay movimientos"}
-          </div>
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>Capital estimado actual</span>
-          <strong>${p2pCapMoney(capitalByRange, 2)} USDT</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">Base + resultado del filtro</div>
-        </div>
-
-        <div class="p2p-capacity-mini">
-          <span>USDT disponible en capacity</span>
-          <strong>${p2pCapMoney(activeRemainingUsdt, 2)} USDT</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">Pendiente por vender/cubrir</div>
-        </div>
-      </div>
-
-      <h3 class="section-title" style="margin:18px 0 8px;">PPM (SII)</h3>
-      <div class="p2p-detail-summary-grid">
-        <div class="p2p-capacity-mini" style="cursor:pointer;" onclick="window.p2pOpenPpmModal()" title="Click para editar el % de PPM">
-          <span>PPM a pagar (rango actual)</span>
-          <strong>${p2pHasPpmPct ? p2pCapMoney(p2pPpmClp, 0) + ' CLP' : 'Configura el %'}</strong>
-          <div class="p2p-capacity-meta" style="margin-top:5px;">
-            ${p2pHasPpmPct
-              ? `${p2pPpmUsdt !== null ? p2pCapMoney(p2pPpmUsdt, 2) + ' USDT · ' : ''}${p2pCapMoney(p2pPpmPct, 2)}% del CLP recibido — click para editar`
-              : 'Click para definir el % (pendiente con tu contadora)'}
-          </div>
-        </div>
-        ${!window.HAS_ONZE_CORE_BUSINESS ? (function(){
-          // Pedido explícito del usuario (ago 2026): reparto 50/50 de la
-          // ganancia del rango YA descontado el PPM -- mismo cálculo que ya
-          // existe para el socio (AKI Transfers), ahora también en el
-          // Dashboard P2P propio de un tenant sin negocio ONZE (ej.
-          // Hector), que sigue repartiendo su ganancia 50/50 con Josber
-          // aunque ahora opere en su propia cuenta separada.
-          const pct = p2pPpmPct;
-          const hasPct = p2pHasPpmPct;
-          const avgSell = dataAll.avgSellPrice ? Number(dataAll.avgSellPrice) : 0;
-          const ganancia = dataAll.profitClp !== null && dataAll.profitClp !== undefined ? Number(dataAll.profitClp) : null;
-          const ppmClp2 = (hasPct && ganancia !== null) ? Number(dataAll.clpReceived || 0) * (pct / 100) : null;
-          const netoClp = (hasPct && ganancia !== null) ? ganancia - ppmClp2 : null;
-          const netoUsdt = (netoClp !== null && avgSell > 0) ? netoClp / avgSell : null;
-          const perPersonClp = netoClp !== null ? netoClp / 2 : null;
-          const perPersonUsdt = (perPersonClp !== null && avgSell > 0) ? perPersonClp / avgSell : null;
-          const signN = netoClp !== null && netoClp >= 0 ? '+' : '';
-          const colorN = netoClp === null ? '#f8fafc' : (netoClp >= 0 ? '#34d399' : '#fb7185');
-
-          if(netoClp === null){
-            return `<div class="p2p-capacity-mini">
-              <span>Ganancia neta a repartir</span>
-              <strong style="font-size:13px;">Configura el % de PPM</strong>
-            </div>`;
+              // Pedido explícito del usuario (ago 2026): NO expandir la
+              // tarjeta al hacer click -- abrir una pantalla aparte (modal),
+              // igual que "Capital P2P". La fila queda corta (nombre +
+              // cantidad de retiros a la izquierda, total a recibir a la
+              // derecha) y el detalle (ganancia total, cada retiro, total a
+              // recibir) se arma en window.p2pOpenPersonNetModal (definido
+              // más arriba, compartido con la cuenta AKI Transfers).
+              const personRowP2P = (name) => {
+                const withdrawalsOf = rawWithdrawals.filter(w => w.kind === "retiro" && String(w.person || "").trim().toLowerCase() === name.toLowerCase() && isP2PInRange(w.withdrawnAt, range));
+                const withdrawnUsdt = withdrawalsOf.reduce((sum, w) => sum + Number(w.amountUsdt || 0), 0);
+                const shareUsdt = perPersonUsdt !== null ? perPersonUsdt - withdrawnUsdt : null;
+                const shareClp = (shareUsdt !== null && avgSell > 0) ? shareUsdt * avgSell : null;
+                const sign = shareUsdt !== null && shareUsdt >= 0 ? "+" : "";
+                const color = shareUsdt === null ? WHITE : (shareUsdt >= 0 ? GREEN : RED);
+                const countLabel = withdrawalsOf.length === 1 ? "1 retiro" : `${withdrawalsOf.length} retiros`;
+                const gananciaSign = perPersonUsdt !== null && perPersonUsdt >= 0 ? "+" : "";
+                const payload = {
+                  name, color, sign, gananciaSign,
+                  ganancia: p2pCapMoney(perPersonUsdt, 2),
+                  share: p2pCapMoney(shareUsdt, 2),
+                  shareClp: p2pCapMoney(shareClp, 0),
+                  withdrawals: withdrawalsOf.map(w => ({
+                    date: new Date(w.withdrawnAt).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' }),
+                    note: w.note || "",
+                    amount: p2pCapMoney(Number(w.amountUsdt), 2),
+                  })),
+                };
+                const payloadAttr = JSON.stringify(payload).replace(/'/g, "&#39;");
+                return `
+                <div style="cursor:pointer;padding:9px 10px;margin-top:8px;border:1px solid rgba(148,163,184,.14);border-radius:12px;background:rgba(15,23,42,.4);transition:border-color .15s ease;" onmouseover="this.style.borderColor='rgba(148,163,184,.32)'" onmouseout="this.style.borderColor='rgba(148,163,184,.14)'" onclick="window.p2pOpenPersonNetModalFromEl(this)" data-detail='${payloadAttr}'>
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+                    <span style="color:#cbd5e1;font-weight:800;font-size:12.5px;">${name}${withdrawalsOf.length ? ` <span style="color:#64748b;font-weight:600;">(${countLabel})</span>` : ''}</span>
+                    <span style="color:${color};font-weight:800;font-size:12.5px;white-space:nowrap;">${sign}${p2pCapMoney(shareUsdt, 2)} USDT ›</span>
+                  </div>
+                </div>`;
+              };
+              cards.push(`<div class="p2p-dashboard-card">
+                <div class="p2p-dashboard-label">Ganancia neta a repartir</div>
+                <div style="font-size:16px;font-weight:900;color:${colorN};">
+                  ${signN}${p2pCapMoney(netoUsdt, 2)} USDT <span style="color:#8aa0ba;font-weight:700;">· ${signN}${p2pCapMoney(netoClp, 0)} CLP</span>
+                </div>
+                ${personRowP2P("Hector")}
+                ${personRowP2P("Josber")}
+              </div>`);
+            }
           }
 
-          const personRowP2P = (name, usdt, clp) => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid rgba(148,163,184,.1);font-size:12px;">
-              <span style="color:#cbd5e1;font-weight:800;">${name}</span>
-              <span style="color:${colorN};font-weight:800;">${signN}${p2pCapMoney(usdt, 2)} USDT <span style="color:#8aa0ba;font-weight:600;">· ${signN}${p2pCapMoney(clp, 0)} CLP</span></span>
-            </div>`;
-
-          return `<div class="p2p-capacity-mini">
-            <span>Ganancia neta a repartir</span>
-            <strong style="color:${colorN};">${signN}${p2pCapMoney(netoUsdt, 2)} USDT</strong>
-            <div class="p2p-capacity-meta" style="margin-top:2px;">${signN}${p2pCapMoney(netoClp, 0)} CLP</div>
-            ${personRowP2P('Hector', perPersonUsdt, perPersonClp)}
-            ${personRowP2P('Josber', perPersonUsdt, perPersonClp)}
-          </div>`;
-        })() : ''}
+          return cards.join("");
+        })()}
       </div>
+
+      <details class="p2p-collapsible">
+        <summary>Ganancia por día</summary>
+        <div class="p2p-collapsible-body">
+          ${dailyBreakdown.length
+            ? dailyBreakdown.map(d => {
+                const dSign = d.profitClp >= 0 ? "+" : "-";
+                const dColor = d.profitClp >= 0 ? "#34d399" : "#fb7185";
+                const dProfitUsdt = d.avgBuyPrice > 0 ? d.profitClp / d.avgBuyPrice : null;
+                return `<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid rgba(148,163,184,.1);font-size:13px;">
+                  <span style="color:#f8fafc;">${d.date}</span>
+                  <span style="color:#8aa0ba;">${p2pCapMoney(d.clpReceived, 0)} CLP</span>
+                  <span style="color:${dColor};text-align:right;">${dSign}${p2pCapMoney(Math.abs(d.profitClp), 0)} CLP${dProfitUsdt !== null ? `<br><span style="font-size:11px;">${dSign}${p2pCapMoney(Math.abs(dProfitUsdt), 2)} USDT</span>` : ""}</span>
+                </div>`;
+              }).join("")
+            : `<div class="p2p-dashboard-empty">Sin ventas en este rango.</div>`}
+        </div>
+      </details>
 
       <h3 class="section-title" style="margin:18px 0 8px;">💸 Retiros y gastos</h3>
       <div class="p2p-withdraw-card">
@@ -22258,7 +22283,7 @@ function addP2PBotStyles(){
       ">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:16px;">
           <div>
-            <div style="font-size:22px;font-weight:1000;">Métricas P2P</div>
+            <div style="font-size:22px;font-weight:1000;">📊 Estadísticas</div>
             <div style="font-size:13px;color:#94a3b8;margin-top:5px;">
               Resumen inteligente de capital, capacity y rendimiento por rango.
             </div>
@@ -22308,6 +22333,7 @@ function addP2PBotStyles(){
       window.__p2pPpmPct = (ppmRes.ok && ppmRes.value !== null && ppmRes.value !== undefined) ? Number(ppmRes.value) : null;
       if(wRes.ok){
         window.__p2pTotalWithdrawnUsdt = (wRes.withdrawals || []).reduce((sum, w) => sum + Number(w.amountUsdt), 0);
+        window.__p2pWithdrawalsRaw = wRes.withdrawals || [];
       }
       renderP2PRangeDetailContent(range || "today");
       window.p2pWithdrawRenderList();
@@ -22374,8 +22400,13 @@ function addP2PBotStyles(){
       if(conceptEl) conceptEl.value = '';
       if(personEl) personEl.value = '';
       await window.loadP2PWithdrawalsFromServer();
-      window.p2pWithdrawRenderList();
+      // renderP2PRangeDetailContent reconstruye TODO el modal (incluyendo un
+      // <div id="p2pWithdrawList"> nuevo y vacío) -- por eso p2pWithdrawRenderList()
+      // va DESPUÉS, no antes: si fuera antes, llenaría un div que esta línea
+      // está por reemplazar/tirar, y la lista quedaría vacía hasta cerrar y
+      // volver a abrir el modal (bug real confirmado en vivo, ago 2026).
       if(typeof renderP2PRangeDetailContent === 'function') renderP2PRangeDetailContent(window.__p2pLastRange || 'today');
+      window.p2pWithdrawRenderList();
       if(typeof showToast === 'function') showToast(kind === 'gasto' ? 'Gasto registrado' : 'Retiro registrado');
     } else if(errorEl){
       errorEl.textContent = r.error || (kind === 'gasto' ? 'Error al registrar el gasto' : 'Error al registrar el retiro');
@@ -22391,8 +22422,10 @@ function addP2PBotStyles(){
     const r = await res.json();
     if(r.ok){
       await window.loadP2PWithdrawalsFromServer();
-      window.p2pWithdrawRenderList();
+      // Mismo orden que en p2pWithdrawRegister -- reconstruir el modal
+      // primero, LUEGO llenar la lista (ver comentario ahí arriba).
       if(typeof renderP2PRangeDetailContent === 'function') renderP2PRangeDetailContent(window.__p2pLastRange || 'today');
+      window.p2pWithdrawRenderList();
     } else if(typeof showToast === 'function'){
       showToast(r.error || 'Error al borrar', 'error');
     }
@@ -28689,6 +28722,13 @@ try{
     const res = await socioBnFetch('/api/partner/dashboard?' + params.toString());
     if(!res.ok) return;
 
+    // Reactivado (ago 2026): ahora que los retiros "mes de julio" quedaron
+    // con su fecha real de julio (ya no 15-08), filtrar por withdrawnAt
+    // dentro del rango seleccionado sí refleja correctamente qué retiro es
+    // de "este mes". Ver nota en la tarjeta de reparto más abajo.
+    const wResForSplit = await socioBnFetch('/api/partner/withdrawals?' + params.toString());
+    window.__socioBnWithdrawalsInRange = (wResForSplit.ok && Array.isArray(wResForSplit.withdrawals)) ? wResForSplit.withdrawals : [];
+
     const grid = document.getElementById('socioBnStatsModalGrid');
     if(grid){
       const s = res.rangeStats;
@@ -28769,8 +28809,8 @@ try{
           const netoUsdt = (netoClp !== null && avgSell > 0) ? netoClp / avgSell : null;
           const perPersonClp = netoClp !== null ? netoClp / 2 : null;
           const perPersonUsdt = (perPersonClp !== null && avgSell > 0) ? perPersonClp / avgSell : null;
-          const sign = netoClp !== null && netoClp >= 0 ? '+' : '';
-          const color = netoClp === null ? WHITE : (netoClp >= 0 ? GREEN : RED);
+          const signN = netoClp !== null && netoClp >= 0 ? '+' : '';
+          const colorN = netoClp === null ? WHITE : (netoClp >= 0 ? GREEN : RED);
 
           if(netoClp === null){
             return `<div class="p2p-dashboard-card">
@@ -28779,19 +28819,61 @@ try{
             </div>`;
           }
 
-          const personRow = (name, usdt, clp) => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid rgba(148,163,184,.1);font-size:12px;">
-              <span style="color:#cbd5e1;font-weight:800;">${name}</span>
-              <span style="color:${color};font-weight:800;">${sign}${socioBnMoney(usdt, 2)} USDT <span style="color:#8aa0ba;font-weight:600;">· ${sign}${socioBnMoney(clp, 0)} CLP</span></span>
+          // Reactivado (ago 2026): se había revertido esto porque los
+          // retiros "mes de julio" estaban fechados 15-08 (el día que se
+          // registraron, no el mes que liquidan) y por eso se contaban mal
+          // como "de este mes". Se corrigió la fecha de esos 2 registros a
+          // julio directamente en la base de datos -- con eso, filtrar por
+          // withdrawnAt dentro del rango ya funciona bien: solo cuenta el
+          // "adelanto retiro agosto" de Hector, como corresponde.
+          const rawWithdrawals = Array.isArray(window.__socioBnWithdrawalsInRange) ? window.__socioBnWithdrawalsInRange : [];
+          const withdrawnByPerson = (name) => rawWithdrawals
+            .filter(w => w.kind === 'retiro' && String(w.person || '').trim().toLowerCase() === name.toLowerCase())
+            .reduce((sum, w) => sum + Number(w.amountUsdt || 0), 0);
+
+          // Pedido explícito del usuario (ago 2026): NO expandir la tarjeta
+          // al hacer click -- abrir una pantalla aparte (modal), igual que
+          // "Capital P2P". La fila queda corta (nombre + cantidad de
+          // retiros a la izquierda, total a recibir a la derecha) y el
+          // detalle se arma en window.p2pOpenPersonNetModal (definido en
+          // otro <script>, lado ONZE -- función window.-scoped, compartida).
+          const personRow = (name) => {
+            const withdrawalsOf = rawWithdrawals.filter(w => w.kind === 'retiro' && String(w.person || '').trim().toLowerCase() === name.toLowerCase());
+            const withdrawnUsdt = withdrawalsOf.reduce((sum, w) => sum + Number(w.amountUsdt || 0), 0);
+            const shareUsdt = perPersonUsdt !== null ? perPersonUsdt - withdrawnUsdt : null;
+            const shareClp = (shareUsdt !== null && avgSell > 0) ? shareUsdt * avgSell : null;
+            const sign = shareUsdt !== null && shareUsdt >= 0 ? '+' : '';
+            const color = shareUsdt === null ? WHITE : (shareUsdt >= 0 ? GREEN : RED);
+            const countLabel = withdrawalsOf.length === 1 ? '1 retiro' : `${withdrawalsOf.length} retiros`;
+            const gananciaSign = perPersonUsdt !== null && perPersonUsdt >= 0 ? '+' : '';
+            const payload = {
+              name, color, sign, gananciaSign,
+              ganancia: socioBnMoney(perPersonUsdt, 2),
+              share: socioBnMoney(shareUsdt, 2),
+              shareClp: socioBnMoney(shareClp, 0),
+              withdrawals: withdrawalsOf.map(w => ({
+                date: new Date(w.withdrawnAt).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' }),
+                note: w.note || '',
+                amount: socioBnMoney(Number(w.amountUsdt), 2),
+              })),
+            };
+            const payloadAttr = JSON.stringify(payload).replace(/'/g, '&#39;');
+            return `
+            <div style="cursor:pointer;padding:9px 10px;margin-top:8px;border:1px solid rgba(148,163,184,.14);border-radius:12px;background:rgba(15,23,42,.4);transition:border-color .15s ease;" onmouseover="this.style.borderColor='rgba(148,163,184,.32)'" onmouseout="this.style.borderColor='rgba(148,163,184,.14)'" onclick="window.p2pOpenPersonNetModalFromEl(this)" data-detail='${payloadAttr}'>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+                <span style="color:#cbd5e1;font-weight:800;font-size:12.5px;">${name}${withdrawalsOf.length ? ` <span style="color:#64748b;font-weight:600;">(${countLabel})</span>` : ''}</span>
+                <span style="color:${color};font-weight:800;font-size:12.5px;white-space:nowrap;">${sign}${socioBnMoney(shareUsdt, 2)} USDT ›</span>
+              </div>
             </div>`;
+          };
 
           return `<div class="p2p-dashboard-card">
             <div class="p2p-dashboard-label">Ganancia neta a repartir</div>
-            <div style="font-size:16px;font-weight:900;color:${color};">
-              ${sign}${socioBnMoney(netoUsdt, 2)} USDT <span style="color:#8aa0ba;font-weight:700;">· ${sign}${socioBnMoney(netoClp, 0)} CLP</span>
+            <div style="font-size:16px;font-weight:900;color:${colorN};">
+              ${signN}${socioBnMoney(netoUsdt, 2)} USDT <span style="color:#8aa0ba;font-weight:700;">· ${signN}${socioBnMoney(netoClp, 0)} CLP</span>
             </div>
-            ${personRow('Hector', perPersonUsdt, perPersonClp)}
-            ${personRow('Josber', perPersonUsdt, perPersonClp)}
+            ${personRow('Hector')}
+            ${personRow('Josber')}
           </div>`;
         })(),
       ].join('');
@@ -28963,6 +29045,13 @@ try{
   }
 
   function initSocioBn(){
+    // Bug real confirmado en vivo (ago 2026, tenant de Hector): esto corría
+    // SIEMPRE sin importar el tenant, así que el auto-sync de AKI Transfers
+    // (cada 15s) seguía llamando a /api/partner/sync en la sesión de Hector,
+    // que no tiene esas credenciales -- console llena de errores 400 en
+    // loop, para siempre. addSocioBnNavButton() ya tenía esta guarda, pero
+    // buildSocioBnView()/initSocioBnAutoSync() no.
+    if(!window.HAS_ONZE_CORE_BUSINESS) return;
     buildSocioBnView();
     addSocioBnNavButton();
     initSocioBnAutoSync();
