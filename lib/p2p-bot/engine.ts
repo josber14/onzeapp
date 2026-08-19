@@ -678,58 +678,6 @@ async function getActiveCapacity(prisma: any, tenantId: number) {
   return cap;
 }
 
-async function autoFinishCapacities(prisma: any, tenantId: number) {
-  // Todas las capacities (excepto _capital) ordenadas por creación
-  const allCaps = await prisma.p2PCapacity.findMany({
-    where: { tenantId, status: { not: "_capital" } },
-    orderBy: { createdAt: "asc" },
-  });
-  const activeCaps = allCaps.filter((c: any) => c.status === "active" && !c.finishedAt);
-  if (activeCaps.length === 0) return;
-
-  // Total CLP vendido desde la primera capacity de la historia
-  const firstCreatedAt = allCaps[0].createdAt;
-  const totalSales = await prisma.binanceOrder.aggregate({
-    where: { tenantId, orderStatus: "COMPLETED", tradeType: "SELL", fiat: "CLP", createdAt: { gte: firstCreatedAt } },
-    _sum: { totalPrice: true },
-  });
-  const totalClpEver = Number(totalSales._sum?.totalPrice || 0);
-
-  // Restar lo que las capacities ya finished consumieron
-  const consumedAgg = await prisma.p2PCapacity.aggregate({
-    where: { tenantId, status: "finished", finalClpReceived: { not: null } },
-    _sum: { finalClpReceived: true },
-  });
-  const alreadyConsumed = Number(consumedAgg._sum?.finalClpReceived || 0);
-  let remainingClp = totalClpEver - alreadyConsumed;
-  if (remainingClp <= 0) return;
-
-  for (const cap of activeCaps) {
-    const capClp = Number(cap.capacityClp);
-    if (capClp <= 0) continue;
-
-    const consumed = Math.min(capClp, remainingClp);
-    remainingClp -= consumed;
-
-    if (consumed >= capClp) {
-      const buyPrice = Number(cap.buyPrice);
-      const capUsdt = capClp / (buyPrice || 1);
-      await prisma.p2PCapacity.update({
-        where: { id: cap.id },
-        data: {
-          status: "finished",
-          finishedAt: new Date(),
-          finalSoldUsdt: capUsdt,
-          finalClpReceived: capClp,
-        },
-      });
-      await logBot(tenantId, "info", null, `Auto-finish capacity ${buyPrice} (${capClp.toLocaleString("es-CL")} CLP)`);
-    } else {
-      break;
-    }
-  }
-}
-
 async function fetchMyBinanceAds(client: BinanceP2PClient): Promise<any[]> {
   const myAdsRes = await client.getMyAds(1, 50);
   let raw: any[] = [];
@@ -1047,14 +995,7 @@ async function runBinanceCycle(
       if (activeCap?.buyPrice) activeCapacityBuyPrice = Number(activeCap.buyPrice);
     } catch (e) {}
 
-    // Auto-finish completed capacities
-    try {
-      await autoFinishCapacities(prisma, tenantId);
-    } catch (e: any) {
-      await log( "warn", "binance", `Error auto-finish: ${e.message}`);
-    }
-
-    // Re-read capacity after auto-finish and update ads with correct price
+    // Re-read capacity and update ads with correct price
     try {
       const activeCap = await getActiveCapacity(prisma, tenantId);
       activeCapacityBuyPrice = activeCap?.buyPrice ? Number(activeCap.buyPrice) : null;
@@ -1723,14 +1664,7 @@ async function runBybitCycle(
       if (activeCap?.buyPrice) activeCapacityBuyPrice = Number(activeCap.buyPrice);
     } catch (e) {}
 
-    // Auto-finish completed capacities
-    try {
-      await autoFinishCapacities(prisma, tenantId);
-    } catch (e: any) {
-      await log( "warn", "bybit", `Error auto-finish: ${e.message}`);
-    }
-
-    // Re-read capacity after auto-finish and update ads with correct price
+    // Re-read capacity and update ads with correct price
     try {
       const activeCap = await getActiveCapacity(prisma, tenantId);
       activeCapacityBuyPrice = activeCap?.buyPrice ? Number(activeCap.buyPrice) : null;

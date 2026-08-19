@@ -22759,9 +22759,23 @@ function addP2PBotStyles(){
   }
 
   window.syncBinanceSales = function syncBinanceSales(silent = false){
+    // Evita que dos sincronizaciones corran en paralelo -- el timer de 15s
+    // (initBinanceSalesSync) y el listener de "visibilitychange" pueden
+    // disparar dos corridas casi al mismo tiempo. Protección defensiva
+    // adicional (ago 2026): la corrupción real de capacity de esa fecha
+    // (cuenta de Hector) resultó tener otras dos causas de fondo ya
+    // arregladas -- paginación incompleta al leer Binance (ver
+    // fetchAllBinanceOrders en app/api/binance/p2p-history/route.ts) y un
+    // segundo auto-finish duplicado que corría dentro del bot, en el
+    // servidor, sin este candado ni el detalle de ventas (ya eliminado de
+    // lib/p2p-bot/engine.ts) -- pero evitar corridas simultáneas acá sigue
+    // siendo correcto en general, así que se deja.
+    if(window.__p2pSyncInFlight) return;
+
     const btn = document.getElementById('btn-sync-binance-sales');
     if(!btn) return;
 
+    window.__p2pSyncInFlight = true;
     const oldText = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Sincronizando...';
@@ -22785,6 +22799,7 @@ function addP2PBotStyles(){
         if(!silent) onzeAlert('❌ Error: ' + error.message);
       })
       .finally(() => {
+        window.__p2pSyncInFlight = false;
         btn.disabled = false;
         btn.textContent = oldText;
       });

@@ -10,7 +10,26 @@ if (!connectionString) {
   throw new Error("No está definida DIRECT_URL ni DATABASE_URL.");
 }
 
-const pool = new Pool({ connectionString });
+// Neon corta las conexiones que llevan un rato sin usarse. Sin estas
+// opciones, node-postgres a veces entrega del pool una conexión que ya está
+// muerta del lado de Neon y la consulta se queda esperando una respuesta que
+// nunca llega -- bug real confirmado en vivo (ago 2026): el login se quedaba
+// pegado en "Verificando..." para siempre en la instancia de dev con más
+// tiempo corriendo. keepAlive detecta conexiones muertas más rápido,
+// idleTimeoutMillis recicla las que llevan mucho tiempo sin usarse antes de
+// que Neon las corte, y query_timeout asegura que si de todos modos cae en
+// una conexión mala, la consulta falle en 20s en vez de colgarse para
+// siempre (para que la UI muestre un error en vez de girar sin parar).
+const pool = new Pool({
+  connectionString,
+  keepAlive: true,
+  connectionTimeoutMillis: 10_000,
+  idleTimeoutMillis: 30_000,
+  query_timeout: 20_000,
+});
+pool.on("error", (err) => {
+  console.error("Postgres pool error (conexión inactiva):", err);
+});
 const adapter = new PrismaPg(pool);
 
 // apiKey/secretKey/passphrase de BinanceCredentials/BybitCredentials/OkxCredentials

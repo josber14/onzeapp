@@ -77,7 +77,14 @@ async function fetchAllBinanceOrders(apiKey: string, secretKey: string, startTim
       }
     }
 
-    if (items.length < 100) break;
+    // Bug real confirmado en vivo (ago 2026, cuenta de Hector): se pide
+    // rows=100 pero Binance en la práctica entrega como máximo 50 por
+    // página en este endpoint -- "menos de 100" era SIEMPRE cierto, así que
+    // el loop se paraba después de la página 1 todas las veces, perdiendo
+    // en silencio las páginas más viejas (confirmado pidiendo páginas 2, 3
+    // y 4 a mano: tenían ventas reales de días anteriores). La única señal
+    // confiable de "ya no hay más" es una página vacía (ya cubierto arriba,
+    // línea "if (items.length === 0) break;").
     page++;
   }
 
