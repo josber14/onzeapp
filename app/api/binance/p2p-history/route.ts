@@ -66,25 +66,36 @@ async function fetchAllBinanceOrders(apiKey: string, secretKey: string, startTim
     const items = Array.isArray(json?.data) ? json.data : [];
     if (items.length === 0) break;
 
-    for (const item of items) {
-      if (
-        String(item.fiat || "").toUpperCase() === "CLP" &&
-        String(item.orderStatus || "").toUpperCase() === "COMPLETED"
-      ) {
-        const createTime = Number(item.createTime || 0);
-        if (startTimestamp && createTime < startTimestamp) continue;
-        allOrders.push(formatOrder(item));
-      }
-    }
-
     // Bug real confirmado en vivo (ago 2026, cuenta de Hector): se pide
     // rows=100 pero Binance en la práctica entrega como máximo 50 por
     // página en este endpoint -- "menos de 100" era SIEMPRE cierto, así que
     // el loop se paraba después de la página 1 todas las veces, perdiendo
     // en silencio las páginas más viejas (confirmado pidiendo páginas 2, 3
-    // y 4 a mano: tenían ventas reales de días anteriores). La única señal
-    // confiable de "ya no hay más" es una página vacía (ya cubierto arriba,
-    // línea "if (items.length === 0) break;").
+    // y 4 a mano: tenían ventas reales de días anteriores). Se quitó ese
+    // corte -- pero eso solo, sin nada más, hizo que cuentas con un cutoff
+    // viejo (ej. tenant 1/ONZE, corte de más de un mes atrás) recorrieran
+    // TODO el historial hasta una página vacía en CADA sincronización de
+    // 15s, poniendo el dashboard notablemente lento (bug real confirmado en
+    // vivo, ago 2026, cuenta propia de Josber). Las órdenes vienen más
+    // nuevas primero -- en cuanto una página completa queda ANTES del
+    // startTimestamp, todo lo que sigue también va a estar antes, así que
+    // ahí sí se puede cortar sin perder nada.
+    let pageHasAnyWithinCutoff = !startTimestamp;
+
+    for (const item of items) {
+      const createTime = Number(item.createTime || 0);
+      if (startTimestamp && createTime < startTimestamp) continue;
+      pageHasAnyWithinCutoff = true;
+
+      if (
+        String(item.fiat || "").toUpperCase() === "CLP" &&
+        String(item.orderStatus || "").toUpperCase() === "COMPLETED"
+      ) {
+        allOrders.push(formatOrder(item));
+      }
+    }
+
+    if (startTimestamp && !pageHasAnyWithinCutoff) break;
     page++;
   }
 
@@ -106,7 +117,28 @@ export async function GET(req: NextRequest) {
       where: { tenantId },
       select: { p2pResetCutoff: true },
     });
-    const startTimestamp = settings?.p2pResetCutoff ? Number(settings.p2pResetCutoff) : undefined;
+    const resetCutoff = settings?.p2pResetCutoff ? Number(settings.p2pResetCutoff) : undefined;
+
+    // Bug real confirmado en vivo (ago 2026, cuenta propia de Josber/ONZE):
+    // con el cutoff del reset (ej. 9 de julio) tal cual, CADA sincronización
+    // de 15s tenía que recorrer TODO el historial desde esa fecha otra vez
+    // -- en una cuenta con mucho volumen (1746+ órdenes) tardaba ~25s, más
+    // que el propio intervalo de 15s, poniendo el dashboard visiblemente
+    // lento. Mismo patrón ya usado en app/api/partner/sync/route.ts (AKI
+    // Transfers, nunca tuvo este problema): en vez de recorrer desde el
+    // cutoff original en cada sync, arrancar desde la orden más nueva que
+    // YA está guardada en BinanceOrder -- 2h de colchón por seguridad. La
+    // primera sincronización (caché vacía) sigue usando el cutoff completo.
+    const OVERLAP_BUFFER_MS = 2 * 60 * 60 * 1000;
+    const latestCached = await prisma.binanceOrder.aggregate({
+      where: { tenantId },
+      _max: { createTime: true },
+    });
+    const latestCachedMs = latestCached._max.createTime ? Number(latestCached._max.createTime) : null;
+    const incrementalStart = latestCachedMs ? latestCachedMs - OVERLAP_BUFFER_MS : undefined;
+    const startTimestamp = incrementalStart && resetCutoff
+      ? Math.max(incrementalStart, resetCutoff)
+      : incrementalStart ?? resetCutoff;
 
     let apiKey: string | null = null;
     let secretKey: string | null = null;
