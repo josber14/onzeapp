@@ -71,6 +71,7 @@ model Tenant {
   P2PAccount            P2PAccount[]
   p2pBotConfig          P2PBotConfig?
   P2PBotExchangeConfig  P2PBotExchangeConfig[]
+  p2pBotCallLogs        P2PBotCallLog[]
   p2pBotLogs            P2PBotLog[]
   p2pBotOrders          P2PBotOrder[]
   p2pBotAds             P2PBotAd[]
@@ -1498,6 +1499,36 @@ model P2PBotExchangeConfig {
 
   @@unique([tenantId, exchange, label])
   @@index([tenantId])
+}
+
+// Registro persistido del freno anti-bloqueo de Binance (ver lib/p2p-bot/
+// rate-limiter.ts) -- antes vivía en un Map en memoria del proceso, que se
+// resetea solo entre invocaciones de una función serverless. Necesario para
+// automatizar el bot vía cron de Vercel (ago 2026) sin arriesgar el límite
+// real de Binance (36 llamadas/min por cuenta, no revelado, ya causó un
+// bloqueo real una vez -- ver AGENTS.md). Una fila por llamada real a
+// Binance; se cuenta cuántas hay en la ventana de 60s para decidir si hay
+// cupo. Filas viejas se limpian en cada chequeo.
+model P2PBotCallLog {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int
+  label     String
+  exchange  String
+  calledAt  DateTime @default(now())
+  Tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, exchange, label, calledAt])
+}
+
+// Candado simple para que el cron del bot (app/api/internal/bot-cycle-cron)
+// no se solape consigo mismo si una invocación tarda más de un minuto en
+// cerrar y el siguiente disparo del cron llega antes -- una sola fila (id
+// fijo), se "toma" con lockedAt=ahora y se libera al terminar. Si una
+// invocación anterior murió sin liberar el candado (ej. timeout), se
+// considera "viejo" pasados 70s y se puede volver a tomar igual.
+model P2PCronLock {
+  id       String    @id
+  lockedAt DateTime?
 }
 
 model P2PBotAd {

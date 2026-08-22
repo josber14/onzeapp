@@ -111,7 +111,7 @@ function getAdState(bs: BinanceState, adId: string): AdState {
   return as;
 }
 
-function buildBinanceState(bs: BinanceState, rateLimitKey?: string): any {
+async function buildBinanceState(bs: BinanceState, rateLimitKey?: string): Promise<any> {
   const now = Date.now();
   const oneHourAgo = now - 3600000;
   const allTimestamps: number[] = [];
@@ -137,7 +137,7 @@ function buildBinanceState(bs: BinanceState, rateLimitKey?: string): any {
     && (now - minLastUpdate >= 5000 || minLastUpdate === 0)
     && maxWeight < 4000
     && now >= anyCooldown;
-  const rateLimit = rateLimitKey ? getUsage(rateLimitKey) : { used: 0, cap: 32, reserved: 4, resetInMs: 0 };
+  const rateLimit = rateLimitKey ? await getUsage(rateLimitKey) : { used: 0, cap: 32, reserved: 4, resetInMs: 0 };
   return {
     cambiosEstaHora: active.length,
     cambiosMax: 30,
@@ -492,7 +492,7 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
 
       if (isDisabled && !chatEnabled && !force) {
         await l( "info", exchange, `Bot ${exchange} deshabilitado en su sesión`);
-        if (exchange === "binance") cycleState.binance = buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
+        if (exchange === "binance") cycleState.binance = await buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
         continue;
       }
 
@@ -508,7 +508,7 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
       const cycleGateKey = `${tenantId}:${label}:${exchange}`;
       const lastFullCycleAtMs = lastFullCycleAt.get(cycleGateKey) || 0;
       if (!force && Date.now() - lastFullCycleAtMs < MIN_CYCLE_GAP_MS) {
-        if (exchange === "binance") cycleState.binance = buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
+        if (exchange === "binance") cycleState.binance = await buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
         continue;
       }
       lastFullCycleAt.set(cycleGateKey, Date.now());
@@ -519,7 +519,7 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
         });
         if (!creds) {
           await l("warn", "binance", "Sin credenciales Binance configuradas");
-          cycleState.binance = buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
+          cycleState.binance = await buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
           continue;
         }
 
@@ -530,13 +530,13 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
           binancePromises.push((async () => {
             try {
               const result = await runBinanceCycle(tenantId, activeConfig, creds.apiKey, creds.secretKey, label);
-              cycleState.binance = buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
+              cycleState.binance = await buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
               if (result.actions.length > 0) {
                 actions.push(...result.actions);
                 await l( "info", "binance", `${result.actions.length} acción(es) ejecutada(s)`, { actions: result.actions });
               }
             } catch (e: any) {
-              cycleState.binance = buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
+              cycleState.binance = await buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
               await l( "error", "binance", `Error en ciclo Binance: ${e.message}`);
             }
           })());
@@ -565,7 +565,7 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
         }
 
         if (binancePromises.length > 0) await Promise.all(binancePromises);
-        if (cycleState.binance === undefined) cycleState.binance = buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
+        if (cycleState.binance === undefined) cycleState.binance = await buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
       } else if (exchange === "bybit") {
         // Bybit no tiene concepto de ONZE/ZINPLE — es una única cuenta fija.
         // Sin importar bajo qué label (ONZE o ZINPLE) esté corriendo el timer
@@ -775,8 +775,9 @@ async function runBinanceCycle(
             // por soporte jul 2026) — el sync de cantidad es prioritario (no es
             // una "persecución" de precio hacia abajo), así que solo se frena si
             // de verdad no queda ningún cupo.
-            if (!canCallPriority(rateLimitKey)) {
-              await log( "info", "binance", `Ad ${ma.adId}: sync de cantidad esperando cupo (autolímite ${getUsage(rateLimitKey).used}/${getUsage(rateLimitKey).cap} por minuto) — saltando este ciclo`);
+            if (!(await canCallPriority(rateLimitKey))) {
+              const u0 = await getUsage(rateLimitKey);
+              await log( "info", "binance", `Ad ${ma.adId}: sync de cantidad esperando cupo (autolímite ${u0.used}/${u0.cap} por minuto) — saltando este ciclo`);
               continue;
             }
             // 5s de separación entre intentos de sync de cantidad de distintos
@@ -790,7 +791,7 @@ async function runBinanceCycle(
               await new Promise(r => setTimeout(r, 5000));
             }
             try {
-              recordCall(rateLimitKey);
+              await recordCall(rateLimitKey);
               await client.updateAdQuantity(ma.adId, balance);
               as.qtySyncCooldownUntil = 0;
               await log( "info", "binance", `Ad ${ma.adId}: quantity sync → surplusAmount=${balance} (wallet balance, antes ${currQty})`);
@@ -1288,9 +1289,9 @@ async function runBinanceCycle(
       // se reservan 4 cupos exclusivos para las prioritarias, así que una
       // bajada se salta antes de tocar ese margen (vuelve a intentar el
       // próximo ciclo, no pasa nada por esperar un poco para bajar).
-      const rateOk = isPriceUp ? canCallPriority(rateLimitKey) : canCallNonUrgent(rateLimitKey);
+      const rateOk = isPriceUp ? await canCallPriority(rateLimitKey) : await canCallNonUrgent(rateLimitKey);
       if (!rateOk) {
-        const u = getUsage(rateLimitKey);
+        const u = await getUsage(rateLimitKey);
         await log( "info", "binance",
           `Ad ${adId}: autolímite (${u.used}/${u.cap} por minuto) — ${isPriceUp ? "esperando cupo para subir" : "bajada no urgente, se salta este ciclo"}`);
         continue;
@@ -1307,7 +1308,7 @@ async function runBinanceCycle(
       try {
         const payload: any = { adId, price: targetPrice.toFixed(2) };
         if (as.hiddenAt > 0) payload.visible = 1; // restaurar visibilidad junto con el precio corregido
-        recordCall(rateLimitKey);
+        await recordCall(rateLimitKey);
         as.lastRetryAttemptAt = Date.now();
         await log( "info", "binance",
           `Ad ${adId}: price update → price=${targetPrice.toFixed(2)}${as.hiddenAt > 0 ? " (restaurando visibilidad)" : ""}`);
@@ -1335,15 +1336,16 @@ async function runBinanceCycle(
         if (e.message?.includes("187049") || e.message?.includes("187040")) {
           if (as.correctionFailSince === 0) as.correctionFailSince = Date.now();
           const failingForMs = Date.now() - as.correctionFailSince;
+          const u2 = await getUsage(rateLimitKey);
           await log( "warn", "binance",
-            `Ad ${adId}: 187049/187040 (autolímite en ${getUsage(rateLimitKey).used}/${getUsage(rateLimitKey).cap}/min) — lleva ${Math.round(failingForMs / 1000)}s sin poder corregir, reintenta el próximo ciclo`);
+            `Ad ${adId}: 187049/187040 (autolímite en ${u2.used}/${u2.cap}/min) — lleva ${Math.round(failingForMs / 1000)}s sin poder corregir, reintenta el próximo ciclo`);
           // Freno de emergencia: si no se logra corregir el precio en 25s
           // seguidos, ocultar el anuncio (sin borrarlo) para que no siga
           // tomando órdenes a un precio desactualizado — se reactiva solo
           // apenas haya cupo (ver bloque de éxito arriba).
-          if (failingForMs > 25000 && as.hiddenAt === 0 && canCallPriority(rateLimitKey)) {
+          if (failingForMs > 25000 && as.hiddenAt === 0 && await canCallPriority(rateLimitKey)) {
             try {
-              recordCall(rateLimitKey);
+              await recordCall(rateLimitKey);
               await client.updateAd({ adId, visible: 0 });
               as.hiddenAt = Date.now();
               await log( "warn", "binance",
