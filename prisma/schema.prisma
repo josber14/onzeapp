@@ -972,6 +972,7 @@ model P2PCapacity {
   finalSaleParts      Json?
   manualPaymentClp    Decimal?  @db.Decimal(18, 2)
   manualPaymentsClp   Decimal?  @db.Decimal(18, 2)
+  manualPayments      Json?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   tenant              Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)

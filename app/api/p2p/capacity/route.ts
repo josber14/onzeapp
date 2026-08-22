@@ -33,6 +33,7 @@ export async function GET() {
     saleParts: it.finalSaleParts || [],
     manualPaymentClp: it.manualPaymentClp !== null ? Number(it.manualPaymentClp) : null,
     manualPaymentsClp: it.manualPaymentsClp !== null ? Number(it.manualPaymentsClp) : null,
+    manualPayments: it.manualPayments || [],
     createdAt: it.createdAt.toISOString(),
   }));
   return NextResponse.json({ ok: true, items: normalized });
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest) {
       || (item.saleParts && Array.isArray(item.saleParts) ? item.saleParts : null),
     manualPaymentClp: item.manualPaymentClp !== undefined && item.manualPaymentClp !== null ? Number(item.manualPaymentClp) : null,
     manualPaymentsClp: item.manualPaymentsClp !== undefined && item.manualPaymentsClp !== null ? Number(item.manualPaymentsClp) : null,
+    manualPayments: Array.isArray(item.manualPayments) ? item.manualPayments : null,
   };
   const upserted = existing
     ? await prisma.p2PCapacity.update({ where: { id: String(item.id) }, data })

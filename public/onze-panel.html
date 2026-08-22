@@ -18635,9 +18635,19 @@ function addP2PBotStyles(){
 
         // Asignar por CLP: el capacity se completa cuando el CLP recibido
         // alcanza su capacityClp. El USDT se prorratea de la venta original.
+        // Pedido explícito del usuario (ago 2026): "Completar saldo" (pago
+        // manual directo al proveedor, ej. plata enviada para tener USDT sin
+        // pasar por una venta de Binance) NO debe reducir el monto total del
+        // capacity -- eso hacía que las ventas ya asignadas antes del pago
+        // manual se recalcularan contra un monto más chico y descuadraran.
+        // manualPaymentsClp se resta acá, del lado de las ventas, junto con
+        // lo ya vendido -- así ambas formas de "pagarle al proveedor" (venta
+        // real + pago manual) compiten por el mismo monto total fijo, sin
+        // pisarse.
         const capTotalClp = Number(cap.capacityClp || 0);
+        const capManualPaid = Number(cap.manualPaymentsClp || 0);
         const capUsedClp = Number(cap.clpReceived || 0);
-        const capAvailableClp = Math.max(capTotalClp - capUsedClp, 0);
+        const capAvailableClp = Math.max(capTotalClp - capManualPaid - capUsedClp, 0);
 
         if(capAvailableClp <= 0) continue;
 
@@ -18698,10 +18708,13 @@ function addP2PBotStyles(){
 
     const enriched = capacities.map(item => {
       const price = Number(item.buyPrice || 0);
-      // paidClp se registró al crear el capacity (no reduce el capacity).
-      // manualPaymentsClp se registró al completar saldo parcial (reduce capacityClp).
-      // Por eso NO sumamos manualPaymentsClp aquí, porque el capacity ya se redujo.
-      const paid = Number(item.paidClp || 0);
+      // paidClp se registra al crear el capacity. manualPaymentsClp se
+      // registra al completar saldo parcial (pago directo al proveedor,
+      // fuera de Binance). Pedido explícito del usuario (ago 2026): ya NO
+      // reduce el capacityClp (ver el loop de asignación más arriba) --
+      // ambos se suman acá como "ya pagado al proveedor por fuera de la
+      // venta", junto con lo vendido real, contra el mismo monto total fijo.
+      const paid = Number(item.paidClp || 0) + Number(item.manualPaymentsClp || 0);
 
       // Carryover de días anteriores (ventas pre-cargadas manualmente)
       const carryover = getP2PCapacityCarryover(item.id);
@@ -19797,7 +19810,7 @@ function addP2PBotStyles(){
           <div class="p2p-capacity-mini">
             <span>Restante</span>
             <strong>${p2pCapMoney(item.remainingUsdt, 2)} USDT</strong>
-            <div class="p2p-capacity-meta" style="margin-top:5px;">${p2pCapMoney(Math.max(Number(item.capacityClp || 0) - Number(item.clpReceived || 0), 0), 0)} CLP</div>
+            <div class="p2p-capacity-meta" style="margin-top:5px;">${p2pCapMoney(item.pendingClp, 0)} CLP</div>
           </div>
           <div class="p2p-capacity-mini">
             <span>Ganancia</span>
@@ -19806,8 +19819,8 @@ function addP2PBotStyles(){
           </div>
           ${
             Number(item.manualPaymentClp || item.manualPaymentsClp || item.paidClp || 0) > 0
-            ? `<div class="p2p-capacity-mini">
-                <span>Pago manual</span>
+            ? `<div class="p2p-capacity-mini" style="cursor:pointer;" onclick="window.openManualPaymentsModal('${item.id}')" title="Click para ver el detalle de cada pago">
+                <span>Pago manual ›</span>
                 <strong style="color:#fbbf24;">${p2pCapMoney(Number(item.manualPaymentClp || item.manualPaymentsClp || item.paidClp || 0), 0)} CLP</strong>
               </div>`
             : ""
@@ -19862,11 +19875,12 @@ function addP2PBotStyles(){
     if(!capStats) { onzeAlert("No se pudo calcular el restante"); return; }
 
     const remainingUsdt = Number(capStats.remainingUsdt || 0);
-    const buyPrice = Number(cap.buyPrice || 0);
     const capacityClpTotal = Number(cap.capacityClp || 0);
+    const existingManualPaid = Number(cap.manualPaymentsClp || 0);
     const clpReceived = Number(capStats.clpReceived || 0);
-    // Restante = lo que falta por cubrir del capacity total
-    const remainingClp = Math.max(capacityClpTotal - clpReceived, 0);
+    // Restante = lo que falta por cubrir del capacity total, descontando
+    // ventas reales Y pagos manuales ya hechos (ver finishCapacityManually).
+    const remainingClp = Math.max(capacityClpTotal - existingManualPaid - clpReceived, 0);
 
     if(remainingClp <= 0){
       if(await onzeConfirm("Este capacity ya está cubierto por completo. ¿Marcar como completado?")){
@@ -19934,14 +19948,41 @@ function addP2PBotStyles(){
     const capStats = stats.capacities.find(c => c.id === id);
     if(!capStats) return;
 
-    const buyPrice = Number(cap.buyPrice || 0);
+    // Pedido explícito del usuario (ago 2026): "Completar saldo" (pago
+    // manual directo al proveedor, ej. plata enviada por fuera para tener
+    // USDT sin pasar por una venta de Binance) tiene que descontar el saldo
+    // restante y nada más -- NO debe tocar el monto total del capacity
+    // (capacityClp/usdtAmount). Antes SÍ lo reducía, y como las ventas
+    // reales se recalculan siempre desde cero contra el monto total, las
+    // ventas ya asignadas antes del pago manual quedaban compitiendo por un
+    // monto más chico y el "Restante" dejaba de coincidir con lo que
+    // realmente se le debía al proveedor (confirmado en vivo, capacity
+    // #265: 5.000.000 → 3.018.000 tras un pago manual de 1.982.000 rompió
+    // el cálculo). Ahora el pago manual solo se acumula en
+    // manualPaymentsClp, y calculateP2PCapacityStats() ya lo resta del
+    // disponible para ventas reales (ver el loop de asignación más arriba)
+    // -- ambas formas de pago compiten por el mismo monto fijo, sin pisarse.
     const capacityClpTotal = Number(cap.capacityClp || 0);
+    const existingManualPaid = Number(cap.manualPaymentsClp || 0);
     const clpReceived = Number(capStats.clpReceived || 0);
-    const remainingClp = Math.max(capacityClpTotal - clpReceived, 0);
+    const remainingClp = Math.max(capacityClpTotal - existingManualPaid - clpReceived, 0);
     const payment = Math.min(manualClpPayment, remainingClp);
+    const newManualPaid = existingManualPaid + payment;
+
+    // Pedido explícito del usuario (ago 2026): poder ver cada pago manual
+    // por separado y borrar uno puntual si se equivocó -- antes solo se
+    // guardaba el total acumulado (manualPaymentsClp), sin detalle. Se
+    // agrega un registro por cada pago (id, monto, fecha) en
+    // manualPayments; manualPaymentsClp sigue existiendo como el total (se
+    // sigue leyendo en varios lugares) pero ahora se recalcula siempre como
+    // la suma de manualPayments, nunca a mano.
+    const existingPayments = Array.isArray(cap.manualPayments) ? cap.manualPayments : [];
+    const newPayments = payment > 0
+      ? [...existingPayments, { id: `manualpay_${Date.now()}`, amountClp: payment, createdAt: new Date().toISOString() }]
+      : existingPayments;
 
     if(payment >= remainingClp * 0.99){
-      // Pago completo: cerrar capacity
+      // Ya no queda nada por cubrir (ni por ventas reales ni por pago manual) -> cerrar
       capacities[idx] = {
         ...cap,
         status: "finished",
@@ -19952,32 +19993,15 @@ function addP2PBotStyles(){
         finalCommissionClp: Number(capStats.commissionClp || 0),
         finalSaleParts: capStats.saleParts || [],
         manualPaymentClp: Number(cap.manualPaymentClp || 0) + payment,
-        manualPaymentsClp: Number(cap.manualPaymentsClp || 0) + payment
+        manualPaymentsClp: newManualPaid,
+        manualPayments: newPayments
       };
     } else {
-      const newCapacityClp = capacityClpTotal - payment;
-      const newUsdt = buyPrice > 0 ? newCapacityClp / buyPrice : 0;
-      if (clpReceived >= newCapacityClp * 0.99) {
-        capacities[idx] = {
-          ...cap,
-          status: "finished",
-          finishedAt: new Date().toISOString(),
-          finalSoldUsdt: Number(capStats.usedUsdt || 0),
-          finalClpReceived: clpReceived,
-          finalCommissionUsdt: Number(capStats.commissionUsdt || 0),
-          finalCommissionClp: Number(capStats.commissionClp || 0),
-          finalSaleParts: capStats.saleParts || [],
-          manualPaymentClp: Number(cap.manualPaymentClp || 0) + payment,
-          manualPaymentsClp: (Number(cap.manualPaymentsClp || 0)) + payment
-        };
-      } else {
-        capacities[idx] = {
-          ...cap,
-          capacityClp: newCapacityClp,
-          usdtAmount: newUsdt,
-          manualPaymentsClp: (Number(cap.manualPaymentsClp || 0)) + payment
-        };
-      }
+      capacities[idx] = {
+        ...cap,
+        manualPaymentsClp: newManualPaid,
+        manualPayments: newPayments
+      };
     }
 
     saveP2PCapacity(capacities);
@@ -19991,6 +20015,108 @@ function addP2PBotStyles(){
     }
   };
 
+  // Pedido explícito del usuario (ago 2026): clickear la tarjeta "Pago
+  // manual" abre el detalle de cada pago hecho al proveedor (fecha + monto)
+  // con opción de borrar uno puntual si se equivocó -- antes solo se veía
+  // el total acumulado, sin forma de corregir un pago mal cargado.
+  window.openManualPaymentsModal = function(capacityId){
+    const capacities = loadP2PCapacity();
+    const cap = capacities.find(c => c.id === capacityId);
+    if(!cap){ onzeAlert("No encontré este capacity."); return; }
+
+    let modal = document.getElementById("manualPaymentsModal");
+    if(modal) modal.remove();
+
+    modal = document.createElement("div");
+    modal.id = "manualPaymentsModal";
+    modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;";
+    modal.addEventListener("click", function(e){ if(e.target === modal) modal.remove(); });
+
+    document.body.appendChild(modal);
+    renderManualPaymentsModalBody(capacityId);
+  };
+
+  function renderManualPaymentsModalBody(capacityId){
+    const modal = document.getElementById("manualPaymentsModal");
+    if(!modal) return;
+
+    const capacities = loadP2PCapacity();
+    const cap = capacities.find(c => c.id === capacityId);
+    if(!cap){ modal.remove(); return; }
+
+    const payments = Array.isArray(cap.manualPayments) ? cap.manualPayments.slice().sort((a,b)=> new Date(b.createdAt||0) - new Date(a.createdAt||0)) : [];
+    const total = payments.reduce((sum, p) => sum + Number(p.amountClp || 0), 0);
+
+    modal.innerHTML = `
+      <div style="background:#0d2137;border:1px solid #2a4a6a;border-radius:16px;padding:24px;max-width:460px;width:90%;">
+        <h3 style="color:#00d4ff;margin-bottom:4px;">💵 Pagos manuales</h3>
+        <p style="color:#8aa0ba;font-size:12px;margin-bottom:16px;">${cap.provider || ""} · ${cap.date || ""}</p>
+        <div style="max-height:340px;overflow-y:auto;">
+          ${payments.length ? payments.map(p => `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(148,163,184,.12);">
+              <div>
+                <strong style="color:#fbbf24;">${Math.round(Number(p.amountClp||0)).toLocaleString("es-CL")} CLP</strong>
+                <div style="color:#8aa0ba;font-size:12px;margin-top:2px;">${p.createdAt ? new Date(p.createdAt).toLocaleString("es-CL", { timeZone:"America/Santiago", day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" }) : ""}</div>
+              </div>
+              <button class="btn small danger" type="button" onclick="window.deleteManualPayment('${capacityId}','${p.id}')" title="Borrar este pago" style="padding:6px 10px;font-size:13px;">🗑️</button>
+            </div>
+          `).join("") : `<div style="color:#8aa0ba;font-size:13px;padding:14px 0;text-align:center;">Sin pagos manuales registrados.</div>`}
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:14px;border-top:1px solid rgba(148,163,184,.14);">
+          <span style="color:#8aa0ba;font-size:13px;">Total pagado manual</span>
+          <strong style="color:#fbbf24;">${Math.round(total).toLocaleString("es-CL")} CLP</strong>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+          <button class="btn secondary" type="button" onclick="document.getElementById('manualPaymentsModal').remove()">Cerrar</button>
+        </div>
+      </div>
+    `;
+  }
+
+  window.deleteManualPayment = async function(capacityId, paymentId){
+    const ok = await onzeConfirm("¿Borrar este pago manual? Esto le va a devolver ese monto al saldo restante del capacity.");
+    if(!ok) return;
+
+    const capacities = loadP2PCapacity().slice();
+    const idx = capacities.findIndex(c => c.id === capacityId);
+    if(idx < 0) return;
+
+    const cap = capacities[idx];
+    const payments = Array.isArray(cap.manualPayments) ? cap.manualPayments : [];
+    const remaining = payments.filter(p => p.id !== paymentId);
+    const newTotal = remaining.reduce((sum, p) => sum + Number(p.amountClp || 0), 0);
+
+    // Si el capacity ya estaba "finished" porque este pago manual lo cerró
+    // del todo, reabrirlo -- borrar un pago puede dejar saldo pendiente de
+    // nuevo, y calculateP2PCapacityStats() necesita recalcularlo desde
+    // "active" (un capacity "finished" queda congelado, ver el loop de
+    // asignación en calculateP2PCapacityStats).
+    capacities[idx] = {
+      ...cap,
+      manualPayments: remaining,
+      manualPaymentsClp: newTotal,
+      ...(cap.status === "finished" ? {
+        status: "active",
+        finishedAt: null,
+        finalSoldUsdt: null,
+        finalClpReceived: null,
+        finalCommissionUsdt: null,
+        finalCommissionClp: null,
+        finalSaleParts: [],
+      } : {})
+    };
+
+    saveP2PCapacity(capacities);
+    postP2PCapacityToServer(capacities[idx]);
+
+    renderP2PCapacityPanel();
+    updateP2PDashboardWithCapacity();
+
+    if(document.getElementById("manualPaymentsModal")){
+      renderManualPaymentsModalBody(capacityId);
+    }
+    if(typeof showToast === "function") showToast("Pago manual borrado");
+  };
 
   window.openCompletedCapacitiesModal = function(){
     const allCapacities = loadP2PCapacity().filter(c => c.status === "finished" && c.provider !== "_initial_capital")
@@ -20758,7 +20884,7 @@ function addP2PBotStyles(){
                 <div class="p2p-capacity-mini">
                   <span>Restante</span>
                   <strong>${p2pCapMoney(item.remainingUsdt, 2)} USDT</strong>
-                  <div class="p2p-capacity-meta" style="margin-top:4px;">${p2pCapMoney(Math.max(Number(item.capacityClp || 0) - Number(item.clpReceived || 0), 0), 0)} CLP</div>
+                  <div class="p2p-capacity-meta" style="margin-top:4px;">${p2pCapMoney(item.pendingClp, 0)} CLP</div>
                 </div>
                 <div class="p2p-capacity-mini">
                   <span>CLP recibido</span>
@@ -20782,8 +20908,8 @@ function addP2PBotStyles(){
                 </div>
                 ${
                   Number(item.manualPaymentClp || item.manualPaymentsClp || item.paidClp || 0) > 0
-                  ? `<div class="p2p-capacity-mini">
-                      <span>Pago manual</span>
+                  ? `<div class="p2p-capacity-mini" style="cursor:pointer;" onclick="window.openManualPaymentsModal('${item.id}')" title="Click para ver el detalle de cada pago">
+                      <span>Pago manual ›</span>
                       <strong style="color:#fbbf24;">${p2pCapMoney(Number(item.manualPaymentClp || item.manualPaymentsClp || item.paidClp || 0), 0)} CLP</strong>
                     </div>`
                   : ""
@@ -22723,10 +22849,18 @@ function addP2PBotStyles(){
     const toFinish = stats.capacities.filter(c =>
       c.status === "active" &&
       Number(c.capacityClp || c.totalCost || 0) > 0 &&
-      // Tolerancia de 1 CLP (moneda sin decimales) — la suma de muchas ventas
-      // pequeñas puede quedar unos centavos por debajo del monto exacto por
-      // redondeo, sin que eso signifique que falta saldo real por vender.
-      Number(c.clpReceived || 0) >= Number(c.capacityClp || c.totalCost || 0) - 1
+      // Bug real confirmado en vivo (ago 2026, capacity #265): comparaba
+      // solo ventas reales (c.clpReceived) contra el monto total, sin
+      // sumar los pagos manuales ya hechos (manualPaymentsClp) -- un
+      // capacity totalmente cubierto por ventas + pago manual se quedaba
+      // "Activo" para siempre. c.pendingClp ya suma ambos (ver el cálculo
+      // "inteligente" de coveredClp en calculateP2PCapacityStats), así que
+      // usar eso es la forma correcta de saber si ya no queda nada por
+      // cubrir. Tolerancia de 1 CLP (moneda sin decimales) — la suma de
+      // muchas ventas pequeñas puede quedar unos centavos por debajo del
+      // monto exacto por redondeo, sin que eso signifique que falta saldo
+      // real por vender.
+      Number(c.pendingClp || 0) <= 1
     );
     if(!toFinish.length) return;
 
