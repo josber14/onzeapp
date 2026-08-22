@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { createHmac, publicEncrypt, constants } from "crypto";
+import { binanceApiBase, binanceFetch } from "@/lib/p2p-bot/binance-proxy";
 
 // RSA/ECB/OAEPWITHSHA-256ANDMGF1PADDING (fórmula Java que dio soporte de
 // Binance) — Node equivalente: RSA_PKCS1_OAEP_PADDING + oaepHash sha256.
@@ -49,7 +50,7 @@ export async function testBinanceCredentials(tenantId: number, label = "ONZE") {
 export class BinanceP2PClient {
   private apiKey: string;
   private secretKey: string;
-  private apiBase = "https://api.binance.com";
+  private apiBase = binanceApiBase();
   private p2pBase = "https://p2p.binance.com";
   public latestWeight: number = 0;
   // Límite confirmado por soporte de Binance (jul 2026) — ver comentario en releaseAssets.
@@ -98,7 +99,7 @@ export class BinanceP2PClient {
     };
     if (bodyPayload && method !== "GET") opts.body = JSON.stringify(bodyPayload);
 
-    const res = await fetch(url, opts);
+    const res = await binanceFetch(url, opts);
     const weightStr = res.headers.get("X-SAPI-USED-IP-WEIGHT-1M") || res.headers.get("x-sapi-used-ip-weight-1m") || res.headers.get("x-mbx-used-weight") || "0";
     this.latestWeight = parseInt(weightStr, 10) || 0;
     if (!res.ok) {
@@ -475,8 +476,8 @@ export class BinanceP2PClient {
     const params: any = { timestamp: Date.now() };
     const queryStr = this.buildQueryString(params);
     const sig = this.sign(queryStr);
-    const url = `https://api.binance.com/sapi/v1/c2c/chat/retrieveChatCredential?${queryStr}&signature=${encodeURIComponent(sig)}`;
-    const res = await fetch(url, {
+    const url = `${binanceApiBase()}/sapi/v1/c2c/chat/retrieveChatCredential?${queryStr}&signature=${encodeURIComponent(sig)}`;
+    const res = await binanceFetch(url, {
       method: "GET",
       headers: { "X-MBX-APIKEY": this.apiKey, "clientType": "web", "Content-Type": "application/json" },
     });
@@ -564,8 +565,8 @@ export class BinanceP2PClient {
     const params: any = { orderNo: orderNumber, page, rows, recvWindow: 60000, timestamp: Date.now() };
     const queryStr = this.buildQueryString(params);
     const sig = this.sign(queryStr);
-    const url = `https://api.binance.com/sapi/v1/c2c/chat/retrieveChatMessagesWithPagination?${queryStr}&signature=${encodeURIComponent(sig)}`;
-    const res = await fetch(url, {
+    const url = `${binanceApiBase()}/sapi/v1/c2c/chat/retrieveChatMessagesWithPagination?${queryStr}&signature=${encodeURIComponent(sig)}`;
+    const res = await binanceFetch(url, {
       method: "GET",
       headers: { "X-MBX-APIKEY": this.apiKey, "Content-Type": "application/json" },
     });

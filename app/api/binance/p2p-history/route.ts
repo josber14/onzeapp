@@ -3,11 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import crypto from "crypto";
+import { binanceApiBase, binanceFetch } from "@/lib/p2p-bot/binance-proxy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const BINANCE_BASE_URL = "https://api.binance.com";
+const BINANCE_BASE_URL = binanceApiBase();
 
 async function getSession() {
   const cookieStore = await cookies();
@@ -56,7 +57,7 @@ async function fetchAllBinanceOrders(apiKey: string, secretKey: string, startTim
     const signature = signQuery(query, secretKey);
     const url = `${BINANCE_BASE_URL}/sapi/v1/c2c/orderMatch/listUserOrderHistory?${query}&signature=${signature}`;
 
-    const res = await fetch(url, { headers: { "X-MBX-APIKEY": apiKey } });
+    const res = await binanceFetch(url, { headers: { "X-MBX-APIKEY": apiKey } });
     const json = await res.json();
 
     if (!res.ok) {

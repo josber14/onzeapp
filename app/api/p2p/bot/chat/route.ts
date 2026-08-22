@@ -4,6 +4,7 @@ import { verifySessionToken } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { createHmac } from "crypto";
 import { getBybitCredentials, BybitP2PClient } from "@/lib/p2p-bot/bybit-adapter";
+import { binanceApiBase, binanceFetch } from "@/lib/p2p-bot/binance-proxy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,8 +65,8 @@ export async function GET(req: NextRequest) {
     };
     const queryStr = buildQueryString(allParams);
     const sig = sign(queryStr, creds.secretKey);
-    const url = `https://api.binance.com/sapi/v1/c2c/chat/retrieveChatMessagesWithPagination?${queryStr}&signature=${encodeURIComponent(sig)}`;
-    const res = await fetch(url, {
+    const url = `${binanceApiBase()}/sapi/v1/c2c/chat/retrieveChatMessagesWithPagination?${queryStr}&signature=${encodeURIComponent(sig)}`;
+    const res = await binanceFetch(url, {
       method: "GET",
       headers: { "X-MBX-APIKEY": creds.apiKey, "Content-Type": "application/json" },
     });
