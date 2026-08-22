@@ -371,7 +371,7 @@ export class BinanceP2PClient {
     const queryStr = this.buildQueryString(allParams);
     const signature = this.sign(queryStr);
     const url = `${this.apiBase}/sapi/v1/c2c/orderMatch/listUserOrderHistory?${queryStr}&signature=${encodeURIComponent(signature)}`;
-    const res = await fetch(url, {
+    const res = await binanceFetch(url, {
       method: "GET",
       headers: {
         "X-MBX-APIKEY": this.apiKey,
