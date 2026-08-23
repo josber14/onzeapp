@@ -11070,8 +11070,9 @@ function addP2PBotStyles(){
           <label id="adCfg_${realId}_Top1DiffLabel" style="${top1Style}">Diferencia top 1 (CLP)
             <span style="display:flex;align-items:center;gap:4px;"><input id="adCfg_${realId}_Top1Diff" type="number" step="0.01" value="${top1Diff}" placeholder="0.10" onchange="botSaveAdCfgField(${realId},'botTop1Diff',this.value)" style="flex:1;"><button class="btn small ghost" type="button" onclick="botSaveAdCfgBulk(${realId})" title="Guardar" style="font-size:12px;padding:1px 4px;">💾</button></span>
           </label>
-          <label id="adCfg_${realId}_SpreadPctLabel" style="${spreadStyle}">Spread (%)
-            <input id="adCfg_${realId}_SpreadPct" type="number" step="0.1" value="${spreadPct}" placeholder="0.5" onchange="botSaveAdCfgField(${realId},'botSpreadPct',this.value)">
+          <label id="adCfg_${realId}_SpreadPctLabel" style="${spreadStyle}">Precio spread (CLP)
+            <input id="adCfg_${realId}_SpreadPct" type="number" step="0.01" data-stored-pct="${spreadPct}" placeholder="923.00" oninput="window.botAdUpdateSpreadHint(${realId})" onchange="window.botAdSpreadPriceChanged(${realId},this.value)">
+            <span id="adCfg_${realId}_SpreadHint" style="font-size:10px;color:#34d399;"></span>
           </label>
           <label>Precio fuente
             <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
@@ -11140,6 +11141,7 @@ function addP2PBotStyles(){
     botUpdateAdCostBadge(realId);
     botAdUpdateSafeMarginHint(realId);
     botAdUpdateRealCost(realId);
+    window.botAdUpdateSpreadPriceField(realId);
   };
 
   window.botAdCfgStrategyChange = function(realId, value){
@@ -11147,6 +11149,99 @@ function addP2PBotStyles(){
     var s = document.getElementById("adCfg_" + realId + "_SpreadPctLabel");
     if(t) t.style.display = value === 'spread' ? 'none' : '';
     if(s) s.style.display = value === 'top1' ? 'none' : '';
+    if(value === 'spread') window.botAdUpdateSpreadPriceField(realId);
+  };
+
+  // Pedido explícito del usuario (ago 2026): "Spread fijo" se escribe como un
+  // PRECIO en CLP (ej. 923), no como %, igual que ya funciona "Precio fuente:
+  // Manual" -- el motor de precios (engine.ts) sigue guardando/usando
+  // botSpreadPct como % sin cambios, esto solo traduce precio↔% en el panel.
+  async function botAdGetRefPriceAndCommission(realId){
+    var refPrice = null;
+    var src = document.getElementById("adCfg_" + realId + "_PriceSource")?.value;
+    if(src === 'capacity'){
+      var activePrice = getActiveCapacityBuyPrice();
+      if(activePrice){
+        refPrice = activePrice;
+      } else {
+        try {
+          const r = await fetch('/api/p2p/capacity', { credentials: 'include' });
+          const d = await r.json();
+          if(d?.ok && Array.isArray(d.items)){
+            var found = findActiveCapacityFrom(d.items);
+            if(found) refPrice = Number(found.buyPrice);
+          }
+        } catch(e) {}
+      }
+    } else {
+      var floorInp = document.getElementById("adCfg_" + realId + "_PriceFloorPct");
+      if(floorInp && floorInp.value !== '' && !isNaN(parseFloat(floorInp.value))){
+        refPrice = parseFloat(floorInp.value);
+      }
+      if(!refPrice){
+        var activePrice = getActiveCapacityBuyPrice();
+        if(activePrice) refPrice = activePrice;
+      }
+    }
+    var commPct = 0;
+    if(botSelectedExchange === 'binance'){
+      commPct = parseFloat(document.getElementById("adCfg_" + realId + "_CommissionPct").value);
+      if(!commPct || isNaN(commPct)) commPct = parseFloat(document.getElementById("botExCommissionPct").value) || 0;
+    }
+    return { refPrice: refPrice, commPct: commPct };
+  }
+
+  // Rellena el campo con el precio equivalente al % ya guardado (data-stored-pct,
+  // fijado al renderizar la tarjeta) -- solo si el usuario no está escribiendo
+  // ahí mismo ahora, para no pisarle lo que está tipeando.
+  window.botAdUpdateSpreadPriceField = async function(realId){
+    var input = document.getElementById("adCfg_" + realId + "_SpreadPct");
+    if(!input || document.activeElement === input) return;
+    var storedPct = parseFloat(input.getAttribute('data-stored-pct'));
+    if(isNaN(storedPct)) storedPct = 0;
+    var ref = await botAdGetRefPriceAndCommission(realId);
+    if(ref.refPrice > 0){
+      var price = ref.refPrice * (1 + (ref.commPct + storedPct) / 100);
+      input.value = price.toFixed(2);
+    }
+    window.botAdUpdateSpreadHint(realId);
+  };
+
+  // Feedback en vivo mientras se escribe el precio -- muestra a qué % equivale,
+  // igual que el hint de "Margen de seguridad" pero en la dirección contraria.
+  window.botAdUpdateSpreadHint = async function(realId){
+    var hint = document.getElementById("adCfg_" + realId + "_SpreadHint");
+    var input = document.getElementById("adCfg_" + realId + "_SpreadPct");
+    if(!hint || !input) return;
+    var price = parseFloat(input.value);
+    if(isNaN(price)){ hint.textContent = ""; return; }
+    var ref = await botAdGetRefPriceAndCommission(realId);
+    if(!ref.refPrice || ref.refPrice <= 0){ hint.textContent = "Sin costo real detectado todavía"; hint.style.color = "#fbbf24"; return; }
+    var spreadPct = ((price / ref.refPrice) - 1) * 100 - ref.commPct;
+    hint.textContent = "→ equivale a " + spreadPct.toFixed(2) + "% sobre tu costo real ($" + ref.refPrice.toFixed(2) + ")";
+    hint.style.color = spreadPct >= 0 ? "#34d399" : "#fb7185";
+  };
+
+  // Al guardar: traduce el precio escrito a % (lo que de verdad usa
+  // engine.ts) y lo manda por el mismo camino de guardado de siempre
+  // (botSaveAdCfgField) -- sin tocar el motor de precios para nada.
+  window.botAdSpreadPriceChanged = async function(realId, priceValue){
+    var input = document.getElementById("adCfg_" + realId + "_SpreadPct");
+    var price = parseFloat(priceValue);
+    if(isNaN(price)){
+      botSaveAdCfgField(realId, 'botSpreadPct', '');
+      return;
+    }
+    var ref = await botAdGetRefPriceAndCommission(realId);
+    if(!ref.refPrice || ref.refPrice <= 0){
+      if(input) input.style.outline = "2px solid #fb7185";
+      setTimeout(function(){ if(input) input.style.outline = ""; }, 1500);
+      return;
+    }
+    var spreadPct = ((price / ref.refPrice) - 1) * 100 - ref.commPct;
+    if(input) input.setAttribute('data-stored-pct', spreadPct);
+    botSaveAdCfgField(realId, 'botSpreadPct', spreadPct);
+    window.botAdUpdateSpreadHint(realId);
   };
 
   // Botones +/- para "Margen seguridad (%)" -- pedido explícito del usuario
@@ -11336,7 +11431,11 @@ function addP2PBotStyles(){
     body.botStrategy       = document.getElementById("adCfg_" + realId + "_Strategy").value;
     body.botTop1Diff       = parseFloat(document.getElementById("adCfg_" + realId + "_Top1Diff").value);
     if(isNaN(body.botTop1Diff)) body.botTop1Diff = null;
-    body.botSpreadPct      = parseFloat(document.getElementById("adCfg_" + realId + "_SpreadPct").value);
+    // El campo ahora muestra un PRECIO (CLP), no el %; el % real que usa el
+    // motor de precios queda guardado en data-stored-pct (lo actualiza
+    // botAdSpreadPriceChanged cada vez que se edita el precio).
+    var spreadPctInp = document.getElementById("adCfg_" + realId + "_SpreadPct");
+    body.botSpreadPct = spreadPctInp ? parseFloat(spreadPctInp.getAttribute('data-stored-pct')) : NaN;
     if(isNaN(body.botSpreadPct)) body.botSpreadPct = null;
     body.botPriceSource    = document.getElementById("adCfg_" + realId + "_PriceSource").value;
     body.botPriceFloorPct  = parseFloat(document.getElementById("adCfg_" + realId + "_PriceFloorPct").value);
