@@ -11273,9 +11273,18 @@ function addP2PBotStyles(){
       }
       var ranked = (data.data && Array.isArray(data.data.ranked)) ? data.data.ranked : [];
       if(adPayType === 'match' && adPayMethodsLower.length > 0){
+        // El propio anuncio guarda su método de pago como IDENTIFICADOR
+        // (código interno de Binance, ver /api/p2p/bot/ads), no como nombre
+        // legible -- por eso se compara contra ambos campos (identifier Y
+        // name) de cada competidor, igual que hace engine.ts para no
+        // quedarse sin coincidencias por comparar cosas distintas.
         ranked = ranked.filter(function(c){
-          var cmpNames = (c.paymentMethods || []).map(function(pm){ return String(pm.name || pm.identifier || '').trim().toLowerCase(); });
-          return cmpNames.some(function(n){ return adPayMethodsLower.indexOf(n) !== -1; });
+          var cmpValues = (c.paymentMethods || []).reduce(function(acc, pm){
+            if(pm.identifier) acc.push(String(pm.identifier).trim().toLowerCase());
+            if(pm.name) acc.push(String(pm.name).trim().toLowerCase());
+            return acc;
+          }, []);
+          return cmpValues.some(function(v){ return adPayMethodsLower.indexOf(v) !== -1; });
         });
       }
       // Por si algún nickname que ya estaba excluido ya no aparece en el mercado ahora mismo -- lo mostramos igual, marcado, al final.
@@ -11283,7 +11292,9 @@ function addP2PBotStyles(){
       var extra = Array.from(current).filter(function(n){ return !seenNick.has(n); }).map(function(n){ return { nickName: n, price: null, available: null }; });
       var all = ranked.concat(extra);
       if(all.length === 0){
-        listEl.innerHTML = '<div style="padding:16px;text-align:center;color:#64748b;font-size:13px;">Sin datos de mercado todavía. Deja el bot corriendo un momento y vuelve a intentar, o escribe el nombre a mano.</div>';
+        listEl.innerHTML = adPayType === 'match'
+          ? '<div style="padding:16px;text-align:center;color:#64748b;font-size:13px;">Ningún comerciante con este método de pago apareció en el último ciclo. Vuelve a intentar en un momento, o escribe el nombre a mano.</div>'
+          : '<div style="padding:16px;text-align:center;color:#64748b;font-size:13px;">Sin datos de mercado todavía. Deja el bot corriendo un momento y vuelve a intentar, o escribe el nombre a mano.</div>';
         return;
       }
       listEl.innerHTML = all.map(function(c){
