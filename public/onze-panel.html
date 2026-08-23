@@ -11027,7 +11027,7 @@ function addP2PBotStyles(){
     if (strategy !== 'top1') cfgFields.push('SpreadPct');
     cfgFields.push('PriceSource','CommissionPct','SafeMarginPct','MinCompetitorCapital','CompetePayType','ExcludedMerchants','CycleInterval','CircuitBreakPct','MinAdPriceDiffPct');
     const cfgCount = cfgFields.length;
-    return `<div class="bot-ad-pill" data-ad-real-id="${realId}" data-ad-adid="${a.adId||''}">
+    return `<div class="bot-ad-pill" data-ad-real-id="${realId}" data-ad-adid="${a.adId||''}" data-ad-paytype="${payType}" data-ad-paymethods="${escHtml(JSON.stringify(pms || []))}">
       <div class="bot-ad-card-header">
         <span class="sell-label">Vender</span>
         <span style="flex:1;font-size:12px;font-weight:500;color:#94a3b8;">${a.asset||'USDT'} / ${a.fiat||'CLP'}</span>
@@ -11234,6 +11234,16 @@ function addP2PBotStyles(){
       (input ? input.value : "").split(",").map(function(s){ return s.trim(); }).filter(Boolean)
     );
 
+    // Pedido explícito del usuario (ago 2026): el anuncio "Banco Estado" debe
+    // mostrar solo comerciantes que acepten Banco Estado (igual que compite
+    // de verdad ese anuncio, __match_ad__ en engine.ts); el anuncio "todos
+    // los bancos" sigue mostrando el mercado completo, sin cambios.
+    var container = document.querySelector('[data-ad-real-id="' + realId + '"]');
+    var adPayType = container ? container.getAttribute('data-ad-paytype') : 'all';
+    var adPayMethods = [];
+    try{ adPayMethods = JSON.parse((container && container.getAttribute('data-ad-paymethods')) || '[]'); }catch(e){}
+    var adPayMethodsLower = adPayMethods.map(function(p){ return String(p).trim().toLowerCase(); });
+
     var backdrop = document.getElementById("botExcludeMerchantsModal");
     if(backdrop) backdrop.remove();
     backdrop = document.createElement("div");
@@ -11244,7 +11254,7 @@ function addP2PBotStyles(){
     backdrop.innerHTML = '<div style="width:min(440px,100%);border:1px solid rgba(148,163,184,.18);background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(2,6,23,.98));border-radius:16px;padding:20px;position:relative;">'
       + '<button type="button" onclick="document.getElementById(\'botExcludeMerchantsModal\').remove()" style="position:absolute;top:14px;right:14px;width:26px;height:26px;border-radius:8px;border:1px solid rgba(148,163,184,.2);background:rgba(148,163,184,.1);color:#cbd5e1;cursor:pointer;font-size:15px;line-height:1;">✕</button>'
       + '<h3 style="color:#f8fafc;margin-bottom:4px;padding-right:30px;font-size:16px;">Excluir comerciantes</h3>'
-      + '<p style="color:#8aa0ba;font-size:12px;margin-bottom:14px;">Marca a quién NO seguirle el precio. Lista tomada del último ciclo del bot.</p>'
+      + '<p style="color:#8aa0ba;font-size:12px;margin-bottom:14px;">Marca a quién NO seguirle el precio. Lista tomada del último ciclo del bot' + (adPayType === 'match' ? ' — filtrada al mismo método de pago de este anuncio' : ' — mercado completo') + '.</p>'
       + '<div id="botExcludeMerchantsList" style="max-height:50vh;overflow-y:auto;display:flex;flex-direction:column;gap:2px;">Cargando comerciantes…</div>'
       + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">'
       + '<button type="button" class="btn secondary" onclick="document.getElementById(\'botExcludeMerchantsModal\').remove()">Cancelar</button>'
@@ -11262,6 +11272,12 @@ function addP2PBotStyles(){
         return;
       }
       var ranked = (data.data && Array.isArray(data.data.ranked)) ? data.data.ranked : [];
+      if(adPayType === 'match' && adPayMethodsLower.length > 0){
+        ranked = ranked.filter(function(c){
+          var cmpNames = (c.paymentMethods || []).map(function(pm){ return String(pm.name || pm.identifier || '').trim().toLowerCase(); });
+          return cmpNames.some(function(n){ return adPayMethodsLower.indexOf(n) !== -1; });
+        });
+      }
       // Por si algún nickname que ya estaba excluido ya no aparece en el mercado ahora mismo -- lo mostramos igual, marcado, al final.
       var seenNick = new Set(ranked.map(function(c){ return c.nickName; }));
       var extra = Array.from(current).filter(function(n){ return !seenNick.has(n); }).map(function(n){ return { nickName: n, price: null, available: null }; });
