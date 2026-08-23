@@ -96,6 +96,7 @@ export async function GET(req: NextRequest) {
               botSafeMarginPct: localAd?.botSafeMarginPct ? Number(localAd.botSafeMarginPct) : null,
               botMinCompetitorCapital: localAd?.botMinCompetitorCapital ? Number(localAd.botMinCompetitorCapital) : null,
               botCompetePayTypes: localAd?.botCompetePayTypes as string[] | null || null,
+              botExcludedMerchants: localAd?.botExcludedMerchants as string[] | null || null,
               botCycleInterval: localAd?.botCycleInterval ? Number(localAd.botCycleInterval) : null,
               botCircuitBreakPct: localAd?.botCircuitBreakPct ? Number(localAd.botCircuitBreakPct) : null,
               botDailyVolumeCapUsdt: localAd?.botDailyVolumeCapUsdt ? Number(localAd.botDailyVolumeCapUsdt) : null,
@@ -230,6 +231,7 @@ export async function GET(req: NextRequest) {
             botSafeMarginPct: localAd?.botSafeMarginPct ? Number(localAd.botSafeMarginPct) : null,
             botMinCompetitorCapital: localAd?.botMinCompetitorCapital ? Number(localAd.botMinCompetitorCapital) : null,
             botCompetePayTypes: localAd?.botCompetePayTypes as string[] | null || null,
+            botExcludedMerchants: localAd?.botExcludedMerchants as string[] | null || null,
             botCycleInterval: localAd?.botCycleInterval ? Number(localAd.botCycleInterval) : null,
             botCircuitBreakPct: localAd?.botCircuitBreakPct ? Number(localAd.botCircuitBreakPct) : null,
             botDailyVolumeCapUsdt: localAd?.botDailyVolumeCapUsdt ? Number(localAd.botDailyVolumeCapUsdt) : null,
@@ -272,6 +274,7 @@ export async function GET(req: NextRequest) {
       botSafeMarginPct: a.botSafeMarginPct ? Number(a.botSafeMarginPct) : null,
       botMinCompetitorCapital: a.botMinCompetitorCapital ? Number(a.botMinCompetitorCapital) : null,
       botCompetePayTypes: a.botCompetePayTypes as string[] | null || null,
+      botExcludedMerchants: a.botExcludedMerchants as string[] | null || null,
       botCycleInterval: a.botCycleInterval ? Number(a.botCycleInterval) : null,
       botCircuitBreakPct: a.botCircuitBreakPct ? Number(a.botCircuitBreakPct) : null,
       botDailyVolumeCapUsdt: a.botDailyVolumeCapUsdt ? Number(a.botDailyVolumeCapUsdt) : null,
@@ -307,7 +310,7 @@ export async function PUT(req: NextRequest) {
 
     const body = await req.json();
     const label = body.label || req.nextUrl.searchParams.get("label") || "ONZE";
-    const { id, adId, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged, botEnabled, botTop1Diff, botSafeMarginPct, botCompetePayTypes, botPriceFloorPct, botPriceSource, botCommissionPct, botMinCompetitorCapital, botStrategy, botSpreadPct, botCycleInterval, botCircuitBreakPct, botDailyVolumeCapUsdt, botMinAdPriceDiffPct } = body;
+    const { id, adId, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged, botEnabled, botTop1Diff, botSafeMarginPct, botCompetePayTypes, botExcludedMerchants, botPriceFloorPct, botPriceSource, botCommissionPct, botMinCompetitorCapital, botStrategy, botSpreadPct, botCycleInterval, botCircuitBreakPct, botDailyVolumeCapUsdt, botMinAdPriceDiffPct } = body;
 
     if (!exchange) {
       return Response.json({ ok: false, error: "exchange es requerido" }, { status: 400 });
@@ -408,6 +411,7 @@ export async function PUT(req: NextRequest) {
     if (botSafeMarginPct !== undefined) updateData.botSafeMarginPct = botSafeMarginPct;
     if (botMinCompetitorCapital !== undefined) updateData.botMinCompetitorCapital = botMinCompetitorCapital;
     if (botCompetePayTypes !== undefined) updateData.botCompetePayTypes = botCompetePayTypes;
+    if (botExcludedMerchants !== undefined) updateData.botExcludedMerchants = botExcludedMerchants;
     if (botCycleInterval !== undefined) updateData.botCycleInterval = botCycleInterval;
     if (botCircuitBreakPct !== undefined) updateData.botCircuitBreakPct = botCircuitBreakPct;
     if (botDailyVolumeCapUsdt !== undefined) updateData.botDailyVolumeCapUsdt = botDailyVolumeCapUsdt;

@@ -1049,6 +1049,14 @@ async function runBinanceCycle(
       } else if (!adCompetePayTypes || !adCompetePayTypes.length) {
         adCompetePayTypes = null;
       }
+      // Comerciantes que este anuncio nunca debe seguir/competir, elegidos
+      // manualmente por nickname de Binance (ago 2026, pedido explícito del
+      // usuario). Vacío por defecto -- no cambia nada si no se configura.
+      const adExcludedMerchants = new Set(
+        ((managedAd.botExcludedMerchants as string[] | null) || [])
+          .map((n) => String(n).trim().toLowerCase())
+          .filter(Boolean)
+      );
       const adPriceSource = managedAd.botPriceSource || exchangePriceSource;
       const adPriceFloorPct = managedAd.botPriceFloorPct != null ? Number(managedAd.botPriceFloorPct) : (exchangePriceFloorPct > 0 ? exchangePriceFloorPct : null);
       const adCircuitBreakPct = managedAd.botCircuitBreakPct != null ? Number(managedAd.botCircuitBreakPct) : exchangeCircuitBreakPct;
@@ -1129,6 +1137,13 @@ async function runBinanceCycle(
               await log( "warn", "binance", `Ad ${adId}: filtro pago eliminó ${beforeCount} competidores. ourPayMethods=${JSON.stringify(ourPayMethods)} samples=${JSON.stringify(paySamples)}`);
             }
           }
+        }
+      }
+      if (adExcludedMerchants.size > 0) {
+        const beforeExclude = competitors.length;
+        competitors = competitors.filter((c: any) => !adExcludedMerchants.has(String(c.nickName || "").trim().toLowerCase()));
+        if (competitors.length < beforeExclude) {
+          await log("debug", "binance", `Ad ${adId}: excluidos ${beforeExclude - competitors.length} competidor(es) por lista de comerciantes bloqueados`);
         }
       }
       if (competitors.length === 0) {

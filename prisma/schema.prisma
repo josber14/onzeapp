@@ -1561,6 +1561,10 @@ model P2PBotAd {
   botSafeMarginPct        Decimal? @db.Decimal(8, 4)
   botMinCompetitorCapital Decimal? @db.Decimal(18, 2)
   botCompetePayTypes      Json?
+  // Nicknames de Binance a excluir de la competencia de este anuncio (ago
+  // 2026, pedido explícito del usuario). Lista vacía/null = sin cambios de
+  // comportamiento, se compite contra todo el mercado como siempre.
+  botExcludedMerchants    Json?
   botCycleInterval        Int?
   botCircuitBreakPct      Decimal? @db.Decimal(8, 4)
   botDailyVolumeCapUsdt   Decimal? @db.Decimal(18, 8)

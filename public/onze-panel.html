@@ -11025,7 +11025,7 @@ function addP2PBotStyles(){
     const cfgFields = [];
     if (strategy !== 'spread') cfgFields.push('Top1Diff');
     if (strategy !== 'top1') cfgFields.push('SpreadPct');
-    cfgFields.push('PriceSource','CommissionPct','SafeMarginPct','MinCompetitorCapital','CompetePayType','CycleInterval','CircuitBreakPct','MinAdPriceDiffPct');
+    cfgFields.push('PriceSource','CommissionPct','SafeMarginPct','MinCompetitorCapital','CompetePayType','ExcludedMerchants','CycleInterval','CircuitBreakPct','MinAdPriceDiffPct');
     const cfgCount = cfgFields.length;
     return `<div class="bot-ad-pill" data-ad-real-id="${realId}" data-ad-adid="${a.adId||''}">
       <div class="bot-ad-card-header">
@@ -11103,6 +11103,10 @@ function addP2PBotStyles(){
               <option value="match" ${payType==='match'?'selected':''}>Mismos del anuncio</option>
             </select>
           </label>
+          <form autocomplete="off" style="display:contents"><label>Excluir comerciantes
+            <input id="adCfg_${realId}_ExcludedMerchants" type="text" value="${escHtml(Array.isArray(a.botExcludedMerchants) ? a.botExcludedMerchants.join(', ') : '')}" placeholder="nickname1, nickname2" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botExcludedMerchants',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+            <span class="help-text">Nicknames de Binance separados por coma — nunca se les sigue el precio</span>
+          </label></form>
           <label>Intervalo ciclo (seg)
             <input id="adCfg_${realId}_CycleInterval" type="number" step="1" min="1" value="${a.botCycleInterval != null ? a.botCycleInterval : ''}" placeholder="10" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botCycleInterval',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
           </label>
@@ -11184,6 +11188,11 @@ function addP2PBotStyles(){
     if (adId) body.adId = adId;
     if(field === 'botCompetePayTypes'){
       body[field] = value === 'match' ? ['__match_ad__'] : ['all'];
+    } else if(field === 'botExcludedMerchants'){
+      // Nicknames de Binance separados por coma -- guardado como lista,
+      // vacío = sin exclusiones (comportamiento normal de siempre).
+      var excludedList = String(value || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+      body[field] = excludedList.length ? excludedList : null;
     } else {
       body[field] = value === '' ? null : (field === 'botStrategy' || field === 'botPriceSource' ? value : Number(value));
     }
@@ -11233,6 +11242,11 @@ function addP2PBotStyles(){
     if(isNaN(body.botMinCompetitorCapital)) body.botMinCompetitorCapital = null;
     var payType = document.getElementById("adCfg_" + realId + "_CompetePayType").value;
     body.botCompetePayTypes = payType === "match" ? ["__match_ad__"] : null;
+    var excludedInp = document.getElementById("adCfg_" + realId + "_ExcludedMerchants");
+    if(excludedInp){
+      var excludedList2 = String(excludedInp.value || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+      body.botExcludedMerchants = excludedList2.length ? excludedList2 : null;
+    }
     var cycleInp = document.getElementById("adCfg_" + realId + "_CycleInterval");
     body.botCycleInterval = cycleInp ? parseInt(cycleInp.value) || null : null;
     var cbInp = document.getElementById("adCfg_" + realId + "_CircuitBreakPct");
