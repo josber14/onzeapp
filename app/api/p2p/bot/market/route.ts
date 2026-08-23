@@ -25,10 +25,11 @@ export async function GET(req: NextRequest) {
     const exchange = (searchParams.get("exchange") || "bybit") as "binance" | "bybit" | "okx";
     const limit = Math.min(Number(searchParams.get("limit")) || 50, 200);
     const live = searchParams.get("live") === "true";
+    const label = searchParams.get("label") || "ONZE";
 
     if (live && type === "latest") {
       try {
-        const market = await fetchLiveMarket(exchange, session.tenantId);
+        const market = await fetchLiveMarket(exchange, session.tenantId, "1", label);
         return Response.json({
           ok: true,
           data: {

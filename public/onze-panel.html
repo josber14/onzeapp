@@ -11253,11 +11253,15 @@ function addP2PBotStyles(){
     document.body.appendChild(backdrop);
 
     try{
-      var res = await fetch("/api/p2p/bot/market?type=latest&exchange=" + encodeURIComponent(botSelectedExchange) + "&limit=60&live=true", { credentials: "include" });
+      var res = await fetch("/api/p2p/bot/market?type=latest&exchange=" + encodeURIComponent(botSelectedExchange) + "&label=" + encodeURIComponent(botActiveLabel || "ONZE") + "&limit=60&live=true", { credentials: "include" });
       var data = await res.json();
       var listEl = document.getElementById("botExcludeMerchantsList");
       if(!listEl) return;
-      var ranked = (data.ok && data.data && Array.isArray(data.data.ranked)) ? data.data.ranked : [];
+      if(!data.ok){
+        listEl.innerHTML = '<div style="padding:16px;text-align:center;color:#fb7185;font-size:13px;">Error trayendo el mercado: ' + escHtml(data.error || 'desconocido') + '</div>';
+        return;
+      }
+      var ranked = (data.data && Array.isArray(data.data.ranked)) ? data.data.ranked : [];
       // Por si algún nickname que ya estaba excluido ya no aparece en el mercado ahora mismo -- lo mostramos igual, marcado, al final.
       var seenNick = new Set(ranked.map(function(c){ return c.nickName; }));
       var extra = Array.from(current).filter(function(n){ return !seenNick.has(n); }).map(function(n){ return { nickName: n, price: null, available: null }; });
