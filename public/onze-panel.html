@@ -3977,6 +3977,18 @@
     const COLLABORATOR_PAYMENTS_KEY = "onze_collaborator_payments_v1";
     const WHATSAPP_NUMBER = "56951333777";
     const PANEL_QUERY = new URLSearchParams(window.location.search);
+    // Bug real confirmado (ago 2026, tenant de Hector): las claves de
+    // localStorage del módulo P2P (capacity, ventas Binance/Bybit/OKX,
+    // capital inicial) eran GLOBALES al origen onze-pay.com, sin distinguir
+    // tenant -- si el mismo navegador llegó a tener abierta otra cuenta
+    // (ej. un tab de otra sesión), sus ventas se mezclaron con las de este
+    // tenant y calculateP2PCapacityStats() llenó y cerró de golpe 20
+    // capacities activos de Hector con ventas que no eran suyas. Cada clave
+    // ahora se guarda separada por tenant (window.__p2pTenantSuffix), leído
+    // acá arriba de todo porque este es el primer <script> del panel --
+    // varios bloques <script> más abajo (cada uno con su propio scope IIFE)
+    // lo necesitan y no pueden ver PANEL_QUERY directamente.
+    window.__p2pTenantSuffix = "_t" + (PANEL_QUERY.get("tenantId") || "0");
     const SESSION_ROLE = String(PANEL_QUERY.get("role") || "").trim();
     const IS_ADMIN_ROLE =
       SESSION_ROLE === "super_admin_global" ||
@@ -17737,16 +17749,24 @@ function addP2PBotStyles(){
     });
   }
 
+  // Separado por tenant (window.__p2pTenantSuffix, fijado al inicio del
+  // panel) -- ver el comentario junto a esa variable: estas claves eran
+  // globales al origen onze-pay.com y una cuenta llegó a leer ventas de
+  // otra, inflando y cerrando capacities que no correspondían.
+  window.p2pOrdersKey = function p2pOrdersKey(base){
+    return base + (window.__p2pTenantSuffix || "");
+  }
+
   window.loadP2PBinanceOrders = function loadP2PBinanceOrders(){
     try{
-      return JSON.parse(localStorage.getItem("onze_p2p_binance_orders") || "[]");
+      return JSON.parse(localStorage.getItem(p2pOrdersKey("onze_p2p_binance_orders")) || "[]");
     }catch(e){
       return [];
     }
   }
 
   window.saveP2PBinanceOrders = function saveP2PBinanceOrders(orders){
-    localStorage.setItem("onze_p2p_binance_orders", JSON.stringify(Array.isArray(orders) ? orders : []));
+    localStorage.setItem(p2pOrdersKey("onze_p2p_binance_orders"), JSON.stringify(Array.isArray(orders) ? orders : []));
   }
 
   // Espejo de loadP2PBinanceOrders/saveP2PBinanceOrders para Bybit -- misma
@@ -17754,14 +17774,14 @@ function addP2PBotStyles(){
   // Binance que ya funciona.
   window.loadP2PBybitOrders = function loadP2PBybitOrders(){
     try{
-      return JSON.parse(localStorage.getItem("onze_p2p_bybit_orders") || "[]");
+      return JSON.parse(localStorage.getItem(p2pOrdersKey("onze_p2p_bybit_orders")) || "[]");
     }catch(e){
       return [];
     }
   }
 
   window.saveP2PBybitOrders = function saveP2PBybitOrders(orders){
-    localStorage.setItem("onze_p2p_bybit_orders", JSON.stringify(Array.isArray(orders) ? orders : []));
+    localStorage.setItem(p2pOrdersKey("onze_p2p_bybit_orders"), JSON.stringify(Array.isArray(orders) ? orders : []));
   }
 
   // Mismo espejo para OKX -- solo ventas manuales por ahora (no hay API de
@@ -17769,14 +17789,14 @@ function addP2PBotStyles(){
   // igual que Bybit.
   window.loadP2POkxOrders = function loadP2POkxOrders(){
     try{
-      return JSON.parse(localStorage.getItem("onze_p2p_okx_orders") || "[]");
+      return JSON.parse(localStorage.getItem(p2pOrdersKey("onze_p2p_okx_orders")) || "[]");
     }catch(e){
       return [];
     }
   }
 
   window.saveP2POkxOrders = function saveP2POkxOrders(orders){
-    localStorage.setItem("onze_p2p_okx_orders", JSON.stringify(Array.isArray(orders) ? orders : []));
+    localStorage.setItem(p2pOrdersKey("onze_p2p_okx_orders"), JSON.stringify(Array.isArray(orders) ? orders : []));
   }
 
   // Limpieza única al cargar el panel (ago 2026): borra del caché local
@@ -18090,10 +18110,16 @@ function addP2PBotStyles(){
   if(window.__onzeP2PCapacityLoaded) return;
   window.__onzeP2PCapacityLoaded = true;
 
-  const CAPACITY_KEY = "onze_p2p_capacity_items";
-  const OWN_CAPITAL_KEY = "onze_p2p_own_capital_items";
-  const P2P_CAPACITY_BASELINE_KEY = "onze_p2p_capacity_baseline_at";
-  const CARRYOVER_KEY = "onze_p2p_capacity_carryover";
+  // Separadas por tenant (window.__p2pTenantSuffix) -- ver el comentario
+  // junto a esa variable, al inicio del panel: estas claves eran globales
+  // al origen onze-pay.com y llegaron a mezclar ventas/capacity de dos
+  // cuentas distintas en el mismo navegador.
+  const CAPACITY_KEY = "onze_p2p_capacity_items" + (window.__p2pTenantSuffix || "");
+  const OWN_CAPITAL_KEY = "onze_p2p_own_capital_items" + (window.__p2pTenantSuffix || "");
+  const P2P_CAPACITY_BASELINE_KEY = "onze_p2p_capacity_baseline_at" + (window.__p2pTenantSuffix || "");
+  const CARRYOVER_KEY = "onze_p2p_capacity_carryover" + (window.__p2pTenantSuffix || "");
+  const P2P_MANUAL_MODE_KEY = "__p2pManualMode" + (window.__p2pTenantSuffix || "");
+  const P2P_LAST_CLEAR_KEY = "__p2pCapacityLastClear" + (window.__p2pTenantSuffix || "");
 
   function getP2PCapacityCarryover(id){
     try{
@@ -18115,7 +18141,7 @@ function addP2PBotStyles(){
 
     if(!value){
       // Si el usuario limpió hace <60s, ignorar capacities en cache que puedan resucitar fechas viejas
-      const lastClear = Number(window.__p2pCapacityLastClear || localStorage.getItem('__p2pCapacityLastClear') || 0);
+      const lastClear = Number(window.__p2pCapacityLastClear || localStorage.getItem(P2P_LAST_CLEAR_KEY) || 0);
       const recentlyCleared = lastClear && (Date.now() - lastClear) < 60000;
 
       if(!recentlyCleared){
@@ -18349,8 +18375,8 @@ function addP2PBotStyles(){
         // Siempre que el usuario haya indicado limpieza manual (flag persistente),
         // ignorar datos del servidor y borrar registros remotos para que no resuciten.
         // El flag se activa con la función window.deleteAllP2PCapacities().
-        const p2pManualMode = localStorage.getItem('__p2pManualMode') === 'true';
-        const lastClear = Number(window.__p2pCapacityLastClear || localStorage.getItem('__p2pCapacityLastClear') || 0);
+        const p2pManualMode = localStorage.getItem(P2P_MANUAL_MODE_KEY) === 'true';
+        const lastClear = Number(window.__p2pCapacityLastClear || localStorage.getItem(P2P_LAST_CLEAR_KEY) || 0);
         const recentlyCleared = lastClear && (Date.now() - lastClear) < 60000;
 
         const clearAge = lastClear ? Date.now() - lastClear : Infinity;
@@ -18358,7 +18384,7 @@ function addP2PBotStyles(){
         // Si el modo manual está activo pero ya pasaron 60s desde el último clear,
         // ignorarlo (la bandera quedó colgada de un reset anterior).
         if(p2pManualMode && !recentlyCleared && clearAge > 60000){
-          localStorage.removeItem('__p2pManualMode');
+          localStorage.removeItem(P2P_MANUAL_MODE_KEY);
           console.log("✅ Modo manual P2P desactivado — ya expiró");
         }
 
@@ -18378,7 +18404,7 @@ function addP2PBotStyles(){
           }
           // Si el servidor ya está vacío O pasaron 60s, desactivar modo manual
           if(data.items.length === 0 || (clearAge > 60000)){
-            localStorage.removeItem('__p2pManualMode');
+            localStorage.removeItem(P2P_MANUAL_MODE_KEY);
             if(p2pManualMode) console.log("✅ Modo manual P2P desactivado — servidor limpio");
           }
           return false;
@@ -18508,7 +18534,7 @@ function addP2PBotStyles(){
   window.loadP2PBinanceSales = function loadP2PBinanceSales(){
     let orders = [];
     try{
-      orders = JSON.parse(localStorage.getItem("onze_p2p_binance_orders") || "[]");
+      orders = JSON.parse(localStorage.getItem(window.p2pOrdersKey("onze_p2p_binance_orders")) || "[]");
     }catch(e){}
 
     return orders
@@ -20963,9 +20989,9 @@ function addP2PBotStyles(){
     }
   }
 
-  const P2P_INITIAL_CAPITAL_KEY = "onze_p2p_initial_capital_usdt";
-  const P2P_PROFIT_DAY_KEY = "onze_p2p_profit_day";
-  const P2P_PROFIT_START_KEY = "onze_p2p_profit_start";
+  const P2P_INITIAL_CAPITAL_KEY = "onze_p2p_initial_capital_usdt" + (window.__p2pTenantSuffix || "");
+  const P2P_PROFIT_DAY_KEY = "onze_p2p_profit_day" + (window.__p2pTenantSuffix || "");
+  const P2P_PROFIT_START_KEY = "onze_p2p_profit_start" + (window.__p2pTenantSuffix || "");
 
   function getP2PInitialCapital(){
     return Number(localStorage.getItem(P2P_INITIAL_CAPITAL_KEY) || 0);
@@ -22801,7 +22827,7 @@ function addP2PBotStyles(){
       seen.add(key);
       deduped.push(o);
     }
-    localStorage.setItem('onze_p2p_binance_orders', JSON.stringify(deduped));
+    localStorage.setItem(window.p2pOrdersKey('onze_p2p_binance_orders'), JSON.stringify(deduped));
   }
   function getBinanceSales(){
     try{
@@ -23367,7 +23393,7 @@ function addP2PBotStyles(){
         }else{
           const orders = loadP2PBinanceOrders();
           orders.unshift(order);
-          localStorage.setItem("onze_p2p_binance_orders", JSON.stringify(orders));
+          localStorage.setItem(window.p2pOrdersKey("onze_p2p_binance_orders"), JSON.stringify(orders));
 
           try { localStorage.setItem("onze_binance_sales", JSON.stringify(orders)); } catch(e){}
         }
@@ -23578,9 +23604,9 @@ function addP2PBotStyles(){
 
   window.deleteAllP2PCapacities = function(){
     window.__p2pCapacityCache = [];
-    localStorage.removeItem('onze_p2p_capacity_items');
-    localStorage.setItem('__p2pManualMode', 'true');
-    localStorage.setItem('__p2pCapacityLastClear', String(Date.now()));
+    localStorage.removeItem(CAPACITY_KEY);
+    localStorage.setItem(P2P_MANUAL_MODE_KEY, 'true');
+    localStorage.setItem(P2P_LAST_CLEAR_KEY, String(Date.now()));
     window.__p2pCapacityLastClear = Date.now();
     window.__p2pCapacityPendingSync = {};
     if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
@@ -23652,13 +23678,13 @@ function addP2PBotStyles(){
     // 2. Limpiar local: capacities
     window.__p2pCapacityCache = [];
     window.__p2pCapacityPendingSync = {};
-    localStorage.removeItem('onze_p2p_capacity_items');
+    localStorage.removeItem(CAPACITY_KEY);
 
     // 3. Limpiar baseline (se recalculará con la medianoche de Chile)
     localStorage.removeItem(P2P_CAPACITY_BASELINE_KEY);
 
     // 4. Limpiar ventas Binance
-    localStorage.removeItem('onze_p2p_binance_orders');
+    localStorage.removeItem(window.p2pOrdersKey('onze_p2p_binance_orders'));
     localStorage.removeItem('onze_binance_sales');
     window.__p2pBinancePage = 1;
     if(typeof renderBinanceSalesTable === 'function') renderBinanceSalesTable();
@@ -23680,7 +23706,7 @@ function addP2PBotStyles(){
     //    (POST /api/p2p/reset) y el flag __p2pManualMode causaba que cualquier
     //    capacity nuevo creado en los siguientes 60s fuera borrado del servidor
     //    en el próximo sync. Se mantiene el lastClear para referencia.
-    localStorage.setItem('__p2pCapacityLastClear', String(Date.now()));
+    localStorage.setItem(P2P_LAST_CLEAR_KEY, String(Date.now()));
     window.__p2pCapacityLastClear = Date.now();
 
     // 9. Forzar el reinicio del baseline ahora
@@ -27550,7 +27576,7 @@ try{
   window.resetP2PFullFreshStart = window.resetP2PFullFreshStart || function(){
     if(typeof showP2PResetConfirmModal === 'function'){ showP2PResetConfirmModal(); return; }
     fetch('/api/p2p/reset', { method:'POST', credentials:'include' }).then(r=>r.json()).then(d=>{ if(d.ok) console.log("✅ Servidor limpiado"); }).catch(e=>console.warn(e));
-    'onze_p2p_capacity_items,onze_p2p_capacity_baseline_at,onze_p2p_binance_orders,onze_binance_sales,onze_p2p_initial_capital_usdt,onze_p2p_profit_day,onze_p2p_profit_start,onze_p2p_capacity_carryover,__p2pCapitalCarryoverDate,__p2pCapitalCarryoverProfit,onze_p2p_own_capital_items,__p2pManualMode,__p2pCapacityLastClear'.split(',').forEach(k => localStorage.removeItem(k));
+    'onze_p2p_capacity_items,onze_p2p_capacity_baseline_at,onze_p2p_binance_orders,onze_binance_sales,onze_p2p_initial_capital_usdt,onze_p2p_profit_day,onze_p2p_profit_start,onze_p2p_capacity_carryover,__p2pCapitalCarryoverDate,__p2pCapitalCarryoverProfit,onze_p2p_own_capital_items,__p2pManualMode,__p2pCapacityLastClear'.split(',').forEach(k => { localStorage.removeItem(k); localStorage.removeItem(k + (window.__p2pTenantSuffix || '')); });
     console.log("🧹 RESET COMPLETO");
     location.reload();
   };
@@ -27560,7 +27586,7 @@ try{
 try{
   if(location.search.includes('fullreset=1')){
     fetch('/api/p2p/reset', { method:'POST', credentials:'include' }).catch(()=>{});
-    'onze_p2p_capacity_items,onze_p2p_capacity_baseline_at,onze_p2p_binance_orders,onze_binance_sales,onze_p2p_initial_capital_usdt,onze_p2p_profit_day,onze_p2p_profit_start,onze_p2p_capacity_carryover,__p2pCapitalCarryoverDate,__p2pCapitalCarryoverProfit,onze_p2p_own_capital_items,__p2pManualMode,__p2pCapacityLastClear'.split(',').forEach(k => localStorage.removeItem(k));
+    'onze_p2p_capacity_items,onze_p2p_capacity_baseline_at,onze_p2p_binance_orders,onze_binance_sales,onze_p2p_initial_capital_usdt,onze_p2p_profit_day,onze_p2p_profit_start,onze_p2p_capacity_carryover,__p2pCapitalCarryoverDate,__p2pCapitalCarryoverProfit,onze_p2p_own_capital_items,__p2pManualMode,__p2pCapacityLastClear'.split(',').forEach(k => { localStorage.removeItem(k); localStorage.removeItem(k + (window.__p2pTenantSuffix || '')); });
     const url = new URL(location.href);
     url.searchParams.delete('fullreset');
     history.replaceState({}, '', url);
