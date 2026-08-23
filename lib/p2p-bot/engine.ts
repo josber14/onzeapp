@@ -1074,6 +1074,27 @@ async function runBinanceCycle(
       }
       const priceFloor = minSellPrice * (1 + adCommissionPct / 100);
 
+      // Estrategia del anuncio (ago 2026, pedido explícito del usuario):
+      // "top1" (default, comportamiento de siempre) sigue al competidor de
+      // arriba. "spread" es un precio FIJO sobre el costo real -- costo +
+      // comisión + spread, sin mirar competidores para nada. Confirmado con
+      // el usuario: los frenos de seguridad que siguen después (circuit
+      // breaker, distancia mínima entre anuncios propios, límite de
+      // velocidad de Binance) aplican igual en los dos modos -- por eso
+      // "spread" solo reemplaza CÓMO se calcula targetPrice, todo lo que
+      // viene después de este bloque queda intacto sin importar el modo.
+      const adStrategy = managedAd.botStrategy === "spread" ? "spread" : "top1";
+      const adSpreadPct = managedAd.botSpreadPct != null ? Number(managedAd.botSpreadPct) : 0;
+
+      let targetPrice: number;
+      let safeFloor: number;
+
+      if (adStrategy === "spread") {
+        targetPrice = minSellPrice * (1 + (adCommissionPct + adSpreadPct) / 100);
+        safeFloor = targetPrice;
+        await log("debug", "binance", `Ad ${adId}: estrategia spread fijo — minSellPrice=${minSellPrice} adCommissionPct=${adCommissionPct} adSpreadPct=${adSpreadPct} targetPrice=${targetPrice.toFixed(4)}`);
+      } else {
+
       // Filter competitors for this ad
       let competitors: any[];
       let needsPaymentFilter = true;
@@ -1187,7 +1208,7 @@ async function runBinanceCycle(
       }
 
       // Safe margin floor (basado en costo real + margen de seguridad)
-      const safeFloor = minSellPrice * (1 + (adCommissionPct + adSafeMarginPct) / 100);
+      safeFloor = minSellPrice * (1 + (adCommissionPct + adSafeMarginPct) / 100);
       // Target calculation
       let targetCompetitor: any = null;
       let targetIndex = -1;
@@ -1224,9 +1245,11 @@ async function runBinanceCycle(
       // Sin competidor objetivo (nadie viable, ej: mercado completo por debajo de
       // nuestro costo) → el anuncio cae al piso de seguridad, nunca se queda fijo
       // en el precio anterior.
-      let targetPrice = targetCompetitor ? Number(targetCompetitor.price) - adTop1Diff : safeFloor;
+      targetPrice = targetCompetitor ? Number(targetCompetitor.price) - adTop1Diff : safeFloor;
       // Nunca quedarse debajo del precio mínimo de seguridad
       if (targetPrice < safeFloor) { targetPrice = safeFloor; }
+
+      } // fin del bloque "top1" (adStrategy !== "spread")
 
       // ── Distancia mínima con nuestros otros anuncios del mismo lado ──
       // Binance exige ≥0.1% de diferencia entre anuncios propios en la misma
