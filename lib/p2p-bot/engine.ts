@@ -1448,24 +1448,40 @@ async function runBinanceCycle(
     }
 
     // 5. Sync orders
+    // Bug real confirmado (ago 2026): esta sincronización NUNCA guardaba
+    // `label` (ONZE/ZINPLE quedaban mezclados sin forma de distinguirlos) y
+    // NUNCA actualizaba el estado de una orden ya guardada -- una orden
+    // vista por primera vez como "TRADING" quedaba congelada así para
+    // siempre, aunque en Binance ya se hubiera completado. Bybit (más abajo
+    // en este archivo) ya tenía el arreglo del estado; acá nunca se aplicó.
+    // Mismo patrón que Bybit ahora: crear si es nueva, actualizar el estado
+    // si cambió.
     try {
       const ordersRes = await client.getOrders({ page: 1, rows: 30 });
       const binanceOrders = ordersRes?.data ?? [];
       for (const o of binanceOrders) {
         const orderId = o.orderNumber ?? o.orderNo ?? o.id;
+        const newStatus = String(o.orderStatus ?? o.status ?? "unknown");
         const existing = await prisma.p2PBotOrder.findFirst({
           where: { tenantId, orderNumber: orderId, exchange: "binance" },
         });
-        if (!existing) {
+        if (existing) {
+          if (existing.status !== newStatus || existing.label !== label) {
+            await prisma.p2PBotOrder.update({
+              where: { id: existing.id },
+              data: { status: newStatus, label },
+            });
+          }
+        } else {
           await prisma.p2PBotOrder.create({
             data: {
-              tenantId, exchange: "binance", orderNumber: orderId,
+              tenantId, label, exchange: "binance", orderNumber: orderId,
               tradeType: o.tradeType === "SELL" ? "SELL" : "BUY",
               asset: o.asset || "USDT", fiat: o.fiat || "CLP",
               amount: Number(o.amount ?? o.totalQuantity ?? 0),
               totalPrice: Number(o.totalPrice ?? o.totalAmount ?? 0),
               unitPrice: Number(o.unitPrice ?? o.price ?? 0),
-              status: o.orderStatus ?? o.status ?? "unknown",
+              status: newStatus,
               counterparty: o.counterPartNickName ?? o.counterpartyNickName ?? o.publisherName ?? "",
               executedAt: o.createTime ? new Date(o.createTime) : new Date(),
             },
