@@ -21739,6 +21739,18 @@ function addP2PBotStyles(){
           <div id="p2pCurrentCapitalLabel" style="margin-top:6px;font-size:28px;font-weight:1000;color:#34d399;">0,00 USDT</div>
         </div>
 
+        <div id="p2pWithdrawnBox" style="
+          border:1px solid rgba(248,113,113,.20);
+          background:rgba(15,23,42,.62);
+          border-radius:18px;
+          padding:14px 16px;
+          margin-bottom:14px;
+          display:none;
+        ">
+          <div style="font-size:12px;color:#94a3b8;font-weight:900;text-transform:uppercase;letter-spacing:.08em;">Total retirado (histórico)</div>
+          <div id="p2pWithdrawnLabel" style="margin-top:6px;font-size:20px;font-weight:1000;color:#f87171;">-0,00 USDT</div>
+        </div>
+
         <div style="
           border:1px solid rgba(148,163,184,.15);
           background:rgba(15,23,42,.45);
@@ -21949,6 +21961,12 @@ function addP2PBotStyles(){
     if(error) error.textContent = "";
     if(preview) preview.textContent = "";
     if(label) label.textContent = `${p2pCapMoney(current, 2)} USDT`;
+
+    const withdrawnBox = modal.querySelector("#p2pWithdrawnBox");
+    const withdrawnLabel = modal.querySelector("#p2pWithdrawnLabel");
+    const totalWithdrawn = Number(window.__p2pTotalWithdrawnUsdt || 0);
+    if(withdrawnLabel) withdrawnLabel.textContent = `-${p2pCapMoney(totalWithdrawn, 2)} USDT`;
+    if(withdrawnBox) withdrawnBox.style.display = totalWithdrawn > 0 ? "block" : "none";
 
     if(typeof calculateP2PCapacityStats === "function"){
       const safeStats = calculateP2PCapacityStats() || {};
