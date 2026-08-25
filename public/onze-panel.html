@@ -21735,20 +21735,9 @@ function addP2PBotStyles(){
           padding:14px 16px;
           margin-bottom:14px;
         ">
-          <div style="font-size:12px;color:#94a3b8;font-weight:900;text-transform:uppercase;letter-spacing:.08em;">Capital registrado actual</div>
+          <div style="font-size:12px;color:#94a3b8;font-weight:900;text-transform:uppercase;letter-spacing:.08em;">Capital P2P actual (real)</div>
           <div id="p2pCurrentCapitalLabel" style="margin-top:6px;font-size:28px;font-weight:1000;color:#34d399;">0,00 USDT</div>
-        </div>
-
-        <div id="p2pWithdrawnBox" style="
-          border:1px solid rgba(248,113,113,.20);
-          background:rgba(15,23,42,.62);
-          border-radius:18px;
-          padding:14px 16px;
-          margin-bottom:14px;
-          display:none;
-        ">
-          <div style="font-size:12px;color:#94a3b8;font-weight:900;text-transform:uppercase;letter-spacing:.08em;">Total retirado (histórico)</div>
-          <div id="p2pWithdrawnLabel" style="margin-top:6px;font-size:20px;font-weight:1000;color:#f87171;">-0,00 USDT</div>
+          <div id="p2pCapitalBreakdown" style="margin-top:6px;font-size:12px;color:#93c5fd;font-weight:700;"></div>
         </div>
 
         <div style="
@@ -21786,9 +21775,12 @@ function addP2PBotStyles(){
           <option value="remove">Retirar capital</option>
         </select>
 
-        <label style="display:block;font-size:13px;font-weight:800;color:#cbd5e1;margin-bottom:8px;">
+        <label style="display:block;font-size:13px;font-weight:800;color:#cbd5e1;margin-bottom:4px;">
           Monto en USDT
         </label>
+        <div style="font-size:11px;color:#64748b;margin-bottom:8px;">
+          Este es el capital inicial (base fija). El "Capital P2P actual" de arriba ya le suma ganancias y resta retiros automáticamente.
+        </div>
 
         <input id="p2pInitialCapitalInput" inputmode="decimal" type="text" placeholder="Ej: 6000" style="
           width:100%;
@@ -21848,10 +21840,6 @@ function addP2PBotStyles(){
             cursor:pointer;
           ">Guardar</button>
         </div>
-
-        <button type="button" onclick="saveP2PInitialCapital(0);syncP2PInitialCapitalToServer(0);closeP2PInitialCapitalModal();updateP2PCapitalCard();" style="
-          width:100%;margin-top:12px;border:0;border-radius:16px;padding:13px 14px;background:#dc2626;color:#fff;font-size:15px;font-weight:1000;cursor:pointer;
-        ">Reiniciar</button>
       </div>
     `;
 
@@ -21956,22 +21944,35 @@ function addP2PBotStyles(){
     const error = modal.querySelector("#p2pInitialCapitalError");
     const preview = modal.querySelector("#p2pInitialCapitalPreview");
     const label = modal.querySelector("#p2pCurrentCapitalLabel");
+    const breakdown = modal.querySelector("#p2pCapitalBreakdown");
     const current = getP2PInitialCapital();
 
     if(error) error.textContent = "";
     if(preview) preview.textContent = "";
-    if(label) label.textContent = `${p2pCapMoney(current, 2)} USDT`;
 
-    const withdrawnBox = modal.querySelector("#p2pWithdrawnBox");
-    const withdrawnLabel = modal.querySelector("#p2pWithdrawnLabel");
+    // Pedido explícito del usuario (ago 2026): esta pantalla mostraba solo
+    // el capital inicial (base fija) bajo el título "Capital registrado
+    // actual", lo que confundía porque no era el Capital P2P real (el
+    // mismo que ya se ve en el dashboard = inicial + acumulado + ganancia
+    // del mes - retirado). Ahora se muestra ese total real aquí también,
+    // con el desglose abajo para que quede claro de dónde sale.
+    const safeStats = typeof calculateP2PCapacityStats === "function" ? (calculateP2PCapacityStats() || {}) : {};
+    const monthlyProfit = Number(getP2PRangeStatsFromCapacity(safeStats, "month").profitUsdt || 0);
+    const accumulatedProfit = Number(window.__p2pAccumulatedProfitUsdt || 0);
     const totalWithdrawn = Number(window.__p2pTotalWithdrawnUsdt || 0);
-    if(withdrawnLabel) withdrawnLabel.textContent = `-${p2pCapMoney(totalWithdrawn, 2)} USDT`;
-    if(withdrawnBox) withdrawnBox.style.display = totalWithdrawn > 0 ? "block" : "none";
+    const realTotal = current + accumulatedProfit + monthlyProfit - totalWithdrawn;
 
-    if(typeof calculateP2PCapacityStats === "function"){
-      const safeStats = calculateP2PCapacityStats() || {};
-      renderP2PMonthlyHistory("p2pMonthlyHistoryList", getP2PMonthlyBreakdown(safeStats));
+    if(label) label.textContent = `${p2pCapMoney(realTotal, 2)} USDT`;
+    if(breakdown){
+      const sign = monthlyProfit >= 0 ? "+" : "-";
+      let parts = [`Inicial: ${p2pCapMoney(current, 2)}`];
+      if(accumulatedProfit !== 0) parts.push(`Acumulado: ${p2pCapMoney(accumulatedProfit, 2)}`);
+      parts.push(`Este mes: ${sign}${p2pCapMoney(Math.abs(monthlyProfit), 2)}`);
+      if(totalWithdrawn > 0) parts.push(`Retirado: -${p2pCapMoney(totalWithdrawn, 2)}`);
+      breakdown.textContent = parts.join(" · ") + " USDT";
     }
+
+    renderP2PMonthlyHistory("p2pMonthlyHistoryList", getP2PMonthlyBreakdown(safeStats));
 
     if(action){
       action.value = "set";
