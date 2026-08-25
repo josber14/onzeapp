@@ -21863,8 +21863,14 @@ function addP2PBotStyles(){
     const preview = document.getElementById("p2pInitialCapitalPreview");
     const current = getP2PInitialCapital();
 
+    // Bug real confirmado en vivo (ago 2026): el campo se llena con
+    // String(numeroJS) -- formato normal con punto decimal (ej. "13183.05")
+    // -- pero esto asumía formato chileno (punto=miles, coma=decimales) y le
+    // borraba el punto, multiplicando por 100 cualquier monto con
+    // decimales. Solo se convierte la coma (por si alguien escribe a la
+    // chilena a mano), el punto se deja intacto.
     const raw = String(input?.value || "").trim();
-    const clean = raw.replace(/\./g, "").replace(",", ".");
+    const clean = raw.replace(",", ".");
     const amount = Number(clean);
 
     if(!preview) return;
@@ -21886,8 +21892,14 @@ function addP2PBotStyles(){
     const action = document.getElementById("p2pInitialCapitalAction")?.value || "set";
     const error = document.getElementById("p2pInitialCapitalError");
 
+    // Bug real confirmado en vivo (ago 2026): el campo se llena con
+    // String(numeroJS) -- formato normal con punto decimal (ej. "13183.05")
+    // -- pero esto asumía formato chileno (punto=miles, coma=decimales) y le
+    // borraba el punto, multiplicando por 100 cualquier monto con
+    // decimales. Solo se convierte la coma (por si alguien escribe a la
+    // chilena a mano), el punto se deja intacto.
     const raw = String(input?.value || "").trim();
-    const clean = raw.replace(/\./g, "").replace(",", ".");
+    const clean = raw.replace(",", ".");
     const amount = Number(clean);
     const current = getP2PInitialCapital();
 
