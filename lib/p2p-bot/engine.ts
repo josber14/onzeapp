@@ -1462,14 +1462,26 @@ async function runBinanceCycle(
       for (const o of binanceOrders) {
         const orderId = o.orderNumber ?? o.orderNo ?? o.id;
         const newStatus = String(o.orderStatus ?? o.status ?? "unknown");
+        // Bug real confirmado (ago 2026): este fetch (listUserOrderHistory)
+        // sí trae la comisión real cobrada por Binance en `o.commission`,
+        // pero nunca se guardaba -- toda orden quedaba con comisión 0,
+        // inflando la ganancia mostrada en el Dashboard. Se guarda al crear
+        // y se rellena en las que ya existían sin ella (nunca cambia
+        // después de completada, así que no hace falta pisarla si ya está).
+        const commissionUsdt = Number(o.commission ?? 0);
         const existing = await prisma.p2PBotOrder.findFirst({
           where: { tenantId, orderNumber: orderId, exchange: "binance" },
         });
         if (existing) {
-          if (existing.status !== newStatus || existing.label !== label) {
+          const needsUpdate = existing.status !== newStatus || existing.label !== label || (existing.commission == null && commissionUsdt > 0);
+          if (needsUpdate) {
             await prisma.p2PBotOrder.update({
               where: { id: existing.id },
-              data: { status: newStatus, label },
+              data: {
+                status: newStatus,
+                label,
+                ...(existing.commission == null && commissionUsdt > 0 ? { commission: commissionUsdt } : {}),
+              },
             });
           }
         } else {
@@ -1481,6 +1493,7 @@ async function runBinanceCycle(
               amount: Number(o.amount ?? o.totalQuantity ?? 0),
               totalPrice: Number(o.totalPrice ?? o.totalAmount ?? 0),
               unitPrice: Number(o.unitPrice ?? o.price ?? 0),
+              commission: commissionUsdt,
               status: newStatus,
               counterparty: o.counterPartNickName ?? o.counterpartyNickName ?? o.publisherName ?? "",
               executedAt: o.createTime ? new Date(o.createTime) : new Date(),
