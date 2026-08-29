@@ -9945,6 +9945,15 @@ function addP2PBotStyles(){
     .bot-account-card .acct-label{font-weight:700;color:#f1f5f9;font-size:13px;}
     .bot-account-card .acct-detail{font-size:11px;color:#94a3b8;margin-top:3px;line-height:1.5;}
     .bot-account-card .acct-actions{display:flex;gap:6px;margin-top:8px;justify-content:flex-end;}
+    .acct-icon-btn{
+      width:26px;height:26px;padding:0;display:inline-flex;align-items:center;justify-content:center;
+      border-radius:7px;border:1px solid rgba(148,163,184,.15);background:rgba(148,163,184,.06);
+      font-size:12px;line-height:1;cursor:pointer;transition:filter .15s,border-color .15s;
+    }
+    .acct-icon-btn:hover{filter:brightness(1.25);}
+    .acct-icon-btn.is-warn{border-color:rgba(248,113,113,.25);background:rgba(220,38,38,.08);}
+    .acct-icon-btn.is-ok{border-color:rgba(74,222,128,.3);background:rgba(22,163,74,.14);}
+    .acct-icon-btn.is-danger{border-color:rgba(248,113,113,.2);background:rgba(127,29,29,.12);}
     .bot-acct-btn{background:transparent;border:none;color:#94a3b8;cursor:pointer;transition:all .15s;}
     .bot-acct-btn.active{background:rgba(0,212,255,.12);color:#00d4ff;}
     .p2p-resumen-tab{background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.15);color:#94a3b8;cursor:pointer;transition:all .15s;padding:5px 14px;border-radius:999px;font-size:12px;font-weight:700;}
@@ -10477,10 +10486,14 @@ function addP2PBotStyles(){
               </div>
               <p id="botCycleProfitHint" style="margin-top:6px;font-size:10px;color:#64748b;"></p>
               <div style="margin-top:10px;">
-                <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px;">Órdenes de este ciclo</div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                  <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.3px;">Órdenes de este ciclo</div>
+                  <span id="botCycleSetAsideChip" onclick="window.botCycleToggleSetAsideList()" style="display:none;cursor:pointer;font-size:10px;font-weight:700;padding:2px 9px;border-radius:999px;background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.3);color:#fbbf24;"></span>
+                </div>
                 <div id="botCycleOrdersList" style="max-height:220px;overflow-y:auto;border:1px solid rgba(148,163,184,.12);border-radius:8px;">
                   <div style="color:#64748b;font-size:11px;text-align:center;padding:12px 0;">Sin órdenes todavía</div>
                 </div>
+                <div id="botCycleSetAsideList" style="display:none;margin-top:8px;border:1px solid rgba(251,191,36,.2);border-radius:8px;background:rgba(251,191,36,.04);"></div>
               </div>
             </div>
             <div id="botCycleManualList" style="margin-top:10px;font-size:11px;color:#94a3b8;display:none;"></div>
@@ -13323,13 +13336,15 @@ function addP2PBotStyles(){
           if(info.email) parts.push("Email: " + info.email);
           infoStr = parts.join("<br>");
         }catch(e){}
+        const isUnavailable = !!a.unavailable;
         return `
-        <div class="bot-account-card">
-          <div class="acct-label">${escHtml(bankTitle || a.label)}</div>
+        <div class="bot-account-card"${isUnavailable ? ' style="border-color:rgba(220,38,38,0.5);background:rgba(220,38,38,0.06);"' : ''}>
+          <div class="acct-label">${escHtml(bankTitle || a.label)}${isUnavailable ? ' <span style="color:#dc2626;font-weight:800;font-size:11px;">🚨 NO DISPONIBLE</span>' : ''}</div>
           <div class="acct-detail">${infoStr || escHtml(a.accountType || '')}</div>
           <div class="acct-actions">
-            <button class="btn small ghost" type="button" onclick="window.botPanelEditAccount(${a.id})">Editar</button>
-            <button class="btn small danger" type="button" onclick="window.botPanelDeleteAccount(${a.id})">Eliminar</button>
+            <button class="acct-icon-btn" type="button" title="Editar" onclick="window.botPanelEditAccount(${a.id})">✏️</button>
+            <button class="acct-icon-btn ${isUnavailable ? 'is-ok' : 'is-warn'}" type="button" title="${isUnavailable ? 'Marcar disponible' : 'Marcar no disponible'}" onclick="window.botPanelToggleAccountUnavailable(${a.id}, ${!isUnavailable})">${isUnavailable ? '✅' : '🚫'}</button>
+            <button class="acct-icon-btn is-danger" type="button" title="Eliminar" onclick="window.botPanelDeleteAccount(${a.id})">🗑️</button>
           </div>
         </div>
       `}).join("");
@@ -13984,6 +13999,20 @@ function addP2PBotStyles(){
 
   window.botPanelDeleteAccount = async function(id){
     await fetch("/api/p2p/bot/accounts?id=" + id, { method:"DELETE", credentials:"include" });
+    loadPanelAccounts();
+  };
+
+  // Botón de emergencia (ago 2026): marca/desmarca una cuenta como "no
+  // disponible" sin borrarla. El bot deja de ofrecerla a compradores nuevos
+  // y manda un aviso corto antes del saludo en cualquier orden nueva
+  // mientras quede marcada así.
+  window.botPanelToggleAccountUnavailable = async function(id, unavailable){
+    await fetch("/api/p2p/bot/accounts", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, unavailable }),
+    });
     loadPanelAccounts();
   };
 
@@ -14753,6 +14782,20 @@ function addP2PBotStyles(){
           ? "$" + Math.round(totalClpNum / orderCountForAvg).toLocaleString()
           : "—";
 
+        // Chip de "ventas apartadas" (botón "Sacar del ciclo", ago 2026)
+        const setAsideChipEl = document.getElementById("botCycleSetAsideChip");
+        if(setAsideChipEl){
+          const n = Number(data.setAsideCount || 0);
+          if(n > 0){
+            setAsideChipEl.style.display = "inline-block";
+            setAsideChipEl.textContent = "🅿️ " + n + " apartada" + (n === 1 ? "" : "s") + " · $" + Math.round(Number(data.setAsideTotalClp || 0)).toLocaleString();
+          }else{
+            setAsideChipEl.style.display = "none";
+            const listEl2 = document.getElementById("botCycleSetAsideList");
+            if(listEl2) listEl2.style.display = "none";
+          }
+        }
+
         // Lista de órdenes que van entrando en este ciclo
         const ordersListEl = document.getElementById("botCycleOrdersList");
         if(ordersListEl){
@@ -14760,11 +14803,15 @@ function addP2PBotStyles(){
           if(orders.length){
             ordersListEl.innerHTML = orders.map(o => {
               const t = o.executedAt || o.createTime;
+              const tMs = o.executedAt ? new Date(o.executedAt).getTime() : (Number(t) || 0);
               const dateStr = t ? new Date(Number(t) || t).toLocaleString("es-CL", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }) : "—";
+              const orderNumber = o.orderNumber || o.orderNo || "";
+              const setAsideBtn = orderNumber ? "<button onclick=\"window.botCycleSetAside('" + orderNumber + "', " + (Number(o.amount) || 0) + ", " + Math.round(Number(o.totalPrice) || 0) + ", " + tMs + ")\" title='Sacar del ciclo activo' style='margin-left:8px;background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.3);color:#fbbf24;border-radius:6px;padding:2px 7px;font-size:10px;cursor:pointer;'>Sacar</button>" : "";
               return "<div style='display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-bottom:1px solid rgba(148,163,184,.08);font-size:11px;'>" +
                 "<span style='color:#94a3b8;'>" + dateStr + "</span>" +
                 "<span style='color:#e2e8f0;'>" + Number(o.amount || 0).toFixed(2) + " USDT</span>" +
                 "<span style='color:#fbbf24;font-weight:700;'>$" + Math.round(Number(o.totalPrice || 0)).toLocaleString() + "</span>" +
+                setAsideBtn +
               "</div>";
             }).join("");
           }else{
@@ -15223,6 +15270,70 @@ function addP2PBotStyles(){
       if(!data.ok){ onzeAlert(data.error || "No se pudo vaciar"); return; }
       window.botCycleShowHistory();
     }catch(e){ onzeAlert("Error al vaciar historial"); }
+  };
+
+  // Botón "Sacar del ciclo" (ago 2026): saca una venta puntual del ciclo
+  // activo, queda apartada sin contar en ningún ciclo hasta que se inicie el
+  // próximo (ver /api/p2p/cycle/set-aside y start/route.ts).
+  window.botCycleSetAside = async function(orderNumber, amount, totalPrice, createTime){
+    if(!(await onzeConfirm("¿Sacar esta venta del ciclo activo? Queda apartada hasta que inicies el próximo ciclo."))) return;
+    try{
+      const res = await fetch("/api/p2p/cycle/set-aside", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderNumber, amount, totalPrice, createTime, label: botActiveLabel || "ONZE", exchange: botSelectedExchange || "binance" }),
+      });
+      const data = await res.json();
+      if(!data.ok){ onzeAlert(data.error || "No se pudo sacar la venta"); return; }
+      botCycleRefresh();
+    }catch(e){ onzeAlert("Error al sacar la venta"); }
+  };
+
+  window.botCycleToggleSetAsideList = function(){
+    const el = document.getElementById("botCycleSetAsideList");
+    if(!el) return;
+    if(el.style.display === "none"){
+      el.style.display = "block";
+      window.botCycleLoadSetAsideList();
+    }else{
+      el.style.display = "none";
+    }
+  };
+
+  window.botCycleLoadSetAsideList = async function(){
+    const el = document.getElementById("botCycleSetAsideList");
+    if(!el) return;
+    el.innerHTML = "<div style='padding:8px;font-size:11px;color:#94a3b8;'>Cargando...</div>";
+    try{
+      const lbl = botActiveLabel || "ONZE";
+      const ex = botSelectedExchange || "binance";
+      const res = await fetch("/api/p2p/cycle/set-aside?label=" + encodeURIComponent(lbl) + "&exchange=" + encodeURIComponent(ex), { credentials: "include" });
+      const data = await res.json();
+      const orders = data?.orders || [];
+      if(!orders.length){
+        el.innerHTML = "<div style='padding:8px;font-size:11px;color:#94a3b8;'>Sin ventas apartadas.</div>";
+        return;
+      }
+      el.innerHTML = orders.map(o => {
+        const dateStr = o.createTime ? new Date(o.createTime).toLocaleString("es-CL", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }) : "—";
+        return "<div style='display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-bottom:1px solid rgba(251,191,36,.12);font-size:11px;'>" +
+          "<span style='color:#94a3b8;'>" + dateStr + "</span>" +
+          "<span style='color:#e2e8f0;'>" + Number(o.amount || 0).toFixed(2) + " USDT</span>" +
+          "<span style='color:#fbbf24;font-weight:700;'>$" + Math.round(Number(o.totalPrice || 0)).toLocaleString() + "</span>" +
+          "<button onclick=\"window.botCycleReturnSetAside(" + o.id + ")\" title='Devolver al ciclo activo' style='background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#93c5fd;border-radius:6px;padding:2px 7px;font-size:10px;cursor:pointer;'>Devolver</button>" +
+        "</div>";
+      }).join("");
+    }catch(e){
+      el.innerHTML = "<div style='padding:8px;font-size:11px;color:#f87171;'>Error al cargar.</div>";
+    }
+  };
+
+  window.botCycleReturnSetAside = async function(id){
+    try{
+      await fetch("/api/p2p/cycle/set-aside?id=" + id, { method: "DELETE", credentials: "include" });
+      window.botCycleLoadSetAsideList();
+      botCycleRefresh();
+    }catch(e){ onzeAlert("Error al devolver la venta"); }
   };
 
   function initP2PBot(){

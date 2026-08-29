@@ -33,6 +33,7 @@ export async function GET() {
         accountType: a.accountType,
         accountInfo: a.accountInfo,
         isActive: a.isActive,
+        unavailable: a.unavailable,
         sortOrder: a.sortOrder,
       })),
     });
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { id, exchange, label, accountType, accountInfo, isActive, sortOrder } = body;
+    const { id, exchange, label, accountType, accountInfo, isActive, unavailable, sortOrder } = body;
 
     if (id) {
       const updated = await prisma.p2PAccount.update({
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
           ...(accountType !== undefined && { accountType }),
           ...(accountInfo !== undefined && { accountInfo }),
           ...(isActive !== undefined && { isActive }),
+          ...(unavailable !== undefined && { unavailable }),
           ...(sortOrder !== undefined && { sortOrder }),
         },
       });

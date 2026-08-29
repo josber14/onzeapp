@@ -72,6 +72,16 @@ export async function POST(req: NextRequest) {
           minCloseBalance: minCloseBalance ?? undefined,
         },
       });
+
+      // Botón "Sacar del ciclo" (ago 2026): las ventas que quedaron
+      // "apartadas" (sacadas de un ciclo anterior, sin reclamar por nadie
+      // todavía) pasan a contar en el ciclo que recién arranca -- es el
+      // punto exacto donde el usuario dijo que deben "entrar".
+      await tx.p2PCycleSetAsideOrder.updateMany({
+        where: { tenantId, exchange, label, claimedByCycleId: null },
+        data: { claimedByCycleId: created.id, claimedAt: new Date() },
+      });
+
       return { alreadyActive: false as const, cycle: created };
     });
 

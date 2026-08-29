@@ -104,6 +104,45 @@ export async function computeCycleOrderStats(
   };
 }
 
+// Botón "Sacar del ciclo" (ago 2026): recalcula totales/primera/última orden
+// a partir de una lista de órdenes ya filtrada -- reutilizado tanto para
+// EXCLUIR una orden apartada de los totales del ciclo activo, como para
+// SUMAR una orden apartada reclamada por el ciclo nuevo (aunque su createTime
+// real sea anterior al startTime de ese ciclo, por eso no puede pasar de
+// nuevo por el filtro de rango de fecha de computeCycleOrderStats).
+function recomputeStatsFromOrders(orders: any[]) {
+  let totalUsdt = 0;
+  let totalBinanceClp = 0;
+  for (const o of orders) {
+    totalUsdt += Number(o.amount) || 0;
+    totalBinanceClp += Math.round(Number(o.totalPrice) || 0);
+  }
+  const sortedByTime = [...orders].sort((a: any, b: any) => (Number(a.createTime) || 0) - (Number(b.createTime) || 0));
+  const firstOrder = sortedByTime[0] || null;
+  const lastOrder = sortedByTime[sortedByTime.length - 1] || null;
+  return { totalUsdt, totalBinanceClp, orderCount: orders.length, firstOrder, lastOrder, orders: sortedByTime };
+}
+
+export function excludeOrdersFromStats(stats: any, excludeOrderNumbers: Set<string>) {
+  if (!excludeOrderNumbers.size) return stats;
+  const filtered = (stats.orders || []).filter((o: any) => !excludeOrderNumbers.has(String(o.orderNumber)));
+  if (filtered.length === (stats.orders || []).length) return stats;
+  return recomputeStatsFromOrders(filtered);
+}
+
+export function mergeExtraOrdersIntoStats(stats: any, extraOrders: any[]) {
+  if (!extraOrders.length) return stats;
+  const seen = new Set((stats.orders || []).map((o: any) => String(o.orderNumber)));
+  const merged = [...(stats.orders || [])];
+  for (const o of extraOrders) {
+    const id = String(o.orderNumber);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    merged.push(o);
+  }
+  return recomputeStatsFromOrders(merged);
+}
+
 // Estados que Binance/Bybit consideran definitivos como venta real completada
 // (ver P2PBotOrder.status, guardado con el string crudo del exchange).
 const COMPLETED_STATUSES = new Set(["COMPLETED", "completed"]);

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { BybitP2PClient, bybitOrderGroup, bybitOrderStatusLabel } from "./bybit-adapter";
 import { BinanceP2PClient } from "./binance-adapter";
 import { canCallPriority, canCallNonUrgent, recordCall, getUsage } from "./rate-limiter";
-import { computeCycleOrderStats, computeLocalCycleStats, mapCycleOrdersForDisplay } from "./cycle-stats";
+import { computeCycleOrderStats, computeLocalCycleStats, mapCycleOrdersForDisplay, excludeOrdersFromStats, mergeExtraOrdersIntoStats } from "./cycle-stats";
 import { processChats } from "./chat-agent";
 import type {
   P2PBotConfigData,
@@ -2268,10 +2268,27 @@ async function autoCloseCycle(
 
   const startMs = Number(cycle.startTime);
   const endMs = Date.now();
-  const { totalUsdt, totalBinanceClp, firstOrder, lastOrder, orders } =
-    exchange === "binance"
-      ? await computeCycleOrderStats(client, startMs, endMs, recentOrders)
-      : await computeLocalCycleStats(prisma, tenantId, exchange, startMs, endMs);
+  let stats: any = exchange === "binance"
+    ? await computeCycleOrderStats(client, startMs, endMs, recentOrders)
+    : await computeLocalCycleStats(prisma, tenantId, exchange, startMs, endMs);
+
+  // Botón "Sacar del ciclo" (ago 2026): mismo criterio que el cierre manual
+  // (app/api/p2p/cycle/close/route.ts) -- lo apartado sin reclamar no debe
+  // colarse en el auto-cierre.
+  const setAsideRows = await prisma.p2PCycleSetAsideOrder.findMany({
+    where: { tenantId, exchange, label, OR: [{ claimedByCycleId: null }, { claimedByCycleId: cycle.id }] },
+  });
+  const unclaimed = setAsideRows.filter((o: any) => o.claimedByCycleId === null);
+  const claimedByThisCycle = setAsideRows.filter((o: any) => o.claimedByCycleId === cycle.id);
+  if (unclaimed.length) {
+    stats = excludeOrdersFromStats(stats, new Set(unclaimed.map((o: any) => o.orderNumber)));
+  }
+  if (claimedByThisCycle.length) {
+    stats = mergeExtraOrdersIntoStats(stats, claimedByThisCycle.map((o: any) => ({
+      orderNumber: o.orderNumber, amount: o.amount, totalPrice: o.totalPrice, createTime: o.createTime.getTime(),
+    })));
+  }
+  const { totalUsdt, totalBinanceClp, firstOrder, lastOrder, orders } = stats;
 
   const totalManualClp = Number(cycle.totalManualClp);
 

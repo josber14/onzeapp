@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { BinanceP2PClient } from "@/lib/p2p-bot/binance-adapter";
-import { computeCycleOrderStats, computeLocalCycleStats, mapCycleOrdersForDisplay } from "@/lib/p2p-bot/cycle-stats";
+import { computeCycleOrderStats, computeLocalCycleStats, mapCycleOrdersForDisplay, excludeOrdersFromStats, mergeExtraOrdersIntoStats } from "@/lib/p2p-bot/cycle-stats";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const startMs = Number(cycle.startTime);
     const endMs = Date.now();
 
-    let totalUsdt: number, totalBinanceClp: number, orderCount: number, firstOrder: any, lastOrder: any, orders: any[];
+    let stats: any;
     if (exchange === "binance") {
       const creds = await prisma.binanceCredentials.findFirst({
         where: { tenantId: session.tenantId, isActive: true, label },
@@ -46,14 +46,31 @@ export async function POST(req: NextRequest) {
         return Response.json({ ok: false, error: "Sin credenciales Binance" });
       }
       const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
-      ({ totalUsdt, totalBinanceClp, orderCount, firstOrder, lastOrder, orders } =
-        await computeCycleOrderStats(client, startMs, endMs));
+      stats = await computeCycleOrderStats(client, startMs, endMs);
     } else {
       // Bybit/OKX: sin API de historial propia integrada acá todavía --
       // usamos las órdenes que el ciclo del bot ya sincroniza a P2PBotOrder.
-      ({ totalUsdt, totalBinanceClp, orderCount, firstOrder, lastOrder, orders } =
-        await computeLocalCycleStats(prisma, session.tenantId, exchange, startMs, endMs));
+      stats = await computeLocalCycleStats(prisma, session.tenantId, exchange, startMs, endMs);
     }
+
+    // Botón "Sacar del ciclo" (ago 2026): mismo criterio que status/route.ts
+    // -- lo que sigue sin reclamar se excluye del total que se está por
+    // guardar; lo que este mismo ciclo ya reclamó (si el usuario sacó algo y
+    // después empezó ESTE ciclo mientras seguía activo) se suma igual.
+    const setAsideRows = await prisma.p2PCycleSetAsideOrder.findMany({
+      where: { tenantId: session.tenantId, exchange, label, OR: [{ claimedByCycleId: null }, { claimedByCycleId: cycle.id }] },
+    });
+    const unclaimed = setAsideRows.filter((o: any) => o.claimedByCycleId === null);
+    const claimedByThisCycle = setAsideRows.filter((o: any) => o.claimedByCycleId === cycle.id);
+    if (unclaimed.length) {
+      stats = excludeOrdersFromStats(stats, new Set(unclaimed.map((o: any) => o.orderNumber)));
+    }
+    if (claimedByThisCycle.length) {
+      stats = mergeExtraOrdersIntoStats(stats, claimedByThisCycle.map((o: any) => ({
+        orderNumber: o.orderNumber, amount: o.amount, totalPrice: o.totalPrice, createTime: o.createTime.getTime(),
+      })));
+    }
+    const { totalUsdt, totalBinanceClp, orderCount, firstOrder, lastOrder, orders } = stats;
 
     const totalManualClp = Number(cycle.totalManualClp);
 

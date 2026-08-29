@@ -700,6 +700,18 @@ export async function handleVerified(
 
   await logMsg(tenantId, exchange, `[Chat] handleVerified: iniciando para ${order.orderNumber}`);
 
+  // Botón de emergencia: si hay algún banco marcado "no disponible" para esta
+  // cuenta (ONZE/ZINPLE), se manda un aviso corto ANTES del saludo normal —
+  // como mensaje aparte, no pegado al saludo (pedido explícito del usuario,
+  // para que sea fácil de leer). Aplica a las 4 salidas de esta función, sin
+  // importar por qué anuncio entró la orden.
+  const unavailableBanks = await getUnavailableBankNames(tenantId, exchange, label);
+  const emergencyWarning = buildUnavailableBankWarning(unavailableBanks);
+  async function sendEmergencyWarningIfAny() {
+    if (!emergencyWarning) return;
+    await sendAndTrack(client, exchange, order.orderNumber, cs, emergencyWarning, createdAtTs);
+  }
+
   // "known" solo existe si ya vimos a esta persona completar una compra
   // ANTES (el nombre real se captura recién al completar una orden) — o sea,
   // si existe, esta orden ya es su 2da compra o más. Coincide exactamente
@@ -783,6 +795,7 @@ export async function handleVerified(
     const wantsMultiple = matchWantsMultipleAccounts(firstMsg);
     if (wantsMultiple) await markSplitPaymentDeclared(cs);
     const greeting = `${hello} Ya te paso ${wantsMultiple ? "las cuentas que necesites" : "la cuenta"} — antes dime: ¿transfieres desde cuenta personal o empresa?\n  1) Personal\n  2) Empresa\n\nResponde 1 o 2.`;
+    await sendEmergencyWarningIfAny();
     const sent = await sendAndTrack(client, exchange, order.orderNumber, cs, greeting, createdAtTs);
     if (sent) {
       await updateState(cs.id, "awaiting_account_type", { isCompany: false, isReturning });
@@ -823,6 +836,7 @@ export async function handleVerified(
 
     if (prevAccount) {
       const greeting = `${hello} ¿Vas a transferir a la misma cuenta de la última vez (${known.lastBank})? Avísame si necesitas que te la reenvíe, o si prefieres usar otra cuenta.`;
+      await sendEmergencyWarningIfAny();
       const sent = await sendAndTrack(client, exchange, order.orderNumber, cs, greeting, createdAtTs);
       if (sent) {
         await updateState(cs.id, "awaiting_previous_account", {
@@ -843,6 +857,7 @@ export async function handleVerified(
     // sin que sepamos cuál es, awaiting_previous_account ya cae de forma
     // segura a la cuenta principal por defecto.
     const greeting = `${hello} ¿Vas a transferir a la misma cuenta que usaste la última vez, o prefieres que te pase una cuenta distinta esta vez?`;
+    await sendEmergencyWarningIfAny();
     const sent = await sendAndTrack(client, exchange, order.orderNumber, cs, greeting, createdAtTs);
     if (sent) {
       await updateState(cs.id, "awaiting_previous_account", {
@@ -856,6 +871,7 @@ export async function handleVerified(
   }
 
   const greeting = buildInitialGreeting(isReturning, name);
+  await sendEmergencyWarningIfAny();
   const sent = await sendAndTrack(client, exchange, order.orderNumber, cs, greeting, createdAtTs);
   if (sent) {
     await updateState(cs.id, "awaiting_account_type", { isCompany: false, isReturning });
@@ -3124,8 +3140,13 @@ function pickDefaultAccountsPerBank(accounts: any[]): any[] {
 }
 
 async function getAccountsForAd(tenantId: number, exchange: string, ad: any, label = "ONZE", opts: { includeHidden?: boolean } = {}): Promise<any[]> {
+  // unavailable: false -- botón de emergencia del panel (ago 2026). Una cuenta
+  // marcada "no disponible" nunca se ofrece sola a un comprador nuevo, ni
+  // siquiera como "la misma de la vez pasada" (ver includeHidden en
+  // handleVerified) -- se excluye acá, en la fuente, para que ambos usos
+  // queden protegidos sin duplicar el filtro en cada lugar que llama esto.
   const all = await prisma.p2PAccount.findMany({
-    where: { tenantId, exchange, label, isActive: true },
+    where: { tenantId, exchange, label, isActive: true, unavailable: false },
     orderBy: { sortOrder: "asc" },
   });
 
@@ -3249,9 +3270,30 @@ async function findKnownRealNameExact(tenantId: number, exchange: string, label:
   };
 }
 
+// Botón de emergencia (ago 2026): el usuario marca una cuenta como "no
+// disponible" desde el panel cuando ese banco tiene un problema puntual (ej.
+// Banco Estado caído). El aviso debe salir en el primer mensaje de CUALQUIER
+// orden nueva -- pedido explícito del usuario, no solo en las órdenes que
+// entran por el anuncio de ese banco, porque compradores recurrentes piden
+// pagar a esa cuenta puntual sin importar por qué anuncio entraron.
+async function getUnavailableBankNames(tenantId: number, exchange: string, label: string): Promise<string[]> {
+  const rows = await prisma.p2PAccount.findMany({
+    where: { tenantId, exchange, label, isActive: true, unavailable: true },
+    select: { accountInfo: true },
+  });
+  const names = rows.map(r => parseAccountInfo(r).bank).filter(Boolean);
+  return Array.from(new Set(names));
+}
+
+function buildUnavailableBankWarning(bankNames: string[]): string | null {
+  if (bankNames.length === 0) return null;
+  const list = bankNames.map(b => b.toUpperCase()).join(" Y ");
+  return `⚠️ AVISO: ${list} NO ESTÁ DISPONIBLE, POR FAVOR NO TRANSFERIR A ESA CUENTA EN ESTE MOMENTO.`;
+}
+
 async function getAvailableAccounts(tenantId: number, exchange: string, label = "ONZE"): Promise<any[]> {
   const all = await prisma.p2PAccount.findMany({
-    where: { tenantId, exchange, label, isActive: true },
+    where: { tenantId, exchange, label, isActive: true, unavailable: false },
     orderBy: { sortOrder: "asc" },
   });
   // Mismo criterio que getAccountsForAd: al repartir un pago entre varias

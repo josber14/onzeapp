@@ -81,6 +81,7 @@ model Tenant {
   p2pCapacities         P2PCapacity[]
   p2pManualSales        P2PManualSale[]
   p2pCycles             P2PCycle[]
+  p2pCycleSetAsideOrders P2PCycleSetAsideOrder[]
   p2pWithdrawals        P2PWithdrawal[]
   p2pWebAuthnCredentials P2PWebAuthnCredential[]
   p2pWebAuthnChallenges P2PWebAuthnChallenge[]
@@ -1460,6 +1461,7 @@ model P2PAccount {
   accountType String
   accountInfo Json
   isActive    Boolean  @default(true)
+  unavailable Boolean  @default(false)
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @default(now())
@@ -1616,6 +1618,32 @@ model P2PCycle {
 
   @@index([tenantId, exchange, label, status])
   @@index([tenantId])
+}
+
+// Botón "Sacar del ciclo" (ago 2026): una venta real que entró en el ciclo
+// equivocado (ej. el usuario olvidó cerrar el ciclo anterior a tiempo) se
+// puede sacar del ciclo activo -- queda "apartada" (sin dueño, claimedByCycleId
+// null) hasta que el usuario inicia el próximo ciclo, momento en el que
+// start/route.ts la reclama para ese ciclo nuevo. Mientras está sin reclamar,
+// se excluye de los totales del ciclo activo (status/close/autoCloseCycle);
+// una vez reclamada, se sube a los totales del ciclo que la reclamó aunque su
+// createTime real sea anterior al startTime de ese ciclo.
+model P2PCycleSetAsideOrder {
+  id               Int       @id @default(autoincrement())
+  tenantId         Int
+  exchange         String
+  label            String
+  orderNumber      String
+  amount           Decimal   @db.Decimal(18, 8)
+  totalPrice       Decimal   @db.Decimal(18, 2)
+  createTime       DateTime
+  setAsideAt       DateTime  @default(now())
+  claimedByCycleId Int?
+  claimedAt        DateTime?
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, exchange, label, orderNumber])
+  @@index([tenantId, exchange, label, claimedByCycleId])
 }
 
 model P2PCycleManualSale {
