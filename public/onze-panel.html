@@ -15320,7 +15320,10 @@ function addP2PBotStyles(){
           "<span style='color:#94a3b8;'>" + dateStr + "</span>" +
           "<span style='color:#e2e8f0;'>" + Number(o.amount || 0).toFixed(2) + " USDT</span>" +
           "<span style='color:#fbbf24;font-weight:700;'>$" + Math.round(Number(o.totalPrice || 0)).toLocaleString() + "</span>" +
+          "<span style='display:flex;gap:5px;'>" +
           "<button onclick=\"window.botCycleReturnSetAside(" + o.id + ")\" title='Devolver al ciclo activo' style='background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#93c5fd;border-radius:6px;padding:2px 7px;font-size:10px;cursor:pointer;'>Devolver</button>" +
+          "<button onclick=\"window.botCycleDiscardSetAside(" + o.id + ")\" title='Eliminar (no la reclama ningún ciclo)' style='background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5;border-radius:6px;padding:2px 7px;font-size:10px;cursor:pointer;'>🗑️</button>" +
+          "</span>" +
         "</div>";
       }).join("");
     }catch(e){
@@ -15334,6 +15337,15 @@ function addP2PBotStyles(){
       window.botCycleLoadSetAsideList();
       botCycleRefresh();
     }catch(e){ onzeAlert("Error al devolver la venta"); }
+  };
+
+  window.botCycleDiscardSetAside = async function(id){
+    if(!(await onzeConfirm("¿Eliminar esta venta apartada? No se sumará a este ciclo ni al próximo -- no se puede deshacer."))) return;
+    try{
+      await fetch("/api/p2p/cycle/set-aside?id=" + id + "&mode=discard", { method: "DELETE", credentials: "include" });
+      window.botCycleLoadSetAsideList();
+      botCycleRefresh();
+    }catch(e){ onzeAlert("Error al eliminar la venta"); }
   };
 
   function initP2PBot(){

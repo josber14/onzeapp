@@ -1640,6 +1640,12 @@ model P2PCycleSetAsideOrder {
   setAsideAt       DateTime  @default(now())
   claimedByCycleId Int?
   claimedAt        DateTime?
+  // Botón "Eliminar" (papelera, ago 2026) -- distinto de "Devolver": una vez
+  // descartada, la fila se queda (sigue excluida del ciclo activo, para no
+  // reaparecer sola en los totales) pero nunca la reclama un ciclo nuevo ni
+  // vuelve a aparecer en la lista de apartadas. "Devolver" en cambio borra la
+  // fila entera, así que la venta vuelve a contar de inmediato en el activo.
+  discarded        Boolean   @default(false)
   tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, exchange, label, orderNumber])

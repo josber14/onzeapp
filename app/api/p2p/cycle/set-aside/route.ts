@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     const exchange = searchParams.get("exchange") || "binance";
 
     const orders = await prisma.p2PCycleSetAsideOrder.findMany({
-      where: { tenantId: session.tenantId, exchange, label, claimedByCycleId: null },
+      where: { tenantId: session.tenantId, exchange, label, claimedByCycleId: null, discarded: false },
       orderBy: { setAsideAt: "desc" },
     });
     return Response.json({ ok: true, orders });
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
 
     const created = await prisma.p2PCycleSetAsideOrder.upsert({
       where: { tenantId_exchange_label_orderNumber: { tenantId: session.tenantId, exchange, label, orderNumber: String(orderNumber) } },
-      update: {},
+      update: { discarded: false },
       create: {
         tenantId: session.tenantId,
         exchange,
@@ -69,8 +69,12 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Devuelve una venta apartada (por error) al ciclo activo -- solo mientras
-// sigue sin reclamar por ningún ciclo nuevo.
+// Dos acciones sobre una venta apartada sin reclamar todavía:
+// - "Devolver" (default): borra la fila entera -- la venta vuelve a contar
+//   de inmediato en el ciclo activo (ya no hay nada que la excluya).
+// - "Eliminar" (?mode=discard): NO borra la fila -- la marca `discarded`, así
+//   sigue excluida del ciclo activo para siempre y ningún ciclo nuevo la
+//   reclama (ver start/route.ts), pero desaparece de la lista de apartadas.
 export async function DELETE(req: NextRequest) {
   try {
     const session = await getSession();
@@ -80,10 +84,18 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = Number(searchParams.get("id"));
     if (!id) return Response.json({ ok: false, error: "id requerido" }, { status: 400 });
+    const mode = searchParams.get("mode");
 
-    await prisma.p2PCycleSetAsideOrder.deleteMany({
-      where: { id, tenantId: session.tenantId, claimedByCycleId: null },
-    });
+    if (mode === "discard") {
+      await prisma.p2PCycleSetAsideOrder.updateMany({
+        where: { id, tenantId: session.tenantId, claimedByCycleId: null },
+        data: { discarded: true },
+      });
+    } else {
+      await prisma.p2PCycleSetAsideOrder.deleteMany({
+        where: { id, tenantId: session.tenantId, claimedByCycleId: null },
+      });
+    }
     return Response.json({ ok: true });
   } catch (error: any) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });

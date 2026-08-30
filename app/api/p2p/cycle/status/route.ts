@@ -82,8 +82,13 @@ export async function GET(req: NextRequest) {
             totalBinanceClp: stats.totalBinanceClp,
           };
           orders = (stats.orders || []).slice(-50).reverse();
-          setAsideCount = unclaimed.length;
-          setAsideTotalClp = unclaimed.reduce((sum: number, o: any) => sum + Math.round(Number(o.totalPrice) || 0), 0);
+          // El chip solo cuenta lo que el usuario todavía puede VER en la
+          // lista de apartadas (ver GET de set-aside/route.ts) -- una vez
+          // eliminada (discarded), sigue excluida de los totales para
+          // siempre, pero ya no debe aparecer en el contador.
+          const visibleUnclaimed = unclaimed.filter((o: any) => !o.discarded);
+          setAsideCount = visibleUnclaimed.length;
+          setAsideTotalClp = visibleUnclaimed.reduce((sum: number, o: any) => sum + Math.round(Number(o.totalPrice) || 0), 0);
         }
       } catch (e) {
         // si falla la consulta en vivo, se muestra lo que haya guardado (0) en vez de romper el status

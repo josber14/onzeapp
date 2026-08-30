@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
       // todavía) pasan a contar en el ciclo que recién arranca -- es el
       // punto exacto donde el usuario dijo que deben "entrar".
       await tx.p2PCycleSetAsideOrder.updateMany({
-        where: { tenantId, exchange, label, claimedByCycleId: null },
+        where: { tenantId, exchange, label, claimedByCycleId: null, discarded: false },
         data: { claimedByCycleId: created.id, claimedAt: new Date() },
       });
 
