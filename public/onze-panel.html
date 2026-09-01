@@ -21379,6 +21379,8 @@ function addP2PBotStyles(){
       const data = await res.json();
       if(data.ok && typeof data.value === "number" && data.value >= 0){
         window.__p2pAccumulatedProfitUsdt = Number(data.accumulatedProfit || 0);
+        window.__p2pWithdrawalsBaselineAt = data.withdrawalsBaselineAt || null;
+        window.recomputeP2PTotalWithdrawn();
         const local = getP2PInitialCapital();
         if(Math.abs(data.value - local) > 0.01){
           localStorage.setItem(P2P_INITIAL_CAPITAL_KEY, String(data.value));
@@ -21390,23 +21392,42 @@ function addP2PBotStyles(){
     }
   }
 
+  // Botón "Empezar de cero" (ago 2026, pedido explícito del usuario tras un
+  // retiro del mes anterior): un retiro de ANTES de este punto de corte ya
+  // quedó reflejado en el capital inicial (fue lo que lo bajó) -- restarlo
+  // otra vez en vivo sería descontarlo dos veces. Solo los retiros de esta
+  // fecha en adelante cuentan. null = nunca se reseteó, cuenta TODO el
+  // historial (comportamiento de siempre). Se recalcula acá (no solo al
+  // cargar los retiros) porque el punto de corte y la lista de retiros
+  // llegan de dos fetches independientes, en cualquier orden.
+  window.__p2pWithdrawalsBaselineAt = null;
+  window.recomputeP2PTotalWithdrawn = function(){
+    const raw = window.__p2pWithdrawalsRaw || [];
+    const baselineMs = window.__p2pWithdrawalsBaselineAt ? new Date(window.__p2pWithdrawalsBaselineAt).getTime() : 0;
+    window.__p2pTotalWithdrawnUsdt = raw.reduce((sum, w) => {
+      const t = w.withdrawnAt ? new Date(w.withdrawnAt).getTime() : 0;
+      return t >= baselineMs ? sum + Number(w.amountUsdt) : sum;
+    }, 0);
+  };
+
   // Pedido explícito del usuario (ago 2026): mismo mecanismo de Retiros y
   // gastos que ya tiene el socio, ahora para el Capital P2P propio de ONZE.
-  // Cacheado en window.__p2pTotalWithdrawnUsdt (todo el historial, sin
-  // filtro de rango) -- updateP2PCapitalCard() y el modal de Métricas P2P
-  // lo restan del capital mostrado.
+  // Cacheado en window.__p2pTotalWithdrawnUsdt (todo el historial desde el
+  // punto de corte de arriba) -- updateP2PCapitalCard() y el modal de
+  // Métricas P2P lo restan del capital mostrado.
   window.__p2pTotalWithdrawnUsdt = 0;
   window.loadP2PWithdrawalsFromServer = async function loadP2PWithdrawalsFromServer(){
     try{
       const res = await fetch("/api/p2p/withdrawals");
       const data = await res.json();
       if(data.ok){
-        window.__p2pTotalWithdrawnUsdt = (data.withdrawals || []).reduce((sum, w) => sum + Number(w.amountUsdt), 0);
         // Lista cruda -- la usa "Ganancia neta a repartir" para descontarle
         // a cada persona lo que ella misma ya retiró en el rango (solo
         // tenant de Hector, ver el resto del comentario en
-        // renderP2PRangeDetailContent).
+        // renderP2PRangeDetailContent) -- y recomputeP2PTotalWithdrawn()
+        // para el total filtrado por el punto de corte.
         window.__p2pWithdrawalsRaw = data.withdrawals || [];
+        window.recomputeP2PTotalWithdrawn();
         updateP2PCapitalCard();
       }
     }catch(e){
@@ -22858,8 +22879,8 @@ function addP2PBotStyles(){
     ]).then(([ppmRes, wRes]) => {
       window.__p2pPpmPct = (ppmRes.ok && ppmRes.value !== null && ppmRes.value !== undefined) ? Number(ppmRes.value) : null;
       if(wRes.ok){
-        window.__p2pTotalWithdrawnUsdt = (wRes.withdrawals || []).reduce((sum, w) => sum + Number(w.amountUsdt), 0);
         window.__p2pWithdrawalsRaw = wRes.withdrawals || [];
+        window.recomputeP2PTotalWithdrawn();
       }
       renderP2PRangeDetailContent(range || "today");
       window.p2pWithdrawRenderList();

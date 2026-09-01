@@ -45,6 +45,15 @@ export async function GET() {
       // terminado UNA sola vez. null = tenant viejo que nunca pasó por
       // esto todavía.
       throughMonth: record?.date ? record.date.slice(0, 7) : null,
+      // Punto de corte de retiros (ago 2026, "empezar de cero"): reusa
+      // finishedAt de este registro especial (nunca se usa para otra cosa
+      // acá). Retiros de ANTES de esta fecha ya quedaron reflejados en el
+      // capital inicial de arriba (fue justamente lo que lo bajó) -- seguir
+      // restándolos también en vivo sería descontarlos dos veces. Solo los
+      // retiros de esta fecha en adelante restan del Capital P2P mostrado.
+      // null = nunca se reseteó, se siguen restando TODOS (comportamiento de
+      // siempre, sin romper nada para tenants que nunca usaron esto).
+      withdrawalsBaselineAt: record?.finishedAt ? record.finishedAt.toISOString() : null,
     });
   } catch (error: any) {
     return Response.json(
@@ -62,7 +71,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { value, throughMonth, accumulatedProfit } = body ?? {};
+    const { value, throughMonth, accumulatedProfit, reset } = body ?? {};
 
     const id = capitalRecordId(session.tenantId);
     const chileMonth = new Date().toLocaleDateString("en-CA", { timeZone: "America/Santiago" }).slice(0, 7);
@@ -86,8 +95,18 @@ export async function POST(req: NextRequest) {
     //    "throughMonth", SIN "value"): solo suma a la ganancia acumulada,
     //    nunca toca el capital inicial.
     const isManualEdit = typeof value === "number" || (typeof value === "string" && value.trim() !== "");
-    const updateData: { capacityClp?: number; usdtAmount?: number; date: string } = { date: dateValue };
-    if (isManualEdit) {
+    const updateData: { capacityClp?: number; usdtAmount?: number; date: string; finishedAt?: Date } = { date: dateValue };
+    if (reset === true) {
+      // 3) Reseteo explícito ("empezar de cero", ago 2026, pedido del
+      //    usuario tras un nuevo mes): fija el nuevo inicial, borra el
+      //    acumulado, y mueve a HOY el punto de corte de retiros -- las tres
+      //    cosas atómicas, solo cuando se pide este reseteo a propósito
+      //    (nunca se dispara por una edición normal del inicial ni por el
+      //    rollover automático de fin de mes).
+      updateData.capacityClp = Number(value || 0);
+      updateData.usdtAmount = 0;
+      updateData.finishedAt = new Date();
+    } else if (isManualEdit) {
       updateData.capacityClp = Number(value || 0);
     } else if (typeof accumulatedProfit === "number") {
       updateData.usdtAmount = accumulatedProfit;
@@ -105,6 +124,7 @@ export async function POST(req: NextRequest) {
         provider: "_initial_capital",
         status: "_capital",
         date: dateValue,
+        finishedAt: reset === true ? new Date() : null,
       },
     });
 
@@ -113,6 +133,7 @@ export async function POST(req: NextRequest) {
       value: Number(record.capacityClp || 0),
       accumulatedProfit: Number(record.usdtAmount || 0),
       throughMonth: record.date.slice(0, 7),
+      withdrawalsBaselineAt: record.finishedAt ? record.finishedAt.toISOString() : null,
     });
   } catch (error: any) {
     return Response.json(
