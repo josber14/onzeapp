@@ -19049,7 +19049,23 @@ function addP2PBotStyles(){
 
       if(saleRemainingClp > 0){
         const remainingRatio = saleTotalClp > 0 ? saleRemainingClp / saleTotalClp : 0;
-        unassignedSaleUsdt += saleTotalUsdt * remainingRatio;
+        const remainingUsdt = saleTotalUsdt * remainingRatio;
+        // Bug real confirmado en vivo (sep 2026): una venta REAL (ej.
+        // $1.000.000 CLP) repartida entre varios capacity puede dejar un
+        // resto microscópico (< 1 peso / < 0.005 USDT) por puro redondeo al
+        // prorratear -- NO es que la venta le falte comprarla, ya está
+        // prácticamente 100% cubierta. Antes esto se mostraba igual como
+        // "venta sin asignar" con "0,00 USDT / 0 CLP", y el botón de
+        // borrar -- pensado solo para basura de verdad (venta 0/0 desde su
+        // origen) -- terminaba borrando la venta REAL completa del caché
+        // local. Como la venta sigue existiendo en el servidor, el
+        // resincronizado automático (cada 15s) la traía de vuelta sola, así
+        // que "eliminar" nunca se sentía como que hacía algo. Ahora este
+        // resto de redondeo se ignora directo (no cuenta como pendiente,
+        // no aparece en la lista) en vez de pedirle acción al usuario por
+        // algo que ya está resuelto.
+        if(window.isP2POrderPhantom({ amount: remainingUsdt, totalPrice: saleRemainingClp })) continue;
+        unassignedSaleUsdt += remainingUsdt;
         unassignedSaleClp += saleRemainingClp;
         unassignedCommissionUsdt += saleCommissionUsdt * remainingRatio;
         unassignedSaleDetail.push({
@@ -19057,7 +19073,7 @@ function addP2PBotStyles(){
           exchange: sale.exchange || "binance",
           isManual: !!(sale._manual || String(sale.orderNumber || "").startsWith("manual_")),
           clp: saleRemainingClp,
-          usdt: saleTotalUsdt * remainingRatio,
+          usdt: remainingUsdt,
           date: sale.createdAt || null,
           ts: Number(getOrderTs(sale) || 0),
         });
