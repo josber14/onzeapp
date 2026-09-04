@@ -12612,6 +12612,7 @@ function addP2PBotStyles(){
         '<div style="flex:1;min-width:0;">' +
           '<div style="font-size:15px;font-weight:700;color:#f1f5f9;" id="botOrderChatCounterparty">—</div>' +
           '<div style="font-size:11px;color:#64748b;" id="botOrderChatOrderInfo">#0000000000</div>' +
+          '<div style="font-size:12px;color:#5eead4;font-weight:600;margin-top:2px;display:none;" id="botOrderChatBuyerName"></div>' +
         '</div>' +
         '<button class="close-btn" type="button" onclick="window.botPanelCloseChat()" style="font-size:22px;width:36px;height:36px;">&times;</button>' +
         '<button type="button" onclick="window.botPanelDiagnoseChat()" title="Diagnóstico Playwright" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:14px;padding:4px;">🔍</button>' +
@@ -14070,7 +14071,6 @@ function addP2PBotStyles(){
     localStorage.setItem("botChatLastRead_" + orderNumber, String(Date.now()));
 
     botPanelChatActiveOrder = orderNumber;
-    window._buyerNameFetched = false;
     const orders = window.botPanelOrdersData || [];
     const order = orders.find(o => o.orderNumber === orderNumber);
     document.getElementById("botOrderChatCounterparty").textContent = order?.counterparty || "—";
@@ -14079,6 +14079,24 @@ function addP2PBotStyles(){
       (order ? window.fmt(order.amount) + " USDT x " + window.fmt(order.unitPrice) : "") +
       " · #" + (orderNumber?.slice(-10) || "");
     document.getElementById("botOrderChatInput").value = "";
+
+    // Nombre real del comprador (ej. "MAMANI CHOQUE NOEMI") -- el mismo dato
+    // que Binance/Bybit ya muestran en su propia app ("Nombre del
+    // comprador"), para validar el pago sin depender del teléfono. Pedido
+    // explícito del usuario (sep 2026). Se pide apenas se abre el chat, sin
+    // esperar a que el comprador marque "pagado" -- confirmado en vivo que
+    // Binance ya lo entrega desde el inicio de la orden.
+    const buyerNameEl = document.getElementById("botOrderChatBuyerName");
+    if(buyerNameEl){ buyerNameEl.style.display = "none"; buyerNameEl.textContent = ""; }
+    fetch("/api/p2p/bot/chat/buyer-name?orderNo=" + encodeURIComponent(orderNumber) + "&exchange=" + botSelectedExchange + "&label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" })
+      .then(r => r.json())
+      .then(d => {
+        if(botPanelChatActiveOrder !== orderNumber) return; // el usuario ya cambió de orden
+        if(d?.ok && d?.name && buyerNameEl){
+          buyerNameEl.textContent = "👤 " + d.name;
+          buyerNameEl.style.display = "";
+        }
+      }).catch(() => {});
 
     const msgContainer = document.getElementById("botOrderChatMessages");
     msgContainer.innerHTML = '<div data-chat-placeholder style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Cargando mensajes...</div>';
@@ -14126,15 +14144,17 @@ function addP2PBotStyles(){
           container.scrollTop = container.scrollHeight;
         }
 
-        // If buyer just marked as paid, try to fetch real name from Binance page
-        const hasPaidMsg = d2.messages.some(m => m.type === "system" && (m.content.includes("pago") || m.content.includes("paid") || m.content.includes("Pagó") || m.content.includes("confirmó")));
-        if(hasPaidMsg && !window._buyerNameFetched){
-          window._buyerNameFetched = true;
-          fetch("/api/p2p/bot/chat/buyer-name?orderNo=" + encodeURIComponent(botPanelChatActiveOrder), { credentials:"include" })
+        // Reintento silencioso del nombre real -- por si la primera llamada
+        // (al abrir el chat) falló momentáneamente (ej. límite de Binance).
+        // No pisa un nombre que ya se mostró con éxito.
+        const buyerNameEl2 = document.getElementById("botOrderChatBuyerName");
+        if(buyerNameEl2 && buyerNameEl2.style.display === "none"){
+          fetch("/api/p2p/bot/chat/buyer-name?orderNo=" + encodeURIComponent(botPanelChatActiveOrder) + "&exchange=" + botSelectedExchange + "&label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" })
             .then(r => r.json())
             .then(d => {
-              if(d?.ok && d?.name){
-                document.getElementById("botOrderChatCounterparty").textContent = d.name;
+              if(botPanelChatActiveOrder && d?.ok && d?.name && buyerNameEl2){
+                buyerNameEl2.textContent = "👤 " + d.name;
+                buyerNameEl2.style.display = "";
               }
             }).catch(() => {});
         }
