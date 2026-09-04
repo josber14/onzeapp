@@ -3285,10 +3285,16 @@ async function getUnavailableBankNames(tenantId: number, exchange: string, label
   return Array.from(new Set(names));
 }
 
+// Pedido explícito del usuario (sep 2026): el aviso anterior ("NO ESTÁ
+// DISPONIBLE, POR FAVOR NO TRANSFERIR") en mayúsculas sonaba alarmante y
+// podía hacer que el comprador se asustara y abandonara la orden. Este
+// texto es informativo -- deja claro que el ANUNCIO sigue funcionando
+// normal con los demás bancos, y anima a continuar la compra.
 function buildUnavailableBankWarning(bankNames: string[]): string | null {
   if (bankNames.length === 0) return null;
-  const list = bankNames.map(b => b.toUpperCase()).join(" Y ");
-  return `⚠️ AVISO: ${list} NO ESTÁ DISPONIBLE, POR FAVOR NO TRANSFERIR A ESA CUENTA EN ESTE MOMENTO.`;
+  const list = bankNames.map(b => b.toUpperCase()).join(" y ");
+  const verb = bankNames.length > 1 ? "no están disponibles" : "no está disponible";
+  return `ℹ️ Aviso: ${list} ${verb} hoy. Los demás bancos de este anuncio sí funcionan con normalidad, continúa tu orden sin problema.`;
 }
 
 async function getAvailableAccounts(tenantId: number, exchange: string, label = "ONZE"): Promise<any[]> {
