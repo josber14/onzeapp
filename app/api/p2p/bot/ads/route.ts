@@ -73,6 +73,7 @@ export async function GET(req: NextRequest) {
               id: localAd?.id || a.advNo || a.id,
               adId: String(a.advNo || a.id || a.advId),
               exchange: "binance",
+              nickname: localAd?.nickname || null,
               tradeType: a.side === 0 ? "BUY" : "SELL",
               asset: a.tokenId || "USDT",
               fiat: a.currencyId || "CLP",
@@ -83,7 +84,14 @@ export async function GET(req: NextRequest) {
               maxAmount: Number(a.maxSingleTransAmount ?? a.maxAmount) || 0,
               paymentMethods: methods,
               payTime: a.paymentPeriod || a.payTime || 15,
-              status: localAd?.status || liveStatus,
+              // Bug preexistente (encontrado sep 2026, al probar el botón
+              // prender/apagar anuncio): esto priorizaba el status GUARDADO
+              // en nuestra base de datos (viejo, de cuando se creó el
+              // anuncio) por encima del estado REAL leído de Binance en este
+              // mismo request -- por eso el panel podía mostrar "Activo"
+              // aunque el anuncio estuviera apagado de verdad en Binance.
+              // Binance es la fuente de verdad para esto, no nuestra copia.
+              status: liveStatus,
               isActive: a.isOnline ?? true,
               botManaged: localAd?.botManaged || false,
               botEnabled: localAd?.botEnabled || false,
@@ -208,6 +216,7 @@ export async function GET(req: NextRequest) {
             id: localAd?.id || a.id,
             adId: a.id,
             exchange: "bybit",
+            nickname: localAd?.nickname || null,
             tradeType: a.side === 0 ? "BUY" : "SELL",
             asset: a.tokenId || "USDT",
             fiat: a.currencyId || "CLP",
@@ -250,6 +259,7 @@ export async function GET(req: NextRequest) {
       id: a.id,
       exchange: a.exchange,
       adId: a.adId,
+      nickname: a.nickname || null,
       tradeType: a.tradeType,
       asset: a.asset,
       fiat: a.fiat,
@@ -310,10 +320,31 @@ export async function PUT(req: NextRequest) {
 
     const body = await req.json();
     const label = body.label || req.nextUrl.searchParams.get("label") || "ONZE";
-    const { id, adId, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged, botEnabled, botTop1Diff, botSafeMarginPct, botCompetePayTypes, botExcludedMerchants, botPriceFloorPct, botPriceSource, botCommissionPct, botMinCompetitorCapital, botStrategy, botSpreadPct, botCycleInterval, botCircuitBreakPct, botDailyVolumeCapUsdt, botMinAdPriceDiffPct } = body;
+    const { id, adId, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged, botEnabled, botTop1Diff, botSafeMarginPct, botCompetePayTypes, botExcludedMerchants, botPriceFloorPct, botPriceSource, botCommissionPct, botMinCompetitorCapital, botStrategy, botSpreadPct, botCycleInterval, botCircuitBreakPct, botDailyVolumeCapUsdt, botMinAdPriceDiffPct, adOnline, nickname } = body;
 
     if (!exchange) {
       return Response.json({ ok: false, error: "exchange es requerido" }, { status: 400 });
+    }
+
+    // Botón independiente "prender/apagar anuncio" (pedido explícito del
+    // usuario, sep 2026): NO toca el switch "Bot" ni ninguna otra config --
+    // solo cambia el estado real del anuncio en Binance (advStatus), igual
+    // que el switch on/off de la propia app de Binance. Corta acá mismo, no
+    // sigue al resto de la lógica de esta ruta (no hay nada más que hacer).
+    if (typeof adOnline === "boolean" && exchange === "binance") {
+      if (!adId) {
+        return Response.json({ ok: false, error: "adId es requerido para prender/apagar el anuncio" }, { status: 400 });
+      }
+      try {
+        const client = await getBinanceClient(session.tenantId, label);
+        if (!client) {
+          return Response.json({ ok: false, error: "Sin credenciales Binance" }, { status: 400 });
+        }
+        await client.setAdOnline(String(adId), adOnline);
+        return Response.json({ ok: true });
+      } catch (e: any) {
+        return Response.json({ ok: false, error: `Binance API error: ${e.message}` }, { status: 500 });
+      }
     }
 
     // For Bybit: auto-delete old ad before creating new one
@@ -417,6 +448,7 @@ export async function PUT(req: NextRequest) {
     if (botDailyVolumeCapUsdt !== undefined) updateData.botDailyVolumeCapUsdt = botDailyVolumeCapUsdt;
     if (botMinAdPriceDiffPct !== undefined) updateData.botMinAdPriceDiffPct = botMinAdPriceDiffPct;
     if (body.label !== undefined) updateData.label = body.label;
+    if (nickname !== undefined) updateData.nickname = nickname === '' ? null : nickname;
 
     if (dbRecord) {
       updateData.updatedAt = new Date();

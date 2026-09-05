@@ -292,6 +292,62 @@ export class BinanceP2PClient {
     return this.privateRequest("/sapi/v1/c2c/ads/update", {}, body);
   }
 
+  // Prender/apagar el anuncio en Binance -- equivalente exacto al switch
+  // on/off que se ve en la app de Binance para un anuncio (pedido explícito
+  // del usuario, sep 2026: un botón independiente del switch "Bot" del
+  // panel, que solo prenda/apague el anuncio y no toque nada más).
+  //
+  // Descubierto empíricamente contra un anuncio real (probado y revertido en
+  // la misma sesión, sin dejar el anuncio afectado): NO es un endpoint
+  // separado -- se manda por el mismo /sapi/v1/c2c/ads/update (la lista
+  // blanca de 32 campos de más arriba), cambiando únicamente advStatus:
+  // 1 = encendido, 3 = apagado. El endpoint /sapi/v1/c2c/ads/batchUpdateStatus
+  // (usado en removeAd, más abajo) devolvió 404 "Not Found" real de Binance al
+  // probarlo con advStatus "online"/"offline" como string -- esa ruta no
+  // existe para prender/apagar, no usarla para esto.
+  async setAdOnline(adId: string, online: boolean) {
+    const detailRes = await this.getAdDetail(String(adId));
+    const detail = detailRes?.data;
+    if (!detail) throw new Error(`No se pudo leer el detalle del anuncio ${adId} antes de cambiar su estado`);
+
+    const body: Record<string, any> = {
+      adAdditionalKycVerifyItems: detail.adAdditionalKycVerifyItems ?? [],
+      adTags: detail.adTags ?? [],
+      advNo: detail.advNo,
+      advStatus: online ? 1 : 3, // único cambio intencional
+      asset: detail.asset,
+      assetScale: detail.assetScale,
+      autoReplyMsg: detail.autoReplyMsg,
+      buyerBtcPositionLimit: detail.buyerBtcPositionLimit,
+      buyerRegDaysLimit: detail.buyerRegDaysLimit,
+      classify: detail.classify,
+      fiatScale: detail.fiatScale,
+      fiatUnit: detail.fiatUnit,
+      initAmount: detail.initAmount,
+      isSafePayment: false,
+      isStarTraderAdditionalKycExclusion: false,
+      isStarTraderCounterpartyConditionsExclusion: false,
+      launchCountry: [],
+      maxSingleTransAmount: detail.maxSingleTransAmount,
+      minSingleTransAmount: detail.minSingleTransAmount,
+      onlineDelayTime: 0,
+      onlineNow: true,
+      payTimeLimit: detail.payTimeLimit,
+      price: detail.price,
+      priceFloatingRatio: detail.priceFloatingRatio,
+      priceScale: detail.priceScale,
+      priceType: detail.priceType,
+      remarks: detail.remarks,
+      takerAdditionalKycRequired: detail.takerAdditionalKycRequired,
+      tradeMethods: detail.tradeMethods,
+      tradeType: detail.tradeType,
+      visible: 1,
+      voucherTemplateNo: "",
+    };
+
+    return this.privateRequest("/sapi/v1/c2c/ads/update", {}, body);
+  }
+
   async removeAd(adId: string) {
     return this.privateRequest("/sapi/v1/c2c/ads/batchUpdateStatus", {}, { adsNos: [adId], advStatus: "close" });
   }

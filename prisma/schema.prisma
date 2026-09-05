@@ -1539,6 +1539,11 @@ model P2PBotAd {
   label                   String   @default("ONZE")
   exchange                String
   adId                    String?
+  // Nombre propio del anuncio (pedido explícito del usuario, sep 2026): solo
+  // para distinguirlos de un vistazo en el panel cuando hay 2+ anuncios del
+  // mismo exchange/cuenta (ej. "Todos los bancos" vs "Banco Estado") -- es
+  // puramente cosmético, vive solo en Neon, nunca se manda a Binance/Bybit.
+  nickname                String?
   tradeType               String   @default("SELL")
   asset                   String   @default("USDT")
   fiat                    String   @default("CLP")

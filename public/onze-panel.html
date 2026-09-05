@@ -10226,6 +10226,10 @@ function addP2PBotStyles(){
     .toggle-switch .slider::before{content:"";position:absolute;height:18px;width:18px;left:2px;bottom:2px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
     .toggle-switch input:checked+.slider{background:#22c55e;}
     .toggle-switch input:checked+.slider::before{transform:translateX(18px);}
+    /* Distingue el switch "Anuncio" (prende/apaga en Binance) del switch
+       "Bot" -- ambos son toggle-switch idénticos y sin texto, fácil
+       confundirlos y apagar el que no era (pedido explícito del usuario). */
+    .toggle-switch-ad input:checked+.slider{background:#2563eb;}
 
     /* Mobile: colapsa a una sola columna las grillas que asumían escritorio.
        Sin esto, columnas con contenido ancho (ej. Ordenes) empujan a las
@@ -11043,12 +11047,28 @@ function addP2PBotStyles(){
     return `<div class="bot-ad-pill" data-ad-real-id="${realId}" data-ad-adid="${a.adId||''}" data-ad-paytype="${payType}" data-ad-paymethods="${escHtml(JSON.stringify(pms || []))}">
       <div class="bot-ad-card-header">
         <span class="sell-label">Vender</span>
-        <span style="flex:1;font-size:12px;font-weight:500;color:#94a3b8;">${a.asset||'USDT'} / ${a.fiat||'CLP'}</span>
+        <span style="flex:1;min-width:0;font-size:12px;font-weight:500;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${a.asset||'USDT'} / ${a.fiat||'CLP'}">${a.nickname ? '<span style=\"color:#f8fafc;font-weight:700;\">'+escHtml(a.nickname)+'</span> · ' : ''}${a.asset||'USDT'} / ${a.fiat||'CLP'}</span>
+        <button class="ad-icon-btn" type="button" onclick="event.stopPropagation();window.renameBotAd(${realId},'${escHtml(a.adId||'')}','${escHtml(a.exchange||'binance')}','${escHtml(a.nickname||'')}')" title="Ponerle nombre a este anuncio" style="width:22px;height:22px;flex-shrink:0;">
+          <svg viewBox="0 0 24 24" width="13" height="13"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+        </button>
         <span class="status-badge${isOnline?'':' offline'}"><span class="dot"></span>${isOnline ? 'En línea' : 'Desconectado'}</span>
-        <span class="toggle-switch" onclick="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',!${botEnabled})">
-          <input type="checkbox" ${botEnabled?'checked':''}>
-          <span class="slider"></span>
+        <span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:${botEnabled ? '#34d399' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
+          <span>Bot</span>
+          <span class="toggle-switch" title="${botEnabled ? 'Apagar bot' : 'Prender bot'}" onclick="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',!${botEnabled})">
+            <input type="checkbox" ${botEnabled?'checked':''}>
+            <span class="slider"></span>
+          </span>
         </span>
+        ${a.fromBinance ? (() => {
+          const isAdOnline = a.status === 'online' || a.status === 'active';
+          return `<span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:${isAdOnline ? '#60a5fa' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
+          <span>Anuncio</span>
+          <span class="toggle-switch toggle-switch-ad" title="${isAdOnline ? 'Apagar anuncio en Binance' : 'Prender anuncio en Binance'}" onclick="event.stopPropagation();toggleBinanceAdOnline('${escHtml(a.adId||'')}',!${isAdOnline},this)">
+            <input type="checkbox" ${isAdOnline?'checked':''}>
+            <span class="slider"></span>
+          </span>
+        </span>`;
+        })() : ''}
         <button class="menu-btn" onclick="event.stopPropagation();window.botToggleAdMenu(${realId},event);">⋯</button>
         <div class="bot-ad-menu-dropdown" id="botAdMenu_${realId}">
           <button class="menu-item" onclick="event.stopPropagation();window.botSimpleEditAd(${realId})">Editar anuncio</button>
@@ -12724,7 +12744,10 @@ function addP2PBotStyles(){
           <div class="ad-header">
             <div>
               <span class="ad-type ${a.tradeType === 'BUY' ? 'buy' : 'sell'}">${a.tradeType === 'BUY' ? 'Compra' : 'Venta'}</span>
-              <span style="font-weight:700;color:#fff;font-size:14px;margin-left:8px;">${escHtml(a.asset)} / ${escHtml(a.fiat)}</span>
+              ${a.nickname ? '<span style="font-weight:700;color:#fff;font-size:14px;margin-left:8px;">'+escHtml(a.nickname)+'</span> <span style="color:#64748b;font-size:12px;">('+escHtml(a.asset)+'/'+escHtml(a.fiat)+')</span>' : '<span style="font-weight:700;color:#fff;font-size:14px;margin-left:8px;">'+escHtml(a.asset)+' / '+escHtml(a.fiat)+'</span>'}
+              <button class="ad-icon-btn" type="button" onclick="event.stopPropagation();window.renameBotAd(${a.id != null ? a.id : "'" + escHtml(String(a.adId)) + "'"},'${escHtml(a.adId||'')}','${escHtml(a.exchange||'binance')}','${escHtml(a.nickname||'')}')" title="Ponerle nombre a este anuncio" style="width:22px;height:22px;margin-left:4px;">
+                <svg viewBox="0 0 24 24" width="12" height="12"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+              </button>
               ${isLive ? '<span style="font-size:10px;background:rgba(37,99,235,.2);color:#93c5fd;padding:1px 6px;border-radius:4px;margin-left:4px;">' + exchangeLabel + '</span>' : ''}
               ${botEnabled ? '<span style="font-size:10px;background:rgba(5,150,105,.2);color:#6ee7b7;padding:1px 6px;border-radius:4px;margin-left:4px;">Bot activo</span>' : ''}
             </div>
@@ -12732,13 +12755,24 @@ function addP2PBotStyles(){
               <button class="ad-icon-btn" type="button" onclick="window.botPanelEditAd(${a.id != null ? a.id : "'" + escHtml(String(a.adId)) + "'"})" title="Editar anuncio">
                 <svg viewBox="0 0 24 24"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
               </button>
-              <span style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:#64748b;letter-spacing:.3px;text-transform:uppercase;">
+              <span style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:${botEnabled ? '#34d399' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
                 <span>Bot</span>
                 <span class="toggle-switch" title="${botEnabled ? 'Apagar bot' : 'Prender bot'}" onclick="event.stopPropagation();toggleBotAdEnabled(${a.id},!${botEnabled},'${escHtml(a.adId||'')}')">
                   <input type="checkbox" ${botEnabled?'checked':''}>
                   <span class="slider"></span>
                 </span>
               </span>
+              ${a.fromBinance ? (() => {
+                const isAdOnline = a.status === 'online' || a.status === 'active';
+                return `
+              <span style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:${isAdOnline ? '#60a5fa' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
+                <span>Anuncio</span>
+                <span class="toggle-switch toggle-switch-ad" title="${isAdOnline ? 'Apagar anuncio en Binance' : 'Prender anuncio en Binance'}" onclick="event.stopPropagation();toggleBinanceAdOnline('${escHtml(a.adId||'')}',!${isAdOnline},this)">
+                  <input type="checkbox" ${isAdOnline?'checked':''}>
+                  <span class="slider"></span>
+                </span>
+              </span>`;
+              })() : ''}
               <button class="ad-icon-btn danger" type="button" onclick="window.botPanelDeleteAd(${a.id},${isLive ? "'" + a.adId + "'" : 'null'})" title="Eliminar anuncio">
                 <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
               </button>
@@ -13251,6 +13285,51 @@ function addP2PBotStyles(){
       if(!r.ok) console.warn("[P2P Bot] toggleBotAdEnabled error: HTTP", r.status, r.statusText);
       loadPanelAds();
     }catch(e){ console.warn("[P2P Bot] toggleBotAdEnabled error:", e); }
+  };
+
+  // Botón independiente "prender/apagar anuncio" (pedido explícito del
+  // usuario, sep 2026): distinto del switch "Bot" de arriba -- este NO toca
+  // la gestión del bot para nada, solo prende/apaga el anuncio en Binance
+  // (igual que el switch on/off de la propia app de Binance). El precio
+  // sigue actualizándose igual mientras el anuncio esté apagado, tal como
+  // pasa hoy cuando se apaga manualmente desde la app.
+  window.toggleBinanceAdOnline = async function(adId, online, switchEl){
+    if(switchEl){ switchEl.style.opacity = '0.5'; switchEl.style.pointerEvents = 'none'; }
+    try{
+      const r = await fetch("/api/p2p/bot/ads", {
+        method:"PUT", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ exchange: "binance", adId, adOnline: online, label: botActiveLabel || "ONZE" })
+      });
+      const d = await r.json().catch(() => null);
+      if(!r.ok || !d?.ok) console.warn("[P2P Bot] toggleBinanceAdOnline error:", d?.error || r.status);
+    }catch(e){ console.warn("[P2P Bot] toggleBinanceAdOnline error:", e); }
+    // Este switch aparece en dos pantallas distintas (la principal con la
+    // configuración, y la lista dentro del modal de anuncios) -- refresca
+    // las dos, la que no aplique simplemente no hace nada (container null).
+    if(typeof window.botLoadAds === 'function') window.botLoadAds();
+    if(typeof loadPanelAds === 'function') loadPanelAds();
+  };
+
+  // Nombre propio por anuncio (pedido explícito del usuario, sep 2026):
+  // puramente cosmético para distinguir anuncios del mismo exchange/cuenta
+  // de un vistazo -- no se manda a Binance/Bybit, solo vive en Neon.
+  window.renameBotAd = async function(id, adId, exchange, currentNickname){
+    const next = prompt("Nombre para este anuncio (ej. \"Todos los bancos\", \"Banco Estado\"):", currentNickname || "");
+    if(next === null) return; // canceló
+    const body = { exchange: exchange || botSelectedExchange, nickname: next.trim(), label: botActiveLabel || "ONZE" };
+    if (typeof id === "number" || (typeof id === "string" && /^\d+$/.test(id))) body.id = id;
+    if (adId) body.adId = adId;
+    try{
+      const r = await fetch("/api/p2p/bot/ads", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify(body)
+      });
+      if(!r.ok) console.warn("[P2P Bot] renameBotAd error: HTTP", r.status, r.statusText);
+    }catch(e){ console.warn("[P2P Bot] renameBotAd error:", e); }
+    if(typeof window.botLoadAds === 'function') window.botLoadAds();
+    if(typeof loadPanelAds === 'function') loadPanelAds();
   };
 
   window.saveBotAdConfig = async function(id, field, value, adId){
