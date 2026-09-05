@@ -9935,6 +9935,23 @@ function addP2PBotStyles(){
     #botOrderChatOverlay{transition:opacity .15s ease;}
     #botOrderChatOverlay[style*="display: block"]{opacity:1;}
     #botOrderChatMessages::-webkit-scrollbar{width:4px;}
+    /* Fondo con textura para el chat (pedido explícito del usuario, sep
+       2026: "algo bonito tipo whatsapp") -- en vez de copiar el doodle de
+       WhatsApp (verde, ajeno a la paleta de ONZE), es una cuadrícula de
+       puntos sutil sobre un halo azul difuso, dentro de la misma paleta
+       oscura/azul ya usada en todo el panel -- una textura de "red" que
+       encaja con un producto de trading P2P. */
+    .bot-chat-canvas{
+      background-color:#070c1c;
+      background-image:
+        radial-gradient(circle at 18% 12%, rgba(37,99,235,.16), transparent 42%),
+        radial-gradient(circle at 82% 88%, rgba(37,99,235,.10), transparent 45%),
+        radial-gradient(rgba(148,163,184,.14) 1px, transparent 1.4px);
+      background-size:auto, auto, 26px 26px;
+      background-position:0 0, 0 0, 0 0;
+      background-repeat:no-repeat, no-repeat, repeat;
+    }
+    .bot-chat-bubble{box-shadow:0 2px 8px rgba(0,0,0,.22);}
     /* Orders tabs */
     .bot-orders-main-tab{background:transparent;border:none;color:#64748b;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;}
     .bot-orders-main-tab:hover{color:#94a3b8;}
@@ -12469,6 +12486,20 @@ function addP2PBotStyles(){
     // Sort by createdAt descending
     filtered.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
 
+    // Update filter counts -- bug real confirmado en vivo (sep 2026): esto
+    // vivía DESPUÉS del "if(!filtered.length) return" de abajo, así que en
+    // cuanto la pestaña actual se quedaba en 0 órdenes (ej. se liberó la
+    // única pagada), la función cortaba antes de recontar y el número viejo
+    // (ej. "1") quedaba pegado en el chip hasta recargar todo el panel.
+    // Ahora se recalcula SIEMPRE, esté vacía o no la lista visible.
+    const all = window.botPanelOrdersData || [];
+    const pendingCount = all.filter(o => o.status === "pending").length;
+    const paidCount = all.filter(o => o.status === "paid").length;
+    const appealedCount = all.filter(o => o.status === "appealed").length;
+    document.querySelectorAll('.bot-filter-count[data-filter="unpaid"]').forEach(el => el.textContent = pendingCount);
+    document.querySelectorAll('.bot-filter-count[data-filter="paid"]').forEach(el => el.textContent = paidCount);
+    document.querySelectorAll('.bot-filter-count[data-filter="appealed"]').forEach(el => el.textContent = appealedCount);
+
     if(!filtered.length){
       const emptyMsg = botOrdersMainTab === "active"
         ? (botOrdersFilter === "unpaid" ? "No hay ordenes sin pagar" : botOrdersFilter === "paid" ? "No hay ordenes pagadas" : "No hay apelaciones")
@@ -12479,15 +12510,6 @@ function addP2PBotStyles(){
 
     container.innerHTML = filtered.map(orderCard).join("");
     updateOrderTimers();
-
-    // Update filter counts
-    const all = window.botPanelOrdersData || [];
-    const pendingCount = all.filter(o => o.status === "pending").length;
-    const paidCount = all.filter(o => o.status === "paid").length;
-    const appealedCount = all.filter(o => o.status === "appealed").length;
-    document.querySelectorAll('.bot-filter-count[data-filter="unpaid"]').forEach(el => el.textContent = pendingCount);
-    document.querySelectorAll('.bot-filter-count[data-filter="paid"]').forEach(el => el.textContent = paidCount);
-    document.querySelectorAll('.bot-filter-count[data-filter="appealed"]').forEach(el => el.textContent = appealedCount);
   }
 
   function orderCard(o){
@@ -12656,7 +12678,7 @@ function addP2PBotStyles(){
     div.id = "botOrderChatOverlay";
     div.style.cssText = "display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(2,6,23,.85);backdrop-filter:blur(8px);z-index:999999;border-radius:0;overflow:hidden;";
     div.innerHTML = '<div style="display:flex;flex-direction:column;height:100%;max-width:900px;margin:0 auto;">' +
-      '<div style="display:flex;align-items:center;gap:8px;padding:12px 20px;background:rgba(15,23,42,.95);border-bottom:1px solid rgba(148,163,184,.08);">' +
+      '<div style="display:flex;align-items:center;gap:8px;padding:12px 20px;background:linear-gradient(180deg,rgba(20,28,48,.97),rgba(13,19,35,.97));border-bottom:1px solid rgba(148,163,184,.1);box-shadow:0 1px 0 rgba(255,255,255,.02) inset;">' +
         '<div style="flex:1;min-width:0;">' +
           '<div style="font-size:15px;font-weight:700;color:#f1f5f9;" id="botOrderChatCounterparty">—</div>' +
           '<div style="font-size:11px;color:#64748b;" id="botOrderChatOrderInfo">#0000000000</div>' +
@@ -12665,12 +12687,12 @@ function addP2PBotStyles(){
         '<button class="close-btn" type="button" onclick="window.botPanelCloseChat()" style="font-size:22px;width:36px;height:36px;">&times;</button>' +
         '<button type="button" onclick="window.botCallOperator()" title="Avisar por WhatsApp al dueño de la cuenta" style="background:none;border:none;color:#34d399;cursor:pointer;font-size:16px;padding:4px;">📞</button>' +
       '</div>' +
-      '<div id="botOrderChatMessages" style="flex:1;overflow-y:auto;padding:16px 20px;background:rgba(6,10,26,.6);">' +
+      '<div id="botOrderChatMessages" class="bot-chat-canvas" style="flex:1;overflow-y:auto;padding:16px 20px;">' +
         '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">No hay mensajes previos. El chat se habilitará al conectarse con el exchange.</div>' +
       '</div>' +
-      '<div style="display:flex;gap:10px;padding:12px 20px;background:rgba(15,23,42,.95);border-top:1px solid rgba(148,163,184,.08);">' +
-        '<input id="botOrderChatInput" type="text" placeholder="Escribe un mensaje..." onkeydown="if(event.key===\'Enter\')window.botPanelSendChatMessage()" style="flex:1;padding:10px 14px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:14px;font-family:inherit;outline:none;">' +
-        '<button class="btn" type="button" onclick="window.botPanelSendChatMessage()" style="border-radius:8px;padding:10px 18px;">Enviar</button>' +
+      '<div style="display:flex;gap:10px;padding:12px 20px;background:linear-gradient(0deg,rgba(20,28,48,.97),rgba(13,19,35,.97));border-top:1px solid rgba(148,163,184,.1);">' +
+        '<input id="botOrderChatInput" type="text" placeholder="Escribe un mensaje..." onkeydown="if(event.key===\'Enter\')window.botPanelSendChatMessage()" style="flex:1;padding:10px 14px;border-radius:20px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:14px;font-family:inherit;outline:none;">' +
+        '<button class="btn" type="button" onclick="window.botPanelSendChatMessage()" style="border-radius:20px;padding:10px 18px;box-shadow:0 2px 10px rgba(37,99,235,.35);">Enviar</button>' +
       '</div>' +
     '</div>';
     document.body.appendChild(div);
@@ -14148,11 +14170,11 @@ function addP2PBotStyles(){
     const time = m.createTime ? new Date(Number(m.createTime)).toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"}) : "";
     const isSelf = m.self;
     const sender = isSelf ? "Tú" : (m.fromNickName || "Contraparte");
-    return '<div style="display:flex;flex-direction:column;align-items:' + (isSelf ? 'flex-end' : 'flex-start') + ';margin-bottom:8px;">' +
-      '<div style="font-size:10px;color:#64748b;margin-bottom:2px;padding:0 4px;">' + escHtml(sender) + '</div>' +
-      '<div style="background:' + (isSelf ? 'var(--brand)' : 'rgba(30,41,59,.8)') + ';color:' + (isSelf ? '#fff' : '#e2e8f0') + ';padding:8px 14px;border-radius:' + (isSelf ? '12px 12px 4px 12px' : '12px 12px 12px 4px') + ';font-size:13px;max-width:85%;word-wrap:break-word;border:1px solid ' + (isSelf ? 'transparent' : 'rgba(148,163,184,.08)') + ';white-space:pre-wrap;min-width:120px;">' +
+    return '<div style="display:flex;flex-direction:column;align-items:' + (isSelf ? 'flex-end' : 'flex-start') + ';margin-bottom:10px;">' +
+      '<div style="font-size:10px;color:#64748b;margin-bottom:3px;padding:0 4px;">' + escHtml(sender) + '</div>' +
+      '<div class="bot-chat-bubble" style="background:' + (isSelf ? 'linear-gradient(135deg,#2f6ff0,#2451c9)' : '#1c2438') + ';color:' + (isSelf ? '#fff' : '#e7ecf5') + ';padding:9px 14px;border-radius:' + (isSelf ? '16px 16px 3px 16px' : '16px 16px 16px 3px') + ';font-size:13px;line-height:1.45;max-width:85%;word-wrap:break-word;border:1px solid ' + (isSelf ? 'transparent' : 'rgba(148,163,184,.1)') + ';white-space:pre-wrap;min-width:120px;">' +
       escHtml(m.content) +
-      '<div style="font-size:9px;color:' + (isSelf ? 'rgba(255,255,255,.5)' : '#64748b') + ';margin-top:3px;text-align:right;">' + time + '</div></div></div>';
+      '<div style="font-size:9px;color:' + (isSelf ? 'rgba(255,255,255,.55)' : '#7c8aa3') + ';margin-top:3px;text-align:right;">' + time + '</div></div></div>';
   }
 
   window.botOpenImagePreview = function(imgUrl){
@@ -14288,7 +14310,7 @@ function addP2PBotStyles(){
     // Show message instantly (optimistic)
     const placeholder = msgContainer.querySelector('[data-chat-placeholder]');
     if(placeholder) msgContainer.innerHTML = "";
-    msgContainer.innerHTML += '<div data-msg="' + escHtml(text).slice(0, 50) + '" style="display:flex;justify-content:flex-end;margin-bottom:6px;"><div style="background:var(--brand);color:#fff;padding:8px 14px;border-radius:12px 12px 4px 12px;font-size:13px;max-width:85%;word-wrap:break-word;">' + escHtml(text) + '<div style="font-size:9px;color:rgba(255,255,255,.5);margin-top:3px;">' + new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"}) + '</div></div></div>';
+    msgContainer.innerHTML += '<div data-msg="' + escHtml(text).slice(0, 50) + '" style="display:flex;justify-content:flex-end;margin-bottom:10px;"><div class="bot-chat-bubble" style="background:linear-gradient(135deg,#2f6ff0,#2451c9);color:#fff;padding:9px 14px;border-radius:16px 16px 3px 16px;font-size:13px;line-height:1.45;max-width:85%;word-wrap:break-word;">' + escHtml(text) + '<div style="font-size:9px;color:rgba(255,255,255,.55);margin-top:3px;text-align:right;">' + new Date().toLocaleTimeString("es-CL",{hour:"2-digit",minute:"2-digit"}) + '</div></div></div>';
     window._lastSentText = text;
     msgContainer.scrollTop = msgContainer.scrollHeight;
     // Send in background
