@@ -1265,6 +1265,15 @@
       display:block;
     }
 
+    /* onzeConfirm()/onzeAlert() reemplazan a confirm()/alert() nativos --
+       igual que esos, deben quedar SIEMPRE por encima de cualquier otra
+       ventana (ej. el chat de una orden, z-index:999999) -- bug real
+       confirmado en vivo (sep 2026): el aviso quedaba tapado detrás del
+       chat, invisible hasta cerrarlo. */
+    #onzeConfirmModal{
+      z-index:1000000;
+    }
+
     .modal-dialog{
       min-height:calc(100dvh - 32px);
       display:flex;
@@ -10095,6 +10104,14 @@ function addP2PBotStyles(){
     .bot-ad-card .ad-icon-btn:hover{background:rgba(148,163,184,.08);color:#e2e8f0;border-color:rgba(148,163,184,.15);}
     .bot-ad-card .ad-icon-btn.danger:hover{background:rgba(248,113,113,.08);color:#fb7185;border-color:rgba(248,113,113,.15);}
     .bot-ad-card .ad-icon-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+    /* Mismo look del "ad-icon-btn" de arriba pero sin depender de estar
+       dentro de .bot-ad-card -- pedido explícito del usuario (sep 2026): el
+       botón de borrar venta manual se veía como un botón grande con borde
+       rojo (.btn.small.danger), quería el mismo cuadrito discreto que usan
+       los anuncios. */
+    .icon-btn-sm{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;border:1px solid rgba(148,163,184,.08);background:rgba(15,23,42,.4);color:#94a3b8;cursor:pointer;transition:all .12s;flex-shrink:0;}
+    .icon-btn-sm:hover{background:rgba(248,113,113,.08);color:#fb7185;border-color:rgba(248,113,113,.15);}
+    .icon-btn-sm svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
     .bot-ad-card .ad-actions .toggle-switch{width:36px;height:20px;}
     .bot-ad-card .ad-actions .toggle-switch .slider::before{width:16px;height:16px;}
     .ad-bot-config{margin-top:10px;border-top:1px solid rgba(148,163,184,.1);padding-top:10px;}
@@ -10730,11 +10747,21 @@ function addP2PBotStyles(){
                 <div id="botSecFundPwdMsg" style="font-size:12px;margin-top:8px;"></div>
               </div>
 
-              <div style="background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.1);border-radius:12px;padding:14px;">
+              <div style="background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.1);border-radius:12px;padding:14px;margin-bottom:14px;">
                 <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">Huella / Face ID</div>
                 <div id="botSecCredsList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
                 <button class="btn small ghost" type="button" onclick="window.botPanelRegisterFingerprint()">+ Registrar huella en este dispositivo</button>
                 <div id="botSecCredMsg" style="font-size:12px;margin-top:8px;"></div>
+              </div>
+
+              <div style="background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.1);border-radius:12px;padding:14px;">
+                <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:8px;">WhatsApp del dueño de la cuenta (<span id="botSecWhatsappLabel">ONZE</span>)</div>
+                <p class="section-text" style="margin-bottom:10px;">Órdenes sobre $500 USD no se pueden liberar automático -- Binance exige liberarlas manual desde la app. Deja aquí el WhatsApp de quien puede hacerlo, para avisarle rápido desde el chat de la orden.</p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;">
+                  <label style="font-size:11px;color:#94a3b8;">Número (con código de país, ej: 56912345678)
+                    <input id="botExOperatorWhatsapp" type="text" placeholder="56912345678" onchange="window.botSaveExchangeConfig()" style="display:block;width:220px;padding:6px 8px;border-radius:8px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.6);color:#e2e8f0;font-size:14px;margin-top:4px;">
+                  </label>
+                </div>
               </div>
             </div>
             <!-- Tab: Skipo (cotizar/comprar USDT al mayor) -->
@@ -11048,9 +11075,6 @@ function addP2PBotStyles(){
       <div class="bot-ad-card-header">
         <span class="sell-label">Vender</span>
         <span style="flex:1;min-width:0;font-size:12px;font-weight:500;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${a.asset||'USDT'} / ${a.fiat||'CLP'}">${a.nickname ? '<span style=\"color:#f8fafc;font-weight:700;\">'+escHtml(a.nickname)+'</span> · ' : ''}${a.asset||'USDT'} / ${a.fiat||'CLP'}</span>
-        <button class="ad-icon-btn" type="button" onclick="event.stopPropagation();window.renameBotAd(${realId},'${escHtml(a.adId||'')}','${escHtml(a.exchange||'binance')}','${escHtml(a.nickname||'')}')" title="Ponerle nombre a este anuncio" style="width:22px;height:22px;flex-shrink:0;">
-          <svg viewBox="0 0 24 24" width="13" height="13"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-        </button>
         <span class="status-badge${isOnline?'':' offline'}"><span class="dot"></span>${isOnline ? 'En línea' : 'Desconectado'}</span>
         <span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:${botEnabled ? '#34d399' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
           <span>Bot</span>
@@ -11072,6 +11096,7 @@ function addP2PBotStyles(){
         <button class="menu-btn" onclick="event.stopPropagation();window.botToggleAdMenu(${realId},event);">⋯</button>
         <div class="bot-ad-menu-dropdown" id="botAdMenu_${realId}">
           <button class="menu-item" onclick="event.stopPropagation();window.botSimpleEditAd(${realId})">Editar anuncio</button>
+          <button class="menu-item" onclick="event.stopPropagation();window.renameBotAd(${realId},'${escHtml(a.adId||'')}','${escHtml(a.exchange||'binance')}','${escHtml(a.nickname||'')}')">Nombre del anuncio</button>
           <button class="menu-item danger" onclick="event.stopPropagation();window.botPanelDeleteAd(${realId},'${escHtml(a.adId||'')}')">Borrar anuncio</button>
         </div>
       </div>
@@ -11949,6 +11974,7 @@ function addP2PBotStyles(){
     setField("botCycleInterval", cfg.cycleInterval ?? 10);
     var chatCb = document.getElementById("botChatBotEnabled");
     if(chatCb) chatCb.checked = !!cfg.chatBotEnabled;
+    setField("botExOperatorWhatsapp", cfg.operatorWhatsapp || "");
     // Show/hide strategy-specific fields
     var g = document.getElementById("botExchangeConfigGrid");
     if(g){
@@ -12044,13 +12070,15 @@ function addP2PBotStyles(){
     const cycleInterval = Math.round(parseFloat(document.getElementById("botCycleInterval").value)) || 10;
     const minAdPriceDiffPct = parseFloat(document.getElementById("botMinAdPriceDiffPct").value) || 0.1;
     const chatBotEnabled = document.getElementById("botChatBotEnabled").checked;
+    const operatorWhatsappInp = document.getElementById("botExOperatorWhatsapp");
+    const operatorWhatsapp = operatorWhatsappInp ? operatorWhatsappInp.value.trim().replace(/[^0-9]/g,'') : undefined;
 
     var _r = Math.random().toString(36).slice(2);
     await fetch("/api/p2p/bot/exchange-config?_=" + _r, {
       method:"PUT",
       credentials:"include",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ exchange: ex, label: botActiveLabel || "ONZE", strategy, top1Diff, spreadPct, priceSource, priceFloorPct, commissionPct, safeMarginPct, minCompetitorCapital, competePayTypes, circuitBreakPct, minAdPriceDiffPct, cycleInterval, chatBotEnabled })
+      body: JSON.stringify({ exchange: ex, label: botActiveLabel || "ONZE", strategy, top1Diff, spreadPct, priceSource, priceFloorPct, commissionPct, safeMarginPct, minCompetitorCapital, competePayTypes, circuitBreakPct, minAdPriceDiffPct, cycleInterval, chatBotEnabled, operatorWhatsapp })
     });
     var cb = document.getElementById("botChatBotEnabled");
     if(cb) cb.checked = chatBotEnabled;
@@ -12635,7 +12663,7 @@ function addP2PBotStyles(){
           '<div style="font-size:12px;color:#5eead4;font-weight:600;margin-top:2px;display:none;" id="botOrderChatBuyerName"></div>' +
         '</div>' +
         '<button class="close-btn" type="button" onclick="window.botPanelCloseChat()" style="font-size:22px;width:36px;height:36px;">&times;</button>' +
-        '<button type="button" onclick="window.botPanelDiagnoseChat()" title="Diagnóstico Playwright" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:14px;padding:4px;">🔍</button>' +
+        '<button type="button" onclick="window.botCallOperator()" title="Avisar por WhatsApp al dueño de la cuenta" style="background:none;border:none;color:#34d399;cursor:pointer;font-size:16px;padding:4px;">📞</button>' +
       '</div>' +
       '<div id="botOrderChatMessages" style="flex:1;overflow-y:auto;padding:16px 20px;background:rgba(6,10,26,.6);">' +
         '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">No hay mensajes previos. El chat se habilitará al conectarse con el exchange.</div>' +
@@ -14287,39 +14315,24 @@ function addP2PBotStyles(){
     }
   };
 
-  window.botPanelDiagnoseChat = async function(){
-    if(!botPanelChatActiveOrder) return;
-    const msgContainer = document.getElementById("botOrderChatMessages");
-    if(!msgContainer) return;
-    const diagEl = document.createElement("div");
-    diagEl.style.cssText = "color:#94a3b8;font-size:11px;text-align:center;padding:8px;background:rgba(148,163,184,.06);border-radius:6px;margin-bottom:6px;white-space:pre-wrap;font-family:monospace;";
-    diagEl.textContent = "🔍 Diagnosticando...";
-    msgContainer.appendChild(diagEl);
-    msgContainer.scrollTop = msgContainer.scrollHeight;
+  // Pedido explícito del usuario (sep 2026): reemplaza la lupa de diagnóstico
+  // Playwright (ya no servía para nada, era de cuando se armó la integración
+  // del chat) por un acceso rápido para avisarle al dueño real de la cuenta
+  // (vía WhatsApp) cuando el operador necesita que libere una orden a mano
+  // -- ver FUND_PWD_MAX_USD en binance-adapter.ts: Binance no permite
+  // liberar automático (con contraseña de fondos) órdenes de más de $500 USD.
+  window.botCallOperator = async function(){
     try{
-      const r = await fetch("/api/p2p/bot/chat/diagnose?orderNo=" + encodeURIComponent(botPanelChatActiveOrder), { credentials:"include" });
+      const label = botActiveLabel || "ONZE";
+      const r = await fetch("/api/p2p/bot/exchange-config?label=" + encodeURIComponent(label), { credentials:"include" });
       const d = await r.json();
-      if(d?.ok){
-        let txt = "🔍 Diagnóstico:\n";
-        txt += "Cookies: " + (d.hasCookies ? "✅" : "❌ No hay") + "\n";
-        if (d.hasStorageState !== undefined) txt += "StorageState: " + (d.hasStorageState ? "✅" : "❌") + "\n";
-        if(d.navigation) d.navigation.forEach((n, i) => {
-          txt += `\nIntento ${i+1}:\n`;
-          txt += `  URL: ${n.url || "?"}\n`;
-          txt += `  Login: ${n.isLogin ? "⚠️ Sí" : "✅ No"}\n`;
-          txt += `  Not Found: ${n.notFound ? "⚠️ Sí" : "✅ No"}\n`;
-          txt += `  Orden encontrada: ${n.foundOrder ? "✅" : "❌ No"}\n`;
-          txt += `  Textarea: ${n.hasTextarea ? "✅" : "❌ No"}\n`;
-          if(n.bodyPreview) txt += `  Body:\n${n.bodyPreview.slice(0, 600)}\n`;
-        });
-        diagEl.textContent = txt;
-      } else {
-        diagEl.textContent = "❌ Error: " + (d.error || "desconocido");
+      const number = d?.configs?.[botSelectedExchange]?.operatorWhatsapp;
+      if(!number){
+        onzeAlert("Todavía no has configurado un WhatsApp para " + label + ". Ve a Seguridad y agrégalo.");
+        return;
       }
-    } catch(e){
-      diagEl.textContent = "❌ Error de conexión: " + e.message;
-    }
-    msgContainer.scrollTop = msgContainer.scrollHeight;
+      window.open("https://wa.me/" + number, "_blank");
+    }catch(e){ console.warn("[P2P Bot] botCallOperator error:", e); }
   };
 
   window.botPanelAcceptOrder = async function(orderNumber){
@@ -14479,6 +14492,14 @@ function addP2PBotStyles(){
       const label = botActiveLabel || "ONZE";
       const fundLabelEl = document.getElementById("botSecFundPwdLabel");
       if(fundLabelEl) fundLabelEl.textContent = label;
+      const whatsappLabelEl = document.getElementById("botSecWhatsappLabel");
+      if(whatsappLabelEl) whatsappLabelEl.textContent = label;
+      const waInp = document.getElementById("botExOperatorWhatsapp");
+      if(waInp){
+        const wr = await fetch("/api/p2p/bot/exchange-config?label=" + encodeURIComponent(label), { credentials:"include" });
+        const wd = await wr.json();
+        waInp.value = wd?.configs?.[botSelectedExchange]?.operatorWhatsapp || "";
+      }
       const fr = await fetch("/api/security/binance-fund-password?label=" + encodeURIComponent(label), { credentials:"include" });
       const fd = await fr.json();
       const fundStatus = document.getElementById("botSecFundPwdStatus");
@@ -14923,9 +14944,14 @@ function addP2PBotStyles(){
           listEl.style.display = "block";
           listEl.innerHTML = "<div style='font-weight:700;color:#cbd5e1;margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:.3px;'>Ventas manuales</div>" +
             cycle.manualSales.map(s =>
-              "<div style='display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid rgba(148,163,184,.08);'>" +
+              "<div style='display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(148,163,184,.08);'>" +
                 "<span>" + escHtml(s.concept) + "</span>" +
-                "<span style='color:#fbbf24;font-weight:700;'>$" + Math.round(Number(s.amountClp)).toLocaleString() + "</span>" +
+                "<span style='display:flex;align-items:center;gap:6px;'>" +
+                  "<span style='color:#fbbf24;font-weight:700;'>$" + Math.round(Number(s.amountClp)).toLocaleString() + "</span>" +
+                  "<button class=\"icon-btn-sm\" type=\"button\" onclick=\"window.deleteCycleManualSale(" + s.id + ")\" title=\"Borrar esta venta manual\">" +
+                    "<svg viewBox=\"0 0 24 24\"><path d=\"M3 6h18\"/><path d=\"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6\"/><path d=\"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2\"/><line x1=\"10\" y1=\"11\" x2=\"10\" y2=\"17\"/><line x1=\"14\" y1=\"11\" x2=\"14\" y2=\"17\"/></svg>" +
+                  "</button>" +
+                "</span>" +
               "</div>"
             ).join("");
         }else{
@@ -14940,6 +14966,12 @@ function addP2PBotStyles(){
         labelEl.textContent = "Inactivo";
         labelEl.style.background = "rgba(148,163,184,.12)";
         labelEl.style.color = "#94a3b8";
+        // Bug real confirmado en vivo (sep 2026): esta rama nunca tocaba
+        // listEl -- al cerrar un ciclo, sus ventas manuales quedaban
+        // visibles en pantalla (del ciclo YA cerrado) hasta que se
+        // iniciaba el ciclo siguiente, que recién ahí las limpiaba.
+        const listEl2 = document.getElementById("botCycleManualList");
+        if(listEl2) listEl2.style.display = "none";
       }
     }catch(e){}
   }
@@ -18270,6 +18302,20 @@ function addP2PBotStyles(){
     const okx = loadP2POkxOrders();
     const okxClean = okx.filter(isReal);
     if(okxClean.length !== okx.length) saveP2POkxOrders(okxClean);
+  };
+
+  // Borra una venta manual del CICLO activo (P2PCycleManualSale en Neon) --
+  // distinto de deleteManualSale de abajo, que es del sistema viejo de
+  // localStorage. Pedido explícito del usuario (sep 2026): venía sin forma
+  // de borrar una cargada por error (ej. duplicada) desde esta lista.
+  window.deleteCycleManualSale = async function deleteCycleManualSale(id){
+    if(!(await onzeConfirm("¿Borrar esta venta manual del ciclo? Se restará del total."))) return;
+    try{
+      const r = await fetch("/api/p2p/cycle/manual-sale?id=" + id, { method:"DELETE", credentials:"include" });
+      const d = await r.json();
+      if(!d?.ok){ onzeAlert(d?.error || "No se pudo borrar la venta manual."); return; }
+    }catch(e){ onzeAlert("Error de conexión al borrar la venta manual."); return; }
+    botCycleRefresh();
   };
 
   window.deleteManualSale = async function deleteManualSale(orderId){

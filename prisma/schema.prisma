@@ -1497,6 +1497,11 @@ model P2PBotExchangeConfig {
   commissionPct        Decimal   @default(0.14) @db.Decimal(8, 4)
   safeMarginPct        Decimal   @default(0) @db.Decimal(8, 4)
   minAdPriceDiffPct    Decimal?  @db.Decimal(8, 4)
+  // Número de WhatsApp del dueño de la cuenta (pedido explícito del usuario,
+  // sep 2026): el operador que trabaja el chat lo usa para avisar rápido
+  // cuando entra una orden que el sistema no puede liberar solo (Binance
+  // exige liberación manual arriba de FUND_PWD_MAX_USD, ver binance-adapter.ts).
+  operatorWhatsapp     String?
   Tenant               Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, exchange, label])
