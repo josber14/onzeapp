@@ -13056,6 +13056,24 @@ function addP2PBotStyles(){
       try{
         const r = await fetch("/api/p2p/bot/orders?limit=50&live=true&exchange=" + botSelectedExchange + "&label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
         const d = await r.json();
+        // Bug real confirmado en vivo (sep 2026): a Hector le seguía sonando
+        // la alarma de "orden nueva" sin haber ninguna, incluso después de
+        // arreglar el servidor para que ya no tratara "0 órdenes" como un
+        // error. Causa: sus llamadas a Binance pasan por el proxy de la IP
+        // fija (droplet de Singapur, ver lib/p2p-bot/binance-proxy.ts) --
+        // un salto de red extra que a veces sí falla de verdad (no solo
+        // "0 órdenes"). Cuando eso pasa, el servidor cae al respaldo de la
+        // base de datos local (live:false), que puede traer MENOS órdenes
+        // que las reales. Este código no distinguía esa respuesta de
+        // respaldo de una respuesta en vivo real, así que la lista se
+        // achicaba un instante y, al volver los datos en vivo reales en el
+        // siguiente ciclo, las órdenes "de siempre" parecían nuevas y
+        // sonaba la alarma sin motivo. Ahora, si la respuesta es de
+        // respaldo (live:false), se ignora por completo ese ciclo --se
+        // deja la pantalla como estaba hasta el próximo ciclo con datos en
+        // vivo de verdad, en vez de arriesgarse a mostrar/alarmar con datos
+        // incompletos.
+        if(d?.live === false) return;
         const newOrders = d?.ok && d?.orders ? d.orders : [];
         const oldData = window.botPanelOrdersData || [];
         // Check if data changed
