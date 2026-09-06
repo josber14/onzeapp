@@ -41,7 +41,12 @@ async function getClient(exchange: BotExchange, tenantId: number, label = "ONZE"
 }
 
 export async function fetchLiveMarket(exchange: BotExchange, tenantId: number, side: "0" | "1" = "1", label = "ONZE") {
-  const cacheKey = `market:${exchange}:${side}`;
+  // Bug real confirmado en vivo (sep 2026): esta clave de caché NO incluía
+  // tenantId ni label -- si dos tenants (ej. ONZE y el de Hector) o dos
+  // cuentas del mismo tenant (ONZE/ZINPLE) pedían datos de mercado del
+  // mismo exchange dentro de la misma ventana de 6s, una podía recibir por
+  // error los datos cacheados de la OTRA.
+  const cacheKey = `market:${tenantId}:${label}:${exchange}:${side}`;
   const cached = getCached<{ competitors: any[]; totalCompetitors: number; cycleAt: string; ourAd: null; targetPrice: null; fetchAt: string }>(cacheKey);
   if (cached) return cached;
 
@@ -97,7 +102,12 @@ export async function fetchLiveMarket(exchange: BotExchange, tenantId: number, s
 }
 
 export async function fetchLiveOrders(exchange: BotExchange, tenantId: number, limit = 50, label = "ONZE") {
-  const cacheKey = `orders:${exchange}`;
+  // Mismo bug que fetchLiveMarket de arriba -- ver ese comentario. Esto es
+  // muy probablemente la causa real de la alarma de "orden nueva" sonando
+  // sin que llegara ninguna orden: dos pestañas/cuentas pidiendo órdenes
+  // del mismo exchange casi al mismo tiempo podían recibir la lista de
+  // la OTRA cuenta durante la ventana de 6s, viéndose como "todo nuevo".
+  const cacheKey = `orders:${tenantId}:${label}:${exchange}:${limit}`;
   const cached = getCached<{ orders: any[] }>(cacheKey);
   if (cached) return cached;
 
