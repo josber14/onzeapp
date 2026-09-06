@@ -10062,9 +10062,14 @@ function addP2PBotStyles(){
     #botChatOrdersPanelBody{flex:1;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;}
     #botChatOrdersPanelBody #botPanelOrders{position:relative;display:flex;flex-direction:column;flex:1;min-height:0;}
     #botChatOrdersPanelBody #botPanelOrdersList{flex:1;min-height:0;max-height:none!important;}
-    .bot-chat-list-item{position:relative;display:flex;flex-direction:column;gap:2px;padding:12px 16px 12px 22px;border-bottom:1px solid rgba(148,163,184,.06);cursor:pointer;transition:background .12s;}
+    /* Círculo con la inicial del nombre, donde iría la foto -- pedido
+       explícito del usuario (sep 2026), igual a como Binance lo muestra en
+       su propia lista de chats. */
+    .bot-chat-list-item{position:relative;display:flex;align-items:flex-start;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(148,163,184,.06);cursor:pointer;transition:background .12s;}
     .bot-chat-list-item:hover{background:rgba(148,163,184,.06);}
     .bot-chat-list-item.active{background:rgba(37,99,235,.12);border-left:2px solid var(--brand);}
+    .bot-chat-avatar{position:relative;flex-shrink:0;width:36px;height:36px;border-radius:50%;background:#475569;color:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;}
+    .bot-chat-list-text{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;}
     .bot-chat-list-item .name{font-size:13px;font-weight:600;color:#e2e8f0;}
     .bot-chat-list-item .name .realname{font-size:12px;font-weight:500;color:#8fd9c4;}
     .bot-chat-list-item .meta{font-size:11px;color:#8391a8;}
@@ -13020,10 +13025,19 @@ function addP2PBotStyles(){
       const lastMsgAt = o.lastClientMsgAt ? new Date(o.lastClientMsgAt).getTime() : 0;
       const hasUnread = lastMsgAt > lastRead;
       const cachedReal = botChatListNameCache[o.orderNumber];
+      // Círculo con la inicial, donde iría la foto -- pedido explícito del
+      // usuario (sep 2026), igual a como lo muestra Binance en su propia
+      // lista de chats. Usa el nombre real si ya se cargó, si no la
+      // primera letra del nombre enmascarado (casi siempre coincide).
+      const avatarLetter = escHtml(((cachedReal || name || "?").trim().charAt(0) || "?").toUpperCase());
       return '<div class="bot-chat-list-item' + (isActive ? ' active' : '') + '" data-order="' + escHtml(o.orderNumber) + '" onclick="window.botPanelOpenChat(\'' + o.orderNumber + '\');window.botToggleChatList(false);">' +
-        (hasUnread ? '<span style="position:absolute;top:14px;left:6px;width:8px;height:8px;border-radius:50%;background:#60a5fa;box-shadow:0 0 4px rgba(96,165,250,.6);"></span>' : '') +
-        '<span class="name">' + escHtml(name) + (cachedReal ? ' <span class="realname">— ' + escHtml(cachedReal) + '</span>' : '') + '</span>' +
-        '<span class="meta">' + meta + '</span>' +
+        '<div class="bot-chat-avatar">' + avatarLetter +
+          (hasUnread ? '<span style="position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:50%;background:#60a5fa;box-shadow:0 0 4px rgba(96,165,250,.6);border:2px solid #0f1420;"></span>' : '') +
+        '</div>' +
+        '<div class="bot-chat-list-text">' +
+          '<span class="name">' + escHtml(name) + (cachedReal ? ' <span class="realname">— ' + escHtml(cachedReal) + '</span>' : '') + '</span>' +
+          '<span class="meta">' + meta + '</span>' +
+        '</div>' +
       '</div>';
     }).join("");
 
