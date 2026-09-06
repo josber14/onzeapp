@@ -1274,6 +1274,14 @@
       z-index:1000000;
     }
 
+    /* Mismo bug, mismo arreglo: el modal de confirmar liberación (clave/
+       huella) también debe quedar por encima del chat -- ahora que hay un
+       botón "Liberar" DENTRO del chat (sep 2026), este modal se abre
+       encima de él la mayoría de las veces. */
+    #releaseAuthModal{
+      z-index:1000000;
+    }
+
     .modal-dialog{
       min-height:calc(100dvh - 32px);
       display:flex;
@@ -9935,21 +9943,19 @@ function addP2PBotStyles(){
     #botOrderChatOverlay{transition:opacity .15s ease;}
     #botOrderChatOverlay[style*="display: block"]{opacity:1;}
     #botOrderChatMessages::-webkit-scrollbar{width:4px;}
-    /* Fondo con textura para el chat (pedido explícito del usuario, sep
-       2026: "algo bonito tipo whatsapp") -- en vez de copiar el doodle de
-       WhatsApp (verde, ajeno a la paleta de ONZE), es una cuadrícula de
-       puntos sutil sobre un halo azul difuso, dentro de la misma paleta
-       oscura/azul ya usada en todo el panel -- una textura de "red" que
-       encaja con un producto de trading P2P. */
+    /* Fondo del chat, 8va vuelta (sep 2026): probando un wallpaper de íconos
+       de videojuegos (public/images/chat-bg-gaming.jpg, sin marca de agua,
+       confirmado) -- viene diseñado como wallpaper completo de una pantalla
+       (no como tile chico), así que va a "cover" igual que el anterior. Un
+       velo oscuro semitransparente liviano encima para legibilidad. */
     .bot-chat-canvas{
-      background-color:#070c1c;
+      background-color:#0b0e11;
       background-image:
-        radial-gradient(circle at 18% 12%, rgba(37,99,235,.16), transparent 42%),
-        radial-gradient(circle at 82% 88%, rgba(37,99,235,.10), transparent 45%),
-        radial-gradient(rgba(148,163,184,.14) 1px, transparent 1.4px);
-      background-size:auto, auto, 26px 26px;
-      background-position:0 0, 0 0, 0 0;
-      background-repeat:no-repeat, no-repeat, repeat;
+        linear-gradient(rgba(11,14,17,.25), rgba(11,14,17,.25)),
+        url('/images/chat-bg-gaming.jpg');
+      background-repeat:no-repeat, no-repeat;
+      background-position:center, center;
+      background-size:auto, cover;
     }
     .bot-chat-bubble{box-shadow:0 2px 8px rgba(0,0,0,.22);}
     /* Orders tabs */
@@ -12684,6 +12690,7 @@ function addP2PBotStyles(){
           '<div style="font-size:11px;color:#64748b;" id="botOrderChatOrderInfo">#0000000000</div>' +
           '<div style="font-size:12px;color:#5eead4;font-weight:600;margin-top:2px;display:none;" id="botOrderChatBuyerName"></div>' +
         '</div>' +
+        '<button id="botOrderChatReleaseBtn" type="button" onclick="window.botPanelReleaseCurrentChatOrder()" style="display:none;background:#fcd535;border:none;color:#1e2329;font-weight:700;font-size:13px;padding:8px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;">Liberar</button>' +
         '<button class="close-btn" type="button" onclick="window.botPanelCloseChat()" style="font-size:22px;width:36px;height:36px;">&times;</button>' +
         '<button type="button" onclick="window.botCallOperator()" title="Avisar por WhatsApp al dueño de la cuenta" style="background:none;border:none;color:#34d399;cursor:pointer;font-size:16px;padding:4px;">📞</button>' +
       '</div>' +
@@ -14150,6 +14157,15 @@ function addP2PBotStyles(){
   let botPanelChatRefreshInterval = null;
   let botPanelChatLastMsgTime = 0;
 
+  // botPanelChatActiveOrder es una variable interna (no vive en window), así
+  // que un onclick="..." en el HTML del botón (que corre en el scope global
+  // de la página, no acá) no puede leerla directo -- bug real encontrado al
+  // probar el botón "Liberar" del chat (sep 2026): el click no hacía nada.
+  window.botPanelReleaseCurrentChatOrder = function(){
+    if(!botPanelChatActiveOrder) return;
+    window.botPanelReleaseOrder(botPanelChatActiveOrder);
+  };
+
   function renderChatMessageHtml(m){
     if(m.type === "system" || m.type === "auto_reply" && m.self === false){
       return '<div style="display:flex;justify-content:center;margin-bottom:8px;"><div style="background:rgba(148,163,184,.06);color:#94a3b8;padding:4px 12px;border-radius:12px;font-size:11px;text-align:center;">' + escHtml(m.content) + '</div></div>';
@@ -14209,6 +14225,14 @@ function addP2PBotStyles(){
       " · #" + (orderNumber?.slice(-10) || "");
     document.getElementById("botOrderChatInput").value = "";
 
+    // Botón "Liberar" en el chat, igual al que muestra la propia app de
+    // Binance cuando el comprador ya pagó (pedido explícito del usuario,
+    // sep 2026) -- reusa exactamente el mismo flujo de confirmación por
+    // clave/huella que ya existe en la lista de órdenes, no un mecanismo
+    // nuevo. Solo se muestra con status "paid", igual que Binance.
+    const releaseBtn = document.getElementById("botOrderChatReleaseBtn");
+    if(releaseBtn) releaseBtn.style.display = order?.status === "paid" ? "" : "none";
+
     // Nombre real del comprador (ej. "MAMANI CHOQUE NOEMI") -- el mismo dato
     // que Binance/Bybit ya muestran en su propia app ("Nombre del
     // comprador"), para validar el pago sin depender del teléfono. Pedido
@@ -14259,6 +14283,8 @@ function addP2PBotStyles(){
             document.getElementById("botOrderChatCounterparty").textContent = updatedOrder.counterparty;
           }
         }
+        const releaseBtn2 = document.getElementById("botOrderChatReleaseBtn");
+        if(releaseBtn2) releaseBtn2.style.display = updatedOrder?.status === "paid" ? "" : "none";
 
         // Fetch all messages and replace entire content (avoids filtering/sync issues)
         const r2 = await fetch("/api/p2p/bot/chat?orderNo=" + encodeURIComponent(botPanelChatActiveOrder) + "&exchange=" + botSelectedExchange, { credentials:"include" });
