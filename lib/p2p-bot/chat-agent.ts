@@ -3378,6 +3378,20 @@ async function offerSplitPayment(
   // (el equivalente en USDT, no en CLP) porque se usaba como si fuera CLP.
   // order.totalPrice es el monto real en CLP, que es lo que hay que repartir.
   const total = Number(order.totalPrice) || 0;
+  // Bug real confirmado en vivo (sep 2026): si el comprador explica que una
+  // transferencia por el MONTO TOTAL no pasó (ej. "no me dejo pasar los
+  // 230000 por ser primera vez"), extractAmount() agarra ese mismo número
+  // (el que NO pasó) y lo trata como si fuera el límite de su banco -- un
+  // límite real, por definición, siempre es MENOR al total (si no, no
+  // habría nada que dividir). Eso rompía el reparto: distributeAmount()
+  // asignaba TODO el total a la primera cuenta de una sola vez, sin ofrecer
+  // una segunda cuenta. Cuando el monto detectado no es menor al total, se
+  // usa en su lugar el monto que YA sabemos que sí pasó de verdad
+  // (cs.receivedReceiptsClp, calculado de comprobantes ya recibidos) -- un
+  // número probado, no uno adivinado del texto del comprador.
+  if (amount >= total && Number(cs.receivedReceiptsClp) > 0 && Number(cs.receivedReceiptsClp) < total) {
+    amount = Number(cs.receivedReceiptsClp);
+  }
   let accounts = await getAvailableAccounts(tenantId, exchange, label);
   // La primera cuota va al banco que YA se le había mandado antes (lo más
   // probable es que ya haya empezado a transferir ahí) — el resto de las

@@ -10901,6 +10901,13 @@ function addP2PBotStyles(){
     botActiveLabel = label;
     window.botActiveLabel = label;
     localStorage.setItem("botActiveLabel", label);
+    // Bug real confirmado en vivo (sep 2026): botLastOrderIds nunca se
+    // reseteaba al cambiar de cuenta -- las órdenes de la cuenta nueva son
+    // TODAS distintas a las de la cuenta anterior, así que el próximo poll
+    // las veía como "nuevas" y sonaba la alarma sin que hubiera llegado
+    // ninguna orden real. Al limpiar el set acá, el próximo poll toma la
+    // lista de la cuenta nueva como punto de partida, sin sonido de más.
+    if(typeof botLastOrderIds !== "undefined") botLastOrderIds = new Set();
     document.querySelectorAll(".bot-acct-btn").forEach(function(b){
       b.classList.toggle("active", b.getAttribute("data-label") === label);
     });
@@ -10911,6 +10918,10 @@ function addP2PBotStyles(){
   };
 
   window.botSelectExchange = function(exchange){
+    // Mismo fix que botSetActiveLabel: sin esto, cambiar de exchange
+    // (Binance/Bybit/OKX) también hacía sonar la alarma de "orden nueva"
+    // sin que llegara ninguna orden real -- ver el comentario de arriba.
+    if(typeof botLastOrderIds !== "undefined") botLastOrderIds = new Set();
     // ONZE/ZINPLE es exclusivo de Binance -- Bybit/OKX son cuenta única.
     // Forzamos botActiveLabel a "ONZE" mientras se ve Bybit/OKX (así TODOS
     // los fetch de este panel que arman su label con botActiveLabel quedan
@@ -12647,6 +12658,11 @@ function addP2PBotStyles(){
     }
   };
 
+  // Pedido explícito del usuario (sep 2026): el beep de 3 notas (sine,
+  // 880-1100-880Hz) no le gustaba, quería algo más parecido a la
+  // notificación de WhatsApp -- dos notas cortas tipo "campanita" (onda
+  // triangular, más suave que sine puro), cada una con su propio
+  // oscilador/ganancia para un decaimiento limpio por nota.
   function botPlayOrderSound(){
     if(!botSoundEnabled) return;
     try{
@@ -12654,18 +12670,22 @@ function addP2PBotStyles(){
         botAudioContext = new (window.AudioContext || window.webkitAudioContext)();
       }
       const ctx = botAudioContext;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.1);
-      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.2);
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.4);
+      const playNote = (freq, startOffset, duration, peakGain) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = "triangle";
+        const t0 = ctx.currentTime + startOffset;
+        osc.frequency.setValueAtTime(freq, t0);
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(peakGain, t0 + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+        osc.start(t0);
+        osc.stop(t0 + duration + 0.02);
+      };
+      playNote(1318.5, 0, 0.16, 0.28);    // E6
+      playNote(1760, 0.13, 0.22, 0.24);   // A6
     }catch(e){ console.warn("Sound error:", e); }
   }
 
