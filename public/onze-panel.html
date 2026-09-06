@@ -10052,8 +10052,16 @@ function addP2PBotStyles(){
     #botChatOrdersPanel.show{display:flex;}
     #botChatOrdersPanelHeader{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(148,163,184,.1);}
     #botChatOrdersPanelHeader h3{margin:0;font-size:14px;font-weight:700;color:#f1f5f9;}
-    #botChatOrdersPanelBody{flex:1;overflow-y:auto;padding:14px 16px;}
-    #botChatOrdersPanelBody #botPanelOrders{position:relative;}
+    /* Bug real confirmado en vivo (sep 2026): la lista de órdenes
+       (#botPanelOrdersList) trae de fábrica un alto fijo de 350px pensado
+       para el modal chiquito original -- acá, adentro de este panel que
+       ocupa el alto completo de la pantalla, eso dejaba un hueco vacío
+       abajo en vez de estirarse. Se vuelve todo un flex vertical: lo de
+       arriba (pestañas, filtros) mantiene su alto normal, y la lista
+       ocupa y scrollea sola el resto del espacio disponible. */
+    #botChatOrdersPanelBody{flex:1;overflow:hidden;padding:14px 16px;display:flex;flex-direction:column;}
+    #botChatOrdersPanelBody #botPanelOrders{position:relative;display:flex;flex-direction:column;flex:1;min-height:0;}
+    #botChatOrdersPanelBody #botPanelOrdersList{flex:1;min-height:0;max-height:none!important;}
     .bot-chat-list-item{position:relative;display:flex;flex-direction:column;gap:2px;padding:12px 16px 12px 22px;border-bottom:1px solid rgba(148,163,184,.06);cursor:pointer;transition:background .12s;}
     .bot-chat-list-item:hover{background:rgba(148,163,184,.06);}
     .bot-chat-list-item.active{background:rgba(37,99,235,.12);border-left:2px solid var(--brand);}
