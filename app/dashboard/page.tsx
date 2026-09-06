@@ -137,7 +137,7 @@ export default async function DashboardPage() {
           <iframe
             src={panelSrc}
             title="ONZE Panel"
-            className="h-[calc(100vh-120px)] w-full"
+            className="h-[calc(100dvh-120px)] w-full"
           />
         </div>
       </div>
