@@ -43,13 +43,24 @@ export async function GET(req: NextRequest) {
 
     if (live) {
       try {
+        // Bug real confirmado en vivo (sep 2026): antes, si la llamada en
+        // vivo a Binance/Bybit tenía éxito pero justo en ese momento traía
+        // 0 órdenes (algo normal y momentáneo -- no es un error), este
+        // código lo trataba igual que si la llamada hubiera FALLADO y caía
+        // al respaldo de la base de datos local. Ese respaldo guarda el
+        // estado tal cual lo manda Binance ("TRADING", "COMPLETED", etc.)
+        // sin traducirlo a los que espera la pantalla ("pending", "paid",
+        // etc.), así que en ese instante la lista se veía vacía o con
+        // datos raros -- y en el siguiente ciclo (8s después), al volver a
+        // tener datos en vivo, las órdenes "reaparecían". Ahora se confía
+        // en el resultado en vivo SIEMPRE que la llamada no haya lanzado un
+        // error de verdad, tenga 0 órdenes o no.
         const result = await fetchLiveOrders(exchange, session.tenantId, limit, label);
-        if (result.orders.length > 0) {
-          await enrichOrdersWithChatData(result.orders, session.tenantId, exchange);
-          return Response.json({ ok: true, orders: result.orders, live: true });
-        }
+        await enrichOrdersWithChatData(result.orders, session.tenantId, exchange);
+        return Response.json({ ok: true, orders: result.orders, live: true });
       } catch (e: any) {
-        // Live API failed, fall through to DB
+        // Live API falló de verdad (ej. Binance/Bybit caído o error real) --
+        // recién ahí tiene sentido caer al respaldo de la base de datos.
       }
       // Fallback: return DB orders
       const localOrders = await getBotOrders(session.tenantId, limit, exchange, label);
