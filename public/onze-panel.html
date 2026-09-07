@@ -22325,19 +22325,24 @@ function addP2PBotStyles(){
       modal.addEventListener("mousedown", (e) => { if(e.target === modal) modal.remove(); });
       document.body.appendChild(modal);
     }
+    // payload.gananciaLabel / payload.emptyWithdrawalsLabel son opcionales
+    // (pedido explícito del usuario, sep 2026, solo para AKI Transfers) --
+    // este modal es COMPARTIDO con el dashboard P2P de otros tenants (ver
+    // personRowP2P más abajo en el archivo), que sigue siendo por mes/rango
+    // -- si no vienen, se usa el texto de siempre para no afectarlo.
     const rowsHtml = (payload.withdrawals && payload.withdrawals.length)
       ? payload.withdrawals.map((w) => `
         <div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;font-size:13px;border-top:1px solid rgba(148,163,184,.08);">
           <span style="color:#8aa0ba;">Retiro · ${p2pPersonNetEsc(w.date)}${w.note ? " · " + p2pPersonNetEsc(w.note) : ""}</span>
           <span style="color:#fb7185;font-weight:700;white-space:nowrap;">-${p2pPersonNetEsc(w.amount)} USDT</span>
         </div>`).join("")
-      : `<div style="padding:8px 0;font-size:13px;color:#64748b;">Sin retiros en este rango.</div>`;
+      : `<div style="padding:8px 0;font-size:13px;color:#64748b;">${p2pPersonNetEsc(payload.emptyWithdrawalsLabel || "Sin retiros en este rango.")}</div>`;
     modal.innerHTML = `
       <div style="width:min(420px,100%);border:1px solid rgba(52,211,153,.28);background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(2,6,23,.98));border-radius:20px;padding:22px;position:relative;">
         <button type="button" onclick="document.getElementById('p2pPersonNetModal').remove()" title="Cerrar" aria-label="Cerrar" style="position:absolute;top:16px;right:16px;width:28px;height:28px;border-radius:8px;border:1px solid rgba(148,163,184,.2);background:rgba(148,163,184,.1);color:#cbd5e1;cursor:pointer;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;">✕</button>
         <h3 style="color:#00d4ff;margin-bottom:14px;padding-right:30px;">👤 ${p2pPersonNetEsc(payload.name)}</h3>
         <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;">
-          <span style="color:#8aa0ba;">Ganancia total del mes</span>
+          <span style="color:#8aa0ba;">${p2pPersonNetEsc(payload.gananciaLabel || "Ganancia total del mes")}</span>
           <span style="color:#f8fafc;font-weight:700;">${p2pPersonNetEsc(payload.gananciaSign)}${p2pPersonNetEsc(payload.ganancia)} USDT</span>
         </div>
         ${rowsHtml}
@@ -30121,24 +30126,35 @@ try{
           // retiros a la izquierda, total a recibir a la derecha) y el
           // detalle se arma en window.p2pOpenPersonNetModal (definido en
           // otro <script>, lado ONZE -- función window.-scoped, compartida).
+          // Pedido explícito del usuario (sep 2026): el retiro se resta del
+          // TOTAL histórico (no solo del mes en curso) -- un retiro grande
+          // hecho hoy perfectamente puede estar cubriendo plata de meses
+          // anteriores sin retirar todavía, no solo la de este mes. Antes,
+          // el número principal era SOLO el del rango de fechas elegido,
+          // y se podía ver negativo si el retiro superaba la ganancia de
+          // ESE rango en particular, aunque en total la persona siguiera
+          // teniendo saldo pendiente a favor. Ahora el número principal de
+          // la tarjeta es directamente el pendiente histórico (todo lo
+          // ganado - todo lo retirado, desde siempre) -- la tarjeta queda
+          // corta (nombre + ese número) y el detalle completo (ganancia
+          // histórica y cada retiro con su fecha) se ve al hacer click.
           const personRow = (name) => {
-            const withdrawalsOf = rawWithdrawals.filter(w => w.kind === 'retiro' && String(w.person || '').trim().toLowerCase() === name.toLowerCase());
-            const withdrawnUsdt = withdrawalsOf.reduce((sum, w) => sum + Number(w.amountUsdt || 0), 0);
-            const shareUsdt = perPersonUsdt !== null ? perPersonUsdt - withdrawnUsdt : null;
-            const shareClp = (shareUsdt !== null && avgSell > 0) ? shareUsdt * avgSell : null;
-            const sign = shareUsdt !== null && shareUsdt >= 0 ? '+' : '';
-            const color = shareUsdt === null ? WHITE : (shareUsdt >= 0 ? GREEN : RED);
-            const countLabel = withdrawalsOf.length === 1 ? '1 retiro' : `${withdrawalsOf.length} retiros`;
-            const gananciaSign = perPersonUsdt !== null && perPersonUsdt >= 0 ? '+' : '';
-            const pendingAllTimeUsdt = perPersonUsdtAll !== null ? perPersonUsdtAll - allTimeWithdrawnByPerson(name) : null;
-            const pendingSign = pendingAllTimeUsdt !== null && pendingAllTimeUsdt >= 0 ? '+' : '';
-            const pendingColor = pendingAllTimeUsdt === null ? '#64748b' : (pendingAllTimeUsdt >= 0 ? GREEN : RED);
+            const allWithdrawalsOf = allWithdrawals.filter(w => w.kind === 'retiro' && String(w.person || '').trim().toLowerCase() === name.toLowerCase());
+            const withdrawnAllTimeUsdt = allWithdrawalsOf.reduce((sum, w) => sum + Number(w.amountUsdt || 0), 0);
+            const pendingAllTimeUsdt = perPersonUsdtAll !== null ? perPersonUsdtAll - withdrawnAllTimeUsdt : null;
+            const pendingAllTimeClp = (pendingAllTimeUsdt !== null && totalAvgSellAll > 0) ? pendingAllTimeUsdt * totalAvgSellAll : null;
+            const sign = pendingAllTimeUsdt !== null && pendingAllTimeUsdt >= 0 ? '+' : '';
+            const color = pendingAllTimeUsdt === null ? WHITE : (pendingAllTimeUsdt >= 0 ? GREEN : RED);
+            const countLabel = allWithdrawalsOf.length === 1 ? '1 retiro' : `${allWithdrawalsOf.length} retiros`;
+            const gananciaSign = perPersonUsdtAll !== null && perPersonUsdtAll >= 0 ? '+' : '';
             const payload = {
               name, color, sign, gananciaSign,
-              ganancia: socioBnMoney(perPersonUsdt, 2),
-              share: socioBnMoney(shareUsdt, 2),
-              shareClp: socioBnMoney(shareClp, 0),
-              withdrawals: withdrawalsOf.map(w => ({
+              gananciaLabel: "Ganancia total (histórica)",
+              emptyWithdrawalsLabel: "Sin retiros registrados.",
+              ganancia: socioBnMoney(perPersonUsdtAll, 2),
+              share: socioBnMoney(pendingAllTimeUsdt, 2),
+              shareClp: socioBnMoney(pendingAllTimeClp, 0),
+              withdrawals: allWithdrawalsOf.map(w => ({
                 date: new Date(w.withdrawnAt).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' }),
                 note: w.note || '',
                 amount: socioBnMoney(Number(w.amountUsdt), 2),
@@ -30148,12 +30164,8 @@ try{
             return `
             <div style="cursor:pointer;padding:9px 10px;margin-top:8px;border:1px solid rgba(148,163,184,.14);border-radius:12px;background:rgba(15,23,42,.4);transition:border-color .15s ease;" onmouseover="this.style.borderColor='rgba(148,163,184,.32)'" onmouseout="this.style.borderColor='rgba(148,163,184,.14)'" onclick="window.p2pOpenPersonNetModalFromEl(this)" data-detail='${payloadAttr}'>
               <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-                <span style="color:#cbd5e1;font-weight:800;font-size:12.5px;">${name}${withdrawalsOf.length ? ` <span style="color:#64748b;font-weight:600;">(${countLabel})</span>` : ''}</span>
-                <span style="color:${color};font-weight:800;font-size:12.5px;white-space:nowrap;">${sign}${socioBnMoney(shareUsdt, 2)} USDT ›</span>
-              </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:3px;">
-                <span style="color:#64748b;font-size:10.5px;">Pendiente histórico (todo lo ganado − todo lo retirado)</span>
-                <span style="color:${pendingColor};font-weight:700;font-size:11px;white-space:nowrap;">${pendingAllTimeUsdt !== null ? pendingSign + socioBnMoney(pendingAllTimeUsdt, 2) + ' USDT' : '—'}</span>
+                <span style="color:#cbd5e1;font-weight:800;font-size:12.5px;">${name}${allWithdrawalsOf.length ? ` <span style="color:#64748b;font-weight:600;">(${countLabel})</span>` : ''}</span>
+                <span style="color:${color};font-weight:800;font-size:12.5px;white-space:nowrap;">${sign}${socioBnMoney(pendingAllTimeUsdt, 2)} USDT ›</span>
               </div>
             </div>`;
           };
