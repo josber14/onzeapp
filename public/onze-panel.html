@@ -29615,6 +29615,15 @@ try{
     window.__socioBnMonthProfitUsdt = monthProfitUsdt;
     window.__socioBnTotalProfitUsdt = totalProfitUsdt;
     window.__socioBnTotalWithdrawnUsdt = totalWithdrawnUsdt;
+    // Cacheado para el "pendiente histórico" por persona (pedido explícito
+    // del usuario, sep 2026) -- ver socioBnStatsRefresh, tarjeta "Ganancia
+    // neta a repartir". Se necesitan estos valores en CLP (no solo el
+    // convertido a USDT de arriba) para descontar el % de PPM sobre TODO
+    // el histórico, igual que ya se hace por rango de fechas.
+    window.__socioBnTotalProfitClp = totalProfitClp;
+    window.__socioBnTotalAvgSell = totalAvgSell;
+    window.__socioBnTotalClpReceived = totalStats ? Number(totalStats.totalClpReceived || 0) : 0;
+    window.__socioBnAllWithdrawals = withdrawalsRes.ok ? (withdrawalsRes.withdrawals || []) : [];
 
     socioBnRenderStats(res.stats, { initial, monthProfitUsdt, totalProfitUsdt, totalWithdrawnUsdt });
     window.__socioBnCapacityCache = res.stats.perCapacityBreakdown || [];
@@ -30087,6 +30096,25 @@ try{
             .filter(w => w.kind === 'retiro' && String(w.person || '').trim().toLowerCase() === name.toLowerCase())
             .reduce((sum, w) => sum + Number(w.amountUsdt || 0), 0);
 
+          // Pendiente histórico por persona (pedido explícito del usuario,
+          // sep 2026): lo mismo que arriba, pero calculado sobre TODO el
+          // histórico en vez de solo el rango de fechas elegido -- así, si
+          // un mes (ej. agosto) no se retira, no "desaparece": queda
+          // sumado acá hasta que de verdad se retire.
+          const pctAll = window.__socioBnPpmPct;
+          const hasPctAll = pctAll !== null && pctAll !== undefined;
+          const totalClpReceivedAll = window.__socioBnTotalClpReceived || 0;
+          const totalProfitClpAll = window.__socioBnTotalProfitClp;
+          const totalAvgSellAll = window.__socioBnTotalAvgSell || 0;
+          const ppmClpAll = (hasPctAll && totalProfitClpAll !== null && totalProfitClpAll !== undefined) ? totalClpReceivedAll * (pctAll / 100) : null;
+          const netoClpAll = ppmClpAll !== null ? totalProfitClpAll - ppmClpAll : null;
+          const netoUsdtAll = (netoClpAll !== null && totalAvgSellAll > 0) ? netoClpAll / totalAvgSellAll : null;
+          const perPersonUsdtAll = netoUsdtAll !== null ? netoUsdtAll / 2 : null;
+          const allWithdrawals = Array.isArray(window.__socioBnAllWithdrawals) ? window.__socioBnAllWithdrawals : [];
+          const allTimeWithdrawnByPerson = (name) => allWithdrawals
+            .filter(w => w.kind === 'retiro' && String(w.person || '').trim().toLowerCase() === name.toLowerCase())
+            .reduce((sum, w) => sum + Number(w.amountUsdt || 0), 0);
+
           // Pedido explícito del usuario (ago 2026): NO expandir la tarjeta
           // al hacer click -- abrir una pantalla aparte (modal), igual que
           // "Capital P2P". La fila queda corta (nombre + cantidad de
@@ -30102,6 +30130,9 @@ try{
             const color = shareUsdt === null ? WHITE : (shareUsdt >= 0 ? GREEN : RED);
             const countLabel = withdrawalsOf.length === 1 ? '1 retiro' : `${withdrawalsOf.length} retiros`;
             const gananciaSign = perPersonUsdt !== null && perPersonUsdt >= 0 ? '+' : '';
+            const pendingAllTimeUsdt = perPersonUsdtAll !== null ? perPersonUsdtAll - allTimeWithdrawnByPerson(name) : null;
+            const pendingSign = pendingAllTimeUsdt !== null && pendingAllTimeUsdt >= 0 ? '+' : '';
+            const pendingColor = pendingAllTimeUsdt === null ? '#64748b' : (pendingAllTimeUsdt >= 0 ? GREEN : RED);
             const payload = {
               name, color, sign, gananciaSign,
               ganancia: socioBnMoney(perPersonUsdt, 2),
@@ -30119,6 +30150,10 @@ try{
               <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
                 <span style="color:#cbd5e1;font-weight:800;font-size:12.5px;">${name}${withdrawalsOf.length ? ` <span style="color:#64748b;font-weight:600;">(${countLabel})</span>` : ''}</span>
                 <span style="color:${color};font-weight:800;font-size:12.5px;white-space:nowrap;">${sign}${socioBnMoney(shareUsdt, 2)} USDT ›</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:3px;">
+                <span style="color:#64748b;font-size:10.5px;">Pendiente histórico (todo lo ganado − todo lo retirado)</span>
+                <span style="color:${pendingColor};font-weight:700;font-size:11px;white-space:nowrap;">${pendingAllTimeUsdt !== null ? pendingSign + socioBnMoney(pendingAllTimeUsdt, 2) + ' USDT' : '—'}</span>
               </div>
             </div>`;
           };
