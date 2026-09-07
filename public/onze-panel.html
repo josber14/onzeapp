@@ -12805,40 +12805,75 @@ function addP2PBotStyles(){
   // 880-1100-880Hz) no le gustaba, quería algo más parecido a la
   // notificación de WhatsApp -- dos notas cortas tipo "campanita" (onda
   // triangular, más suave que sine puro), cada una con su propio
-  // oscilador/ganancia para un decaimiento limpio por nota.
-  function botPlayOrderSound(){
+  // oscilador/ganancia para un decaimiento limpio por nota. Extraído a un
+  // helper (botPlayTone) para poder reusarlo con otro sonido distinto
+  // cuando una orden pasa a "pagado" (pedido explícito, sep 2026).
+  function botPlayTone(notes){
     if(!botSoundEnabled) return;
     try{
       if(!botAudioContext){
         botAudioContext = new (window.AudioContext || window.webkitAudioContext)();
       }
       const ctx = botAudioContext;
-      const playNote = (freq, startOffset, duration, peakGain) => {
+      for(const note of notes){
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.type = "triangle";
-        const t0 = ctx.currentTime + startOffset;
-        osc.frequency.setValueAtTime(freq, t0);
+        const t0 = ctx.currentTime + note.start;
+        osc.frequency.setValueAtTime(note.freq, t0);
         gain.gain.setValueAtTime(0.0001, t0);
-        gain.gain.exponentialRampToValueAtTime(peakGain, t0 + 0.015);
-        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+        gain.gain.exponentialRampToValueAtTime(note.gain, t0 + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + note.duration);
         osc.start(t0);
-        osc.stop(t0 + duration + 0.02);
-      };
-      playNote(1318.5, 0, 0.16, 0.28);    // E6
-      playNote(1760, 0.13, 0.22, 0.24);   // A6
+        osc.stop(t0 + note.duration + 0.02);
+      }
     }catch(e){ console.warn("Sound error:", e); }
   }
 
+  function botPlayOrderSound(){
+    // Dos notas ASCENDENTES (E6 -> A6) para "llegó una orden nueva".
+    botPlayTone([
+      { freq: 1318.5, start: 0, duration: 0.16, gain: 0.28 },
+      { freq: 1760, start: 0.13, duration: 0.22, gain: 0.24 },
+    ]);
+  }
+
+  function botPlayPaidSound(){
+    // Dos notas DESCENDENTES, más graves (B5 -> E5), tipo "confirmación" --
+    // a propósito muy distinto al de "orden nueva" (que sube de tono) para
+    // poder diferenciarlos de oído sin mirar la pantalla.
+    botPlayTone([
+      { freq: 987.8, start: 0, duration: 0.18, gain: 0.28 },
+      { freq: 659.3, start: 0.15, duration: 0.28, gain: 0.26 },
+    ]);
+  }
+
+  let botLastOrderStatuses = {};
   function botCheckNewOrders(newOrders){
     const currentIds = new Set(newOrders.map(o => o.orderNumber));
+    const hadPreviousData = botLastOrderIds.size > 0;
     const newOnes = newOrders.filter(o => !botLastOrderIds.has(o.orderNumber));
-    if(newOnes.length > 0 && botLastOrderIds.size > 0){
+    if(newOnes.length > 0 && hadPreviousData){
       botPlayOrderSound();
     }
+    // Sonido distinto cuando una orden que YA conocíamos pasa a "pagado"
+    // (pedido explícito del usuario, sep 2026) -- para diferenciarlo de la
+    // alarma de "orden nueva".
+    if(hadPreviousData){
+      for(const o of newOrders){
+        const prevStatus = botLastOrderStatuses[o.orderNumber];
+        if(prevStatus && prevStatus !== "paid" && o.status === "paid"){
+          botPlayPaidSound();
+          break; // un solo sonido aunque varias pasen a pagado en el mismo ciclo
+        }
+      }
+    }
     botLastOrderIds = currentIds;
+    const nextStatuses = {};
+    for(const o of newOrders) nextStatuses[o.orderNumber] = o.status;
+    botLastOrderStatuses = nextStatuses;
   }
 
   function botCreateChatOverlay(){
@@ -13169,7 +13204,17 @@ function addP2PBotStyles(){
     try{
       const r = await fetch("/api/p2p/bot/ads?exchange=" + botSelectedExchange + "&label=" + encodeURIComponent(botActiveLabel || "ONZE"), { credentials:"include" });
       const d = await r.json();
-      if(!d?.ok || !d?.ads?.length){
+      // Bug real confirmado en vivo (sep 2026): a Hector se le "desaparecían"
+      // los anuncios -- causa: si esta llamada fallaba por un problema
+      // pasajero de conexión (ej. el mismo salto extra por el proxy de la IP
+      // fija que ya afectaba las órdenes), el servidor respondía d.ok:false,
+      // y este código lo trataba igual que "0 anuncios de verdad", borrando
+      // la lista que ya se estaba mostrando bien. Ahora, si la llamada
+      // falló (d.ok:false), no se toca nada -- se deja lo que ya había
+      // hasta el próximo intento. Solo se muestra "Sin anuncios" cuando el
+      // servidor respondió BIEN y de verdad no hay ninguno.
+      if(!d?.ok) return;
+      if(!d?.ads?.length){
         container.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Sin anuncios para ' + botSelectedExchange + '. Crea uno nuevo.</div>';
         return;
       }
