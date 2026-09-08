@@ -2472,6 +2472,19 @@ function sanitizeOutgoingChatMessage(msg: string): string {
   return stripped.length > MAX_LEN ? stripped.slice(0, MAX_LEN) : stripped;
 }
 
+// Revisa si un mensaje que Binance reportó como fallido en realidad SÍ
+// llegó a la conversación -- ver el comentario en sendAndTrack. Solo se usa
+// para Binance (WS), Bybit no tiene este comportamiento intermitente.
+async function wasMessageAlreadyDelivered(client: any, orderNo: string, msg: string): Promise<boolean> {
+  try {
+    const res = await client.getChatMessages(orderNo);
+    const raw = res?.data ?? [];
+    return raw.some((m: any) => m.self && String(m.content ?? "").trim() === msg.trim());
+  } catch {
+    return false;
+  }
+}
+
 async function sendAndTrack(client: any, exchange: string, orderNo: string, cs: any, msg: string, createdAt?: number, delayFn: () => Promise<void> = humanDelay): Promise<boolean> {
   msg = sanitizeOutgoingChatMessage(msg);
   try {
@@ -2505,6 +2518,17 @@ async function sendAndTrack(client: any, exchange: string, orderNo: string, cs: 
         }
         if (!sent && attempt === 0) {
           await new Promise((r) => setTimeout(r, 3000));
+          // Bug real confirmado en vivo (sep 2026): "ILLEGAL_PARAM" a veces
+          // es un falso negativo -- el mensaje SÍ llega a la conversación
+          // pese al error reportado (confirmado con un comprador real: el
+          // saludo "¿personal o empresa?" apareció duplicado en su chat).
+          // Antes de reintentar, se revisa si el mensaje ya está de verdad
+          // en la conversación -- si ya llegó, se marca como enviado sin
+          // mandarlo una segunda vez.
+          if (await wasMessageAlreadyDelivered(client, orderNo, msg)) {
+            sent = true;
+            await logMsg(cs.tenantId, exchange, `WS chat ${orderNo}: el mensaje ya había llegado pese al error reportado -- no se reintenta`);
+          }
         }
       }
     } else {
