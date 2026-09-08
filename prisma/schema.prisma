@@ -1572,6 +1572,12 @@ model P2PBotAd {
   botCommissionPct        Decimal? @db.Decimal(8, 4)
   botSafeMarginPct        Decimal? @db.Decimal(8, 4)
   botMinCompetitorCapital Decimal? @db.Decimal(18, 2)
+  // Monto (CLP) para filtrar la lista de competidores a la que Binance
+  // muestra ese monto como transacción -- pedido explícito del usuario (sep
+  // 2026), imita el buscador "monto" que usa un comprador real en Binance
+  // (parámetro transAmount de la API). Null = sin cambios de comportamiento,
+  // se compite contra la lista completa como siempre.
+  botCompeteTransAmount   Decimal? @db.Decimal(18, 2)
   botCompetePayTypes      Json?
   // Nicknames de Binance a excluir de la competencia de este anuncio (ago
   // 2026, pedido explícito del usuario). Lista vacía/null = sin cambios de

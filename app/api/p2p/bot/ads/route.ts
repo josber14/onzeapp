@@ -103,6 +103,7 @@ export async function GET(req: NextRequest) {
               botCommissionPct: localAd?.botCommissionPct ? Number(localAd.botCommissionPct) : null,
               botSafeMarginPct: localAd?.botSafeMarginPct ? Number(localAd.botSafeMarginPct) : null,
               botMinCompetitorCapital: localAd?.botMinCompetitorCapital ? Number(localAd.botMinCompetitorCapital) : null,
+              botCompeteTransAmount: localAd?.botCompeteTransAmount ? Number(localAd.botCompeteTransAmount) : null,
               botCompetePayTypes: localAd?.botCompetePayTypes as string[] | null || null,
               botExcludedMerchants: localAd?.botExcludedMerchants as string[] | null || null,
               botCycleInterval: localAd?.botCycleInterval ? Number(localAd.botCycleInterval) : null,
@@ -239,6 +240,7 @@ export async function GET(req: NextRequest) {
             botCommissionPct: localAd?.botCommissionPct ? Number(localAd.botCommissionPct) : null,
             botSafeMarginPct: localAd?.botSafeMarginPct ? Number(localAd.botSafeMarginPct) : null,
             botMinCompetitorCapital: localAd?.botMinCompetitorCapital ? Number(localAd.botMinCompetitorCapital) : null,
+            botCompeteTransAmount: localAd?.botCompeteTransAmount ? Number(localAd.botCompeteTransAmount) : null,
             botCompetePayTypes: localAd?.botCompetePayTypes as string[] | null || null,
             botExcludedMerchants: localAd?.botExcludedMerchants as string[] | null || null,
             botCycleInterval: localAd?.botCycleInterval ? Number(localAd.botCycleInterval) : null,
@@ -283,6 +285,7 @@ export async function GET(req: NextRequest) {
       botCommissionPct: a.botCommissionPct ? Number(a.botCommissionPct) : null,
       botSafeMarginPct: a.botSafeMarginPct ? Number(a.botSafeMarginPct) : null,
       botMinCompetitorCapital: a.botMinCompetitorCapital ? Number(a.botMinCompetitorCapital) : null,
+      botCompeteTransAmount: a.botCompeteTransAmount ? Number(a.botCompeteTransAmount) : null,
       botCompetePayTypes: a.botCompetePayTypes as string[] | null || null,
       botExcludedMerchants: a.botExcludedMerchants as string[] | null || null,
       botCycleInterval: a.botCycleInterval ? Number(a.botCycleInterval) : null,
@@ -320,7 +323,7 @@ export async function PUT(req: NextRequest) {
 
     const body = await req.json();
     const label = body.label || req.nextUrl.searchParams.get("label") || "ONZE";
-    const { id, adId, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged, botEnabled, botTop1Diff, botSafeMarginPct, botCompetePayTypes, botExcludedMerchants, botPriceFloorPct, botPriceSource, botCommissionPct, botMinCompetitorCapital, botStrategy, botSpreadPct, botCycleInterval, botCircuitBreakPct, botDailyVolumeCapUsdt, botMinAdPriceDiffPct, adOnline, nickname } = body;
+    const { id, adId, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged, botEnabled, botTop1Diff, botSafeMarginPct, botCompetePayTypes, botExcludedMerchants, botPriceFloorPct, botPriceSource, botCommissionPct, botMinCompetitorCapital, botCompeteTransAmount, botStrategy, botSpreadPct, botCycleInterval, botCircuitBreakPct, botDailyVolumeCapUsdt, botMinAdPriceDiffPct, adOnline, nickname } = body;
 
     if (!exchange) {
       return Response.json({ ok: false, error: "exchange es requerido" }, { status: 400 });
@@ -441,6 +444,7 @@ export async function PUT(req: NextRequest) {
     if (botCommissionPct !== undefined) updateData.botCommissionPct = botCommissionPct;
     if (botSafeMarginPct !== undefined) updateData.botSafeMarginPct = botSafeMarginPct;
     if (botMinCompetitorCapital !== undefined) updateData.botMinCompetitorCapital = botMinCompetitorCapital;
+    if (botCompeteTransAmount !== undefined) updateData.botCompeteTransAmount = botCompeteTransAmount;
     if (botCompetePayTypes !== undefined) updateData.botCompetePayTypes = botCompetePayTypes;
     if (botExcludedMerchants !== undefined) updateData.botExcludedMerchants = botExcludedMerchants;
     if (botCycleInterval !== undefined) updateData.botCycleInterval = botCycleInterval;

@@ -11234,13 +11234,14 @@ function addP2PBotStyles(){
     var commission = a.botCommissionPct != null ? a.botCommissionPct : '';
     var safeMargin = a.botSafeMarginPct != null ? a.botSafeMarginPct : '';
     var minCapital = a.botMinCompetitorCapital != null ? a.botMinCompetitorCapital : '';
+    var competeTransAmount = a.botCompeteTransAmount != null ? a.botCompeteTransAmount : '';
     var payType = (a.botCompetePayTypes && a.botCompetePayTypes.length && a.botCompetePayTypes[0] === '__match_ad__') ? 'match' : 'all';
     var top1Style = strategy === 'spread' ? 'display:none;' : '';
     var spreadStyle = strategy === 'top1' ? 'display:none;' : '';
     const cfgFields = [];
     if (strategy !== 'spread') cfgFields.push('Top1Diff');
     if (strategy !== 'top1') cfgFields.push('SpreadPct');
-    cfgFields.push('PriceSource','CommissionPct','SafeMarginPct','MinCompetitorCapital','CompetePayType','ExcludedMerchants','CycleInterval','CircuitBreakPct','MinAdPriceDiffPct');
+    cfgFields.push('PriceSource','CommissionPct','SafeMarginPct','MinCompetitorCapital','CompeteTransAmount','CompetePayType','ExcludedMerchants','CycleInterval','CircuitBreakPct','MinAdPriceDiffPct');
     const cfgCount = cfgFields.length;
     return `<div class="bot-ad-pill" data-ad-real-id="${realId}" data-ad-adid="${a.adId||''}" data-ad-paytype="${payType}" data-ad-paymethods="${escHtml(JSON.stringify(pms || []))}">
       <div class="bot-ad-card-header">
@@ -11326,6 +11327,10 @@ function addP2PBotStyles(){
           </label></form>
           <label>Capital min competidor (USDT)
             <input id="adCfg_${realId}_MinCompetitorCapital" type="number" step="1" value="${minCapital}" placeholder="Sin filtro" onchange="botSaveAdCfgField(${realId},'botMinCompetitorCapital',this.value)">
+          </label>
+          <label>Competir en lista de monto (CLP)
+            <input id="adCfg_${realId}_CompeteTransAmount" type="text" inputmode="numeric" value="${competeTransAmount !== '' ? Number(competeTransAmount).toLocaleString('es-CL') : ''}" placeholder="Todos los montos" oninput="window.botFormatAdTransAmountInput(this)" onchange="botSaveAdCfgField(${realId},'botCompeteTransAmount',this.value.replace(/[^\d]/g,''))">
+            <span class="help-text">Solo compite contra anuncios que aceptarían este monto (ej. 50.000). Vacío = como ahora, contra toda la lista.</span>
           </label>
           <label>Filtrar pago
             <select id="adCfg_${realId}_CompetePayType" onchange="botSaveAdCfgField(${realId},'botCompetePayTypes',this.value)">
@@ -11507,6 +11512,15 @@ function addP2PBotStyles(){
     fetch('/api/p2p/bot/ads',{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({exchange:window.botSelectedExchange||'Binance',id:realId,adId:adId||'',botSafeMarginPct:saveVal,label:window.botActiveLabel||'ONZE'})}).then(function(r){el.style.outline=r.ok?'2px solid #22c55e':'2px solid #fb7185';setTimeout(function(){el.style.outline=''},800)}).catch(function(){el.style.outline='2px solid #fb7185';setTimeout(function(){el.style.outline=''},800)});
   };
   window.botSafeFieldFlash = function(el){ el.style.outline='2px solid #22c55e'; setTimeout(function(){ el.style.outline=''; }, 800); };
+  // Formato con puntos de miles mientras se escribe (ej. "100.000") -- pedido
+  // explícito del usuario (sep 2026), mismo patrón ya usado en otros campos
+  // de CLP del panel (ver socioBnFormatClpInput/usdtFormatClpInput). El
+  // guardado real (botSaveAdCfgField) recibe el valor sin puntos.
+  window.botFormatAdTransAmountInput = function(el){
+    const digits = el.value.replace(/[^\d]/g, '');
+    el.value = digits ? Number(digits).toLocaleString('es-CL') : '';
+  };
+
   window.botSaveAdCfgField = function(realId, field, value){
     var body = { exchange: botSelectedExchange, id: realId, label: botActiveLabel || "ONZE" };
     // Read adId from the parent container's data attribute

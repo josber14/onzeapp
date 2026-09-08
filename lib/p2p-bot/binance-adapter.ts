@@ -155,6 +155,12 @@ export class BinanceP2PClient {
     page?: number;
     rows?: number;
     payTypes?: string[];
+    // Filtra la lista a solo los anuncios que aceptan ESTE monto como
+    // transacción -- confirmado en vivo (sep 2026) contra la API pública de
+    // Binance: es el mismo filtro "monto" que usa un comprador real en
+    // p2p.binance.com, solo trae anuncios donde minSingleTransAmount <=
+    // transAmount <= maxSingleTransAmount.
+    transAmount?: number;
   }): Promise<{ data: any[] }> {
     return this.publicRequest("/bapi/c2c/v2/friendly/c2c/adv/search", {
       asset: params.asset,
@@ -164,6 +170,7 @@ export class BinanceP2PClient {
       rows: Math.min(params.rows || 20, 20),
       payTypes: params.payTypes || [],
       publisherType: null,
+      ...(params.transAmount ? { transAmount: params.transAmount } : {}),
     });
   }
 

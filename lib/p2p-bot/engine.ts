@@ -1099,6 +1099,14 @@ async function runBinanceCycle(
       let competitors: any[];
       let needsPaymentFilter = true;
 
+      // "Competir en la lista de X monto" (pedido explícito del usuario, sep
+      // 2026) -- imita el buscador "monto" que ve un comprador real en
+      // Binance (parámetro transAmount de la API, confirmado en vivo: solo
+      // trae anuncios donde minSingleTransAmount <= transAmount <=
+      // maxSingleTransAmount). Null/vacío = sin cambios de comportamiento,
+      // se compite contra la lista completa como siempre.
+      const adTransAmount = managedAd.botCompeteTransAmount ? Number(managedAd.botCompeteTransAmount) : null;
+
       // For __match_ad__, fetch directly from API with payTypes filter (fast, 2 páginas).
       // Binance rechaza rows > 20 por página ("illegal parameter") — no se puede pedir
       // más de una vez, hay que pedir la página 2 aparte y combinar, para no perder
@@ -1110,18 +1118,36 @@ async function runBinanceCycle(
         if (payTypes.length > 0) {
           try {
             const [page1, page2] = await Promise.all([
-              client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "BUY", rows: 20, page: 1, payTypes }),
-              client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "BUY", rows: 20, page: 2, payTypes }),
+              client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "BUY", rows: 20, page: 1, payTypes, ...(adTransAmount ? { transAmount: adTransAmount } : {}) }),
+              client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "BUY", rows: 20, page: 2, payTypes, ...(adTransAmount ? { transAmount: adTransAmount } : {}) }),
             ]);
             const combined = [...(page1?.data ?? []), ...(page2?.data ?? [])];
             competitors = combined.map(normalizeBinanceAd);
             needsPaymentFilter = false;
-            await log( "debug", "binance", `Ad ${adId}: API filtrada devolvió ${competitors.length} competidores con payTypes=${JSON.stringify(payTypes)}`);
+            await log( "debug", "binance", `Ad ${adId}: API filtrada devolvió ${competitors.length} competidores con payTypes=${JSON.stringify(payTypes)}${adTransAmount ? ` transAmount=${adTransAmount}` : ""}`);
           } catch (e: any) {
             await log( "warn", "binance", `Ad ${adId}: error API filtrada, usando cache: ${e.message}`);
             competitors = [...rawCompetitors];
           }
         } else {
+          competitors = [...rawCompetitors];
+        }
+      } else if (adTransAmount) {
+        // Se pide fresco (no se puede compartir el cache general de arriba
+        // porque cada anuncio puede tener un monto distinto configurado) --
+        // el filtro de método de pago, si corresponde, se sigue aplicando
+        // después con el post-filtro de siempre (needsPaymentFilter queda
+        // true), así se pueden combinar los dos filtros sin duplicar lógica.
+        try {
+          const [page1, page2] = await Promise.all([
+            client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "BUY", rows: 20, page: 1, payTypes: [], transAmount: adTransAmount }),
+            client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "BUY", rows: 20, page: 2, payTypes: [], transAmount: adTransAmount }),
+          ]);
+          const combined = [...(page1?.data ?? []), ...(page2?.data ?? [])];
+          competitors = combined.map(normalizeBinanceAd);
+          await log( "debug", "binance", `Ad ${adId}: API filtrada por transAmount=${adTransAmount} devolvió ${competitors.length} competidores`);
+        } catch (e: any) {
+          await log( "warn", "binance", `Ad ${adId}: error API filtrada por transAmount, usando cache: ${e.message}`);
           competitors = [...rawCompetitors];
         }
       } else {
