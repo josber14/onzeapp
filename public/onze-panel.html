@@ -19571,9 +19571,26 @@ function addP2PBotStyles(){
 
   window.calculateP2PCapacityStats = function calculateP2PCapacityStats(){
 
+    // Bug real confirmado en vivo (sep 2026): dos capacities creados el
+    // MISMO día ordenaban solo por "date" (día calendario, sin hora) -- al
+    // empatar, el orden entre ellos quedaba según como estuvieran guardados
+    // en la memoria del navegador, no según cuál se creó primero de
+    // verdad. Un capacity creado unos segundos DESPUÉS podía terminar
+    // "colándose" y recibiendo ventas reales que le correspondían al más
+    // viejo, dejándolo con un hueco que solo se notaba al intentar
+    // completarlo. Ahora, si el día es el mismo, se desempata por el
+    // momento EXACTO de creación (createdAt, con hora) -- el capacity
+    // creado primero sigue siendo el primero en recibir ventas.
     const capacitiesRaw = loadP2PCapacity()
       .filter(c => c.status !== "_capital")
-      .sort((a,b)=> new Date(a.date || a.createdAt || 0) - new Date(b.date || b.createdAt || 0));
+      .sort((a,b)=> {
+        const dateA = new Date(a.date || a.createdAt || 0).getTime();
+        const dateB = new Date(b.date || b.createdAt || 0).getTime();
+        if(dateA !== dateB) return dateA - dateB;
+        const createdA = new Date(a.createdAt || 0).getTime();
+        const createdB = new Date(b.createdAt || 0).getTime();
+        return createdA - createdB;
+      });
 
     const p2pCapacityBaselineTs = getP2PCapacityBaselineTs();
 
