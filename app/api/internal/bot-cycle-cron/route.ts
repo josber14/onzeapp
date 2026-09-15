@@ -27,6 +27,14 @@ const LOCK_STALE_MS = 70_000;
 // que llegue el siguiente disparo del cron.
 const RUN_BUDGET_MS = 50_000;
 const ROUND_DELAY_MS = 3_000;
+// Si alguien tiene el panel abierto, el navegador ya está ciclando esa cuenta
+// cada ~1s por su cuenta. Sin este chequeo, el cron repetía exactamente el
+// mismo trabajo (mismas llamadas a Binance, mismo cálculo de precio) sin
+// ganar nada -- solo pagando CPU/memoria dos veces. Si el último ciclo real
+// de una cuenta (lastCycleAt, actualizado por CUALQUIER disparador dentro de
+// executeBotCycle) fue hace menos de esto, se asume que ya está cubierta y
+// esta vuelta se la salta.
+const SKIP_IF_CYCLED_WITHIN_MS = 2_000;
 
 async function acquireLock(): Promise<boolean> {
   await prisma.p2PCronLock.upsert({
@@ -69,24 +77,36 @@ export async function GET(req: NextRequest) {
   const startedAt = Date.now();
   let rounds = 0;
   let cyclesRun = 0;
+  let cyclesSkipped = 0;
   const errors: string[] = [];
 
   try {
     while (Date.now() - startedAt < RUN_BUDGET_MS) {
       const configs = await prisma.p2PBotExchangeConfig.findMany({
         where: { enabled: true },
-        select: { tenantId: true, label: true },
+        select: { tenantId: true, label: true, lastCycleAt: true },
       });
 
       if (configs.length === 0) break; // nada prendido, no vale la pena seguir loopeando
 
-      const pairs = Array.from(new Set(configs.map((c) => `${c.tenantId}:${c.label}`))).map((k) => {
-        const [tenantIdStr, label] = k.split(":");
-        return { tenantId: Number(tenantIdStr), label };
-      });
+      // Por par tenant+label, se queda con el lastCycleAt más reciente entre
+      // sus exchanges habilitados -- si CUALQUIERA cicló hace muy poco, es
+      // buena señal de que el navegador ya está cubriendo esta cuenta.
+      const byPair = new Map<string, { tenantId: number; label: string; lastCycleAt: Date | null }>();
+      for (const c of configs) {
+        const key = `${c.tenantId}:${c.label}`;
+        const existing = byPair.get(key);
+        if (!existing || (c.lastCycleAt && (!existing.lastCycleAt || c.lastCycleAt > existing.lastCycleAt))) {
+          byPair.set(key, { tenantId: c.tenantId, label: c.label, lastCycleAt: c.lastCycleAt });
+        }
+      }
 
-      for (const { tenantId, label } of pairs) {
+      for (const { tenantId, label, lastCycleAt } of byPair.values()) {
         if (Date.now() - startedAt >= RUN_BUDGET_MS) break;
+        if (lastCycleAt && Date.now() - lastCycleAt.getTime() < SKIP_IF_CYCLED_WITHIN_MS) {
+          cyclesSkipped++;
+          continue;
+        }
         try {
           await executeBotCycle(tenantId, label);
           cyclesRun++;
@@ -107,6 +127,7 @@ export async function GET(req: NextRequest) {
     ok: true,
     rounds,
     cyclesRun,
+    cyclesSkipped,
     durationMs: Date.now() - startedAt,
     errors: errors.length ? errors.slice(0, 10) : undefined,
   });

@@ -1502,6 +1502,13 @@ model P2PBotExchangeConfig {
   // cuando entra una orden que el sistema no puede liberar solo (Binance
   // exige liberación manual arriba de FUND_PWD_MAX_USD, ver binance-adapter.ts).
   operatorWhatsapp     String?
+  // Marca de tiempo del último ciclo REAL ejecutado para esta cuenta+exchange,
+  // sin importar quién lo disparó (navegador o el cron de bot-cycle-cron).
+  // Sirve para que el cron pueda saltarse una vuelta si el navegador ya cicló
+  // esta cuenta hace muy poco -- sin esto, cron y navegador duplicaban el
+  // mismo trabajo cuando el panel estaba abierto (sep 2026, ver
+  // bot-cycle-cron/route.ts).
+  lastCycleAt          DateTime?
   Tenant               Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, exchange, label])

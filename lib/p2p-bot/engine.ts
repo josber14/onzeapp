@@ -513,6 +513,22 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
       }
       lastFullCycleAt.set(cycleGateKey, Date.now());
 
+      // Persistido en DB (a diferencia de lastFullCycleAt, que es solo en
+      // memoria del proceso) para que el cron de bot-cycle-cron pueda ver si
+      // el navegador (u otra invocación) ya cicló esta cuenta hace muy poco,
+      // y así no duplicar el mismo trabajo -- ver bot-cycle-cron/route.ts.
+      if (exchangeConfig) {
+        try {
+          await prisma.p2PBotExchangeConfig.update({
+            where: { tenantId_exchange_label: { tenantId, exchange, label } },
+            data: { lastCycleAt: new Date() },
+          });
+        } catch {
+          // No crítico -- si falla, el peor caso es que el cron no se salte
+          // una vuelta que podría haberse ahorrado.
+        }
+      }
+
       if (exchange === "binance") {
         const creds = await prisma.binanceCredentials.findFirst({
           where: { tenantId, isActive: true, label },
