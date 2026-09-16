@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
-import { SkipoClient } from "@/lib/skipo-adapter";
+import { SkipoV2Client } from "@/lib/skipo-adapter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,15 +31,27 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const client = new SkipoClient();
+    const client = new SkipoV2Client();
     const quote = await client.getQuotation({
-      baseCurrencyId: "USDT",
-      quoteCurrencyId: "CLP",
-      qtyCurrencyId,
+      baseAsset: "USDT",
+      quoteAsset: "CLP",
+      amountAsset: qtyCurrencyId,
       side,
-      quantity,
+      amount: quantity,
     });
-    return NextResponse.json({ ok: true, quote });
+    // Se devuelve con los nombres de campo de v1 (ordId/baseQty/quoteQty) --
+    // el frontend (onze-panel.html, window.skipoBuy/skipoRefreshPrice) lee
+    // esos nombres y no hace falta tocarlo con la migración a v2.
+    return NextResponse.json({
+      ok: true,
+      quote: {
+        ordId: quote.orderId,
+        rate: quote.rate,
+        baseQty: quote.baseAmount,
+        quoteQty: quote.quoteAmount,
+        createdAt: quote.quotedAt,
+      },
+    });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message || "No se pudo cotizar" }, { status: 502 });
   }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { verifyUsdtClientSessionToken, USDT_CLIENT_SESSION_COOKIE } from "@/lib/usdt-client-session";
-import { SkipoClient } from "@/lib/skipo-adapter";
+import { SkipoV2Client } from "@/lib/skipo-adapter";
 import { findMarginPct } from "@/lib/usdt-margin";
 import { toClientPurchaseIntent } from "@/lib/usdt-purchase";
 
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const receivedClp = Number(intent.receivedClp);
-  const skipoClient = new SkipoClient();
+  const skipoClient = new SkipoV2Client();
 
   // Cotización + confirmación en Skipo: si CUALQUIERA de estas dos falla, no
   // se movió plata todavía (o Skipo la rechazó), así que es seguro liberar
@@ -63,19 +63,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       : await findMarginPct(client.tenantId, receivedClp);
 
     const skipoQuote = await skipoClient.getQuotation({
-      baseCurrencyId: "USDT",
-      quoteCurrencyId: "CLP",
-      qtyCurrencyId: "CLP",
+      baseAsset: "USDT",
+      quoteAsset: "CLP",
+      amountAsset: "CLP",
       side: "BUY",
-      quantity: String(receivedClp),
+      amount: String(receivedClp),
     });
     const skipoRate = Number(skipoQuote.rate);
     clientRate = skipoRate * (1 + marginPct / 100);
     usdtAmount = receivedClp / clientRate;
-    skipoOrdId = skipoQuote.ordId;
+    skipoOrdId = skipoQuote.orderId;
 
     const result = await skipoClient.confirmQuotation(skipoOrdId);
-    skipoConvertId = result.buyConvertId || result.transactionId;
+    skipoConvertId = result.transactionId;
   } catch (e: any) {
     await prisma.usdtPurchaseIntent.update({ where: { id: intent.id }, data: { status: "ready_to_buy" } }).catch(() => {});
     // Nunca reenviar e.message al cliente -- ver mismo comentario en

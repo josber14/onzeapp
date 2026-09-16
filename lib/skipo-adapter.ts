@@ -1,113 +1,19 @@
-import { sign, createHash, randomUUID, createPrivateKey } from "crypto";
+import { createHash, randomUUID, createPrivateKey } from "crypto";
 import { SignJWT } from "jose";
 
-// Cliente de la API de Skipo (cotización/compra de USDT al mayor) — mismo
-// patrón de firma que documenta Skipo: SHA256withRSA sobre
-// "{METHOD} {path} {sorted_alphabetically_body}", header X-SIGNATURE en
-// base64. Confirmado en vivo (jul 2026): X-API-KEY + X-SIGNATURE con este
-// esquema exacto funcionan contra /v1/converts/quotations.
-const BASE_URL = "https://api.skipo.com";
-
-function sortObjectKeys(obj: Record<string, any>): Record<string, any> {
-  return Object.keys(obj)
-    .sort()
-    .reduce((result: Record<string, any>, key: string) => {
-      result[key] = obj[key];
-      return result;
-    }, {});
-}
-
-function getPrivateKeyPem(): string {
-  const b64 = process.env.SKIPO_PRIVATE_KEY_B64;
-  if (!b64) throw new Error("SKIPO_PRIVATE_KEY_B64 no definido");
-  return Buffer.from(b64, "base64").toString("utf8");
-}
-
-export class SkipoClient {
-  private apiKey: string;
-  private privateKeyPem: string;
-
-  constructor(apiKey?: string, privateKeyPem?: string) {
-    this.apiKey = apiKey || process.env.SKIPO_API_KEY || "";
-    this.privateKeyPem = privateKeyPem || getPrivateKeyPem();
-    if (!this.apiKey) throw new Error("SKIPO_API_KEY no definido");
-  }
-
-  private async request(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, body: Record<string, any> = {}): Promise<any> {
-    const headers: Record<string, string> = { "X-API-KEY": this.apiKey, "Content-Type": "application/json" };
-    let bodyStr = "{}";
-    if (method !== "GET") {
-      bodyStr = JSON.stringify(sortObjectKeys(body));
-      const message = `${method} ${path} ${bodyStr}`;
-      headers["X-SIGNATURE"] = sign("sha256", Buffer.from(message), this.privateKeyPem).toString("base64");
-    }
-    const res = await fetch(`${BASE_URL}${path}`, {
-      method,
-      headers,
-      body: method === "GET" ? undefined : bodyStr,
-    });
-    const text = await res.text();
-    let data: any = null;
-    try { data = text ? JSON.parse(text) : null; } catch { /* respuesta no-JSON */ }
-    if (!res.ok) {
-      // Mostrar el cuerpo COMPLETO del error (no solo .message) — Skipo a
-      // veces manda detalle útil en otros campos (ej. errors, details, code)
-      // que .message por sí solo no revela.
-      const msg = data ? JSON.stringify(data) : (text || `HTTP ${res.status}`);
-      throw new Error(`Skipo error (${res.status}) en ${path}: ${msg}`);
-    }
-    return data;
-  }
-
-  async getCurrentUser() {
-    return this.request("GET", "/v1/users/current");
-  }
-
-  async getBalances(): Promise<Array<{ currency: string; balance: number; balanceFrozen: number; balancePending: number; type: string; balanceUSD: number }>> {
-    return this.request("GET", "/v1/currencies/balances");
-  }
-
-  async getSupportedMarkets(page = 1) {
-    return this.request("GET", `/v1/supported_markets?page=${page}`);
-  }
-
-  // Cotización puntual — NO ejecuta nada, solo pregunta el precio. El ordId
-  // que devuelve tiene una ventana corta de validez antes de que haya que
-  // volver a cotizar (mismo concepto que el contador de 5s de su web).
-  async getQuotation(params: {
-    baseCurrencyId: string;
-    quoteCurrencyId: string;
-    qtyCurrencyId: string;
-    side: "BUY" | "SELL";
-    quantity: string;
-  }): Promise<{ ordId: string; rate: string; baseQty: string; quoteQty: string; createdAt: string }> {
-    return this.request("POST", "/v1/converts/quotations", params);
-  }
-
-  // Confirma y EJECUTA la cotización — esto sí mueve dinero real de forma
-  // irreversible. Nunca llamar sin que medie una confirmación explícita del
-  // operador.
-  async confirmQuotation(ordId: string): Promise<{ ordId: string; transactionId: string; buyConvertId: string; sellConvertId: string }> {
-    return this.request("POST", "/v1/converts/quotations:confirm", { ordId });
-  }
-
-  async getConverts(page = 1) {
-    return this.request("GET", `/v1/converts?page=${page}`);
-  }
-
-  async getConvertById(id: string) {
-    return this.request("GET", `/v1/converts/id/${id}`);
-  }
-}
-
-// ─── Cliente API v2 (retiros) ──────────────────────────────────────────
-// Sistema de credenciales TOTALMENTE separado del v1 de arriba (confirmado
-// en la guía oficial de migración de Skipo, ago 2026): "el esquema antiguo
-// (X-API-KEY + firma RSA x509) desaparece en v2". v2 usa dos niveles:
-//   - Tier-1 (lecturas): Authorization: Bearer skp_live_... -- la llave sola.
-//   - Tier-2 (mueve dinero, ej. retiros): X-API-Key: skp_live_... +
-//     Authorization: Bearer <JWT firmado Ed25519>, con claims sub/uri/nonce/
-//     iat/exp (exp-iat<=60s)/bodyHash (SHA-256 hex del body crudo).
+// ─── Cliente API v2 ──────────────────────────────────────────
+// La v1 (X-API-KEY + firma RSA x509 sobre /v1/converts/*, /v1/users/current,
+// etc.) fue retirada por Skipo el 10-sep-2026 -- confirmado en su guía
+// oficial de migración (docs.skipo.com/migration-from-v1) y por aviso
+// directo de Skipo (sep 2026, avisando que aún detectaban tráfico v1 antes
+// de cortarlo del todo). v2 usa dos niveles de credenciales, TOTALMENTE
+// separadas de las de v1:
+//   - Tier-1 (lecturas, y también POST /v2/quotes que no mueve dinero):
+//     Authorization: Bearer skp_live_... -- la llave sola.
+//   - Tier-2 (mueve dinero, ej. retiros y POST /v2/orders): X-API-Key:
+//     skp_live_... + Authorization: Bearer <JWT firmado Ed25519>, con claims
+//     sub/uri/nonce/iat/exp (exp-iat<=60s)/bodyHash (SHA-256 hex del body
+//     crudo).
 // Confirmado en vivo (ago 2026): la llave nueva + esta llave pública Ed25519
 // ya subida al panel de Skipo devuelven 200 real contra GET /v2/contacts.
 const SKIPO_V2_BASE_URL = "https://api.skipo.com";
@@ -138,6 +44,41 @@ export interface SkipoWithdrawal {
   createdAt: string;
 }
 
+// Cotización v2 (POST /v2/quotes) -- reemplaza a SkipoClient.getQuotation
+// (v1, retirada por Skipo el 10-sep-2026). orderId es el mismo id que luego
+// se manda a confirmQuotation Y el que queda como id de la orden resultante
+// -- "one id, learned once, used through the whole flow" (doc oficial).
+export interface SkipoV2Quote {
+  orderId: string;
+  market: string;
+  rate: string;
+  baseAmount: string;
+  quoteAmount: string;
+  quotedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface SkipoV2OrderResult {
+  orderId: string;
+  transactionId: string;
+}
+
+export interface SkipoV2Order {
+  id: string;
+  status: "NEW" | "PARTIALLY_FILLED" | "FILLED" | "FAILED";
+  filledBaseAmount: string;
+  filledQuoteAmount: string;
+  rate: string;
+}
+
+export interface SkipoV2Balance {
+  assetSymbol: string;
+  balance: string;
+  balanceFrozen: string;
+  balancePending: string;
+  balanceUSD: string;
+}
+
 export class SkipoV2Client {
   private apiKey: string;
   private privateKeyPem: string;
@@ -148,12 +89,18 @@ export class SkipoV2Client {
     if (!this.apiKey) throw new Error("SKIPO_V2_API_KEY no definido");
   }
 
-  // Tier-1: la llave sola, para GET/lecturas.
-  private async requestRead(method: "GET", path: string): Promise<any> {
-    const res = await fetch(`${SKIPO_V2_BASE_URL}${path}`, {
-      method,
-      headers: { Authorization: `Bearer ${this.apiKey}` },
-    });
+  // Tier-1: la llave sola (sin firma) -- para GET/lecturas Y para POST
+  // /v2/quotes, que según el OpenAPI real de Skipo también es tier-1 pese a
+  // ser POST (solo cotiza, no mueve dinero -- confirmado por su propio
+  // securitySchemes: bearerKey, igual que las lecturas).
+  private async requestBearer(method: "GET" | "POST", path: string, body?: Record<string, any>): Promise<any> {
+    const headers: Record<string, string> = { Authorization: `Bearer ${this.apiKey}` };
+    let bodyStr: string | undefined;
+    if (method === "POST") {
+      headers["Content-Type"] = "application/json";
+      bodyStr = JSON.stringify(body ?? {});
+    }
+    const res = await fetch(`${SKIPO_V2_BASE_URL}${path}`, { method, headers, body: bodyStr });
     return this.parseResponse(res, path);
   }
 
@@ -163,7 +110,7 @@ export class SkipoV2Client {
   // público de la llave -- los primeros 21 caracteres ("skp_live_" + 12 más),
   // NUNCA la llave secreta completa. Mandábamos la llave entera en los dos
   // -- Skipo nunca la reconocía como un prefijo válido porque era demasiado
-  // larga, de ahí el error. El Bearer de las lecturas (tier-1, requestRead)
+  // larga, de ahí el error. El Bearer de las lecturas (tier-1, requestBearer)
   // SÍ sigue siendo la llave completa -- ese es un esquema distinto, no se
   // toca acá.
   private get apiKeyPrefix(): string {
@@ -213,11 +160,11 @@ export class SkipoV2Client {
   }
 
   async getContacts(): Promise<{ data: SkipoContact[]; pagination: any }> {
-    return this.requestRead("GET", "/v2/contacts");
+    return this.requestBearer("GET", "/v2/contacts");
   }
 
   async getContact(contactId: string): Promise<SkipoContact> {
-    return this.requestRead("GET", `/v2/contacts/${contactId}`);
+    return this.requestBearer("GET", `/v2/contacts/${contactId}`);
   }
 
   // Ejecuta el retiro real -- mueve dinero de forma irreversible. Nunca
@@ -237,8 +184,48 @@ export class SkipoV2Client {
     });
   }
 
+  // Cotización puntual (v2) -- reemplaza a SkipoClient.getQuotation (v1,
+  // retirada por Skipo el 10-sep-2026). NO ejecuta nada, solo pregunta el
+  // precio. expiresAt confirma lo que v1 dejaba implícito: ~5s de validez
+  // antes de que haya que volver a cotizar.
+  async getQuotation(params: {
+    baseAsset: string;
+    quoteAsset: string;
+    amountAsset: string;
+    side: "BUY" | "SELL";
+    amount: string;
+  }): Promise<SkipoV2Quote> {
+    return this.requestBearer("POST", "/v2/quotes", params);
+  }
+
+  async getOrder(id: string): Promise<SkipoV2Order> {
+    return this.requestBearer("GET", `/v2/orders/${id}`);
+  }
+
+  // Ejecuta la cotización -- esto SÍ mueve dinero real de forma irreversible.
+  // Reemplaza a SkipoClient.confirmQuotation (v1). Confirmado con el usuario
+  // (sep 2026, tras una compra real de prueba de 500 CLP): en cuentas a
+  // crédito (onCredit) la orden queda "pendiente de liquidar" hasta que se
+  // paga el CLP correspondiente -- eso es NORMAL, no una falla. Igual que
+  // siempre funcionó con v1 (nunca se verificó ahí tampoco que llegara a
+  // "FILLED"), que Skipo ACEPTE la orden (status distinto de FAILED) ya es
+  // suficiente para dar la compra por completada. El aviso de Skipo de "no
+  // reintentar en PROCESSING" es sobre no repetir esta llamada de creación
+  // -- este método la llama una sola vez, nunca la reintenta.
+  async confirmQuotation(orderId: string): Promise<SkipoV2OrderResult> {
+    const placed = await this.requestSigned("POST", "/v2/orders", { orderId });
+    if (placed.status === "FAILED") {
+      throw new Error(`Skipo v2: la orden ${placed.id} fue rechazada (FAILED)`);
+    }
+    return { orderId: placed.id, transactionId: placed.transactionId || placed.id };
+  }
+
+  async getBalances(): Promise<SkipoV2Balance[]> {
+    return this.requestBearer("GET", "/v2/balances");
+  }
+
   async getWithdrawal(id: string): Promise<SkipoWithdrawal> {
-    return this.requestRead("GET", `/v2/withdrawals/${id}`);
+    return this.requestBearer("GET", `/v2/withdrawals/${id}`);
   }
 
   // Mínimo y comisión de retiro REALES de la cuenta -- confirmado en vivo
@@ -251,6 +238,6 @@ export class SkipoV2Client {
     withdrawalFee: string;
     networks: Array<{ networkSymbol: string; networkName: string; withdrawalFee: string }>;
   }> {
-    return this.requestRead("GET", `/v2/assets/${assetSymbol}`);
+    return this.requestBearer("GET", `/v2/assets/${assetSymbol}`);
   }
 }

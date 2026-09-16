@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { SkipoClient } from "@/lib/skipo-adapter";
+import { SkipoV2Client } from "@/lib/skipo-adapter";
 import { findMarginPct } from "@/lib/usdt-margin";
 
 // Notificaciones para el admin sobre actividad de compra USDT -- pedido
@@ -24,13 +24,13 @@ export async function notifyPurchaseRequested(params: {
   let skipoClpNeeded: number | null = null;
   try {
     const marginPct = fixedMarginPct !== null ? fixedMarginPct : await findMarginPct(tenantId, requestedClp);
-    const skipoClient = new SkipoClient();
+    const skipoClient = new SkipoV2Client();
     const skipoQuote = await skipoClient.getQuotation({
-      baseCurrencyId: "USDT",
-      quoteCurrencyId: "CLP",
-      qtyCurrencyId: "CLP",
+      baseAsset: "USDT",
+      quoteAsset: "CLP",
+      amountAsset: "CLP",
       side: "BUY",
-      quantity: String(requestedClp),
+      amount: String(requestedClp),
     });
     const skipoRate = Number(skipoQuote.rate);
     const clientRate = skipoRate * (1 + marginPct / 100);

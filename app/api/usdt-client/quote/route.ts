@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { verifyUsdtClientSessionToken, USDT_CLIENT_SESSION_COOKIE } from "@/lib/usdt-client-session";
-import { SkipoClient } from "@/lib/skipo-adapter";
+import { SkipoV2Client } from "@/lib/skipo-adapter";
 import { findMarginPct } from "@/lib/usdt-margin";
 
 export const runtime = "nodejs";
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const skipoClient = new SkipoClient();
+    const skipoClient = new SkipoV2Client();
     let clpAmount: number;
     let usdtAmount: number;
     let marginPct: number;
@@ -66,11 +66,11 @@ export async function POST(req: NextRequest) {
         ? Number(client.fixedMarginPct)
         : await findMarginPct(session.tenantId, clpAmountInput);
       const skipoQuote = await skipoClient.getQuotation({
-        baseCurrencyId: "USDT",
-        quoteCurrencyId: "CLP",
-        qtyCurrencyId: "CLP",
+        baseAsset: "USDT",
+        quoteAsset: "CLP",
+        amountAsset: "CLP",
         side: "BUY",
-        quantity: String(clpAmountInput),
+        amount: String(clpAmountInput),
       });
       const skipoRate = Number(skipoQuote.rate);
       clientRate = skipoRate * (1 + marginPct / 100);
@@ -87,14 +87,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: false, error: "Ingresa una cantidad de USDT válida" }, { status: 400 });
       }
       const skipoQuote = await skipoClient.getQuotation({
-        baseCurrencyId: "USDT",
-        quoteCurrencyId: "CLP",
-        qtyCurrencyId: "USDT",
+        baseAsset: "USDT",
+        quoteAsset: "CLP",
+        amountAsset: "USDT",
         side: "BUY",
-        quantity: String(usdtAmountInput),
+        amount: String(usdtAmountInput),
       });
       const skipoRate = Number(skipoQuote.rate);
-      const estimatedClp = Number(skipoQuote.quoteQty);
+      const estimatedClp = Number(skipoQuote.quoteAmount);
       marginPct = client.fixedMarginPct !== null
         ? Number(client.fixedMarginPct)
         : await findMarginPct(session.tenantId, estimatedClp);

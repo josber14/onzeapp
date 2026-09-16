@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
-import { SkipoClient } from "@/lib/skipo-adapter";
+import { SkipoV2Client } from "@/lib/skipo-adapter";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const client = new SkipoClient();
+    const client = new SkipoV2Client();
     const result = await client.confirmQuotation(ordId);
     return NextResponse.json({ ok: true, result });
   } catch (e: any) {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
-import { SkipoClient } from "@/lib/skipo-adapter";
+import { SkipoV2Client } from "@/lib/skipo-adapter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,9 +22,20 @@ export async function GET() {
   if ("error" in auth) return auth.error;
 
   try {
-    const client = new SkipoClient();
+    const client = new SkipoV2Client();
     const balances = await client.getBalances();
-    return NextResponse.json({ ok: true, balances });
+    // "currency" (no "assetSymbol") -- así lo lee el frontend
+    // (window.skipoLoadBalances en onze-panel.html), sin tocarlo.
+    return NextResponse.json({
+      ok: true,
+      balances: balances.map((b) => ({
+        currency: b.assetSymbol,
+        balance: b.balance,
+        balanceFrozen: b.balanceFrozen,
+        balancePending: b.balancePending,
+        balanceUSD: b.balanceUSD,
+      })),
+    });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message || "No se pudo consultar el saldo" }, { status: 502 });
   }
