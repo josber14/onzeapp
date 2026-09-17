@@ -20,8 +20,17 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const label = searchParams.get("label") || "ONZE";
     const exchange = searchParams.get("exchange") || "binance";
+    // El modal "Ver historial" (botCycleShowHistory) solo usa `recent` --
+    // pero reusaba este mismo endpoint, pagando siempre el cálculo en vivo
+    // del ciclo ACTIVO (llamada a Binance + producción) aunque nunca lo
+    // mostrara. Confirmado en vivo (sep 2026): esto seguía sintiéndose
+    // lento después de espaciar el refresco de fondo, porque cada apertura
+    // del historial disparaba esa misma consulta pesada de nuevo. Con este
+    // flag se salta todo ese bloque -- el historial pasa a ser trabajo
+    // puramente de base de datos, rápido.
+    const historyOnly = searchParams.get("historyOnly") === "1";
 
-    const active = await prisma.p2PCycle.findFirst({
+    const active = historyOnly ? null : await prisma.p2PCycle.findFirst({
       where: { tenantId: session.tenantId, exchange, label, status: "active" },
       include: { manualSales: true },
     });

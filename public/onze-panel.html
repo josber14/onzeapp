@@ -15774,7 +15774,7 @@ function addP2PBotStyles(){
     const lbl = botActiveLabel || "ONZE";
     let cycles = [];
     try{
-      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(lbl) + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance"), { credentials:"include" });
+      const res = await fetch("/api/p2p/cycle/status?historyOnly=1&label=" + encodeURIComponent(lbl) + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance"), { credentials:"include" });
       const data = await res.json();
       cycles = data?.recent || [];
     }catch(e){}
