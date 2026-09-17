@@ -21788,29 +21788,6 @@ function addP2PBotStyles(){
       .find(panel => panel.innerText.includes("Capacity externo P2P"));
   }
 
-  // Botón TEMPORAL (sep 2026) para una corrección de datos única: 105
-  // capacities "finished" quedaron con la fecha de "Finalizado" mal
-  // registrada (ver /api/admin/fix-capacity-dates). Solo corrige fechas,
-  // ningún monto cambia. Borrar este botón y la función una vez confirmado
-  // que la corrección se aplicó bien en producción.
-  window.p2pFixCapacityDatesOnce = async function p2pFixCapacityDatesOnce(){
-    const ok = await onzeConfirm(
-      "Esto corrige la fecha de 'Finalizado' de los capacity viejos que " +
-      "quedó mal registrada (usa la fecha real de su última venta) -- " +
-      "no cambia ningún monto. ¿Continuar?"
-    );
-    if(!ok) return;
-    try{
-      const r = await fetch("/api/admin/fix-capacity-dates", { method: "POST", credentials: "include" });
-      const d = await r.json();
-      if(!d.ok){ onzeAlert("❌ " + (d.error || "No se pudo corregir")); return; }
-      onzeAlert(`✅ Corregidos ${d.fixed} de ${d.totalFinished} capacity completados.`);
-      if(typeof renderP2PCapacityPanel === "function") renderP2PCapacityPanel();
-    }catch(e){
-      onzeAlert("❌ Error de red: " + e.message);
-    }
-  };
-
   window.renderP2PCapacityPanel = function renderP2PCapacityPanel(){
     const panel = findCapacityPanel();
     if(!panel) return;
@@ -21864,7 +21841,6 @@ function addP2PBotStyles(){
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn" type="button" id="openP2PCapacityBtn">Registrar capacity</button>
           <button class="btn secondary" type="button" id="openCompletedCapacitiesBtn" onclick="openCompletedCapacitiesModal()">📋 Completados</button>
-          <button class="btn secondary" type="button" onclick="window.p2pFixCapacityDatesOnce()" style="background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.3);color:#fbbf24;" title="Corrección única de datos: arregla la fecha de 'Finalizado' de capacities viejos que quedó mal registrada -- no toca ningún monto. Borrar este botón después de usarlo.">🛠️ Corregir fechas</button>
           ${!window.HAS_ONZE_CORE_BUSINESS ? (() => {
             // Precarga con el último valor conocido (cache en memoria) en vez
             // de arrancar siempre en "···"/0% -- pedido explícito del
