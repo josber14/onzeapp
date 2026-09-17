@@ -57,11 +57,14 @@ export async function GET(req: NextRequest) {
     if (Number(deleted) < BATCH_SIZE) break;
   }
 
+  const deletedAlerts = await prisma.systemAlertLog.deleteMany({ where: { createdAt: { lt: cutoff } } });
+
   return NextResponse.json({
     ok: true,
     cutoff: cutoff.toISOString(),
     deletedLogs,
     deletedSnapshots,
+    deletedAlerts: deletedAlerts.count,
     durationMs: Date.now() - startedAt,
   });
 }

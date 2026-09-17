@@ -1,5 +1,6 @@
 import { createHash, randomUUID, createPrivateKey } from "crypto";
 import { SignJWT } from "jose";
+import { prisma } from "@/lib/prisma";
 
 // ─── Cliente API v2 ──────────────────────────────────────────
 // La v1 (X-API-KEY + firma RSA x509 sobre /v1/converts/*, /v1/users/current,
@@ -154,7 +155,11 @@ export class SkipoV2Client {
       // OJO: este mensaje SIEMPRE queda server-side (logs, console.error) --
       // nunca reenviar tal cual al cliente, contiene el nombre del proveedor
       // y su dominio. Ver toClient* en lib/usdt-purchase.ts.
-      throw new Error(`Skipo v2 error (${res.status}) en ${path}: ${msg}`);
+      const errMsg = `Skipo v2 error (${res.status}) en ${path}: ${msg}`;
+      // Fire-and-forget: alimenta el monitor de alertas por Telegram (ver
+      // app/api/internal/system-monitor). Nunca debe frenar el error real.
+      prisma.systemAlertLog.create({ data: { source: "skipo", message: errMsg } }).catch(() => {});
+      throw new Error(errMsg);
     }
     return data;
   }

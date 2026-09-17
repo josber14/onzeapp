@@ -1545,6 +1545,28 @@ model P2PCronLock {
   lockedAt DateTime?
 }
 
+// Log genérico de errores que hoy no caen en P2PBotLog (ej. Skipo, que no
+// tiene un exchange/label como Binance/Bybit) -- alimenta el monitor de
+// alertas por Telegram (app/api/internal/system-monitor). Vida corta: se
+// limpia junto con P2PBotLog en cleanup-logs.
+model SystemAlertLog {
+  id        Int      @id @default(autoincrement())
+  source    String // "skipo" por ahora, extensible a futuro
+  tenantId  Int?
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([source, createdAt])
+}
+
+// Evita que el monitor mande el mismo aviso por Telegram cada 5 minutos
+// mientras una falla sigue activa -- una fila por tipo de alerta, con la
+// última vez que se avisó. Se reactiva sola cuando pasa el cooldown.
+model SystemAlertCooldown {
+  key           String   @id
+  lastAlertedAt DateTime
+}
+
 model P2PBotAd {
   id                      Int      @id @default(autoincrement())
   tenantId                Int
