@@ -11927,7 +11927,7 @@ function addP2PBotStyles(){
           }
         }
         window.botRefreshExchange(true);
-        botCycleRefresh();
+        botCycleRefresh(false);
         // If backend says nothing is running, stop the cycle
         if(data?.ok && data?.running === false){
           botStopCycleForLabel(startLabel);
@@ -15364,7 +15364,25 @@ function addP2PBotStyles(){
     return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
   }
 
-  async function botCycleRefresh(){
+  let botCycleLastRefreshAt = 0;
+  // Bug real confirmado en vivo (sep 2026): /api/p2p/cycle/status hace hasta
+  // 5 llamadas SEGUIDAS (no en paralelo) a Binance más una consulta de TODOS
+  // los ciclos históricos -- y esta función la llamaba cada 1s desde el
+  // timer del bot (scheduleBotCycle), sin ningún freno propio, aunque el
+  // "Ciclo de Ventas" no necesita esa frescura de subsegundo. Resultado:
+  // trabajo pesado corriendo todo el día de fondo, compitiendo con las
+  // acciones reales del usuario (por eso "cerrar ciclo"/"ver historial" se
+  // sentían lentos) y sumando costo de CPU en Vercel sin necesidad. El
+  // parámetro `force` (true por default) deja las llamadas disparadas por
+  // una acción real del usuario (cerrar, iniciar, sacar venta, etc.)
+  // siempre inmediatas -- solo el tick del timer pasa force=false.
+  const BOT_CYCLE_REFRESH_THROTTLE_MS = 12000;
+  async function botCycleRefresh(force = true){
+    if(!force){
+      const now = Date.now();
+      if(now - botCycleLastRefreshAt < BOT_CYCLE_REFRESH_THROTTLE_MS) return;
+    }
+    botCycleLastRefreshAt = Date.now();
     // Bug real confirmado en vivo (jul 2026): esta función se llama cada
     // ~300ms mientras el bot está corriendo (scheduleBotCycle). Si el
     // usuario cambia de pestaña Binance/Bybit justo mientras una de esas

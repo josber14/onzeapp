@@ -124,16 +124,13 @@ export async function GET(req: NextRequest) {
       include: { manualSales: true },
     });
 
-    // Numeración propia por exchange+cuenta (1, 2, 3...) en vez del id crudo
-    // de la tabla (compartido entre todos los exchanges) -- así el primer
-    // ciclo que se cierra en Bybit es "Ciclo #1", no el id global de la fila.
-    const allIds = await prisma.p2PCycle.findMany({
-      where: { tenantId: session.tenantId, exchange, label },
-      orderBy: { id: "asc" },
-      select: { id: true },
-    });
-    const numberById = new Map(allIds.map((c: any, i: number) => [c.id, i + 1]));
-    const withNumber = (c: any) => (c ? { ...c, displayNumber: numberById.get(c.id) ?? c.id } : c);
+    // displayNumber ya viene guardado en cada ciclo desde que se crea (ver
+    // start/route.ts) -- antes acá se traían TODOS los ciclos históricos de
+    // la cuenta en cada consulta solo para numerarlos, una consulta que
+    // crecía para siempre y corría cada vez que se refrescaba el panel.
+    // Fallback a c.id solo para ciclos viejos sin displayNumber asignado
+    // (corregidos en una migración de datos única, no debería pasar más).
+    const withNumber = (c: any) => (c ? { ...c, displayNumber: c.displayNumber ?? c.id } : c);
 
     return Response.json({
       ok: true,

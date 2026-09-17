@@ -42,12 +42,22 @@ export async function computeCycleOrderStats(
   extraOrders: any[] = []
 ) {
   const endTimestamp = endMs ?? Date.now();
-  const allOrders: any[] = [];
-  for (let page = 1; page <= 5; page++) {
-    const pageRes = await client.getOrders({ page, rows: 100, startTimestamp: startMs, endTimestamp });
-    const pageData = pageRes?.data || [];
-    if (pageData.length === 0) break;
-    allOrders.push(...pageData);
+  // Antes: hasta 5 llamadas a Binance UNA DETRÁS DE OTRA (cada una esperando
+  // a que la anterior respondiera) -- llamado cada 1s desde el panel
+  // (botCycleRefresh), esto sumaba varios segundos de latencia seguida solo
+  // para refrescar el ciclo. La página 1 sigue yendo sola (la mayoría de los
+  // ciclos caben ahí, sin gastar llamadas de más); si viene LLENA (100 filas,
+  // señal de que hay más), recién ahí se piden las 4 páginas restantes TODAS
+  // A LA VEZ en vez de una por una.
+  const firstPageRes = await client.getOrders({ page: 1, rows: 100, startTimestamp: startMs, endTimestamp });
+  const allOrders: any[] = [...(firstPageRes?.data || [])];
+  if (allOrders.length === 100) {
+    const remainingPages = await Promise.all(
+      [2, 3, 4, 5].map((page) => client.getOrders({ page, rows: 100, startTimestamp: startMs, endTimestamp }))
+    );
+    for (const pageRes of remainingPages) {
+      allOrders.push(...(pageRes?.data || []));
+    }
   }
 
   const seen = new Set<string>();

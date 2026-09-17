@@ -1630,6 +1630,15 @@ model P2PCycle {
   tenantId         Int
   label            String               @default("ONZE")
   exchange         String               @default("binance")
+  // Número mostrado en el panel ("Ciclo #N"), propio de cada
+  // tenant+exchange+label -- calculado UNA VEZ al crear el ciclo (ver
+  // start/route.ts) y guardado acá. Antes se recalculaba en CADA consulta
+  // de estado trayendo TODOS los ciclos históricos de esa cuenta solo para
+  // enumerarlos -- una consulta que crecía para siempre y corría cada vez
+  // que se refrescaba el panel (sep 2026). Null en ciclos creados ANTES de
+  // este cambio -- se les asignó su número real en una corrección de datos
+  // única (mismo criterio, orden por id).
+  displayNumber    Int?
   startTime        DateTime             @default(now())
   endTime          DateTime?
   status           String               @default("active")

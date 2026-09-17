@@ -62,6 +62,10 @@ export async function POST(req: NextRequest) {
         startTime = lastClosed.endTime;
       }
 
+      // Número mostrado en el panel ("Ciclo #N") -- se calcula una sola vez
+      // acá, no en cada consulta de estado (ver comentario en el schema).
+      const priorCount = await tx.p2PCycle.count({ where: { tenantId, exchange, label } });
+
       const created = await tx.p2PCycle.create({
         data: {
           tenantId,
@@ -70,6 +74,7 @@ export async function POST(req: NextRequest) {
           status: "active",
           startTime,
           minCloseBalance: minCloseBalance ?? undefined,
+          displayNumber: priorCount + 1,
         },
       });
 
