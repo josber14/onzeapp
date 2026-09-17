@@ -21788,9 +21788,52 @@ function addP2PBotStyles(){
       .find(panel => panel.innerText.includes("Capacity externo P2P"));
   }
 
+  // Botón TEMPORAL (sep 2026) para una corrección de datos única: 105
+  // capacities "finished" quedaron con la fecha de "Finalizado" mal
+  // registrada (ver /api/admin/fix-capacity-dates). Solo corrige fechas,
+  // ningún monto cambia. Borrar este botón y la función una vez confirmado
+  // que la corrección se aplicó bien en producción.
+  window.p2pFixCapacityDatesOnce = async function p2pFixCapacityDatesOnce(){
+    const ok = await onzeConfirm(
+      "Esto corrige la fecha de 'Finalizado' de los capacity viejos que " +
+      "quedó mal registrada (usa la fecha real de su última venta) -- " +
+      "no cambia ningún monto. ¿Continuar?"
+    );
+    if(!ok) return;
+    try{
+      const r = await fetch("/api/admin/fix-capacity-dates", { method: "POST", credentials: "include" });
+      const d = await r.json();
+      if(!d.ok){ onzeAlert("❌ " + (d.error || "No se pudo corregir")); return; }
+      onzeAlert(`✅ Corregidos ${d.fixed} de ${d.totalFinished} capacity completados.`);
+      if(typeof renderP2PCapacityPanel === "function") renderP2PCapacityPanel();
+    }catch(e){
+      onzeAlert("❌ Error de red: " + e.message);
+    }
+  };
+
   window.renderP2PCapacityPanel = function renderP2PCapacityPanel(){
     const panel = findCapacityPanel();
     if(!panel) return;
+
+    // Fix real (sep 2026): esta pestaña dependía de que el usuario TAMBIÉN
+    // hubiera abierto alguna de las pestañas de Ventas (Binance/Bybit/OKX)
+    // para que las ventas reales y manuales se sincronizaran desde Neon --
+    // si nunca las abría, el cálculo de capacity trabajaba con lo que
+    // hubiera quedado en el navegador de sesiones anteriores. Cuando por
+    // fin llegaba data nueva (ej. al abrir esa otra pestaña días después),
+    // capacities viejos se completaban de golpe con la fecha de HOY en vez
+    // de su fecha real (confirmado en vivo: 16 capacities del 03-sep
+    // completados así recién el 16-sep). Ahora esta pestaña se mantiene al
+    // día por sí sola. Throttle de 10s (no en cada render, que puede
+    // llamarse varias veces seguidas tras una acción) para no saturar el
+    // servidor.
+    const __now = Date.now();
+    if(!window.__p2pCapacitySalesSyncLastAt || __now - window.__p2pCapacitySalesSyncLastAt > 10000){
+      window.__p2pCapacitySalesSyncLastAt = __now;
+      if(typeof syncBinanceSales === 'function') syncBinanceSales(true);
+      if(typeof syncBybitSales === 'function') syncBybitSales(true);
+      if(typeof window.syncP2PManualSalesFromServer === 'function') window.syncP2PManualSalesFromServer();
+    }
 
     if(typeof autoFinishP2PCapacities === "function") autoFinishP2PCapacities();
 
@@ -21821,6 +21864,7 @@ function addP2PBotStyles(){
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button class="btn" type="button" id="openP2PCapacityBtn">Registrar capacity</button>
           <button class="btn secondary" type="button" id="openCompletedCapacitiesBtn" onclick="openCompletedCapacitiesModal()">📋 Completados</button>
+          <button class="btn secondary" type="button" onclick="window.p2pFixCapacityDatesOnce()" style="background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.3);color:#fbbf24;" title="Corrección única de datos: arregla la fecha de 'Finalizado' de capacities viejos que quedó mal registrada -- no toca ningún monto. Borrar este botón después de usarlo.">🛠️ Corregir fechas</button>
           ${!window.HAS_ONZE_CORE_BUSINESS ? (() => {
             // Precarga con el último valor conocido (cache en memoria) en vez
             // de arrancar siempre en "···"/0% -- pedido explícito del
@@ -24011,10 +24055,26 @@ function addP2PBotStyles(){
     for(const capStats of toFinish){
       const idx = caps.findIndex(c => c.id === capStats.id);
       if(idx < 0) continue;
+      // Bug real confirmado en vivo (sep 2026): usar new Date() acá marca
+      // la fecha en que el CÓDIGO nota que el capacity ya está cubierto,
+      // no la fecha real en que se cubrió. Si ninguna sesión del panel
+      // tenía a mano el dato completo de ventas (ver el fix de sincronía
+      // más abajo, en renderP2PCapacityPanel), un capacity de hace semanas
+      // podía cerrarse de golpe con la fecha de HOY -- confirmado con 16
+      // capacities del 03-sep que se cerraron así el 16-sep. Ahora se usa
+      // la fecha de la venta MÁS RECIENTE que lo completó (sí refleja el
+      // momento real); solo si no hay ninguna venta real (cubierto puro por
+      // pago manual, caso raro en esta función) se usa "ahora".
+      const saleParts = capStats.saleParts || [];
+      const lastSaleTs = saleParts.reduce((max, p) => {
+        const t = new Date(p.createdAt || 0).getTime();
+        return t > max ? t : max;
+      }, 0);
+      const finishedAt = lastSaleTs > 0 ? new Date(lastSaleTs).toISOString() : new Date().toISOString();
       caps[idx] = {
         ...caps[idx],
         status: "finished",
-        finishedAt: new Date().toISOString(),
+        finishedAt,
         finalSoldUsdt: capStats.usedUsdt,
         finalClpReceived: capStats.clpReceived,
         finalCommissionUsdt: capStats.commissionUsdt,
@@ -24049,13 +24109,17 @@ function addP2PBotStyles(){
     // siendo correcto en general, así que se deja.
     if(window.__p2pSyncInFlight) return;
 
+    // El botón solo existe en la pestaña "Ventas Binance" -- pero esta
+    // función también se dispara desde la pestaña de Capacity (ver fix de
+    // sep 2026 en renderP2PCapacityPanel) para que el cálculo de capacity
+    // no dependa de que el usuario haya visitado esa otra pestaña. Si no
+    // hay botón (porque no se está viendo esa pestaña), igual se sincroniza
+    // -- solo se omite la animación del botón.
     const btn = document.getElementById('btn-sync-binance-sales');
-    if(!btn) return;
 
     window.__p2pSyncInFlight = true;
-    const oldText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Sincronizando...';
+    const oldText = btn ? btn.textContent : null;
+    if(btn){ btn.disabled = true; btn.textContent = 'Sincronizando...'; }
 
     var lblParam = (typeof botActiveLabel !== 'undefined' && botActiveLabel) ? '?label=' + encodeURIComponent(botActiveLabel) : '';
     fetch('/api/binance/p2p-history' + lblParam)
@@ -24077,8 +24141,7 @@ function addP2PBotStyles(){
       })
       .finally(() => {
         window.__p2pSyncInFlight = false;
-        btn.disabled = false;
-        btn.textContent = oldText;
+        if(btn){ btn.disabled = false; btn.textContent = oldText; }
       });
   }
   window.initBinanceSalesSync = function initBinanceSalesSync(){
@@ -24119,12 +24182,15 @@ function addP2PBotStyles(){
   }
 
   window.syncBybitSales = function syncBybitSales(silent = false){
+    if(window.__p2pBybitSyncInFlight) return;
+    // Igual que syncBinanceSales: el botón solo existe en la pestaña
+    // "Ventas Bybit", pero esta función también se dispara desde la
+    // pestaña de Capacity -- si no hay botón, se sincroniza igual.
     const btn = document.getElementById('btn-sync-bybit-sales');
-    if(!btn) return;
 
-    const oldText = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Sincronizando...';
+    window.__p2pBybitSyncInFlight = true;
+    const oldText = btn ? btn.textContent : null;
+    if(btn){ btn.disabled = true; btn.textContent = 'Sincronizando...'; }
 
     fetch('/api/bybit/p2p-history')
       .then(res => res.json())
@@ -24144,8 +24210,8 @@ function addP2PBotStyles(){
         if(!silent) onzeAlert('❌ Error: ' + error.message);
       })
       .finally(() => {
-        btn.disabled = false;
-        btn.textContent = oldText;
+        window.__p2pBybitSyncInFlight = false;
+        if(btn){ btn.disabled = false; btn.textContent = oldText; }
       });
   }
 
