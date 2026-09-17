@@ -20,12 +20,13 @@ function isAuthorized(req: NextRequest): boolean {
 // antes de que pase este tiempo, aunque el cron corra cada 5 min. Se
 // reactiva sola en cuanto el problema deja de detectarse (ver
 // clearCooldown), así que la próxima vez que reaparezca avisa de inmediato.
-const COOLDOWN_MS = 20 * 60 * 1000; // 20 min
+const COOLDOWN_MS = 20 * 60 * 1000; // 20 min -- default para fallas que pueden resolverse solas pronto
+const SLOW_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6h -- para condiciones que no cambian rápido (ej. ciclo atascado), para no repetir el mismo aviso cada 20 min sin necesidad
 
-async function alertOnce(key: string, message: string) {
+async function alertOnce(key: string, message: string, cooldownMs: number = COOLDOWN_MS) {
   const existing = await prisma.systemAlertCooldown.findUnique({ where: { key } });
   const now = Date.now();
-  if (existing && now - existing.lastAlertedAt.getTime() < COOLDOWN_MS) return;
+  if (existing && now - existing.lastAlertedAt.getTime() < cooldownMs) return;
 
   await sendTelegramAlert(message);
   await prisma.systemAlertCooldown.upsert({
@@ -46,6 +47,8 @@ const SKIPO_ERROR_THRESHOLD = 3;
 const SKIPO_ERROR_WINDOW_MINUTES = 15;
 const CAPACITY_CLUSTER_MINUTES = 15;
 const CAPACITY_CLUSTER_MIN_SIZE = 3;
+const CYCLE_STUCK_HOURS = 48; // calibrado con datos reales: ciclos normales cierran en 1-24h
+const CYCLE_ERROR_WINDOW_MINUTES = 30;
 
 // 1) Bot detenido: cuentas con el bot prendido (P2PBotExchangeConfig.enabled)
 // que no generaron NINGÚN log en los últimos minutos -- el problema más
@@ -164,6 +167,60 @@ async function checkCapacityClusters() {
   );
 }
 
+// 5) Ciclo de ventas atascado: un ciclo "active" que lleva mucho más tiempo
+// abierto que lo normal (1-24h según los últimos cierres reales) suele
+// significar que autoCloseCycle() dejó de correr para esa cuenta o quedó
+// trabado -- confirmado en vivo (sep 2026): 2 ciclos reales llevaban 38 y
+// 54 DÍAS abiertos sin que nadie se diera cuenta.
+async function checkStuckCycles() {
+  const cutoff = new Date(Date.now() - CYCLE_STUCK_HOURS * 60 * 60 * 1000);
+  const stuck = await prisma.p2PCycle.findMany({
+    where: { status: "active", startTime: { lt: cutoff } },
+    select: { id: true, tenantId: true, label: true, exchange: true, startTime: true },
+  });
+
+  for (const c of stuck) {
+    const key = `stuck-cycle:${c.id}`;
+    const hours = Math.round((Date.now() - c.startTime.getTime()) / 3600000);
+    await alertOnce(
+      key,
+      `🔴 Ciclo de ventas atascado\n\nCiclo #${c.id} (${c.label}, tenant ${c.tenantId}, ${c.exchange}) lleva ${hours}h abierto -- lo normal es que cierre en 1-24h. Revisar si autoCloseCycle sigue corriendo para esta cuenta.`,
+      SLOW_COOLDOWN_MS
+    );
+  }
+}
+
+// 6) Errores REALES (excepciones) en el cierre automático del ciclo -- ver
+// engine.ts, autoCloseCycle envuelto en try/catch que loguea con este
+// prefijo exacto. Distinto del mensaje normal "orden(es) pendiente(s) sin
+// resolver" (que es informativo, no un bug).
+async function checkCycleErrors() {
+  const cutoff = new Date(Date.now() - CYCLE_ERROR_WINDOW_MINUTES * 60 * 1000);
+  const errorLogs = await prisma.p2PBotLog.findMany({
+    where: { createdAt: { gte: cutoff }, message: { startsWith: "Auto-close cycle check:" } },
+    select: { tenantId: true, label: true, exchange: true, message: true },
+  });
+  if (!errorLogs.length) {
+    await clearCooldown("cycle-errors");
+    return;
+  }
+
+  const byAccount = new Map<string, { tenantId: number; label: string | null; exchange: string | null; count: number; sample: string }>();
+  for (const l of errorLogs) {
+    const k = `${l.tenantId}:${l.label}:${l.exchange}`;
+    const entry = byAccount.get(k) || { tenantId: l.tenantId, label: l.label, exchange: l.exchange, count: 0, sample: l.message };
+    entry.count++;
+    byAccount.set(k, entry);
+  }
+
+  for (const [k, entry] of byAccount) {
+    await alertOnce(
+      `cycle-errors:${k}`,
+      `🔴 Error real en el cierre del ciclo de ventas\n\nCuenta: ${entry.label} (tenant ${entry.tenantId}, ${entry.exchange})\n${entry.count} error(es) en los últimos ${CYCLE_ERROR_WINDOW_MINUTES} min.\nÚltimo: ${entry.sample.slice(0, 200)}`
+    );
+  }
+}
+
 // Disparado cada 5 min por el cron de Vercel (ver vercel.json).
 export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) {
@@ -171,7 +228,7 @@ export async function GET(req: NextRequest) {
   }
 
   const errors: string[] = [];
-  for (const check of [checkStalledBots, checkBinanceErrorSpikes, checkSkipoFailures, checkCapacityClusters]) {
+  for (const check of [checkStalledBots, checkBinanceErrorSpikes, checkSkipoFailures, checkCapacityClusters, checkStuckCycles, checkCycleErrors]) {
     try {
       await check();
     } catch (e: any) {
