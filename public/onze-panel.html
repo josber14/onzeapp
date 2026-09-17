@@ -21825,7 +21825,9 @@ function addP2PBotStyles(){
     const __now = Date.now();
     if(!window.__p2pCapacitySalesSyncLastAt || __now - window.__p2pCapacitySalesSyncLastAt > 10000){
       window.__p2pCapacitySalesSyncLastAt = __now;
-      if(typeof syncBinanceSales === 'function') syncBinanceSales(true);
+      // ONZE y ZINPLE, no solo la etiqueta activa -- el capacity es de toda
+      // la cuenta (ver comentario junto a syncAllLabelsBinanceSalesForCapacity).
+      if(typeof syncAllLabelsBinanceSalesForCapacity === 'function') syncAllLabelsBinanceSalesForCapacity();
       if(typeof syncBybitSales === 'function') syncBybitSales(true);
       if(typeof window.syncP2PManualSalesFromServer === 'function') window.syncP2PManualSalesFromServer();
     }
@@ -23966,6 +23968,36 @@ function addP2PBotStyles(){
       if(typeof updateP2PDashboardWithCapacity === "function") updateP2PDashboardWithCapacity();
     }catch(e){}
   }, 500);
+
+  // Bug real confirmado en vivo (sep 2026): el capacity es de TODA la
+  // cuenta (ONZE + ZINPLE juntos, ver P2PCapacity/CAPACITY_KEY -- no llevan
+  // label), pero syncBinanceSales() solo trae la etiqueta que está viendo
+  // el usuario en ese momento (botActiveLabel). Si el usuario tiene abierta
+  // la pestaña ONZE mientras su actividad real es en ZINPLE (o viceversa),
+  // las ventas reales de la OTRA cuenta se quedaban desactualizadas en el
+  // navegador, distorsionando cuánto le queda disponible a cada capacity --
+  // confirmado en vivo: una venta manual de 1.000.000 CLP no se reflejó en
+  // el capacity ni en el resumen diario porque el capacity necesitaba ver
+  // ventas reales de ZINPLE que esta pestaña nunca había sincronizado.
+  // Reproducido con los datos reales del servidor (sin depender del
+  // navegador): el algoritmo de asignación en sí es correcto, el problema
+  // era pura falta de datos frescos. Por eso el refresco de la pestaña de
+  // Capacity trae SIEMPRE ambas cuentas, no solo la que se está mirando.
+  function syncAllLabelsBinanceSalesForCapacity(){
+    for (const lbl of ["ONZE", "ZINPLE"]) {
+      fetch('/api/binance/p2p-history?label=' + encodeURIComponent(lbl))
+        .then(res => res.json())
+        .then(data => {
+          if(data.ok && data.orders && data.orders.length){
+            saveBinanceSales(data.orders);
+            if(typeof autoFinishP2PCapacities === 'function') autoFinishP2PCapacities();
+            if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
+            if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
+          }
+        })
+        .catch(() => {});
+    }
+  }
 
   function saveBinanceSales(orders){
     // Combina con TODO lo ya guardado (no solo las manuales) — cada sync trae
