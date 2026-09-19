@@ -123,13 +123,6 @@ export async function GET(req: NextRequest) {
     await releaseLock();
   }
 
-  // Log explícito (temporal, sep 2026) para confirmar en los logs de Vercel
-  // que el chequeo de "el navegador ya cicló esto hace poco" (cyclesSkipped)
-  // está funcionando de verdad -- quitar una vez confirmado en producción.
-  console.log(
-    `[bot-cycle-cron] rounds=${rounds} cyclesRun=${cyclesRun} cyclesSkipped=${cyclesSkipped} durationMs=${Date.now() - startedAt}`
-  );
-
   return NextResponse.json({
     ok: true,
     rounds,
