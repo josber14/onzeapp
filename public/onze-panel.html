@@ -22549,13 +22549,23 @@ function addP2PBotStyles(){
 
   // Arranca el refresco periódico del badge UNA sola vez (idempotente) --
   // separado del ciclo de renders de renderP2PCapacityPanel a propósito (ver
-  // comentario arriba, en el bug de la carrera). 20s: parecido al resto de
-  // los refrescos del panel, sin machacar la API de Binance con la consulta
-  // en vivo del cupo.
+  // comentario arriba, en el bug de la carrera).
+  //
+  // Bug real confirmado en vivo (sep 2026, factura de Vercel disparada):
+  // /api/p2p/bank-quota escanea el DÍA COMPLETO de órdenes contra Binance en
+  // vivo (hasta 5 páginas SEGUIDAS, no en paralelo -- ver el comentario en
+  // esa ruta sobre por qué no se puede paralelizar) cada vez que se llama.
+  // A 20s de intervalo, con volumen alto esa consulta puede tardar 20-25s
+  // ella sola -- casi sin respiro entre una llamada y la siguiente, sumando
+  // CPU y memoria de Vercel activas casi sin parar mientras el panel esté
+  // abierto. Es un cupo DIARIO de banco (límite de $5.000.000 CLP/día), no
+  // un precio que cambie segundo a segundo -- no necesita esta frecuencia.
+  // 3 minutos (180s) sigue siendo varias actualizaciones por hora, de sobra
+  // para no pasarse del límite sin darse cuenta.
   window.p2pEnsureBankQuotaPolling = function(){
     window.p2pRefreshBankQuotaBadge();
     if(window.__p2pBankQuotaInterval) return;
-    window.__p2pBankQuotaInterval = setInterval(window.p2pRefreshBankQuotaBadge, 20000);
+    window.__p2pBankQuotaInterval = setInterval(window.p2pRefreshBankQuotaBadge, 180000);
   };
 
   window.p2pRefreshBankQuotaModal = async function(){
@@ -24178,7 +24188,14 @@ function addP2PBotStyles(){
     initManualSaleButton();
     if(typeof window.syncP2PManualSalesFromServer === "function") window.syncP2PManualSalesFromServer();
     if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
-    setInterval(() => syncBinanceSales(true), 15000);
+    // initP2PDashboard() llama esto UNA vez al abrir el panel, sin importar
+    // qué pestaña de "Ventas" se esté viendo -- así que este intervalo corre
+    // TODO el día de fondo. El endpoint que llama es barato (lee de
+    // P2PBotOrder en la base de datos, no le pide nada en vivo a Binance),
+    // y además la pestaña de Capacity ya lo refresca aparte cada ~10s (ver
+    // syncAllLabelsBinanceSalesForCapacity) -- 60s acá alcanza de sobra
+    // como red de respaldo, sin duplicar tanto trabajo.
+    setInterval(() => syncBinanceSales(true), 60000);
 
     document.addEventListener("visibilitychange", function(){
       if(document.visibilityState === "visible"){
@@ -24299,7 +24316,16 @@ function addP2PBotStyles(){
     }
     if(typeof window.syncP2PManualSalesFromServer === "function") window.syncP2PManualSalesFromServer();
     if(typeof renderP2PDashboardFromBybit === 'function') renderP2PDashboardFromBybit();
-    setInterval(() => syncBybitSales(true), 15000);
+    // Bug real confirmado en vivo (sep 2026, factura de Vercel disparada):
+    // igual que initBinanceSalesSync, esto corre TODO EL DÍA de fondo desde
+    // que se abre el panel (initP2PDashboard lo llama una sola vez, sin
+    // importar la pestaña) -- pero a diferencia de Binance, el endpoint de
+    // Bybit SÍ hace una consulta EN VIVO real (hasta 50 páginas) cada vez
+    // que se llama, con fallback a la base de datos solo si esa consulta
+    // falla. Cada 15s, sin parar, es exactamente el mismo patrón que ya
+    // causó el problema de bank-quota. 60s acá alcanza de sobra -- la
+    // pestaña de Capacity ya la refresca aparte cuando hace falta.
+    setInterval(() => syncBybitSales(true), 60000);
   }
 
   // OKX no tiene API conectada todavía (ver lib/p2p-bot/okx-adapter.ts) --
