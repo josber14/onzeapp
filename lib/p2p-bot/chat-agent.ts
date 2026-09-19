@@ -6,6 +6,22 @@ import type { ChatState, ChatMessage } from "./types";
 
 const MAX_RETRIES = 3;
 
+// Bug real confirmado en vivo (sep 2026): processChats() pedía la lista de
+// órdenes a Binance (2 llamadas, venta+compra) Y los mensajes de cada orden
+// activa en CADA ciclo del bot -- que puede repetirse cada 1-3s -- sin
+// ningún freno propio, por fuera del límite de 32 llamadas/min que ya
+// protege solo las llamadas de actualizar anuncios (ver rate-limiter.ts).
+// Confirmado en la cuenta de Hector: eso solo, sumado al resto del bot,
+// hizo que la cuenta chocara con el límite GENERAL de Binance (-1003 "Too
+// many requests"), afectando incluso su propio uso manual de la app. Un
+// comprador escribiendo un mensaje no nota la diferencia entre que se le
+// responda en 1s o en 4s -- así que alcanza con revisar "¿hay algo nuevo?"
+// cada 4s como máximo, no en cada tick. Igual que MIN_CYCLE_GAP_MS más
+// abajo en engine.ts, es en memoria del proceso (no en base de datos) --
+// mismo criterio ya aceptado ahí para este tipo de freno liviano.
+const lastChatFetchAt = new Map<string, number>();
+const CHAT_FETCH_THROTTLE_MS = 4000;
+
 // Confirmado en vivo (jul 2026): el listado de órdenes de Binance a veces
 // reporta "CANCELLED_BY_SYSTEM" de forma transitoria por varios minutos y
 // después vuelve a "TRADING" solo, sin que nada real haya cambiado (mismo
@@ -47,6 +63,12 @@ export async function processChats(
   activeAds: any[],
   label = "ONZE"
 ) {
+  const throttleKey = `${tenantId}:${exchange}:${label}`;
+  const now = Date.now();
+  const lastFetch = lastChatFetchAt.get(throttleKey) || 0;
+  if (now - lastFetch < CHAT_FETCH_THROTTLE_MS) return;
+  lastChatFetchAt.set(throttleKey, now);
+
   const { client } = await getClient();
 
   let liveOrders: any[] = [];
