@@ -27,86 +27,87 @@ model Plan {
 }
 
 model Tenant {
-  id                    Int                    @id @default(autoincrement())
-  code                  String                 @unique
-  legalName             String?
-  tradeName             String
-  ownerUserId           Int?
-  dataSourceMode        DataSourceMode
-  planId                Int?
-  isOnzeInternal        Boolean                @default(false)
-  active                Boolean                @default(true)
-  p2pPpmPct             Decimal?               @db.Decimal(6, 3)
+  id                      Int                     @id @default(autoincrement())
+  code                    String                  @unique
+  legalName               String?
+  tradeName               String
+  ownerUserId             Int?
+  dataSourceMode          DataSourceMode
+  planId                  Int?
+  isOnzeInternal          Boolean                 @default(false)
+  active                  Boolean                 @default(true)
+  p2pPpmPct               Decimal?                @db.Decimal(6, 3)
   // Pedido explícito del usuario (ago 2026), pensando el sistema como
   // vendible a otros clientes: el selector "ONZE/ZINPLE" (2 cuentas
   // Binance) y la pestaña "Skipo" del panel P2P son cosas específicas del
   // negocio de ONZE (tenant id=1) -- un tenant nuevo (ej. un cliente al que
   // se le vende esta herramienta) arranca SIN ellas por defecto (false).
-  p2pMultiAccount       Boolean                @default(false)
-  skipoEnabled          Boolean                @default(false)
+  p2pMultiAccount         Boolean                 @default(false)
+  skipoEnabled            Boolean                 @default(false)
   // Cubre el resto de las líneas de negocio de ONZE que no tienen que ver
   // con el bot P2P vendible (Inicio, Noticias, Dashboard/Calculadora ONZE
   // en modo completo, AKI TRANSFERS, Clientes USDT) -- pedido explícito
   // del usuario (ago 2026): un tenant nuevo solo debe ver las herramientas
   // del bot P2P, nada de esto.
-  hasOnzeCoreBusiness   Boolean                @default(false)
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-  auditLogs             AuditLog[]
-  balanceMovements      BalanceMovement[]
-  binanceCredentials    BinanceCredentials[]
-  binanceOrders         BinanceOrder[]
-  bybitCredentials      BybitCredentials[]
-  bybitOrders           BybitOrder[]
-  collaboratorPayments  CollaboratorPayment[]
-  dataSources           DataSource[]
-  earningsMovements     EarningsMovement[]
-  expenses              Expense[]
-  initialCapitals       InitialCapital[]
-  internalFundings      InternalFunding[]
-  liquidityAlerts       LiquidityAlert[]
-  OkxCredentials        OkxCredentials[]
-  operations            Operation[]
-  customers             OperatorCustomer[]
-  P2PAccount            P2PAccount[]
-  p2pBotConfig          P2PBotConfig?
-  P2PBotExchangeConfig  P2PBotExchangeConfig[]
-  p2pBotCallLogs        P2PBotCallLog[]
-  p2pBotLogs            P2PBotLog[]
-  p2pBotOrders          P2PBotOrder[]
-  p2pBotAds             P2PBotAd[]
-  p2pChatStates         P2PChatState[]
-  p2pBuyerIdentities    P2PBuyerIdentity[]
-  p2pBotMarketSnapshots P2PBotMarketSnapshot[]
-  p2pCapacities         P2PCapacity[]
-  p2pManualSales        P2PManualSale[]
-  p2pCycles             P2PCycle[]
-  p2pCycleSetAsideOrders P2PCycleSetAsideOrder[]
-  p2pWithdrawals        P2PWithdrawal[]
-  p2pWebAuthnCredentials P2PWebAuthnCredential[]
-  p2pWebAuthnChallenges P2PWebAuthnChallenge[]
-  p2pReleaseAuthTokens  P2PReleaseAuthToken[]
-  usdtClients           UsdtClient[]
-  usdtMarginTiers       UsdtMarginTier[]
-  usdtPurchaseIntents   UsdtPurchaseIntent[]
-  usdtIncomingTransfers UsdtIncomingTransfer[]
-  usdtPriceTicks        UsdtPriceTick[]
-  adminNotifications    AdminNotification[]
+  hasOnzeCoreBusiness     Boolean                 @default(false)
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  auditLogs               AuditLog[]
+  balanceMovements        BalanceMovement[]
+  binanceCredentials      BinanceCredentials[]
+  binanceOrders           BinanceOrder[]
+  bybitCredentials        BybitCredentials[]
+  bybitOrders             BybitOrder[]
+  collaboratorPayments    CollaboratorPayment[]
+  dataSources             DataSource[]
+  earningsMovements       EarningsMovement[]
+  expenses                Expense[]
+  initialCapitals         InitialCapital[]
+  internalFundings        InternalFunding[]
+  liquidityAlerts         LiquidityAlert[]
+  OkxCredentials          OkxCredentials[]
+  operations              Operation[]
+  customers               OperatorCustomer[]
+  P2PAccount              P2PAccount[]
+  p2pBotConfig            P2PBotConfig?
+  P2PBotExchangeConfig    P2PBotExchangeConfig[]
+  p2pBotCallLogs          P2PBotCallLog[]
+  p2pBotLogs              P2PBotLog[]
+  p2pBotOrders            P2PBotOrder[]
+  p2pBotAds               P2PBotAd[]
+  p2pChatStates           P2PChatState[]
+  p2pBuyerIdentities      P2PBuyerIdentity[]
+  p2pBotMarketSnapshots   P2PBotMarketSnapshot[]
+  p2pCapacities           P2PCapacity[]
+  p2pCapacityEngineLogs   P2PCapacityEngineLog[]
+  p2pManualSales          P2PManualSale[]
+  p2pCycles               P2PCycle[]
+  p2pCycleSetAsideOrders  P2PCycleSetAsideOrder[]
+  p2pWithdrawals          P2PWithdrawal[]
+  p2pWebAuthnCredentials  P2PWebAuthnCredential[]
+  p2pWebAuthnChallenges   P2PWebAuthnChallenge[]
+  p2pReleaseAuthTokens    P2PReleaseAuthToken[]
+  usdtClients             UsdtClient[]
+  usdtMarginTiers         UsdtMarginTier[]
+  usdtPurchaseIntents     UsdtPurchaseIntent[]
+  usdtIncomingTransfers   UsdtIncomingTransfer[]
+  usdtPriceTicks          UsdtPriceTick[]
+  adminNotifications      AdminNotification[]
   usdtWithdrawalAddresses UsdtWithdrawalAddress[]
-  usdtWithdrawals       UsdtWithdrawal[]
-  partnerAccounts       PartnerAccount[]
-  partnerCapacities     PartnerCapacity[]
-  partnerSales          PartnerSale[]
-  partnerWithdrawals    PartnerWithdrawal[]
-  partnerCapitalLedger  PartnerCapitalLedger[]
-  rateLists             RateList[]
-  subscriptions         Subscription[]
-  ownerUser             User?                  @relation("TenantOwner", fields: [ownerUserId], references: [id])
-  plan                  Plan?                  @relation(fields: [planId], references: [id])
-  balances              TenantCountryBalance[]
-  pairs                 TenantPair[]
-  settings              TenantSettings?
-  users                 User[]
+  usdtWithdrawals         UsdtWithdrawal[]
+  partnerAccounts         PartnerAccount[]
+  partnerCapacities       PartnerCapacity[]
+  partnerSales            PartnerSale[]
+  partnerWithdrawals      PartnerWithdrawal[]
+  partnerCapitalLedger    PartnerCapitalLedger[]
+  rateLists               RateList[]
+  subscriptions           Subscription[]
+  ownerUser               User?                   @relation("TenantOwner", fields: [ownerUserId], references: [id])
+  plan                    Plan?                   @relation(fields: [planId], references: [id])
+  balances                TenantCountryBalance[]
+  pairs                   TenantPair[]
+  settings                TenantSettings?
+  users                   User[]
 }
 
 model Subscription {
@@ -541,19 +542,27 @@ model AuditLog {
 }
 
 model TenantSettings {
-  id                              Int      @id @default(autoincrement())
-  tenantId                        Int      @unique
+  id                              Int       @id @default(autoincrement())
+  tenantId                        Int       @unique
   inviteCode                      String?
   whatsappClosingNumber           String?
   sheetUrl                        String?
-  allowInternalOperatorManagement Boolean  @default(false)
-  allowPairCreation               Boolean  @default(false)
-  allowCountryCreation            Boolean  @default(false)
-  allowSheetSync                  Boolean  @default(true)
-  allowUsdtAnalysis               Boolean  @default(false)
-  allowKyc                        Boolean  @default(false)
+  allowInternalOperatorManagement Boolean   @default(false)
+  allowPairCreation               Boolean   @default(false)
+  allowCountryCreation            Boolean   @default(false)
+  allowSheetSync                  Boolean   @default(true)
+  allowUsdtAnalysis               Boolean   @default(false)
+  allowKyc                        Boolean   @default(false)
   themeOverrides                  Json?
   p2pResetCutoff                  BigInt?
+  // Motor de Capacity del lado del servidor (ver AGENTS.md, sección "Motor
+  // de Capacity" y el plan de esa etapa). false = modo sombra: el cron
+  // (/api/internal/p2p-capacity-engine) calcula qué haría y lo anota en
+  // P2PCapacityEngineLog, sin tocar ningún capacity real todavía. true =
+  // modo autoritativo: el cron SÍ marca capacities como "finished" en Neon,
+  // y el navegador deja de intentar hacerlo por su cuenta. Se activa cuenta
+  // por cuenta, a mano, solo después de varios días de modo sombra limpio.
+  p2pCapacityServerAuthority      Boolean   @default(false)
   // Clave de 4 dígitos para proteger "Liberar" en el panel P2P (jul 2026) —
   // nunca se guarda en texto plano, solo el hash (bcryptjs, mismo patrón que
   // el login). El bloqueo temporal es para que no se pueda "adivinar" por
@@ -561,9 +570,9 @@ model TenantSettings {
   releasePinHash                  String?
   releasePinFailedAttempts        Int       @default(0)
   releasePinLockedUntil           DateTime?
-  createdAt                       DateTime @default(now())
-  updatedAt                       DateTime @updatedAt
-  tenant                          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt                       DateTime  @default(now())
+  updatedAt                       DateTime  @updatedAt
+  tenant                          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
 // Huella/Face ID registrada para proteger "Liberar" en el panel P2P — el
@@ -623,50 +632,50 @@ model P2PReleaseAuthToken {
 // panel ONZE — login/sesión propios, ver lib/usdt-client-session.ts) ───
 
 model UsdtClient {
-  id               Int       @id @default(autoincrement())
-  tenantId         Int
-  email            String
-  passwordHash     String
-  fullName         String
+  id                  Int                     @id @default(autoincrement())
+  tenantId            Int
+  email               String
+  passwordHash        String
+  fullName            String
   // pending_kyc: recién registrado, KYC sin revisar. pending_approval: KYC
   // enviado, esperando aprobación manual del admin. approved: puede comprar.
   // rejected / suspended: acceso bloqueado.
-  status           String    @default("pending_kyc")
+  status              String                  @default("pending_kyc")
   // Tope de compra por operación/período para este cliente — protege contra
   // que alguien cierre un precio con el proveedor y no pague. Null = sin
   // límite propio (usa el default general, si existe).
-  purchaseLimitClp Decimal?  @db.Decimal(18, 2)
+  purchaseLimitClp    Decimal?                @db.Decimal(18, 2)
   // Margen fijo para ESTE cliente puntual — si está definido, se usa siempre
   // en vez de los tramos generales por monto (UsdtMarginTier). Null = sin
   // override, usa los tramos configurados.
-  fixedMarginPct   Decimal?  @db.Decimal(6, 3)
+  fixedMarginPct      Decimal?                @db.Decimal(6, 3)
   // 2FA (TOTP) propio del cliente — requerido para retirar. Cifrado
   // reversible porque hace falta el valor real para verificar cada código
   // (no es un hash). totpEnabled queda en false hasta que el cliente
   // confirme un código real durante la configuración.
-  totpSecretEnc    String?
-  totpEnabled      Boolean   @default(false)
+  totpSecretEnc       String?
+  totpEnabled         Boolean                 @default(false)
   // Dirección y red donde el cliente quiere recibir sus retiros de USDT —
   // configurable por el propio cliente en su perfil, se usa como default en
   // la pantalla de Retirar.
-  walletAddress    String?
-  withdrawalNetwork String?  // "TRC20" | "ERC20" | "BEP20"
+  walletAddress       String?
+  withdrawalNetwork   String? // "TRC20" | "ERC20" | "BEP20"
   // Datos del formulario de KYC tal como los captura el formulario propio del
   // usuario — guardado como JSON en vez de columnas fijas porque el formulario
   // real todavía no fue confirmado (evita inventar nombres de campo).
-  kycData          Json?
-  approvedAt       DateTime?
-  approvedByUserId Int?
+  kycData             Json?
+  approvedAt          DateTime?
+  approvedByUserId    Int?
   // Throttle simple de /api/usdt-client/quote -- evita que una cuenta (o una
   // sesión comprometida) haga spam de cotizaciones reales contra Skipo.
-  lastQuoteAt      DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contacts         UsdtClientContact[]
-  purchaseIntents  UsdtPurchaseIntent[]
+  lastQuoteAt         DateTime?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  tenant              Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contacts            UsdtClientContact[]
+  purchaseIntents     UsdtPurchaseIntent[]
   withdrawalAddresses UsdtWithdrawalAddress[]
-  withdrawals      UsdtWithdrawal[]
+  withdrawals         UsdtWithdrawal[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -678,14 +687,14 @@ model UsdtClient {
 // misma persona. Vive en nuestra base, no tiene relación con los "contacts"
 // de la API de Skipo (esos son de la cuenta del admin, no del cliente).
 model UsdtClientContact {
-  id        Int      @id @default(autoincrement())
+  id        Int        @id @default(autoincrement())
   clientId  Int
   alias     String
-  currency  String   @default("USDT")
-  network   String   // "TRC20" | "ERC20" | "BEP20"
+  currency  String     @default("USDT")
+  network   String // "TRC20" | "ERC20" | "BEP20"
   address   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
   client    UsdtClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([clientId])
@@ -713,26 +722,26 @@ model UsdtMarginTier {
 // errores de monto). El cliente solo puede comprar (status pasa a
 // ready_to_buy) una vez que receivedClp alcanza requestedClp — nunca antes.
 model UsdtPurchaseIntent {
-  id             Int       @id @default(autoincrement())
+  id             Int                    @id @default(autoincrement())
   tenantId       Int
   clientId       Int
   referenceCode  String
-  requestedClp   Decimal   @db.Decimal(18, 2)
-  receivedClp    Decimal   @default(0) @db.Decimal(18, 2)
+  requestedClp   Decimal                @db.Decimal(18, 2)
+  receivedClp    Decimal                @default(0) @db.Decimal(18, 2)
   // awaiting_payment: esperando que llegue la plata. ready_to_buy: ya llegó,
   // el cliente puede apretar Comprar. completed: ya se ejecutó la compra en
   // Skipo. cancelled: el cliente/operador la dio de baja.
-  status         String    @default("awaiting_payment")
-  usdtAmount     Decimal?  @db.Decimal(18, 8)
-  executedRate   Decimal?  @db.Decimal(18, 4)
+  status         String                 @default("awaiting_payment")
+  usdtAmount     Decimal?               @db.Decimal(18, 8)
+  executedRate   Decimal?               @db.Decimal(18, 4)
   skipoOrdId     String?
   skipoConvertId String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
   readyAt        DateTime?
   executedAt     DateTime?
-  tenant         Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  client         UsdtClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tenant         Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client         UsdtClient             @relation(fields: [clientId], references: [id], onDelete: Cascade)
   transfers      UsdtIncomingTransfer[]
 
   @@unique([tenantId, referenceCode])
@@ -752,22 +761,22 @@ model UsdtPurchaseIntent {
 // la misma dirección con su providerContactId -> el cliente ya la puede
 // elegir para retirar.
 model UsdtWithdrawalAddress {
-  id               Int      @id @default(autoincrement())
-  tenantId         Int
-  clientId         Int
-  alias            String
-  assetSymbol      String   @default("USDT")
-  networkSymbol    String   // ej: "BEP20", "TRC20", "ERC20" -- solo para mostrar al cliente
-  address          String   // solo para mostrar al cliente, NUNCA se manda tal cual al proveedor
+  id                Int              @id @default(autoincrement())
+  tenantId          Int
+  clientId          Int
+  alias             String
+  assetSymbol       String           @default("USDT")
+  networkSymbol     String // ej: "BEP20", "TRC20", "ERC20" -- solo para mostrar al cliente
+  address           String // solo para mostrar al cliente, NUNCA se manda tal cual al proveedor
   // Id del contacto ya whitelisteado del lado del proveedor -- esto es lo
   // que realmente se manda para ejecutar el retiro, no `address`.
   providerContactId String
-  active           Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  client           UsdtClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  withdrawals      UsdtWithdrawal[]
+  active            Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client            UsdtClient       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  withdrawals       UsdtWithdrawal[]
 
   @@index([tenantId, clientId, active])
 }
@@ -776,25 +785,25 @@ model UsdtWithdrawalAddress {
 // interno del proveedor -- server-side únicamente, jamás se devuelve en
 // ninguna respuesta al cliente (ver toClientWithdrawal en lib/usdt-purchase.ts).
 model UsdtWithdrawal {
-  id                   Int      @id @default(autoincrement())
+  id                   Int                   @id @default(autoincrement())
   tenantId             Int
   clientId             Int
   addressId            Int
-  amountUsdt           Decimal  @db.Decimal(18, 8)
-  feeUsdt              Decimal? @db.Decimal(18, 8)
-  totalUsdt            Decimal? @db.Decimal(18, 8)
+  amountUsdt           Decimal               @db.Decimal(18, 8)
+  feeUsdt              Decimal?              @db.Decimal(18, 8)
+  totalUsdt            Decimal?              @db.Decimal(18, 8)
   // pending: aceptado por el proveedor, esperando confirmación on-chain.
   // completed / failed: estado terminal (ver GET /withdrawals/{id} o webhook
   // del lado del proveedor). error: nuestra propia ejecución falló antes de
   // llegar a un estado del proveedor (ej. red caída) -- nunca se movió nada.
-  status               String   @default("pending")
+  status               String                @default("pending")
   providerWithdrawalId String?
   errorMessage         String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
   completedAt          DateTime?
-  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  client               UsdtClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client               UsdtClient            @relation(fields: [clientId], references: [id], onDelete: Cascade)
   address              UsdtWithdrawalAddress @relation(fields: [addressId], references: [id])
 
   @@index([tenantId, clientId, status])
@@ -805,26 +814,26 @@ model UsdtWithdrawal {
 // se confía en el remitente visible del correo — authPassed refleja el
 // resultado real de la validación SPF/DKIM contra el dominio esperado.
 model UsdtIncomingTransfer {
-  id               Int       @id @default(autoincrement())
+  id               Int                 @id @default(autoincrement())
   tenantId         Int
   purchaseIntentId Int?
-  amountClp        Decimal   @db.Decimal(18, 2)
+  amountClp        Decimal             @db.Decimal(18, 2)
   payerName        String?
   rawComment       String?
   // "code": matcheado por el código de referencia en el comentario/glosa.
   // "name_fallback": matcheado por nombre+monto, siempre needsReview=true.
   // "manual": el operador lo asoció a mano desde la bandeja de revisión.
   matchMethod      String?
-  needsReview      Boolean   @default(true)
+  needsReview      Boolean             @default(true)
   reviewedByUserId Int?
   // Message-ID real del correo — evita procesar el mismo aviso dos veces si
   // el cron se solapa o el correo llega más de una vez.
-  emailMessageId   String    @unique
+  emailMessageId   String              @unique
   sourceEmail      String
   authPassed       Boolean
   receivedAt       DateTime
-  createdAt        DateTime  @default(now())
-  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt        DateTime            @default(now())
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   purchaseIntent   UsdtPurchaseIntent? @relation(fields: [purchaseIntentId], references: [id])
 
   @@index([tenantId, needsReview])
@@ -856,18 +865,18 @@ model UsdtPriceTick {
 // perfil -- para que el admin pueda ir a agregarla como contacto en Skipo
 // sin tener que pedírsela por WhatsApp.
 model AdminNotification {
-  id               Int      @id @default(autoincrement())
-  tenantId         Int
-  type             String   // "purchase_requested" | "purchase_cancelled" | "wallet_added"
-  clientName       String
-  requestedClp     Decimal? @db.Decimal(18, 2)
-  skipoClpNeeded   Decimal? @db.Decimal(18, 2)
-  walletAddress    String?
+  id                Int      @id @default(autoincrement())
+  tenantId          Int
+  type              String // "purchase_requested" | "purchase_cancelled" | "wallet_added"
+  clientName        String
+  requestedClp      Decimal? @db.Decimal(18, 2)
+  skipoClpNeeded    Decimal? @db.Decimal(18, 2)
+  walletAddress     String?
   withdrawalNetwork String?
-  purchaseIntentId Int?
-  read             Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  purchaseIntentId  Int?
+  read              Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, read, createdAt])
 }
@@ -885,14 +894,14 @@ model PasswordResetCode {
 }
 
 model BinanceCredentials {
-  id           Int       @id @default(autoincrement())
-  tenantId     Int
-  label        String    @default("ONZE")
-  apiKey       String
-  secretKey    String
-  isActive     Boolean   @default(true)
-  lastTestedAt DateTime?
-  testStatus   String?
+  id              Int       @id @default(autoincrement())
+  tenantId        Int
+  label           String    @default("ONZE")
+  apiKey          String
+  secretKey       String
+  isActive        Boolean   @default(true)
+  lastTestedAt    DateTime?
+  testStatus      String?
   // Contraseña de fondos de Binance (Fund Password) — DISTINTA de apiKey/secretKey
   // y de la clave de login. Binance la exige (cifrada con su llave RSA pública,
   // ver lib/p2p-bot/binance-adapter.ts releaseAssets) en cada liberación de
@@ -900,9 +909,9 @@ model BinanceCredentials {
   // falta el valor real para cifrarla de nuevo con la llave RSA de Binance en
   // cada llamada — nunca se expone en ninguna respuesta de API.
   fundPasswordEnc String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, label])
   @@index([tenantId])
@@ -983,6 +992,27 @@ model P2PCapacity {
   @@index([status])
 }
 
+// Registro del motor de Capacity del lado del servidor (modo sombra y
+// autoritativo, ver TenantSettings.p2pCapacityServerAuthority). Cada fila es
+// una decisión que el motor tomó (o hubiera tomado) para un capacity puntual
+// -- sirve para comparar contra lo que el navegador termina haciendo antes
+// de confiarle el modo autoritativo a una cuenta. Una fila por
+// capacityId+action (no se repite en cada corrida del cron, solo la primera
+// vez que se detecta).
+model P2PCapacityEngineLog {
+  id           Int      @id @default(autoincrement())
+  tenantId     Int
+  capacityId   String
+  action       String // "would_finish" (modo sombra) | "finished" (modo autoritativo)
+  computedClp  Decimal  @db.Decimal(18, 2)
+  computedUsdt Decimal  @db.Decimal(18, 8)
+  createdAt    DateTime @default(now())
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([capacityId, action])
+  @@index([tenantId])
+}
+
 // Ventas "manuales" del panel de Capacity P2P (Bybit/OKX sin API conectada,
 // o correcciones manuales de Binance) -- antes SOLO vivían en localStorage
 // del navegador (onze_p2p_bybit_orders / onze_p2p_okx_orders), nunca en
@@ -1021,33 +1051,33 @@ model SkipoConfirmLock {
 // ─── Dashboard de cuenta del socio (Binance separado, 100% aislado del bot ONZE/ZINPLE) ───
 
 model PartnerAccount {
-  id                Int       @id @default(autoincrement())
-  tenantId          Int
-  label             String    @default("SOCIO")
-  name              String?
-  apiKey            String
-  secretKey         String
-  isActive          Boolean   @default(true)
-  lastSyncedAt      DateTime?
+  id                 Int       @id @default(autoincrement())
+  tenantId           Int
+  label              String    @default("SOCIO")
+  name               String?
+  apiKey             String
+  secretKey          String
+  isActive           Boolean   @default(true)
+  lastSyncedAt       DateTime?
   // Las ventas anteriores a esta fecha se ignoran en las estadísticas (aunque
   // queden guardadas en PartnerSale por si sirven de referencia después) —
   // permite "arrancar la cuenta" desde una fecha elegida por el usuario, sin
   // que el historial de 90 días que trae la primera sincronización infle los
   // números.
-  trackingStartDate DateTime?
+  trackingStartDate  DateTime?
   // Capital inicial en USDT (tarjeta "Capital P2P", mismo concepto que el
   // dashboard ONZE) — se suma a la ganancia del mes en curso para mostrar el
   // capital total. Editable desde el panel, null hasta que el usuario lo
   // defina la primera vez.
-  initialCapitalUsdt Decimal? @db.Decimal(18, 8)
+  initialCapitalUsdt Decimal?  @db.Decimal(18, 8)
   // % de PPM (Pago Provisional Mensual, SII) a aplicar sobre el CLP recibido
   // del período — pedido explícito del usuario (jul 2026): todavía no
   // confirma el % con su contadora, así que queda editable y null hasta que
   // lo defina (la tarjeta muestra "Configura el %" mientras tanto).
-  ppmPct            Decimal?  @db.Decimal(6, 3)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ppmPct             Decimal?  @db.Decimal(6, 3)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, label])
   @@index([tenantId])
@@ -1100,36 +1130,36 @@ model P2PWithdrawal {
 // siempre como registro histórico, aunque el capital actual se siga
 // moviendo después.
 model PartnerCapitalLedger {
-  id                 Int      @id @default(autoincrement())
-  tenantId           Int
-  label              String   @default("SOCIO")
-  periodFrom         DateTime
-  periodTo           DateTime
-  netProfitUsdt      Decimal  @db.Decimal(18, 8)
-  totalWithdrawnUsdt Decimal  @db.Decimal(18, 8)
-  addedUsdt          Decimal  @db.Decimal(18, 8)
-  previousCapitalUsdt Decimal @db.Decimal(18, 8)
-  newCapitalUsdt     Decimal  @db.Decimal(18, 8)
-  createdAt          DateTime @default(now())
-  tenant             Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                  Int      @id @default(autoincrement())
+  tenantId            Int
+  label               String   @default("SOCIO")
+  periodFrom          DateTime
+  periodTo            DateTime
+  netProfitUsdt       Decimal  @db.Decimal(18, 8)
+  totalWithdrawnUsdt  Decimal  @db.Decimal(18, 8)
+  addedUsdt           Decimal  @db.Decimal(18, 8)
+  previousCapitalUsdt Decimal  @db.Decimal(18, 8)
+  newCapitalUsdt      Decimal  @db.Decimal(18, 8)
+  createdAt           DateTime @default(now())
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, label])
 }
 
 model PartnerCapacity {
-  id          String    @id
+  id          String                   @id
   tenantId    Int
-  label       String    @default("SOCIO")
+  label       String                   @default("SOCIO")
   provider    String
-  capacityClp Decimal   @db.Decimal(18, 2)
-  buyPrice    Decimal   @db.Decimal(18, 4)
-  usdtAmount  Decimal   @db.Decimal(18, 8)
+  capacityClp Decimal                  @db.Decimal(18, 2)
+  buyPrice    Decimal                  @db.Decimal(18, 4)
+  usdtAmount  Decimal                  @db.Decimal(18, 8)
   date        String
-  status      String    @default("active")
+  status      String                   @default("active")
   finishedAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  tenant      Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   payments    PartnerCapacityPayment[]
 
   @@index([tenantId, label])
@@ -1309,33 +1339,33 @@ model OkxCredentials {
 }
 
 model P2PChatState {
-  id                Int       @id @default(autoincrement())
-  tenantId          Int
-  exchange          String
-  orderNumber       String
-  state             String    @default("new")
-  counterparty      String?
-  isCompany         Boolean   @default(false)
-  isReturning       Boolean   @default(false)
-  previousBank      String?
-  chosenBank        String?
-  chosenAccountIds  Json?
+  id                     Int       @id @default(autoincrement())
+  tenantId               Int
+  exchange               String
+  orderNumber            String
+  state                  String    @default("new")
+  counterparty           String?
+  isCompany              Boolean   @default(false)
+  isReturning            Boolean   @default(false)
+  previousBank           String?
+  chosenBank             String?
+  chosenAccountIds       Json?
   // IDs de cuenta en el MISMO orden exacto mostrado en el último menú
   // "1) Banco X 2) Banco Y..." — se usa para interpretar un "1"/"2"/"3"
   // numérico. Nunca se re-deriva el orden fresco de la base de datos al
   // interpretar la respuesta: si el orden de las cuentas cambia (ej. un
   // reordenamiento manual) entre que se muestra el menú y que el comprador
   // responde, un número ya no correspondería al banco que realmente vio.
-  pendingBankMenuIds Json?
+  pendingBankMenuIds     Json?
   // El estado en el que estaba la conversación justo antes del aviso de
   // "orden por vencer" (awaiting_problem) — se usa para volver ahí una vez
   // resuelto ese aviso puntual, en vez de forzar siempre a "account_sent"
   // sin importar en qué parte de la conversación se haya interrumpido.
-  preInterruptState  String?
-  erutRequested     Boolean   @default(false)
-  erutReceived      Boolean   @default(false)
-  retryCount        Int       @default(0)
-  transferFailCount Int       @default(0)
+  preInterruptState      String?
+  erutRequested          Boolean   @default(false)
+  erutReceived           Boolean   @default(false)
+  retryCount             Int       @default(0)
+  transferFailCount      Int       @default(0)
   // Se fija la PRIMERA vez que se manda el aviso de "tu orden está por
   // vencer" — nunca se vuelve a null. Evita que el mismo aviso se repita en
   // cada ciclo (~15s) durante toda la ventana de 4.5 min, interrumpiendo una
@@ -1343,7 +1373,7 @@ model P2PChatState {
   // real confirmado en vivo, jul 2026: una orden se canceló porque el
   // comprador nunca alcanzó a responder "personal/empresa" antes de que el
   // aviso volviera a interrumpir).
-  expiryWarnedAt    DateTime?
+  expiryWarnedAt         DateTime?
   // Suma acumulada (CLP) de los montos leídos en los comprobantes de pago
   // que el comprador mandó como imagen (ver classifyImage en chat-brain.ts).
   // Se acumula porque un comprador puede dividir el pago en varias
@@ -1351,7 +1381,7 @@ model P2PChatState {
   // 500.000) -- comparar cada imagen suelta contra el total completo daría
   // una falsa alarma en un pago dividido legítimo. La comparación real
   // contra el total de la orden ocurre recién cuando se marca "Pagado".
-  receivedReceiptsClp Decimal? @db.Decimal(18, 2)
+  receivedReceiptsClp    Decimal?  @db.Decimal(18, 2)
   // Se fija la primera vez que se avisa "recuerda marcar Pagado" (comprobante
   // recibido pero la orden todavía no figura como pagada 1 min después) --
   // mismo principio que expiryWarnedAt, para no repetir el aviso en cada
@@ -1368,8 +1398,8 @@ model P2PChatState {
   // chat-agent.ts) se sigue tratando como el mismo tema. holderNameConfirmed
   // guarda CUÁL de las 2 respuestas se dio (nombre correcto vs. escalar a
   // asesor) para repetir la misma si hace falta, nunca inventar una nueva.
-  holderNameConcernAt DateTime?
-  holderNameConfirmed Boolean?
+  holderNameConcernAt    DateTime?
+  holderNameConfirmed    Boolean?
   // Se fija en cuanto el CLIENTE avisa (por texto) que va a pagar en varias
   // partes/cuentas -- ej. dice que su banco tiene límite, nombra 2+ bancos,
   // o pide "todas las cuentas". Sirve para que, al llegar un comprobante de
@@ -1380,10 +1410,10 @@ model P2PChatState {
   // avisó que pagaría en 3 partes, mandó el primer comprobante, y el bot
   // solo respondió un genérico "vi tu comprobante, marca Pagado" sin nunca
   // verificar el monto contra el total.
-  splitPaymentDeclared Boolean @default(false)
-  partialAmount     Decimal?  @db.Decimal(18, 8)
-  totalAmount       Decimal?  @db.Decimal(18, 8)
-  realName          String?
+  splitPaymentDeclared   Boolean   @default(false)
+  partialAmount          Decimal?  @db.Decimal(18, 8)
+  totalAmount            Decimal?  @db.Decimal(18, 8)
+  realName               String?
   // Primer nombre de pila ya resuelto (vía IA, ver resolveFirstName en
   // chat-brain.ts) -- se calcula UNA VEZ cuando se captura realName y se
   // reutiliza en todos los saludos/mensajes de esta conversación. Necesario
@@ -1392,19 +1422,19 @@ model P2PChatState {
   // confirmado con 20 ejemplos reales jul 2026) -- no hay una posición fija
   // que funcione siempre, así que adivinar por índice llamaba a la persona
   // por su apellido en casi la mitad de los casos reales.
-  firstName         String?
-  pendingFirstMsg   String?
-  lastClientMsgAt   DateTime?
-  lastBotMsgAt      DateTime?
-  lastBotMsg        String?
-  lastClientMsgSeen String?
-  appealAt          DateTime?
-  paidAt            DateTime?
-  completedAt       DateTime?
-  verifiedAt        DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  Tenant            Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  firstName              String?
+  pendingFirstMsg        String?
+  lastClientMsgAt        DateTime?
+  lastBotMsgAt           DateTime?
+  lastBotMsg             String?
+  lastClientMsgSeen      String?
+  appealAt               DateTime?
+  paidAt                 DateTime?
+  completedAt            DateTime?
+  verifiedAt             DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  Tenant                 Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, exchange, orderNumber])
   @@index([tenantId, exchange, state])
@@ -1420,23 +1450,23 @@ model P2PChatState {
 // reconocer a un comprador recurrente en un pedido FUTURO — nunca en el
 // saludo inicial del MISMO pedido, porque ese evento todavía no ocurrió.
 model P2PBuyerIdentity {
-  id         Int      @id @default(autoincrement())
-  tenantId   Int
-  exchange   String
-  label      String   @default("ONZE")
-  nickName   String
-  realName   String
+  id            Int      @id @default(autoincrement())
+  tenantId      Int
+  exchange      String
+  label         String   @default("ONZE")
+  nickName      String
+  realName      String
   // Mismo motivo que P2PChatState.firstName -- primer nombre de pila ya
   // resuelto vía IA, para no tener que re-derivarlo cada vez que se
   // reconoce a un cliente frecuente.
-  firstName  String?
-  orderCount Int      @default(1)
+  firstName     String?
+  orderCount    Int      @default(1)
   lastBank      String?
   lastAccountId Int?
   lastIsCompany Boolean  @default(false)
-  updatedAt  DateTime @updatedAt
-  createdAt  DateTime @default(now())
-  Tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  Tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, exchange, label, nickName])
 }
@@ -1524,12 +1554,12 @@ model P2PBotExchangeConfig {
 // Binance; se cuenta cuántas hay en la ventana de 60s para decidir si hay
 // cupo. Filas viejas se limpian en cada chequeo.
 model P2PBotCallLog {
-  id        Int      @id @default(autoincrement())
-  tenantId  Int
-  label     String
-  exchange  String
-  calledAt  DateTime @default(now())
-  Tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id       Int      @id @default(autoincrement())
+  tenantId Int
+  label    String
+  exchange String
+  calledAt DateTime @default(now())
+  Tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, exchange, label, calledAt])
 }
@@ -1568,9 +1598,9 @@ model SystemAlertCooldown {
 }
 
 model P2PBotAd {
-  id                      Int      @id @default(autoincrement())
+  id                      Int       @id @default(autoincrement())
   tenantId                Int
-  label                   String   @default("ONZE")
+  label                   String    @default("ONZE")
   exchange                String
   adId                    String?
   // Nombre propio del anuncio (pedido explícito del usuario, sep 2026): solo
@@ -1578,48 +1608,48 @@ model P2PBotAd {
   // mismo exchange/cuenta (ej. "Todos los bancos" vs "Banco Estado") -- es
   // puramente cosmético, vive solo en Neon, nunca se manda a Binance/Bybit.
   nickname                String?
-  tradeType               String   @default("SELL")
-  asset                   String   @default("USDT")
-  fiat                    String   @default("CLP")
-  priceType               String   @default("fixed")
-  price                   Decimal  @db.Decimal(18, 8)
-  amount                  Decimal  @db.Decimal(18, 8)
-  amountType              String   @default("fixed")
-  minAmount               Decimal  @db.Decimal(18, 8)
-  maxAmount               Decimal  @db.Decimal(18, 8)
-  paymentMethods          Json     @default("[]")
-  payTime                 Int      @default(15)
-  status                  String   @default("online")
-  isActive                Boolean  @default(true)
-  botManaged              Boolean  @default(false)
-  botEnabled              Boolean  @default(false)
-  botStrategy             String?  @default("top1")
-  botTop1Diff             Decimal? @db.Decimal(18, 8)
-  botSpreadPct            Decimal? @db.Decimal(8, 4)
-  botPriceFloorPct        Decimal? @db.Decimal(8, 4)
-  botPriceSource          String?  @default("capacity")
-  botCommissionPct        Decimal? @db.Decimal(8, 4)
-  botSafeMarginPct        Decimal? @db.Decimal(8, 4)
-  botMinCompetitorCapital Decimal? @db.Decimal(18, 2)
+  tradeType               String    @default("SELL")
+  asset                   String    @default("USDT")
+  fiat                    String    @default("CLP")
+  priceType               String    @default("fixed")
+  price                   Decimal   @db.Decimal(18, 8)
+  amount                  Decimal   @db.Decimal(18, 8)
+  amountType              String    @default("fixed")
+  minAmount               Decimal   @db.Decimal(18, 8)
+  maxAmount               Decimal   @db.Decimal(18, 8)
+  paymentMethods          Json      @default("[]")
+  payTime                 Int       @default(15)
+  status                  String    @default("online")
+  isActive                Boolean   @default(true)
+  botManaged              Boolean   @default(false)
+  botEnabled              Boolean   @default(false)
+  botStrategy             String?   @default("top1")
+  botTop1Diff             Decimal?  @db.Decimal(18, 8)
+  botSpreadPct            Decimal?  @db.Decimal(8, 4)
+  botPriceFloorPct        Decimal?  @db.Decimal(8, 4)
+  botPriceSource          String?   @default("capacity")
+  botCommissionPct        Decimal?  @db.Decimal(8, 4)
+  botSafeMarginPct        Decimal?  @db.Decimal(8, 4)
+  botMinCompetitorCapital Decimal?  @db.Decimal(18, 2)
   // Monto (CLP) para filtrar la lista de competidores a la que Binance
   // muestra ese monto como transacción -- pedido explícito del usuario (sep
   // 2026), imita el buscador "monto" que usa un comprador real en Binance
   // (parámetro transAmount de la API). Null = sin cambios de comportamiento,
   // se compite contra la lista completa como siempre.
-  botCompeteTransAmount   Decimal? @db.Decimal(18, 2)
+  botCompeteTransAmount   Decimal?  @db.Decimal(18, 2)
   botCompetePayTypes      Json?
   // Nicknames de Binance a excluir de la competencia de este anuncio (ago
   // 2026, pedido explícito del usuario). Lista vacía/null = sin cambios de
   // comportamiento, se compite contra todo el mercado como siempre.
   botExcludedMerchants    Json?
   botCycleInterval        Int?
-  botCircuitBreakPct      Decimal? @db.Decimal(8, 4)
-  botDailyVolumeCapUsdt   Decimal? @db.Decimal(18, 8)
-  botMinAdPriceDiffPct    Decimal? @db.Decimal(8, 4)
+  botCircuitBreakPct      Decimal?  @db.Decimal(8, 4)
+  botDailyVolumeCapUsdt   Decimal?  @db.Decimal(18, 8)
+  botMinAdPriceDiffPct    Decimal?  @db.Decimal(8, 4)
   recreateLockUntil       DateTime?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @default(now())
-  Tenant                  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @default(now())
+  Tenant                  Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([exchange])

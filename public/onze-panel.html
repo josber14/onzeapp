@@ -19403,13 +19403,20 @@ function addP2PBotStyles(){
     }
   };
 
-  function postP2PCapacityToServer(item, onSuccess){
+  function postP2PCapacityToServer(item, onSuccess, opts){
+    // manualAction=true identifica un cierre EXPLÍCITO del usuario (botón
+    // "Completar capacity", ver finishCapacityManually) -- distinto del
+    // cierre AUTOMÁTICO y silencioso de autoFinishP2PCapacities(). El motor
+    // del servidor (ver AGENTS.md, "Motor de Capacity del lado del
+    // servidor") solo bloquea el segundo cuando una cuenta ya está en modo
+    // autoritativo; la acción deliberada del usuario siempre se respeta.
+    const manualAction = !!(opts && opts.manualAction);
     (function retry(item, attempt){
       fetch('/api/p2p/capacity?confirm=manual', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item })
+        body: JSON.stringify({ item, manualAction })
       })
       .then(async res => {
         const data = await res.json().catch(()=>null);
@@ -19443,6 +19450,7 @@ function addP2PBotStyles(){
       const res = await fetch('/api/p2p/capacity', { credentials: 'include' });
       if (!res.ok) return false;
       const data = await res.json();
+      window.__p2pServerAuthority = !!data?.serverAuthority;
       if (data?.ok && Array.isArray(data.items)) {
         // Siempre que el usuario haya indicado limpieza manual (flag persistente),
         // ignorar datos del servidor y borrar registros remotos para que no resuciten.
@@ -21136,7 +21144,7 @@ function addP2PBotStyles(){
     }
 
     saveP2PCapacity(capacities);
-    postP2PCapacityToServer(capacities[idx]);
+    postP2PCapacityToServer(capacities[idx], null, { manualAction: true });
 
     renderP2PCapacityPanel();
     updateP2PDashboardWithCapacity();
@@ -24095,6 +24103,15 @@ function addP2PBotStyles(){
     });
   }
   function autoFinishP2PCapacities(){
+    // Motor de Capacity del lado del servidor (ver AGENTS.md): mientras esta
+    // cuenta esté en modo autoritativo, el cierre AUTOMÁTICO de capacities lo
+    // decide el cron del servidor (/api/internal/p2p-capacity-engine), con
+    // datos 100% de Neon -- el navegador deja de hacerlo por su cuenta para
+    // no competir con datos potencialmente incompletos de esta pestaña. El
+    // cierre MANUAL explícito (botón "Completar capacity",
+    // finishCapacityManually) no pasa por acá y sigue funcionando igual.
+    if(window.__p2pServerAuthority) return;
+
     const stats = calculateP2PCapacityStats();
     const toFinish = stats.capacities.filter(c =>
       c.status === "active" &&
