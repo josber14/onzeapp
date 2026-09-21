@@ -9,6 +9,33 @@
   <meta http-equiv="Expires" content="0">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
   <script>if(!sessionStorage.getItem('op_v5')){sessionStorage.setItem('op_v5','1');location.reload(true);}</script>
+  <script>
+    // Auto-recarga (sep 2026): sin esto, una pestaña que ya estaba abierta
+    // antes de un deploy se queda corriendo el código VIEJO en memoria para
+    // siempre -- confirmado en vivo varias veces esta semana (bank-quota y
+    // el sync de Bybit siguieron llamando a Binance a la frecuencia vieja
+    // por días, porque nadie refrescó). window.__ONZE_PANEL_VERSION lo
+    // inyecta /api/panel con la fecha real de modificación del archivo
+    // (ver esa ruta) -- si /api/panel-version alguna vez devuelve una
+    // marca más nueva que la que esta pestaña cargó, se recarga sola.
+    // Intervalo de 3 min: no hace falta más frecuencia para esto, y así no
+    // suma carga de más al servidor.
+    (function(){
+      var CHECK_INTERVAL_MS = 3 * 60 * 1000;
+      function checkVersion(){
+        if(typeof window.__ONZE_PANEL_VERSION !== "number") return;
+        fetch("/api/panel-version", { cache: "no-store" })
+          .then(function(r){ return r.json(); })
+          .then(function(d){
+            if(d && d.ok && typeof d.mtimeMs === "number" && d.mtimeMs > window.__ONZE_PANEL_VERSION){
+              location.reload();
+            }
+          })
+          .catch(function(){});
+      }
+      setInterval(checkVersion, CHECK_INTERVAL_MS);
+    })();
+  </script>
   <style>
     :root{
       --brand:#2563eb;
