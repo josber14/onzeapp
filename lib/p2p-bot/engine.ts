@@ -511,12 +511,42 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
         if (exchange === "binance") cycleState.binance = await buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
         continue;
       }
+
+      // Freno cruzado entre procesos (sep 2026): el freno de arriba
+      // (lastFullCycleAt, solo 300ms) vive en memoria del PROCESO -- no
+      // protege si hay 2 pestañas del navegador abiertas para la MISMA
+      // cuenta, porque cada una corre en una función serverless distinta de
+      // Vercel, cada una con su propia memoria. Confirmado en vivo (sep
+      // 2026): esto duplicaba trabajo real (llamadas a Binance, cálculo de
+      // precio) sin ninguna ganancia, cuando el usuario y Hector tenían el
+      // panel abierto al mismo tiempo. Con la fecha ya guardada en la base
+      // de datos (lastCycleAt, actualizada más abajo), se pregunta si
+      // ALGUIEN MÁS (otra pestaña, el cron) ya cicló esta cuenta hace muy
+      // poco antes de repetir el trabajo real -- 1.2s da margen para que 2
+      // pestañas no se pisen, sin notarse en la velocidad de reacción del
+      // bot (bien por debajo de MIN_CYCLE_GAP_MS de cualquier acción manual
+      // real de un competidor).
+      const CROSS_TAB_CYCLE_GAP_MS = 1200;
+      if (!force) {
+        const dbLastCycle = await prisma.p2PBotExchangeConfig
+          .findUnique({
+            where: { tenantId_exchange_label: { tenantId, exchange, label } },
+            select: { lastCycleAt: true },
+          })
+          .catch(() => null);
+        if (dbLastCycle?.lastCycleAt && Date.now() - dbLastCycle.lastCycleAt.getTime() < CROSS_TAB_CYCLE_GAP_MS) {
+          if (exchange === "binance") cycleState.binance = await buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
+          continue;
+        }
+      }
+
       lastFullCycleAt.set(cycleGateKey, Date.now());
 
       // Persistido en DB (a diferencia de lastFullCycleAt, que es solo en
-      // memoria del proceso) para que el cron de bot-cycle-cron pueda ver si
-      // el navegador (u otra invocación) ya cicló esta cuenta hace muy poco,
-      // y así no duplicar el mismo trabajo -- ver bot-cycle-cron/route.ts.
+      // memoria del proceso) para que el cron de bot-cycle-cron Y el freno
+      // cruzado de arriba puedan ver si el navegador (u otra invocación) ya
+      // cicló esta cuenta hace muy poco, y así no duplicar el mismo trabajo
+      // -- ver bot-cycle-cron/route.ts.
       if (exchangeConfig) {
         try {
           await prisma.p2PBotExchangeConfig.update({
