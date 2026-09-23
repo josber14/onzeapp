@@ -19188,7 +19188,6 @@ function addP2PBotStyles(){
   // cuentas distintas en el mismo navegador.
   const CAPACITY_KEY = "onze_p2p_capacity_items" + (window.__p2pTenantSuffix || "");
   const OWN_CAPITAL_KEY = "onze_p2p_own_capital_items" + (window.__p2pTenantSuffix || "");
-  const P2P_CAPACITY_BASELINE_KEY = "onze_p2p_capacity_baseline_at" + (window.__p2pTenantSuffix || "");
   const CARRYOVER_KEY = "onze_p2p_capacity_carryover" + (window.__p2pTenantSuffix || "");
   const P2P_MANUAL_MODE_KEY = "__p2pManualMode" + (window.__p2pTenantSuffix || "");
   const P2P_LAST_CLEAR_KEY = "__p2pCapacityLastClear" + (window.__p2pTenantSuffix || "");
@@ -19208,63 +19207,27 @@ function addP2PBotStyles(){
     }catch(e){ console.warn("Error saving carryover:", e); }
   }
 
+  // Bug real confirmado en vivo (sep 2026): esta función se INVENTABA su
+  // propia fecha de inicio la primera vez que corría en CADA navegador (la
+  // guardaba en localStorage, P2P_CAPACITY_BASELINE_KEY, y ahí quedaba para
+  // siempre). Como localhost, la web de escritorio y el celular son
+  // navegadores/perfiles distintos, cada uno terminaba con una fecha de
+  // inicio distinta, elegida en un momento distinto -- "Hoy" coincidía entre
+  // dispositivos (ninguna fecha de corte cae dentro de las últimas 24h),
+  // pero "Este mes" y "Capital P2P" daban números completamente distintos
+  // según cuántas ventas del mes quedaban del lado equivocado del corte de
+  // CADA dispositivo. Recargar la página no arreglaba nada porque el valor
+  // ya estaba guardado localmente, no era un problema de sincronización.
+  //
+  // Arreglo: usar el mismo corte que ya vive en el servidor
+  // (TenantSettings.p2pResetCutoff, el instante del último "Empezar de
+  // cero" -- ver /api/p2p/reset) en vez de inventar uno nuevo por
+  // dispositivo. syncP2PCapacityFromServer() lo trae en cada sync y lo deja
+  // en window.__p2pServerResetCutoff; acá solo se lee. Sin cutoff (nunca se
+  // hizo un reset) = sin restricción, cuenta todo el historial real.
   function getP2PCapacityBaselineTs(){
-    let value = localStorage.getItem(P2P_CAPACITY_BASELINE_KEY);
-
-    if(!value){
-      // Si el usuario limpió hace <60s, ignorar capacities en cache que puedan resucitar fechas viejas
-      const lastClear = Number(window.__p2pCapacityLastClear || localStorage.getItem(P2P_LAST_CLEAR_KEY) || 0);
-      const recentlyCleared = lastClear && (Date.now() - lastClear) < 60000;
-
-      if(!recentlyCleared){
-        const caps = loadP2PCapacity();
-        if(caps.length > 0){
-          const dates = caps.map(c => c.date).filter(Boolean).sort();
-          if(dates.length > 0){
-            value = dates[0] + "T00:00:00.000Z";
-          }
-        }
-      }
-
-      if(!value){
-        const midnightTs = getP2PCapacityChileMidnightTs();
-        value = new Date(midnightTs).toISOString();
-        localStorage.setItem(P2P_CAPACITY_BASELINE_KEY, value);
-        console.log("✅ Inicio P2P/capacity fijado (Chile midnight):", value);
-      }else{
-        localStorage.setItem(P2P_CAPACITY_BASELINE_KEY, value);
-        console.log("✅ Inicio P2P/capacity fijado:", value);
-      }
-    }
-
-    const ts = new Date(value).getTime();
-    return Number.isFinite(ts) ? ts : 0;
+    return Number(window.__p2pServerResetCutoff || 0) || 0;
   }
-
-  function getP2PCapacityChileMidnightTs(){
-    const now = Date.now();
-    const chileStr = new Date(now).toLocaleString("en-US", { timeZone: "America/Santiago" });
-    const [, timePart] = chileStr.split(", ");
-    const parts = timePart.split(/[:\s]/);
-    let h = parseInt(parts[0]);
-    const m = parseInt(parts[1]);
-    const s = parseInt(parts[2]);
-    const ampm = parts[3];
-    if(ampm === "PM" && h !== 12) h += 12;
-    if(ampm === "AM" && h === 12) h = 0;
-    const msSinceMidnightChile = (h * 3600 + m * 60 + s) * 1000;
-    return now - msSinceMidnightChile;
-  }
-
-  window.resetP2PCapacityBaselineNow = function(){
-    const midnightTs = getP2PCapacityChileMidnightTs();
-    const value = new Date(midnightTs).toISOString();
-    localStorage.setItem(P2P_CAPACITY_BASELINE_KEY, value);
-    renderP2PCapacityPanel();
-    updateP2PDashboardWithCapacity();
-    if(typeof showToast === "function") showToast("Inicio P2P reiniciado a las 00:00 Chile");
-    console.log("✅ Inicio P2P/capacity reiniciado a medianoche Chile:", value);
-  };
 
   function p2pCapMoney(n, decimals = 2){
     const value = Number(n || 0);
@@ -19451,6 +19414,9 @@ function addP2PBotStyles(){
       if (!res.ok) return false;
       const data = await res.json();
       window.__p2pServerAuthority = !!data?.serverAuthority;
+      // Ver getP2PCapacityBaselineTs() -- fecha de inicio ÚNICA para todos
+      // los dispositivos, en vez de que cada navegador se invente la suya.
+      window.__p2pServerResetCutoff = Number(data?.resetCutoff || 0) || 0;
       if (data?.ok && Array.isArray(data.items)) {
         // Siempre que el usuario haya indicado limpieza manual (flag persistente),
         // ignorar datos del servidor y borrar registros remotos para que no resuciten.
@@ -24945,12 +24911,23 @@ function addP2PBotStyles(){
   };
 
   window.executeP2PFullReset = function(){
-    // 1. Limpiar del servidor primero
+    // 1. Limpiar del servidor primero -- /api/p2p/reset también fija
+    // TenantSettings.p2pResetCutoff a "ahora", que es la fecha de inicio que
+    // TODOS los dispositivos van a leer de ahí en adelante (ver
+    // getP2PCapacityBaselineTs). La actualizamos acá mismo, apenas confirma
+    // el servidor, para que este mismo navegador no tenga que esperar al
+    // próximo sync para verlo reflejado.
     fetch('/api/p2p/reset', { method: 'POST', credentials: 'include' })
       .then(res => res.json())
       .then(data => {
-        if(data.ok) console.log("✅ Datos P2P eliminados del servidor");
-        else console.warn("⚠️ No se pudo limpiar servidor:", data.error);
+        if(data.ok){
+          console.log("✅ Datos P2P eliminados del servidor");
+          window.__p2pServerResetCutoff = Number(data.cutoff) || Date.now();
+          if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
+          if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
+        }else{
+          console.warn("⚠️ No se pudo limpiar servidor:", data.error);
+        }
       })
       .catch(e => console.warn("⚠️ Error limpiando servidor:", e));
 
@@ -24958,9 +24935,6 @@ function addP2PBotStyles(){
     window.__p2pCapacityCache = [];
     window.__p2pCapacityPendingSync = {};
     localStorage.removeItem(CAPACITY_KEY);
-
-    // 3. Limpiar baseline (se recalculará con la medianoche de Chile)
-    localStorage.removeItem(P2P_CAPACITY_BASELINE_KEY);
 
     // 4. Limpiar ventas Binance
     localStorage.removeItem(window.p2pOrdersKey('onze_p2p_binance_orders'));
@@ -24987,11 +24961,6 @@ function addP2PBotStyles(){
     //    en el próximo sync. Se mantiene el lastClear para referencia.
     localStorage.setItem(P2P_LAST_CLEAR_KEY, String(Date.now()));
     window.__p2pCapacityLastClear = Date.now();
-
-    // 9. Forzar el reinicio del baseline ahora
-    const midnightTs = getP2PCapacityChileMidnightTs();
-    const value = new Date(midnightTs).toISOString();
-    localStorage.setItem(P2P_CAPACITY_BASELINE_KEY, value);
 
     if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
     if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();

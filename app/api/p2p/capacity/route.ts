@@ -19,7 +19,7 @@ export async function GET() {
     }),
     prisma.tenantSettings.findUnique({
       where: { tenantId: session.tenantId },
-      select: { p2pCapacityServerAuthority: true },
+      select: { p2pCapacityServerAuthority: true, p2pResetCutoff: true },
     }),
   ]);
   const normalized = items.map((it: any) => ({
@@ -50,6 +50,14 @@ export async function GET() {
     // auto-completar capacities por su cuenta (ver autoFinishP2PCapacities
     // en onze-panel.html).
     serverAuthority: !!settings?.p2pCapacityServerAuthority,
+    // Fecha del último "Empezar de cero" (POST /api/p2p/reset), en ms epoch.
+    // Reemplaza la vieja fecha de inicio "inventada" por cada navegador
+    // (bug real confirmado sep 2026: localhost, web y celular mostraban
+    // "Este mes"/"Capital P2P" distintos porque cada uno se guardaba su
+    // propia fecha de corte en localStorage la primera vez que abría el
+    // panel) -- ver getP2PCapacityBaselineTs() en onze-panel.html, que ahora
+    // lee este valor en vez de auto-generar uno.
+    resetCutoff: settings?.p2pResetCutoff ? Number(settings.p2pResetCutoff) : null,
   });
 }
 
