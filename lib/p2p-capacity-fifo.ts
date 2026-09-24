@@ -123,7 +123,7 @@ function isPhantomSale(s: FifoSaleInput): boolean {
 export function computeP2PCapacityFifo(
   rawCapacities: FifoCapacityInput[],
   rawSales: FifoSaleInput[],
-  markedAsOwnCapital?: Set<string> | null
+  markedAsOwnCapital?: Map<string, number> | null
 ): FifoResult {
   const capacities = [...rawCapacities].sort((a, b) => {
     const dateA = new Date(a.date || a.createdAt || 0).getTime();
@@ -132,13 +132,8 @@ export function computeP2PCapacityFifo(
     return a.createdAt.getTime() - b.createdAt.getTime();
   });
 
-  // Ventas marcadas como "capital propio" (ver P2PCapitalMarkedSale) -- el
-  // usuario ya decidió que no son ganancia P2P nueva. Se excluyen acá, igual
-  // que en calculateP2PCapacityStats() del panel, para que nunca se les
-  // asigne ningún capacity ni cuenten como "sin asignar".
   const sales = rawSales
     .filter((s) => !isPhantomSale(s))
-    .filter((s) => !markedAsOwnCapital?.has(s.orderNumber))
     .sort((a, b) => a.executedAt.getTime() - b.executedAt.getTime());
 
   // Capacitys YA finalizados: se congelan tal cual (mismos valores que
@@ -146,7 +141,25 @@ export function computeP2PCapacityFifo(
   // ventas nuevas. Sus ventas ya asignadas se bloquean por orderNumber para
   // no volver a repartirlas -- ver lockedByOrder en
   // calculateP2PCapacityStats() del navegador.
+  //
+  // Bug real confirmado en vivo (sep 2026): la primera versión de "marcar
+  // como capital propio" EXCLUÍA la venta COMPLETA por orderNumber en vez de
+  // solo la porción marcada. Una venta grande podía estar 80% ya asignada a
+  // un capacity real y 20% sin asignar -- al marcar ese 20% como capital
+  // propio, el filtro por orderNumber sacaba el 100% de la venta de todo
+  // cálculo futuro, robándole al capacity real el 80% que sí le
+  // correspondía (confirmado: ~44M CLP de la cuenta de Hector y ~14.7M CLP
+  // de esta cuenta se "perdieron" así). Arreglo: en vez de filtrar la venta
+  // entera, se suma el monto marcado a `lockedByOrder` -- el mismo mecanismo
+  // que ya usan las ventas cubiertas por un capacity finalizado -- así solo
+  // se excluye la porción puntual marcada, y el resto de la venta sigue
+  // compitiendo normalmente por el reparto real.
   const lockedByOrder = new Map<string, number>();
+  if (markedAsOwnCapital) {
+    for (const [orderNumber, clp] of markedAsOwnCapital) {
+      lockedByOrder.set(orderNumber, (lockedByOrder.get(orderNumber) || 0) + Number(clp || 0));
+    }
+  }
   const frozenResults: FifoCapacityResult[] = [];
   const activeInputs: FifoCapacityInput[] = [];
 

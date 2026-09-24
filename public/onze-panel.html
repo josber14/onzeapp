@@ -19383,11 +19383,20 @@ function addP2PBotStyles(){
     }
   };
 
-  // Set de orderNumbers marcados como "capital propio" -- ver
+  // Map orderNumber -> CLP marcado como "capital propio" -- ver
   // P2PCapitalMarkedSale y el filtro en calculateP2PCapacityStats(). Se
   // sincroniza desde el servidor (no localStorage) para que la marca sea
   // igual en cualquier dispositivo.
-  window.__p2pCapitalMarkedOrderNumbers = window.__p2pCapitalMarkedOrderNumbers || new Set();
+  //
+  // Bug real confirmado en vivo (sep 2026): la primera versión usaba un Set
+  // (solo orderNumber, sin monto) y EXCLUÍA la venta COMPLETA del reparto.
+  // Una venta grande parcialmente cubierta por un capacity real (ej. 80%
+  // asignado, 20% sin asignar) perdía el 100% de golpe al marcar el 20% --
+  // le robaba al capacity real la parte que sí le correspondía (~44M CLP en
+  // una cuenta, ~14.7M CLP en otra). Ahora se guarda el MONTO marcado y se
+  // usa como un bloqueo parcial (lockedByOrder), igual que las ventas ya
+  // cubiertas por un capacity finalizado -- ver calculateP2PCapacityStats().
+  window.__p2pCapitalMarkedOrderNumbers = window.__p2pCapitalMarkedOrderNumbers || new Map();
 
   window.syncP2PCapitalMarkedSalesFromServer = async function syncP2PCapitalMarkedSalesFromServer(){
     try {
@@ -19396,10 +19405,10 @@ function addP2PBotStyles(){
       const data = await res.json();
       if(!data?.ok || !Array.isArray(data.items)) return false;
 
-      const next = new Set(data.items.map(it => String(it.orderNumber || "")));
+      const next = new Map(data.items.map(it => [String(it.orderNumber || ""), Number(it.totalPrice || 0)]));
       let changed = next.size !== window.__p2pCapitalMarkedOrderNumbers.size;
       if(!changed){
-        for(const id of next){ if(!window.__p2pCapitalMarkedOrderNumbers.has(id)){ changed = true; break; } }
+        for(const [id, clp] of next){ if(window.__p2pCapitalMarkedOrderNumbers.get(id) !== clp){ changed = true; break; } }
       }
       window.__p2pCapitalMarkedOrderNumbers = next;
 
@@ -19724,13 +19733,6 @@ function addP2PBotStyles(){
 
         return saleTs >= p2pCapacityBaselineTs;
       })
-      // Ventas marcadas explícitamente como "capital propio" (botón del
-      // aviso "Ventas sin compra/capacity detectadas") -- el usuario ya
-      // decidió que esa venta puntual NO es ganancia P2P nueva. Se excluyen
-      // acá, ANTES de entrar al reparto, para que nunca se le asignen a
-      // ningún capacity (ni nuevo ni viejo) ni vuelvan a contar como "sin
-      // asignar". Ver P2PCapitalMarkedSale / syncP2PCapitalMarkedSalesFromServer.
-      .filter(o => !(window.__p2pCapitalMarkedOrderNumbers || new Set()).has(String(o.orderNumber || "")))
       .sort((a,b)=> Number(getOrderTs(a) || 0) - Number(getOrderTs(b) || 0));
 
     const capacities = capacitiesRaw.map(item => {
@@ -19765,6 +19767,17 @@ function addP2PBotStyles(){
         if(!key) return;
         lockedByOrder[key] = (lockedByOrder[key] || 0) + Number(part.assignedClp || 0);
       });
+    });
+
+    // Ventas marcadas como "capital propio" (botón del aviso "Ventas sin
+    // compra/capacity detectadas") -- el usuario ya decidió que ESA PORCIÓN
+    // puntual no es ganancia P2P nueva. Se bloquea igual que una venta ya
+    // cubierta por un capacity finalizado (mismo mecanismo, arriba) -- NO se
+    // excluye la venta completa, solo el monto puntual marcado, para no
+    // robarle a un capacity real la parte que sí le corresponde si la venta
+    // estaba parcialmente asignada.
+    (window.__p2pCapitalMarkedOrderNumbers || new Map()).forEach((clp, orderNumber) => {
+      lockedByOrder[orderNumber] = (lockedByOrder[orderNumber] || 0) + Number(clp || 0);
     });
 
     let unassignedSaleUsdt = 0;
@@ -21904,7 +21917,7 @@ function addP2PBotStyles(){
       return;
     }
 
-    for(const it of items) window.__p2pCapitalMarkedOrderNumbers.add(it.orderNumber);
+    for(const it of items) window.__p2pCapitalMarkedOrderNumbers.set(it.orderNumber, it.totalPrice);
 
     if(typeof showToast === "function"){
       showToast("Ventas sin capacity marcadas como capital propio (guardado en servidor)");
