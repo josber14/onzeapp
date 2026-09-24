@@ -167,6 +167,36 @@ async function checkCapacityClusters() {
   );
 }
 
+// 4.5) Cuenta sin NINGÚN capacity activo: mientras dure esta ventana, toda
+// venta real que entre queda "sin asignar" (ver "Ventas sin compra/capacity
+// detectadas" en el panel) -- comportamiento esperado (pedido explícito del
+// usuario, sep 2026: "la única forma en que eso puede aparecer es si entran
+// ventas y no existe un capacity activo"), pero el usuario solo se enteraba
+// mirando el panel, después de que ya se habían acumulado decenas de ventas
+// sin cubrir. Este aviso llega apenas se detecta el hueco (máximo 5 min de
+// atraso, el ciclo del cron) para que pueda registrar el siguiente capacity
+// al toque, en vez de descubrirlo tarde. Solo se chequean tenants que ya
+// usan el módulo de capacity (al menos un P2PCapacity alguna vez) -- no
+// tiene sentido avisar a una cuenta que nunca lo usó.
+async function checkNoActiveCapacity() {
+  const tenantIds = await prisma.p2PCapacity
+    .findMany({ select: { tenantId: true }, distinct: ["tenantId"] })
+    .then((rows) => rows.map((r) => r.tenantId));
+
+  for (const tenantId of tenantIds) {
+    const key = `no-active-capacity:${tenantId}`;
+    const activeCount = await prisma.p2PCapacity.count({ where: { tenantId, status: "active" } });
+    if (activeCount > 0) {
+      await clearCooldown(key);
+      continue;
+    }
+    await alertOnce(
+      key,
+      `🟡 Sin capacity activo\n\nTenant ${tenantId} se quedó sin ningún capacity "active" -- cualquier venta real que entre ahora va a quedar "sin asignar" hasta que se registre uno nuevo. Revisar el panel de Capacity.`
+    );
+  }
+}
+
 // 5) Ciclo de ventas atascado: un ciclo "active" que lleva mucho más tiempo
 // abierto que lo normal (1-24h según los últimos cierres reales) suele
 // significar que autoCloseCycle() dejó de correr para esa cuenta o quedó
@@ -228,7 +258,7 @@ export async function GET(req: NextRequest) {
   }
 
   const errors: string[] = [];
-  for (const check of [checkStalledBots, checkBinanceErrorSpikes, checkSkipoFailures, checkCapacityClusters, checkStuckCycles, checkCycleErrors]) {
+  for (const check of [checkStalledBots, checkBinanceErrorSpikes, checkSkipoFailures, checkCapacityClusters, checkNoActiveCapacity, checkStuckCycles, checkCycleErrors]) {
     try {
       await check();
     } catch (e: any) {
