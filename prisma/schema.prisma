@@ -81,6 +81,7 @@ model Tenant {
   p2pCapacities           P2PCapacity[]
   p2pCapacityEngineLogs   P2PCapacityEngineLog[]
   p2pManualSales          P2PManualSale[]
+  p2pCapitalMarkedSales   P2PCapitalMarkedSale[]
   p2pCycles               P2PCycle[]
   p2pCycleSetAsideOrders  P2PCycleSetAsideOrder[]
   p2pWithdrawals          P2PWithdrawal[]
@@ -1035,6 +1036,34 @@ model P2PManualSale {
 
   @@index([tenantId])
   @@index([exchange])
+}
+
+// Ventas reales marcadas explícitamente como "capital propio" (botón
+// "Marcar como capital propio" del aviso "Ventas sin compra/capacity
+// detectadas") -- el usuario decide que esa venta puntual NO es ganancia
+// P2P nueva (ej. plata que ya estaba contabilizada por fuera). Antes esto
+// solo restaba un TOTAL agregado en localStorage (ver AGENTS.md, bug real
+// confirmado sep 2026) -- ni se sincronizaba entre dispositivos, ni excluía
+// las ventas puntuales del reparto real: al crear un capacity nuevo, esas
+// mismas ventas se le volvían a asignar como ganancia "nueva", duplicando
+// algo que el usuario ya había descartado. Ahora se guarda por orderNumber
+// en Neon -- calculateP2PCapacityStats() (panel) y computeP2PCapacityFifo()
+// (motor del servidor) tratan cada orden marcada acá como YA cubierta al
+// 100%, igual que una venta ya asignada a un capacity finalizado: nunca
+// vuelve a aparecer como "sin asignar" ni se le asigna a ningún capacity,
+// en ningún dispositivo.
+model P2PCapitalMarkedSale {
+  id         String   @id // reusa el orderNumber real de la venta
+  tenantId   Int
+  exchange   String
+  amount     Decimal  @db.Decimal(18, 8)
+  totalPrice Decimal  @db.Decimal(18, 2)
+  commission Decimal  @default(0) @db.Decimal(18, 8)
+  executedAt DateTime
+  createdAt  DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
 }
 
 // Idempotencia para /api/admin/skipo/confirm -- evita que un doble clic o un

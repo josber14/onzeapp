@@ -120,7 +120,11 @@ function isPhantomSale(s: FifoSaleInput): boolean {
   return Math.abs(s.amount) < 0.005 || Math.abs(s.totalPrice) < 0.5;
 }
 
-export function computeP2PCapacityFifo(rawCapacities: FifoCapacityInput[], rawSales: FifoSaleInput[]): FifoResult {
+export function computeP2PCapacityFifo(
+  rawCapacities: FifoCapacityInput[],
+  rawSales: FifoSaleInput[],
+  markedAsOwnCapital?: Set<string> | null
+): FifoResult {
   const capacities = [...rawCapacities].sort((a, b) => {
     const dateA = new Date(a.date || a.createdAt || 0).getTime();
     const dateB = new Date(b.date || b.createdAt || 0).getTime();
@@ -128,7 +132,14 @@ export function computeP2PCapacityFifo(rawCapacities: FifoCapacityInput[], rawSa
     return a.createdAt.getTime() - b.createdAt.getTime();
   });
 
-  const sales = rawSales.filter((s) => !isPhantomSale(s)).sort((a, b) => a.executedAt.getTime() - b.executedAt.getTime());
+  // Ventas marcadas como "capital propio" (ver P2PCapitalMarkedSale) -- el
+  // usuario ya decidió que no son ganancia P2P nueva. Se excluyen acá, igual
+  // que en calculateP2PCapacityStats() del panel, para que nunca se les
+  // asigne ningún capacity ni cuenten como "sin asignar".
+  const sales = rawSales
+    .filter((s) => !isPhantomSale(s))
+    .filter((s) => !markedAsOwnCapital?.has(s.orderNumber))
+    .sort((a, b) => a.executedAt.getTime() - b.executedAt.getTime());
 
   // Capacitys YA finalizados: se congelan tal cual (mismos valores que
   // /api/p2p/capacity ya tiene guardados) y NO participan del reparto de

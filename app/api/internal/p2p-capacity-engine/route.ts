@@ -100,8 +100,12 @@ async function processTenant(tenantId: number) {
     finalSaleParts: Array.isArray(c.finalSaleParts) ? (c.finalSaleParts as any) : null,
   }));
 
-  const sales = await loadTenantSales(tenantId);
-  const result = computeP2PCapacityFifo(capacities, sales);
+  const [sales, markedRows] = await Promise.all([
+    loadTenantSales(tenantId),
+    prisma.p2PCapitalMarkedSale.findMany({ where: { tenantId }, select: { id: true } }),
+  ]);
+  const markedAsOwnCapital = new Set(markedRows.map((r) => r.id));
+  const result = computeP2PCapacityFifo(capacities, sales, markedAsOwnCapital);
 
   const authoritative = !!settings?.p2pCapacityServerAuthority;
   const toFinish = result.capacities.filter((c) => c.shouldBeFinished);

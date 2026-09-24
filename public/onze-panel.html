@@ -18555,6 +18555,12 @@ function addP2PBotStyles(){
     // se autocorrige sin que nadie tenga que hacer nada.
     setTimeout(function(){ if(typeof syncP2PCapacityFromServer === 'function') syncP2PCapacityFromServer(); }, 500);
     setInterval(function(){ if(typeof syncP2PCapacityFromServer === 'function') syncP2PCapacityFromServer(); }, 60000);
+
+    // Ventas marcadas como "capital propio" (ver P2PCapitalMarkedSale) --
+    // mismo patrón que capacity: una vez al cargar y reintento cada 60s, así
+    // la marca es igual en cualquier dispositivo apenas sincroniza.
+    setTimeout(function(){ if(typeof syncP2PCapitalMarkedSalesFromServer === 'function') syncP2PCapitalMarkedSalesFromServer(); }, 500);
+    setInterval(function(){ if(typeof syncP2PCapitalMarkedSalesFromServer === 'function') syncP2PCapitalMarkedSalesFromServer(); }, 60000);
   }
 
   if(document.readyState === "loading"){
@@ -19377,6 +19383,37 @@ function addP2PBotStyles(){
     }
   };
 
+  // Set de orderNumbers marcados como "capital propio" -- ver
+  // P2PCapitalMarkedSale y el filtro en calculateP2PCapacityStats(). Se
+  // sincroniza desde el servidor (no localStorage) para que la marca sea
+  // igual en cualquier dispositivo.
+  window.__p2pCapitalMarkedOrderNumbers = window.__p2pCapitalMarkedOrderNumbers || new Set();
+
+  window.syncP2PCapitalMarkedSalesFromServer = async function syncP2PCapitalMarkedSalesFromServer(){
+    try {
+      const res = await fetch('/api/p2p/capital-marked-sale', { credentials: 'include' });
+      if(!res.ok) return false;
+      const data = await res.json();
+      if(!data?.ok || !Array.isArray(data.items)) return false;
+
+      const next = new Set(data.items.map(it => String(it.orderNumber || "")));
+      let changed = next.size !== window.__p2pCapitalMarkedOrderNumbers.size;
+      if(!changed){
+        for(const id of next){ if(!window.__p2pCapitalMarkedOrderNumbers.has(id)){ changed = true; break; } }
+      }
+      window.__p2pCapitalMarkedOrderNumbers = next;
+
+      if(changed){
+        if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
+        if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
+      }
+      return true;
+    } catch(e) {
+      console.warn('Error sincronizando ventas marcadas como capital propio:', e.message);
+      return false;
+    }
+  };
+
   function postP2PCapacityToServer(item, onSuccess, opts){
     // manualAction=true identifica un cierre EXPLÍCITO del usuario (botón
     // "Completar capacity", ver finishCapacityManually) -- distinto del
@@ -19687,6 +19724,13 @@ function addP2PBotStyles(){
 
         return saleTs >= p2pCapacityBaselineTs;
       })
+      // Ventas marcadas explícitamente como "capital propio" (botón del
+      // aviso "Ventas sin compra/capacity detectadas") -- el usuario ya
+      // decidió que esa venta puntual NO es ganancia P2P nueva. Se excluyen
+      // acá, ANTES de entrar al reparto, para que nunca se le asignen a
+      // ningún capacity (ni nuevo ni viejo) ni vuelvan a contar como "sin
+      // asignar". Ver P2PCapitalMarkedSale / syncP2PCapitalMarkedSalesFromServer.
+      .filter(o => !(window.__p2pCapitalMarkedOrderNumbers || new Set()).has(String(o.orderNumber || "")))
       .sort((a,b)=> Number(getOrderTs(a) || 0) - Number(getOrderTs(b) || 0));
 
     const capacities = capacitiesRaw.map(item => {
@@ -21808,8 +21852,9 @@ function addP2PBotStyles(){
     const excessUsdt = Number(stats.unassignedSaleUsdt || 0);
     const excessClp = Number(stats.unassignedSaleClp || 0);
     const excessCommissionUsdt = Number(stats.unassignedCommissionUsdt || 0);
+    const detail = Array.isArray(stats.unassignedSaleDetail) ? stats.unassignedSaleDetail : [];
 
-    if(excessUsdt <= 0){
+    if(excessUsdt <= 0 || !detail.length){
       onzeAlert("No hay ventas sin capacity para marcar como capital propio.");
       return;
     }
@@ -21818,28 +21863,51 @@ function addP2PBotStyles(){
       `¿Marcar estas ventas sin capacity como saldo/capital P2P propio?\n\n` +
       `USDT vendido sin capacity: ${p2pCapMoney(excessUsdt, 2)} USDT\n` +
       `CLP recibido aproximado: ${p2pCapMoney(excessClp, 0)} CLP\n` +
-      `Comisión Binance: ${p2pCapMoney(excessCommissionUsdt, 4)} USDT\n\n` +
-      `Esto significa que no pertenece a un proveedor externo.`
+      `Comisión Binance: ${p2pCapMoney(excessCommissionUsdt, 4)} USDT\n` +
+      `(${detail.length} venta(s))\n\n` +
+      `Esto significa que no pertenece a un proveedor externo, y estas ventas puntuales ` +
+      `NUNCA se le van a asignar a ningún capacity (nuevo o viejo), en ningún dispositivo.`
     );
 
     if(!ok) return;
 
-    const items = loadP2POwnCapital();
+    // Bug real confirmado en vivo (sep 2026): la versión vieja de esto solo
+    // guardaba un TOTAL agregado en localStorage -- no vivía en el servidor
+    // (cada dispositivo veía algo distinto) y no excluía las ventas
+    // puntuales del reparto real, así que al crear un capacity nuevo esas
+    // mismas ventas se le volvían a asignar como ganancia "nueva". Ahora se
+    // manda cada orden puntual a Neon (P2PCapitalMarkedSale) -- ver
+    // calculateP2PCapacityStats(), que las excluye por completo del reparto
+    // en cuanto llegan acá, en cualquier dispositivo.
+    const items = detail.map(d => ({
+      orderNumber: d.orderNumber,
+      exchange: d.exchange || "binance",
+      amount: Number(d.usdt || 0),
+      totalPrice: Number(d.clp || 0),
+      commission: 0,
+      executedAt: d.date || new Date().toISOString(),
+    }));
 
-    items.push({
-      id: `own_${Date.now()}`,
-      usdtAmount: excessUsdt,
-      clpReceived: excessClp,
-      commissionUsdt: excessCommissionUsdt,
-      source: "ventas_sin_capacity",
-      note: "Ventas Binance sin capacity marcadas como capital P2P propio",
-      createdAt: new Date().toISOString()
-    });
+    try {
+      const res = await fetch('/api/p2p/capital-marked-sale', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      const data = await res.json().catch(() => null);
+      if(!res.ok || !data?.ok){
+        throw new Error(data?.error || res.statusText || 'Error servidor');
+      }
+    } catch(e) {
+      onzeAlert('⚠️ No se pudo guardar en el servidor: ' + (e?.message || e) + '\n\nNo se marcó nada -- probá de nuevo.');
+      return;
+    }
 
-    saveP2POwnCapital(items);
+    for(const it of items) window.__p2pCapitalMarkedOrderNumbers.add(it.orderNumber);
 
     if(typeof showToast === "function"){
-      showToast("Ventas sin capacity marcadas como capital propio");
+      showToast("Ventas sin capacity marcadas como capital propio (guardado en servidor)");
     }else{
       onzeAlert("Ventas sin capacity marcadas como capital propio.");
     }
