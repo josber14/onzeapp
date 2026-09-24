@@ -44,6 +44,16 @@ export async function GET() {
 
 // Body: { items: [{ orderNumber, exchange, amount, totalPrice, commission, executedAt }, ...] }
 // Bulk -- el botón marca TODAS las ventas sin asignar del momento de una vez.
+//
+// Bug real confirmado en vivo (sep 2026): con una cuenta de alto volumen
+// (661 ventas sin asignar de una), el loop de abajo hacía 2 consultas
+// SECUENCIALES por cada venta (find + upsert) -- 1.300+ idas y vueltas a la
+// base en una sola llamada, que superaba el tiempo límite de la función
+// mucho antes de terminar. El usuario veía que el botón solo "marcaba" las
+// primeras ~10 y tenía que apretarlo una y otra vez. Arreglo: una sola
+// consulta bulk (createMany + skipDuplicates) en vez de cientos de idas y
+// vueltas -- mismo resultado (una fila nueva por orden, nunca pisa una ya
+// existente, sea de este tenant o de otro), pero en una sola operación.
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.tenantId) {
@@ -56,28 +66,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Falta items" }, { status: 400 });
   }
 
-  for (const item of items) {
-    const orderNumber = String(item?.orderNumber || "");
-    if (!orderNumber) continue;
-    const existing = await prisma.p2PCapitalMarkedSale.findUnique({ where: { id: orderNumber } });
-    if (existing && existing.tenantId !== tenantId) continue; // nunca pisar una marca de otro tenant
+  const rows = items
+    .map((item: any) => ({ orderNumber: String(item?.orderNumber || ""), item }))
+    .filter((r: any) => r.orderNumber)
+    .map(({ orderNumber, item }: any) => ({
+      id: orderNumber,
+      tenantId,
+      exchange: String(item.exchange || "binance"),
+      amount: Number(item.amount || 0),
+      totalPrice: Number(item.totalPrice || 0),
+      commission: Number(item.commission || 0),
+      executedAt: item.executedAt ? new Date(item.executedAt) : new Date(),
+    }));
 
-    await prisma.p2PCapitalMarkedSale.upsert({
-      where: { id: orderNumber },
-      update: {},
-      create: {
-        id: orderNumber,
-        tenantId,
-        exchange: String(item.exchange || "binance"),
-        amount: Number(item.amount || 0),
-        totalPrice: Number(item.totalPrice || 0),
-        commission: Number(item.commission || 0),
-        executedAt: item.executedAt ? new Date(item.executedAt) : new Date(),
-      },
-    });
-  }
+  const result = await prisma.p2PCapitalMarkedSale.createMany({ data: rows, skipDuplicates: true });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, created: result.count, requested: rows.length });
 }
 
 export async function DELETE(req: NextRequest) {
