@@ -19749,18 +19749,24 @@ function addP2PBotStyles(){
         // Capacity finalizado queda congelado. Las nuevas ventas saltan al siguiente activo.
         if(cap.status === "finished") continue;
 
-        // Un capacity activo consume ventas desde su fecha operativa.
-        // No usamos createdAt porque el usuario puede registrar el capacity después
-        // de que ya existan ventas Binance del mismo día/ciclo.
-        const capStartTs = cap.date
-          ? new Date(String(cap.date) + "T00:00:00").getTime()
-          : (cap.createdAt ? new Date(cap.createdAt).getTime() : 0);
-
-        const saleTs = Number(getOrderTs(sale) || 0);
-
-        if(capStartTs && saleTs && saleTs < capStartTs){
-          continue;
-        }
+        // Bug real confirmado en vivo (sep 2026, pedido explícito del
+        // usuario): ANTES, un capacity activo solo podía tomar ventas
+        // fechadas desde su propia fecha en adelante (capStartTs). Eso
+        // rompía el flujo de trabajo real del usuario: cierra el último
+        // capacity del día pagando el resto con plata externa (queda
+        // "finished", congelado) y al día siguiente crea capacitys nuevos
+        // fechados ese día. Cualquier venta real que entrara en el hueco
+        // entre esos dos momentos (ej. una venta de anoche tarde, procesada
+        // recién esta mañana) no podía ser tomada por NINGÚN capacity: los
+        // de ayer ya están congelados, y el de hoy tiene fecha de hoy -- la
+        // venta quedaba "en el aire" para siempre, aunque el usuario
+        // religiosamente creara un capacity nuevo cada día. Regla de negocio
+        // confirmada: una venta sin asignar SOLO es válida si no existe
+        // NINGÚN capacity activo en ese momento -- mientras exista al menos
+        // uno, tiene que poder cubrirla, sin importar qué fecha tenga
+        // escrita. Se quita la restricción de fecha acá: el reparto ahora
+        // es FIFO puro por orden de capacity y de venta, no por coincidencia
+        // de fechas.
 
         // Asignar por CLP: el capacity se completa cuando el CLP recibido
         // alcanza su capacityClp. El USDT se prorratea de la venta original.

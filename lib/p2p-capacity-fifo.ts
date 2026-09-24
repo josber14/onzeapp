@@ -195,11 +195,12 @@ export function computeP2PCapacityFifo(rawCapacities: FifoCapacityInput[], rawSa
     for (const cap of working) {
       if (saleRemainingClp <= 0) break;
 
-      const capStartTs = cap.date
-        ? new Date(String(cap.date) + "T00:00:00").getTime()
-        : cap.createdAt.getTime();
-      if (capStartTs && sale.executedAt.getTime() < capStartTs) continue;
-
+      // Sin restricción de fecha por capacity -- ver el mismo cambio y su
+      // razón completa en calculateP2PCapacityStats() (onze-panel.html).
+      // Regla de negocio confirmada (sep 2026): una venta sin asignar solo
+      // es válida si NINGÚN capacity está activo; mientras exista al menos
+      // uno activo, tiene que cubrirla sin importar su fecha -- FIFO puro
+      // por orden de capacity y de venta.
       const capAvailableClp = Math.max(cap.capacityClp - cap.manualPaymentsClp - cap.clpReceived, 0);
       if (capAvailableClp <= 0) continue;
 
