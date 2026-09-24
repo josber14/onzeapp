@@ -18544,6 +18544,17 @@ function addP2PBotStyles(){
     setTimeout(initBinanceSalesSync, 500);
     setTimeout(initBybitSalesSync, 500);
     setTimeout(initOkxSalesTab, 500);
+
+    // Bug real confirmado en vivo (sep 2026): antes de esto, syncP2PCapacityFromServer()
+    // solo corría al navegar a la pestaña Dashboard P2P -- si esa única
+    // llamada fallaba (ej. el servidor tuvo un error puntual), el panel se
+    // quedaba con "0 capacitys" hasta que el usuario navegara para afuera y
+    // para adentro de nuevo. Ahora corre una vez al cargar y se reintenta
+    // sola cada 60s de fondo -- mismo patrón que ya tienen las ventas
+    // (initBinanceSalesSync/initBybitSalesSync) -- así una falla transitoria
+    // se autocorrige sin que nadie tenga que hacer nada.
+    setTimeout(function(){ if(typeof syncP2PCapacityFromServer === 'function') syncP2PCapacityFromServer(); }, 500);
+    setInterval(function(){ if(typeof syncP2PCapacityFromServer === 'function') syncP2PCapacityFromServer(); }, 60000);
   }
 
   if(document.readyState === "loading"){
@@ -19411,7 +19422,19 @@ function addP2PBotStyles(){
       }
 
       const res = await fetch('/api/p2p/capacity', { credentials: 'include' });
-      if (!res.ok) return false;
+      if (!res.ok) {
+        // Bug real confirmado en vivo (sep 2026): un 500 acá (ej. servidor de
+        // desarrollo con el cliente de Prisma desactualizado tras un cambio
+        // de esquema, sin reiniciar) quedaba en absoluto silencio -- el panel
+        // seguía mostrando "0 capacitys" para siempre, indistinguible de una
+        // cuenta que de verdad no tiene ninguno cargado. Un 401 (sesión
+        // vencida) es normal y no necesita alarmar -- cualquier OTRO código
+        // sí es una falla real que hay que hacer visible.
+        if (res.status !== 401) {
+          warnP2PCapacitySyncFailure(`servidor respondió ${res.status}`);
+        }
+        return false;
+      }
       const data = await res.json();
       window.__p2pServerAuthority = !!data?.serverAuthority;
       // Ver getP2PCapacityBaselineTs() -- fecha de inicio ÚNICA para todos
@@ -19538,9 +19561,26 @@ function addP2PBotStyles(){
         }
         return true;
       }
-    } catch(e) { console.warn('Error sync from server:', e); }
+    } catch(e) {
+      console.warn('Error sync from server:', e);
+      warnP2PCapacitySyncFailure(e?.message || 'error de red');
+    }
     return false;
   };
+
+  // Aviso visible de que los capacitys NO se pudieron cargar del servidor --
+  // antes esto fallaba en silencio (ver comentario arriba). Con cooldown de
+  // 60s para no repetir el mismo toast en cada intento del timer/reintentos.
+  let __p2pCapacitySyncFailureLastWarnedAt = 0;
+  function warnP2PCapacitySyncFailure(detail){
+    const now = Date.now();
+    if (now - __p2pCapacitySyncFailureLastWarnedAt < 60000) return;
+    __p2pCapacitySyncFailureLastWarnedAt = now;
+    console.error('❌ No se pudieron cargar los capacitys del servidor:', detail);
+    if (typeof showToast === 'function') {
+      showToast('⚠️ No se pudo cargar Capacity del servidor (' + detail + ') -- los números de esta pantalla pueden estar incompletos. Reintentando...', 'error');
+    }
+  }
 
   // SINGLE definition (duplicates removed)
   window.isTodayChileFromTs = function isTodayChileFromTs(ts){

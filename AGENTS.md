@@ -804,3 +804,85 @@ antes de seguir ajustando código, considerar sugerir al usuario pausar el bot p
 minutos como primera opción práctica — ya se demostró que funciona. No es una solución de código,
 es una acción operativa, pero vale la pena tenerla presente como opción real antes de seguir
 troubleshooteando indefinidamente.
+
+---
+
+# "Este mes"/"Capital P2P" distinto entre localhost, web y celular (RESUELTO, sep 2026)
+
+## Síntoma
+El mismo "Resumen P2P" (USDT vendidos, CLP recibido, Ganancia, Capital P2P) mostraba números
+distintos según el dispositivo: localhost, www.onze-pay.com (PC) y el celular daban 3 totales
+diferentes para "Este mes" y "Capital P2P" -- aunque "Hoy" coincidía. Recargar la página NO
+arreglaba nada, lo cual fue la pista de que no era un problema de sincronización sino un valor
+permanente guardado distinto en cada dispositivo.
+
+## Causa raíz #1 (la de fondo): fecha de "inicio" del módulo P2P inventada por CADA navegador
+`getP2PCapacityBaselineTs()` (en `onze-panel.html`) se guardaba en `localStorage`
+(`P2P_CAPACITY_BASELINE_KEY`) y NUNCA se sincronizaba con el servidor. La primera vez que CADA
+navegador abría el panel, se auto-asignaba su propia fecha de corte (la fecha del capacity más
+viejo en su caché local en ese momento, o "medianoche de hoy" si no tenía nada) -- localhost, la
+PC y el celular terminaron cada uno con un corte distinto, elegido en un momento distinto. Esa
+fecha filtra CUÁLES ventas cuentan en "Este mes"/"Capital P2P" (`isP2PInRange` ->
+`isP2PAfterCapacityBaseline` -> `getP2PCapacityBaselineTs`), así que cada dispositivo mostraba un
+subconjunto distinto de la MISMA historia real.
+
+### Arreglo
+Ya existía en el servidor (Neon) el valor correcto para esto: `TenantSettings.p2pResetCutoff`
+(la fecha del último "Empezar de cero", `/api/p2p/reset`) -- el mismo concepto, pero guardado en
+un solo lugar. `getP2PCapacityBaselineTs()` ahora es una función de una sola línea que lee
+`window.__p2pServerResetCutoff` (poblado por `syncP2PCapacityFromServer()` en cada sync desde
+`GET /api/p2p/capacity`, que ahora expone `resetCutoff`), en vez de auto-generar un valor local.
+`executeP2PFullReset()` ("Empezar de cero") actualiza ese valor al instante tras confirmar el
+reset del servidor, sin esperar el próximo sync. La función vieja (`getP2PCapacityChileMidnightTs`,
+el self-seed en localStorage, `resetP2PCapacityBaselineNow`) se eliminó por completo -- ya no
+tiene sentido con el servidor como única fuente de verdad.
+
+## Causa raíz #2 (la que "escondió" el arreglo en localhost): servidor de desarrollo con el
+cliente de Prisma desactualizado en memoria
+
+Después de aplicar el arreglo #1, la PC y el celular (ambos contra la producción real) quedaron
+IGUALES entre sí -- pero localhost se quedó mostrando los números VIEJOS, ni siquiera después de
+recargar. Peor: una prueba en una ventana de incógnito (sesión 100% nueva, cero caché) mostró
+**0 capacitys cargados** y una cifra gigante y falsa de "ventas sin asignar" -- muy distinto al
+síntoma original.
+
+**Diagnóstico real (confirmado con `curl` directo al servidor, no adivinado)**: `GET
+/api/p2p/capacity` devolvía **500 Internal Server Error** en el servidor local. Causa: el proceso
+de `next dev` llevaba corriendo desde ANTES de que esta misma sesión corriera `prisma db push` +
+`prisma generate` para agregar el motor de Capacity (nuevo campo
+`TenantSettings.p2pCapacityServerAuthority`, nuevo modelo `P2PCapacityEngineLog`). El proceso de
+Next.js en memoria seguía con el cliente de Prisma VIEJO (compilado en sus chunks de webpack al
+arrancar), que no reconocía el campo nuevo -- cualquier request a esa ruta explotaba con una
+excepción no capturada. El error era 100% silencioso del lado del navegador: `syncP2PCapacityFromServer()`
+solo hacía `if (!res.ok) return false;` sin avisar nada, así que el panel se quedaba mostrando
+"0 capacitys" (indistinguible de una cuenta que de verdad no tiene ninguno) para siempre, en vez
+de un error visible.
+
+**Esto NO afecta a producción** -- cada deploy de Vercel corre `prisma generate` como parte del
+build (`"build": "prisma generate && next build"` en `package.json`), así que production SIEMPRE
+arranca con el cliente actualizado. Es un problema específico de un `next dev` local que sigue
+corriendo desde antes de un cambio de schema.
+
+### Arreglo
+1. Reiniciar el proceso de `next dev` local (matar el proceso viejo, levantar uno nuevo) --
+   soluciona el síntoma al instante, confirmado con `curl` directo (500 -> 200, 469 capacitys).
+2. Arreglo estructural para que este tipo de falla nunca vuelva a ser INVISIBLE:
+   `syncP2PCapacityFromServer()` ahora, si el fetch falla (cualquier código que no sea 401, o una
+   excepción de red), llama a `warnP2PCapacitySyncFailure()` -- un toast visible ("⚠️ No se pudo
+   cargar Capacity del servidor...") con cooldown de 60s para no spamear, en vez de fallar en
+   silencio.
+3. Antes, `syncP2PCapacityFromServer()` SOLO corría al navegar a la pestaña "Dashboard P2P" -- si
+   esa única llamada fallaba, el panel quedaba pegado hasta que el usuario navegara para afuera y
+   para adentro de nuevo. Ahora `initP2PDashboard()` la llama una vez al cargar Y la reintenta
+   sola cada 60s de fondo (mismo patrón que ya tenían las ventas), así una falla transitoria se
+   autocorrige sola.
+
+### Regla para el futuro (IMPORTANTE)
+**Cada vez que se corra `prisma db push`/`prisma migrate` (cualquier cambio de schema) en esta
+sesión o en una futura, hay que reiniciar el proceso de `next dev` local si ya estaba corriendo
+de antes.** Next.js no recompila automáticamente el cliente de Prisma generado en
+`node_modules/@prisma/client` dentro de los chunks de webpack ya cargados en memoria -- un
+cambio de schema sin reiniciar el servidor local produce EXACTAMENTE este síntoma (500 silencioso
+en cualquier ruta que toque el campo/modelo nuevo). Producción nunca sufre esto porque cada
+deploy es un build limpio. Si en el futuro el panel muestra datos "vacíos" o muy distintos a
+producción justo después de un cambio de schema, sospechar de esto ANTES que de un bug de datos.
