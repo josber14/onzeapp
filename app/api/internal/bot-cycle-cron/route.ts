@@ -82,12 +82,24 @@ export async function GET(req: NextRequest) {
 
   try {
     while (Date.now() - startedAt < RUN_BUDGET_MS) {
+      // Pedido explícito del usuario (sep 2026): el historial de órdenes de
+      // Binance (venta real -> P2PBotOrder) tiene que sincronizarse SIEMPRE,
+      // esté o no prendido el bot de precio -- es una lectura por API, no
+      // maneja precio. Antes esta consulta solo traía cuentas con
+      // enabled=true, así que una cuenta con el bot apagado (ej. mientras se
+      // investiga un error) nunca volvía a llamar a executeBotCycle -- ni el
+      // navegador (si nadie clickeó "Iniciar") ni este cron la cubrían, y
+      // ninguna venta real se sincronizaba hasta prender el bot de nuevo.
+      // Ahora también se incluyen las cuentas de binance DESHABILITADAS
+      // (executeBotCycle ya sabe, con su propio freno de 10s, sincronizar
+      // solo el historial de órdenes sin tocar precio -- ver
+      // syncBinanceOrdersOnly en engine.ts).
       const configs = await prisma.p2PBotExchangeConfig.findMany({
-        where: { enabled: true },
+        where: { OR: [{ enabled: true }, { exchange: "binance" }] },
         select: { tenantId: true, label: true, lastCycleAt: true },
       });
 
-      if (configs.length === 0) break; // nada prendido, no vale la pena seguir loopeando
+      if (configs.length === 0) break; // nada configurado, no vale la pena seguir loopeando
 
       // Por par tenant+label, se queda con el lastCycleAt más reciente entre
       // sus exchanges habilitados -- si CUALQUIERA cicló hace muy poco, es

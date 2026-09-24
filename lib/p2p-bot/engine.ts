@@ -55,6 +55,15 @@ const binanceStates = new Map<number, BinanceState>();
 const lastFullCycleAt = new Map<string, number>();
 const MIN_CYCLE_GAP_MS = 300;
 
+// Freno propio para el sync de órdenes independiente del bot de precio (ver
+// syncBinanceOrdersOnly y su llamado en executeBotCycle) -- no necesita
+// correr cada 300ms como el precio, con la cuenta operando a mano el
+// historial de órdenes no cambia tan seguido. 10s alcanza de sobra para que
+// una venta real aparezca casi al instante, sin llamar a Binance de más
+// mientras el bot de precio está apagado.
+const lastOrderSyncOnlyAt = new Map<string, number>();
+const ORDER_SYNC_ONLY_GAP_MS = 10000;
+
 // Captura del lado de compra (side="0") para el Oráculo de mercado -- es
 // solo para el panel de análisis, no alimenta ninguna decisión de precio,
 // por eso se limita a 1 vez cada 30s (no cada ciclo) para no sumarle mas
@@ -490,6 +499,29 @@ export async function executeBotCycle(tenantId: number, label = "ONZE", force = 
       const isDisabled = !activeConfig?.enabled || exPaused;
       if (!isDisabled) anyEnabled = true;
 
+      // Pedido explícito del usuario (sep 2026): sincronizar el historial de
+      // órdenes es una lectura por API (getOrders), no tiene nada que ver
+      // con el manejo de precio -- una venta real tiene que reflejarse en
+      // capacitys/ventas SIEMPRE, esté o no prendido el bot de precio. Antes
+      // esto vivía solo dentro del ciclo de precio (runBinanceCycle), así
+      // que con el bot apagado (ej. mientras se investiga un error, o de
+      // noche) ninguna venta se sincronizaba aunque el usuario siguiera
+      // operando a mano en la app de Binance. Corre acá, ANTES del corte de
+      // "bot deshabilitado" de abajo, con su propio freno de 10s (no hace
+      // falta la cadencia de 300ms del precio para esto).
+      if (exchange === "binance" && isDisabled && !force) {
+        const syncKey = `${tenantId}:${label}`;
+        const lastSync = lastOrderSyncOnlyAt.get(syncKey) || 0;
+        if (Date.now() - lastSync >= ORDER_SYNC_ONLY_GAP_MS) {
+          const creds = await prisma.binanceCredentials.findFirst({ where: { tenantId, isActive: true, label } });
+          if (creds) {
+            lastOrderSyncOnlyAt.set(syncKey, Date.now());
+            const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
+            await syncBinanceOrdersOnly(tenantId, client, label, l);
+          }
+        }
+      }
+
       if (isDisabled && !chatEnabled && !force) {
         await l( "info", exchange, `Bot ${exchange} deshabilitado en su sesión`);
         if (exchange === "binance") cycleState.binance = await buildBinanceState(getBinanceState(tenantId), `${tenantId}:${label}`);
@@ -735,6 +767,68 @@ async function fetchMyBinanceAds(client: BinanceP2PClient): Promise<any[]> {
   else if (myAdsRes?.result && Array.isArray(myAdsRes.result)) raw = myAdsRes.result;
   else if (myAdsRes?.list && Array.isArray(myAdsRes.list)) raw = myAdsRes.list;
   return raw.map(normalizeBinanceAd);
+}
+
+// Sincroniza el historial de órdenes de Binance a P2PBotOrder -- pedido
+// explícito del usuario (sep 2026): esto es una lectura por API (getOrders),
+// no tiene nada que ver con manejo de precio, así que las ventas reales
+// tienen que reflejarse en capacitys/ventas SIEMPRE, este o no encendido el
+// bot de precio. Antes vivía como el paso "5. Sync orders" DENTRO de
+// runBinanceCycle, que solo corre si el bot está enabled -- con el bot
+// apagado (ej. mientras se investiga un error, o simplemente de noche),
+// ninguna venta real se sincronizaba aunque el usuario siguiera operando a
+// mano en la app de Binance. Ver el llamado independiente en executeBotCycle,
+// antes del chequeo de "bot deshabilitado".
+async function syncBinanceOrdersOnly(
+  tenantId: number,
+  client: BinanceP2PClient,
+  label: string,
+  log: (level: string, exchange: string | null, message: string, details?: any) => Promise<void>
+) {
+  try {
+    const ordersRes = await client.getOrders({ page: 1, rows: 30 });
+    const binanceOrders = ordersRes?.data ?? [];
+    for (const o of binanceOrders) {
+      const orderId = o.orderNumber ?? o.orderNo ?? o.id;
+      const newStatus = String(o.orderStatus ?? o.status ?? "unknown");
+      const commissionUsdt = Number(o.commission ?? 0);
+      const existing = await prisma.p2PBotOrder.findFirst({
+        where: { tenantId, orderNumber: orderId, exchange: "binance" },
+      });
+      if (existing) {
+        const needsUpdate = existing.status !== newStatus || existing.label !== label || (existing.commission == null && commissionUsdt > 0);
+        if (needsUpdate) {
+          await prisma.p2PBotOrder.update({
+            where: { id: existing.id },
+            data: {
+              status: newStatus,
+              label,
+              ...(existing.commission == null && commissionUsdt > 0 ? { commission: commissionUsdt } : {}),
+            },
+          });
+        }
+      } else {
+        await prisma.p2PBotOrder.create({
+          data: {
+            tenantId, label, exchange: "binance", orderNumber: orderId,
+            tradeType: o.tradeType === "SELL" ? "SELL" : "BUY",
+            asset: o.asset || "USDT", fiat: o.fiat || "CLP",
+            amount: Number(o.amount ?? o.totalQuantity ?? 0),
+            totalPrice: Number(o.totalPrice ?? o.totalAmount ?? 0),
+            unitPrice: Number(o.unitPrice ?? o.price ?? 0),
+            commission: commissionUsdt,
+            status: newStatus,
+            counterparty: o.counterPartNickName ?? o.counterpartyNickName ?? o.publisherName ?? "",
+            executedAt: o.createTime ? new Date(o.createTime) : new Date(),
+          },
+        });
+      }
+    }
+  } catch (e: any) {
+    if (!e.message?.includes("-9000") && !e.message?.includes("-1000")) {
+      await log( "warn", "binance", `Error órdenes: ${e.message}`);
+    }
+  }
 }
 
 async function runBinanceCycle(
@@ -1519,65 +1613,10 @@ async function runBinanceCycle(
       }
     }
 
-    // 5. Sync orders
-    // Bug real confirmado (ago 2026): esta sincronización NUNCA guardaba
-    // `label` (ONZE/ZINPLE quedaban mezclados sin forma de distinguirlos) y
-    // NUNCA actualizaba el estado de una orden ya guardada -- una orden
-    // vista por primera vez como "TRADING" quedaba congelada así para
-    // siempre, aunque en Binance ya se hubiera completado. Bybit (más abajo
-    // en este archivo) ya tenía el arreglo del estado; acá nunca se aplicó.
-    // Mismo patrón que Bybit ahora: crear si es nueva, actualizar el estado
-    // si cambió.
-    try {
-      const ordersRes = await client.getOrders({ page: 1, rows: 30 });
-      const binanceOrders = ordersRes?.data ?? [];
-      for (const o of binanceOrders) {
-        const orderId = o.orderNumber ?? o.orderNo ?? o.id;
-        const newStatus = String(o.orderStatus ?? o.status ?? "unknown");
-        // Bug real confirmado (ago 2026): este fetch (listUserOrderHistory)
-        // sí trae la comisión real cobrada por Binance en `o.commission`,
-        // pero nunca se guardaba -- toda orden quedaba con comisión 0,
-        // inflando la ganancia mostrada en el Dashboard. Se guarda al crear
-        // y se rellena en las que ya existían sin ella (nunca cambia
-        // después de completada, así que no hace falta pisarla si ya está).
-        const commissionUsdt = Number(o.commission ?? 0);
-        const existing = await prisma.p2PBotOrder.findFirst({
-          where: { tenantId, orderNumber: orderId, exchange: "binance" },
-        });
-        if (existing) {
-          const needsUpdate = existing.status !== newStatus || existing.label !== label || (existing.commission == null && commissionUsdt > 0);
-          if (needsUpdate) {
-            await prisma.p2PBotOrder.update({
-              where: { id: existing.id },
-              data: {
-                status: newStatus,
-                label,
-                ...(existing.commission == null && commissionUsdt > 0 ? { commission: commissionUsdt } : {}),
-              },
-            });
-          }
-        } else {
-          await prisma.p2PBotOrder.create({
-            data: {
-              tenantId, label, exchange: "binance", orderNumber: orderId,
-              tradeType: o.tradeType === "SELL" ? "SELL" : "BUY",
-              asset: o.asset || "USDT", fiat: o.fiat || "CLP",
-              amount: Number(o.amount ?? o.totalQuantity ?? 0),
-              totalPrice: Number(o.totalPrice ?? o.totalAmount ?? 0),
-              unitPrice: Number(o.unitPrice ?? o.price ?? 0),
-              commission: commissionUsdt,
-              status: newStatus,
-              counterparty: o.counterPartNickName ?? o.counterpartyNickName ?? o.publisherName ?? "",
-              executedAt: o.createTime ? new Date(o.createTime) : new Date(),
-            },
-          });
-        }
-      }
-    } catch (e: any) {
-      if (!e.message?.includes("-9000") && !e.message?.includes("-1000")) {
-        await log( "warn", "binance", `Error órdenes: ${e.message}`);
-      }
-    }
+    // 5. Sync orders -- extraída a syncBinanceOrdersOnly() (también se llama
+    // de forma independiente desde executeBotCycle, sin importar si el bot
+    // de precio está prendido o no, ver el comentario ahí).
+    await syncBinanceOrdersOnly(tenantId, client, label, log);
 
     // Update stored price/target for UI
     await log( "info", "binance", `Ciclo completado: managedAds: ${managedAds.length}`);
