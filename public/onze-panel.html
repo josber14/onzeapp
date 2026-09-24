@@ -18841,7 +18841,10 @@ function addP2PBotStyles(){
   }
 
   window.saveP2PBinanceOrders = function saveP2PBinanceOrders(orders){
-    localStorage.setItem(p2pOrdersKey("onze_p2p_binance_orders"), JSON.stringify(Array.isArray(orders) ? orders : []));
+    // Mismo resguardo que saveP2PCapacity() -- en una cuenta de mucho
+    // volumen (miles de ventas reales) este JSON también puede superar el
+    // límite de localStorage; que falle acá nunca debe cortar al que llama.
+    try{ localStorage.setItem(p2pOrdersKey("onze_p2p_binance_orders"), JSON.stringify(Array.isArray(orders) ? orders : [])); }catch(e){ console.warn('No se pudo guardar ventas Binance en localStorage (no crítico):', e.message); }
   }
 
   // Espejo de loadP2PBinanceOrders/saveP2PBinanceOrders para Bybit -- misma
@@ -18856,7 +18859,7 @@ function addP2PBotStyles(){
   }
 
   window.saveP2PBybitOrders = function saveP2PBybitOrders(orders){
-    localStorage.setItem(p2pOrdersKey("onze_p2p_bybit_orders"), JSON.stringify(Array.isArray(orders) ? orders : []));
+    try{ localStorage.setItem(p2pOrdersKey("onze_p2p_bybit_orders"), JSON.stringify(Array.isArray(orders) ? orders : [])); }catch(e){ console.warn('No se pudo guardar ventas Bybit en localStorage (no crítico):', e.message); }
   }
 
   // Mismo espejo para OKX -- solo ventas manuales por ahora (no hay API de
@@ -18871,7 +18874,7 @@ function addP2PBotStyles(){
   }
 
   window.saveP2POkxOrders = function saveP2POkxOrders(orders){
-    localStorage.setItem(p2pOrdersKey("onze_p2p_okx_orders"), JSON.stringify(Array.isArray(orders) ? orders : []));
+    try{ localStorage.setItem(p2pOrdersKey("onze_p2p_okx_orders"), JSON.stringify(Array.isArray(orders) ? orders : [])); }catch(e){ console.warn('No se pudo guardar ventas OKX en localStorage (no crítico):', e.message); }
   }
 
   // Limpieza única al cargar el panel (ago 2026): borra del caché local
@@ -19292,7 +19295,15 @@ function addP2PBotStyles(){
     const arr = Array.isArray(items) ? items : [];
     window.__p2pCapacityCache = arr;
     window.__p2pCapacityLastSave = Date.now();
-    localStorage.setItem(CAPACITY_KEY, JSON.stringify(arr));
+    // Bug real confirmado en vivo (sep 2026, causó lentitud/UI trabada para
+    // el usuario): con muchos capacitys (cada uno con el detalle completo de
+    // sus ventas), el JSON de esta lista puede superar el límite de
+    // localStorage del navegador (QuotaExceededError). window.__p2pCapacityCache
+    // (arriba) ya se actualizó y es lo que de verdad usa el resto del panel
+    // -- localStorage acá es solo una copia para pintar rápido en la
+    // PRÓXIMA carga, nunca debe poder tirar abajo la acción actual del
+    // usuario si falla.
+    try{ localStorage.setItem(CAPACITY_KEY, JSON.stringify(arr)); }catch(e){ console.warn('No se pudo guardar capacity en localStorage (no crítico):', e.message); }
   }
 
   // Ventas manuales (Bybit/OKX sin API conectada, o correcciones manuales de
@@ -19613,7 +19624,10 @@ function addP2PBotStyles(){
 
         const changed = JSON.stringify(previous) !== JSON.stringify(mergedItems);
         window.__p2pCapacityCache = mergedItems;
-        localStorage.setItem(CAPACITY_KEY, JSON.stringify(mergedItems));
+        // Ver el mismo comentario en saveP2PCapacity() -- si esto tira
+        // (localStorage lleno), NO puede impedir que el panel se repinte con
+        // los datos frescos que ya llegaron del servidor.
+        try{ localStorage.setItem(CAPACITY_KEY, JSON.stringify(mergedItems)); }catch(e){ console.warn('No se pudo guardar capacity en localStorage (no crítico):', e.message); }
         if (changed) {
           if (typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
           if (typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
@@ -21746,7 +21760,9 @@ function addP2PBotStyles(){
 
     const items = loadP2PCapacity().filter(item => item.id !== id);
     window.__p2pCapacityCache = items;
-    localStorage.setItem(CAPACITY_KEY, JSON.stringify(items));
+    // Ver el mismo comentario en saveP2PCapacity() -- un fallo acá (localStorage
+    // lleno) no puede impedir que se termine de borrar/repintar.
+    try{ localStorage.setItem(CAPACITY_KEY, JSON.stringify(items)); }catch(e){ console.warn('No se pudo guardar capacity en localStorage (no crítico):', e.message); }
 
     renderP2PCapacityPanel();
     updateP2PDashboardWithCapacity();
@@ -24187,7 +24203,7 @@ function addP2PBotStyles(){
       seen.add(key);
       deduped.push(o);
     }
-    localStorage.setItem(window.p2pOrdersKey('onze_p2p_binance_orders'), JSON.stringify(deduped));
+    try{ localStorage.setItem(window.p2pOrdersKey('onze_p2p_binance_orders'), JSON.stringify(deduped)); }catch(e){ console.warn('No se pudo guardar ventas Binance en localStorage (no crítico):', e.message); }
   }
   function getBinanceSales(){
     try{
@@ -24812,7 +24828,7 @@ function addP2PBotStyles(){
         }else{
           const orders = loadP2PBinanceOrders();
           orders.unshift(order);
-          localStorage.setItem(window.p2pOrdersKey("onze_p2p_binance_orders"), JSON.stringify(orders));
+          try{ localStorage.setItem(window.p2pOrdersKey("onze_p2p_binance_orders"), JSON.stringify(orders)); }catch(e){ console.warn('No se pudo guardar ventas Binance en localStorage (no crítico):', e.message); }
 
           try { localStorage.setItem("onze_binance_sales", JSON.stringify(orders)); } catch(e){}
         }
