@@ -81,25 +81,44 @@ export async function GET(req: NextRequest) {
   const errors: string[] = [];
 
   try {
+    // Bug real confirmado en vivo (sep 2026, causó lentitud real en toda la
+    // web): el arreglo de "sincronizar órdenes aunque el bot esté apagado"
+    // (ver syncBinanceOrdersOnly en engine.ts) se implementó acá sumando las
+    // cuentas de binance DESHABILITADAS a la MISMA consulta que alimenta el
+    // loop rápido de abajo -- como esa consulta casi nunca queda vacía
+    // (siempre hay alguna cuenta de binance configurada, prendida o no), el
+    // `if (configs.length === 0) break` que antes cortaba el cron temprano
+    // dejó de disparar casi nunca: el cron pasó a correr sus 50 segundos
+    // completos, cada 1 minuto, sin parar, multiplicando la carga real del
+    // servidor (más funciones de Vercel corriendo en simultáneo, más
+    // consultas a la base compitiendo con las de usuarios reales).
+    //
+    // Arreglo: separar los dos trabajos. El loop rápido de abajo (cada 3s,
+    // hasta 50s) sigue existiendo SOLO para cuentas con enabled=true, exacto
+    // como antes -- si no hay ninguna, corta temprano igual que siempre. El
+    // sync de cuentas deshabilitadas corre UNA sola vez por invocación del
+    // cron (no 16 veces por minuto) -- de sobra para que una venta real
+    // aparezca en minuto o dos, sin la carga de un loop continuo para algo
+    // que no necesita esa velocidad.
+    const disabledBinanceConfigs = await prisma.p2PBotExchangeConfig.findMany({
+      where: { exchange: "binance", enabled: false },
+      select: { tenantId: true, label: true },
+    });
+    for (const { tenantId, label } of disabledBinanceConfigs) {
+      try {
+        await executeBotCycle(tenantId, label);
+      } catch (e: any) {
+        errors.push(`sync-only tenant ${tenantId} (${label}): ${e?.message || e}`);
+      }
+    }
+
     while (Date.now() - startedAt < RUN_BUDGET_MS) {
-      // Pedido explícito del usuario (sep 2026): el historial de órdenes de
-      // Binance (venta real -> P2PBotOrder) tiene que sincronizarse SIEMPRE,
-      // esté o no prendido el bot de precio -- es una lectura por API, no
-      // maneja precio. Antes esta consulta solo traía cuentas con
-      // enabled=true, así que una cuenta con el bot apagado (ej. mientras se
-      // investiga un error) nunca volvía a llamar a executeBotCycle -- ni el
-      // navegador (si nadie clickeó "Iniciar") ni este cron la cubrían, y
-      // ninguna venta real se sincronizaba hasta prender el bot de nuevo.
-      // Ahora también se incluyen las cuentas de binance DESHABILITADAS
-      // (executeBotCycle ya sabe, con su propio freno de 10s, sincronizar
-      // solo el historial de órdenes sin tocar precio -- ver
-      // syncBinanceOrdersOnly en engine.ts).
       const configs = await prisma.p2PBotExchangeConfig.findMany({
-        where: { OR: [{ enabled: true }, { exchange: "binance" }] },
+        where: { enabled: true },
         select: { tenantId: true, label: true, lastCycleAt: true },
       });
 
-      if (configs.length === 0) break; // nada configurado, no vale la pena seguir loopeando
+      if (configs.length === 0) break; // nada prendido, no vale la pena seguir loopeando
 
       // Por par tenant+label, se queda con el lastCycleAt más reciente entre
       // sus exchanges habilitados -- si CUALQUIERA cicló hace muy poco, es
