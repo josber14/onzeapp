@@ -16,10 +16,6 @@
     {
       "path": "/api/internal/system-monitor",
       "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/internal/p2p-capacity-engine",
-      "schedule": "*/5 * * * *"
     }
   ]
 }

@@ -26,6 +26,15 @@ const pool = new Pool({
   connectionTimeoutMillis: 10_000,
   idleTimeoutMillis: 30_000,
   query_timeout: 20_000,
+  // Bug real confirmado en vivo (sep 2026): sin este límite explícito,
+  // node-postgres usa el default de 10 conexiones por Pool -- con varios
+  // crons corriendo (cada 1-5 min) más el tráfico real de 2 cuentas al
+  // mismo tiempo, se llegó a agotar ese límite: /api/p2p/capacity tardó
+  // 10.8s (justo el connectionTimeoutMillis de arriba) y terminó en un 500
+  // por no conseguir una conexión libre a tiempo. Neon (vía el endpoint
+  // "-pooler") soporta bastantes más conexiones lógicas que esto -- 25 da
+  // margen real sin exagerar.
+  max: 25,
 });
 pool.on("error", (err) => {
   console.error("Postgres pool error (conexión inactiva):", err);
