@@ -19398,6 +19398,18 @@ function addP2PBotStyles(){
   // cubiertas por un capacity finalizado -- ver calculateP2PCapacityStats().
   window.__p2pCapitalMarkedOrderNumbers = window.__p2pCapitalMarkedOrderNumbers || new Map();
 
+  // Bug real confirmado en vivo (sep 2026, plata real afectada -- ver
+  // AGENTS.md): autoFinishP2PCapacities() podía correr y ESCRIBIR en Neon
+  // ANTES de que esta sincronización terminara la primera vez -- el Map de
+  // arriba empieza vacío, así que un capacity nuevo recién creado se
+  // completaba usando ventas que en realidad ya estaban marcadas como
+  // "capital propio", quedando FROZEN con esa plata duplicada para siempre
+  // (17.000.000 CLP en un caso real). Este flag se pone en true recién
+  // cuando el servidor contestó AL MENOS UNA VEZ -- autoFinishP2PCapacities()
+  // se niega a actuar mientras siga en false, sin importar cuántas veces se
+  // llame mientras tanto.
+  window.__p2pCapitalMarkedSalesLoaded = window.__p2pCapitalMarkedSalesLoaded || false;
+
   window.syncP2PCapitalMarkedSalesFromServer = async function syncP2PCapitalMarkedSalesFromServer(){
     try {
       const res = await fetch('/api/p2p/capital-marked-sale', { credentials: 'include' });
@@ -19411,6 +19423,7 @@ function addP2PBotStyles(){
         for(const [id, clp] of next){ if(window.__p2pCapitalMarkedOrderNumbers.get(id) !== clp){ changed = true; break; } }
       }
       window.__p2pCapitalMarkedOrderNumbers = next;
+      window.__p2pCapitalMarkedSalesLoaded = true;
 
       if(changed){
         if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
@@ -21147,6 +21160,15 @@ function addP2PBotStyles(){
   };
 
   window.finishCapacityManually = function(id, manualClpPayment){
+    // Mismo resguardo que autoFinishP2PCapacities() -- completar a mano
+    // también usa calculateP2PCapacityStats(), así que también podría
+    // incluir por error una venta ya marcada como "capital propio" si esa
+    // lista todavía no cargó del servidor.
+    if(!window.__p2pCapitalMarkedSalesLoaded){
+      onzeAlert("Todavía se está cargando información del servidor. Esperá unos segundos y probá de nuevo.");
+      return;
+    }
+
     const capacities = loadP2PCapacity().slice();
     const idx = capacities.findIndex(c => c.id === id);
     if(idx < 0) return;
@@ -24204,6 +24226,18 @@ function addP2PBotStyles(){
     // cierre MANUAL explícito (botón "Completar capacity",
     // finishCapacityManually) no pasa por acá y sigue funcionando igual.
     if(window.__p2pServerAuthority) return;
+
+    // Bug real confirmado en vivo (sep 2026, plata real afectada -- ver
+    // AGENTS.md): esta función podía correr y ESCRIBIR en Neon antes de que
+    // syncP2PCapitalMarkedSalesFromServer() terminara de cargar la lista de
+    // ventas marcadas como "capital propio" por primera vez -- un capacity
+    // recién creado se completaba usando esas mismas ventas ya excluidas,
+    // quedando congelado con esa plata duplicada para siempre (17.000.000
+    // CLP en un caso real). Ahora se niega a cerrar CUALQUIER capacity
+    // mientras esa lista no haya cargado al menos una vez -- más vale
+    // esperar unos segundos de más que congelar un cálculo con datos
+    // incompletos que después no se puede deshacer solo.
+    if(!window.__p2pCapitalMarkedSalesLoaded) return;
 
     const stats = calculateP2PCapacityStats();
     const toFinish = stats.capacities.filter(c =>
