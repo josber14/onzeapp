@@ -22668,8 +22668,21 @@ function addP2PBotStyles(){
   // todo el DOM mientras esta consulta (en vivo contra Binance, 2.5-5s) está
   // en vuelo -- si escribiéramos sobre una referencia vieja ya desconectada,
   // el cambio nunca se vería en pantalla.
+  // Bug real confirmado en vivo (sep 2026): renderP2PCapacityPanel() llama a
+  // p2pEnsureBankQuotaPolling() en CADA render (ver más abajo), y esa
+  // función siempre dispara un fetch INMEDIATO sin ningún freno -- el
+  // intervalo de 180s de más abajo solo evita agregar un segundo
+  // setInterval, no evita esta llamada directa. En una cuenta con muchos
+  // syncs disparando renders seguidos al cargar la página, esto se vio
+  // pidiendo la misma consulta (que además puede escanear varias páginas en
+  // vivo contra Binance) 8 veces en los primeros segundos. Este freno de 15s
+  // aplica a CUALQUIER llamador (el render o el propio intervalo), sin
+  // tocar la frecuencia real de actualización que ya se decidió (180s).
+  let __p2pBankQuotaLastFetchAt = 0;
   window.p2pRefreshBankQuotaBadge = async function(){
     if(!document.getElementById("p2pBankQuotaBadge")) return;
+    if(Date.now() - __p2pBankQuotaLastFetchAt < 15000) return;
+    __p2pBankQuotaLastFetchAt = Date.now();
     try{
       const data = await p2pFetchBankQuotaData();
       const badge = document.getElementById("p2pBankQuotaBadge");
