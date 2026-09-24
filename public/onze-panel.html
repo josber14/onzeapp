@@ -4111,6 +4111,25 @@
     const toastEl = document.getElementById("toast");
     const sidebar = document.getElementById("sidebar");
     const menuToggleBtn = document.getElementById("menuToggleBtn");
+    // Se ata este listener acá mismo, apenas se agarran las referencias del
+    // DOM, en vez de más abajo junto con el resto de los bindings (línea
+    // ~9643 antes de este cambio). Reporte real (sep 2026): en la cuenta de
+    // Hector, tocar "Menú" al toque de abrir la sesión desde el celular no
+    // hacía NADA la primera vez, siempre, sin importar cuántas veces se
+    // repitiera la prueba -- hasta el enésimo toque. Hipótesis: este panel
+    // es un solo <script> de ~30.000 líneas que se ejecuta de corrido; el
+    // botón "Menú" ya está visible en el HTML/CSS desde el primer instante
+    // (no depende de JS para dibujarse), pero su addEventListener recién se
+    // ejecutaba miles de líneas más abajo -- en un celular más lento o con
+    // peor conexión, ese hueco entre "se ve el botón" y "el botón ya
+    // reacciona" puede durar un rato real, y cualquier toque en el medio se
+    // pierde sin ningún error visible. Atar el listener acá, antes de
+    // cualquier otra inicialización pesada, cierra ese hueco al mínimo.
+    if(menuToggleBtn && sidebar){
+      menuToggleBtn.addEventListener("click", ()=>{
+        sidebar.classList.toggle("open");
+      });
+    }
 
     const profitBtn = document.getElementById("profitBtn");
     const profitMenu = document.getElementById("profitMenu");
@@ -9638,10 +9657,6 @@ if(addProviderBtn){
         console.error("CLEAR_HISTORY_ERROR", error);
         showToast(error?.message || "No se pudo borrar el historial");
       }
-    });
-
-    menuToggleBtn.addEventListener("click", ()=>{
-      sidebar.classList.toggle("open");
     });
 
     document.querySelectorAll(".nav-btn").forEach(btn=>{
