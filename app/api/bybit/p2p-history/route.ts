@@ -112,6 +112,9 @@ export async function GET(req: NextRequest) {
           createTime: Number(o.createTime),
           createdAt: o.createdAt.toISOString(),
         })),
+        // Ver comentario en app/api/binance/p2p-history/route.ts -- mismo
+        // chequeo anti-mezcla de cuentas en el navegador.
+        tenantId,
       });
     }
 
@@ -149,6 +152,7 @@ export async function GET(req: NextRequest) {
         total: allOrders.length,
         source: "bybit",
         orders: allOrders,
+        tenantId,
       });
     } catch (e) {
       console.warn("Bybit live fetch failed, falling back to DB:", e);
@@ -179,6 +183,7 @@ export async function GET(req: NextRequest) {
         createTime: Number(o.createTime),
         createdAt: o.createdAt.toISOString(),
       })),
+      tenantId,
     });
   } catch (error: any) {
     console.error("BYBIT_P2P_HISTORY_ERROR:", error?.stack || error?.message || error);

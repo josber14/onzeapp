@@ -66,7 +66,18 @@ export async function GET(req: NextRequest) {
       createdAt: o.executedAt.toISOString(),
     }));
 
-    return Response.json({ ok: true, total: orders.length, source: "database", orders });
+    // tenantId incluido a propósito (sep 2026): el panel usa esto para
+    // confirmar que la sesión real que respondió es la que el navegador
+    // CREE que está viendo antes de guardar nada en localStorage -- ver
+    // saveBinanceSales en part-12.js. Bug real encontrado: si la cookie de
+    // sesión cambia (ej. alguien inicia sesión con OTRA cuenta en una
+    // pestaña del mismo navegador) mientras esta pestaña sigue con su
+    // sincronización de fondo corriendo, esta ruta sigue siendo 100%
+    // correcta (responde con los datos de `session.tenantId`, la cookie
+    // ACTUAL) pero el navegador podía guardar esa respuesta bajo la
+    // etiqueta de la cuenta VIEJA que tenía en memoria, mezclando ventas de
+    // una cuenta con otra en el mismo caché local.
+    return Response.json({ ok: true, total: orders.length, source: "database", orders, tenantId });
   } catch (error: any) {
     console.error("BINANCE_P2P_HISTORY_ERROR:", error?.stack || error?.message || error);
     return Response.json(

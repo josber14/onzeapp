@@ -5133,12 +5133,44 @@
   // decidir con datos de solo UNA de las dos cuentas mientras la otra
   // todavía está en camino. El caller que quiera esperar a que esto termine
   // antes de decidir algo puede hacer `await syncAllLabelsBinanceSalesForCapacity()`.
+  // Bug real confirmado en vivo (sep 2026): las ventas reales de Hector
+  // (otra cuenta, tenant distinto) aparecían como "sin asignar" en el
+  // Capacity de esta cuenta. Causa: la etiqueta de cuenta que usa este
+  // navegador para guardar en localStorage (__p2pTenantSuffix) se fija UNA
+  // sola vez al cargar el panel -- si la cookie de sesión de este navegador
+  // cambia mientras esta pestaña sigue corriendo de fondo (ej. alguien
+  // inicia sesión con otra cuenta en otra pestaña del MISMO navegador, ya
+  // que la cookie es compartida por todo el navegador, no por pestaña),
+  // las rutas /api/*/p2p-history siguen respondiendo bien (con los datos de
+  // la sesión ACTUAL, ya cambiada), pero esta pestaña vieja los guardaba
+  // bajo la etiqueta de la cuenta ANTERIOR, mezclando ventas de una cuenta
+  // con otra para siempre en ese caché. Esta función compara el tenantId
+  // real que respondió el servidor (ver `tenantId` agregado a la respuesta
+  // de esas rutas) contra el que este panel cree que es -- si no coincide,
+  // el caller debe descartar la respuesta sin guardar nada.
+  let __p2pTenantMismatchLastWarnedAt = 0;
+  function isP2PSalesResponseTenantValid(data){
+    if(!data || data.tenantId == null || !window.__p2pTenantSuffix) return true;
+    const expectedSuffix = "_t" + data.tenantId;
+    if(expectedSuffix === window.__p2pTenantSuffix) return true;
+    console.error('[P2P] Descartada respuesta de p2p-history: tenantId=' + data.tenantId + ' no coincide con esta pestaña (' + window.__p2pTenantSuffix + '). Posible cambio de sesión en otra pestaña del mismo navegador.');
+    const now = Date.now();
+    if(now - __p2pTenantMismatchLastWarnedAt > 60000){
+      __p2pTenantMismatchLastWarnedAt = now;
+      if(typeof showToast === 'function'){
+        showToast('⚠️ Esta pestaña detectó un cambio de cuenta en el navegador -- recárgala antes de seguir usando Capacity, para no mezclar ventas de otra cuenta.', 'error');
+      }
+    }
+    return false;
+  }
+
   function syncAllLabelsBinanceSalesForCapacity(){
     return Promise.all(["ONZE", "ZINPLE"].map(lbl =>
       fetch('/api/binance/p2p-history?label=' + encodeURIComponent(lbl))
         .then(res => res.json())
         .then(data => {
           if(data.ok && data.orders && data.orders.length){
+            if(!isP2PSalesResponseTenantValid(data)) return;
             saveBinanceSales(data.orders);
             if(typeof autoFinishP2PCapacities === 'function') autoFinishP2PCapacities();
             if(typeof renderP2PCapacityPanel === 'function') renderP2PCapacityPanel();
@@ -5323,6 +5355,7 @@
       .then(res => res.json())
       .then(data => {
         if(data.ok && data.orders){
+          if(!isP2PSalesResponseTenantValid(data)) throw new Error('Cambio de cuenta detectado -- recarga la pestaña');
           saveBinanceSales(data.orders);
           autoFinishP2PCapacities();
           if(typeof renderP2PDashboardFromBinance === 'function') renderP2PDashboardFromBinance();
@@ -5404,6 +5437,7 @@
       .then(res => res.json())
       .then(data => {
         if(data.ok && data.orders){
+          if(!isP2PSalesResponseTenantValid(data)) throw new Error('Cambio de cuenta detectado -- recarga la pestaña');
           saveBybitSales(data.orders);
           if(typeof autoFinishP2PCapacities === 'function') autoFinishP2PCapacities();
           if(typeof renderP2PDashboardFromBybit === 'function') renderP2PDashboardFromBybit();

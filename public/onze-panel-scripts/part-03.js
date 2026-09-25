@@ -285,6 +285,33 @@
     // varios bloques <script> más abajo (cada uno con su propio scope IIFE)
     // lo necesitan y no pueden ver PANEL_QUERY directamente.
     window.__p2pTenantSuffix = "_t" + (PANEL_QUERY.get("tenantId") || "0");
+    // Purga de emergencia, UNA sola vez por navegador (sep 2026): se
+    // encontró la variante residual del bug de arriba -- el sufijo por
+    // tenant se fija UNA vez al cargar esta pestaña, así que si la cookie de
+    // sesión de este navegador cambia mientras esta pestaña sigue viva de
+    // fondo (ej. alguien inicia sesión con OTRA cuenta en otra pestaña del
+    // MISMO navegador -- la cookie es compartida por todo el navegador, no
+    // por pestaña), esta pestaña vieja podía guardar ventas de la cuenta
+    // NUEVA bajo la etiqueta de la cuenta VIEJA (confirmado en vivo: ventas
+    // reales de Hector aparecieron como "sin asignar" en otra cuenta). El
+    // arreglo de fondo (ver isP2PSalesResponseTenantValid en part-12.js)
+    // evita que esto vuelva a pasar -- esta purga limpia lo que YA haya
+    // quedado contaminado antes de ese arreglo, en CUALQUIER sufijo (no solo
+    // el de esta cuenta, porque no hay forma de saber cuál quedó mal desde
+    // acá). No se pierde nada real: todo se re-sincroniza solo y gratis
+    // desde el servidor la próxima vez que se necesite.
+    try {
+      if (!localStorage.getItem("__p2pSalesCachePurgeSep2026")) {
+        const purgePrefixes = ["onze_p2p_binance_orders", "onze_p2p_bybit_orders", "onze_p2p_okx_orders", "onze_binance_sales"];
+        const purgeKeys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && purgePrefixes.some(p => k.indexOf(p) === 0)) purgeKeys.push(k);
+        }
+        purgeKeys.forEach(k => localStorage.removeItem(k));
+        localStorage.setItem("__p2pSalesCachePurgeSep2026", "1");
+      }
+    } catch (e) {}
     const SESSION_ROLE = String(PANEL_QUERY.get("role") || "").trim();
     const IS_ADMIN_ROLE =
       SESSION_ROLE === "super_admin_global" ||
