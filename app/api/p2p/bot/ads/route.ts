@@ -74,7 +74,18 @@ export async function GET(req: NextRequest) {
               adId: String(a.advNo || a.id || a.advId),
               exchange: "binance",
               nickname: localAd?.nickname || null,
-              tradeType: a.side === 0 ? "BUY" : "SELL",
+              // Bug real confirmado en vivo (sep 2026): este mapeo asumía un
+              // campo numérico `side` (0=BUY) como el que sí devuelve Bybit
+              // más abajo -- pero el endpoint real de Binance
+              // (listWithPagination) nunca trae `side`, trae `tradeType` como
+              // string ("BUY"/"SELL") directo. `a.side === 0` daba siempre
+              // `undefined === 0` (false), así que TODOS los anuncios de
+              // Binance quedaban marcados "SELL" acá adentro sin importar su
+              // lado real -- invisible mientras no existía la vista de
+              // Compra, confirmado en vivo al aparecer un anuncio de Compra
+              // real (tradeType:"BUY" en la respuesta cruda de Binance)
+              // mostrado como Venta en el panel.
+              tradeType: a.tradeType === "BUY" ? "BUY" : "SELL",
               asset: a.tokenId || "USDT",
               fiat: a.currencyId || "CLP",
               priceType: a.priceType === 0 ? "fixed" : "float",

@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const label = body.label || "ONZE";
     const exchange = body.exchange || "binance";
+    const side = body.side === "BUY" ? "BUY" : "SELL";
     const minCloseBalance = body.minCloseBalance ? Number(body.minCloseBalance) : null;
 
     // Bug real confirmado en vivo (jul 2026): dos clics casi simultáneos en
@@ -35,10 +36,10 @@ export async function POST(req: NextRequest) {
     // crear su ciclo antes de poder hacer su propio chequeo -- así siempre
     // lo ve y nunca puede crear un duplicado.
     const result = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${tenantId}, hashtext(${exchange + ":" + label}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${tenantId}, hashtext(${exchange + ":" + label + ":" + side}))`;
 
       const existing = await tx.p2PCycle.findFirst({
-        where: { tenantId, exchange, label, status: "active" },
+        where: { tenantId, exchange, label, side, status: "active" },
       });
       if (existing) {
         return { alreadyActive: true as const, cycle: existing };
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
       // anterior no tuvo ninguna orden, se usa su hora de cierre. Si es el
       // primer ciclo de todos, arranca desde ahora (comportamiento original).
       const lastClosed = await tx.p2PCycle.findFirst({
-        where: { tenantId, exchange, label, status: "closed" },
+        where: { tenantId, exchange, label, side, status: "closed" },
         orderBy: { id: "desc" },
       });
 
@@ -64,13 +65,14 @@ export async function POST(req: NextRequest) {
 
       // Número mostrado en el panel ("Ciclo #N") -- se calcula una sola vez
       // acá, no en cada consulta de estado (ver comentario en el schema).
-      const priorCount = await tx.p2PCycle.count({ where: { tenantId, exchange, label } });
+      const priorCount = await tx.p2PCycle.count({ where: { tenantId, exchange, label, side } });
 
       const created = await tx.p2PCycle.create({
         data: {
           tenantId,
           label,
           exchange,
+          side,
           status: "active",
           startTime,
           minCloseBalance: minCloseBalance ?? undefined,
@@ -83,7 +85,7 @@ export async function POST(req: NextRequest) {
       // todavía) pasan a contar en el ciclo que recién arranca -- es el
       // punto exacto donde el usuario dijo que deben "entrar".
       await tx.p2PCycleSetAsideOrder.updateMany({
-        where: { tenantId, exchange, label, claimedByCycleId: null, discarded: false },
+        where: { tenantId, exchange, label, side, claimedByCycleId: null, discarded: false },
         data: { claimedByCycleId: created.id, claimedAt: new Date() },
       });
 

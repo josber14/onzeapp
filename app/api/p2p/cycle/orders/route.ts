@@ -51,11 +51,11 @@ export async function GET(req: NextRequest) {
       });
       if (creds) {
         const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
-        const stats = await computeCycleOrderStats(client, startMs, endMs);
+        const stats = await computeCycleOrderStats(client, startMs, endMs, [], cycle.side);
         orders = stats.orders || [];
       }
     } else {
-      const stats = await computeLocalCycleStats(prisma, session.tenantId, cycle.exchange, startMs, endMs);
+      const stats = await computeLocalCycleStats(prisma, session.tenantId, cycle.exchange, startMs, endMs, cycle.side);
       orders = stats.orders || [];
     }
 

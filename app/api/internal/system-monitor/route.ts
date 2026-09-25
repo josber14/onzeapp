@@ -204,8 +204,14 @@ async function checkNoActiveCapacity() {
 // 54 DÍAS abiertos sin que nadie se diera cuenta.
 async function checkStuckCycles() {
   const cutoff = new Date(Date.now() - CYCLE_STUCK_HOURS * 60 * 60 * 1000);
+  // side: "SELL" a propósito (sep 2026) -- el Ciclo de Compra (nuevo) todavía
+  // no tiene cierre automático (autoCloseCycle depende del motor de precios
+  // de Compra, no construido todavía -- ver AGENTS.md), así que puede quedar
+  // "active" legítimamente por días mientras el usuario lo maneja a mano. Sin
+  // este filtro, este chequeo dispararía falsas alarmas de "atascado" para
+  // un Ciclo de Compra sano.
   const stuck = await prisma.p2PCycle.findMany({
-    where: { status: "active", startTime: { lt: cutoff } },
+    where: { status: "active", side: "SELL", startTime: { lt: cutoff } },
     select: { id: true, tenantId: true, label: true, exchange: true, startTime: true },
   });
 

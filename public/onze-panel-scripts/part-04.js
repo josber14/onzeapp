@@ -429,8 +429,8 @@ function addP2PBotStyles(){
     .bot-ad-card:hover{border-color:rgba(148,163,184,.16);box-shadow:0 1px 6px rgba(0,0,0,.15);}
     .bot-ad-card .ad-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
     .bot-ad-card .ad-header .ad-type{font-weight:700;font-size:12px;padding:3px 10px;border-radius:6px;}
-    .bot-ad-card .ad-header .ad-type.buy{color:#34d399;background:rgba(52,211,153,.1);}
-    .bot-ad-card .ad-header .ad-type.sell{color:#fb7185;background:rgba(251,113,133,.1);}
+    .bot-ad-card .ad-header .ad-type.sell{color:#34d399;background:rgba(52,211,153,.1);}
+    .bot-ad-card .ad-header .ad-type.buy{color:#fb7185;background:rgba(251,113,133,.1);}
     .bot-ad-card .ad-body{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;font-size:11px;color:#94a3b8;}
     .bot-ad-card .ad-body span{display:flex;flex-direction:column;}
     .bot-ad-card .ad-body .val{color:#cbd5e1;font-weight:600;font-variant-numeric:tabular-nums;}
@@ -540,8 +540,13 @@ function addP2PBotStyles(){
 
     .bot-ad-card-header{display:flex;align-items:center;gap:10px;row-gap:6px;flex-wrap:wrap;padding:12px 14px 0;font-size:12px;font-weight:600;color:#e2e8f0;}
 
-    .bot-ad-card-header .sell-label{display:inline-flex;align-items:center;gap:5px;color:#fb7185;font-weight:700;font-size:11px;background:rgba(251,113,133,.08);padding:2px 10px 2px 8px;border-radius:6px;letter-spacing:.3px;text-transform:uppercase;}
-    .bot-ad-card-header .sell-label::before{content:'';width:6px;height:6px;border-radius:50%;background:#fb7185;}
+    .bot-ad-card-header .sell-label{display:inline-flex;align-items:center;gap:5px;color:#34d399;font-weight:700;font-size:11px;background:rgba(52,211,153,.08);padding:2px 10px 2px 8px;border-radius:6px;letter-spacing:.3px;text-transform:uppercase;}
+    .bot-ad-card-header .sell-label::before{content:'';width:6px;height:6px;border-radius:50%;background:#34d399;}
+    /* Pedido explícito del usuario (sep 2026): Venta en verde (arriba, color
+       base), Compra en rojo -- para no confundir cuál anuncio es cuál a
+       simple vista. */
+    .bot-ad-card-header .sell-label.buy-label{color:#fb7185;background:rgba(251,113,133,.08);}
+    .bot-ad-card-header .sell-label.buy-label::before{background:#fb7185;}
 
     .bot-ad-card-header .status-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;margin-left:auto;padding:3px 10px;border-radius:6px;white-space:nowrap;letter-spacing:.2px;}
 
@@ -773,8 +778,8 @@ function addP2PBotStyles(){
                  selector, el filtro por defecto sigue siendo "SELL", igual que
                  siempre. -->
             <div style="display:flex;gap:6px;margin-bottom:10px;">
-              <button class="btn small ghost bot-ads-side-btn" type="button" data-side="SELL" onclick="window.botSetAdsSideFilter('SELL')" style="font-size:11px;padding:5px 12px;border-radius:6px;">Venta</button>
-              <button class="btn small ghost bot-ads-side-btn" type="button" data-side="BUY" onclick="window.botSetAdsSideFilter('BUY')" style="font-size:11px;padding:5px 12px;border-radius:6px;">Compra</button>
+              <button class="btn small ghost bot-ads-side-btn active" type="button" data-side="SELL" onclick="window.botSetAdsSideFilter('SELL')" style="font-size:11px;padding:5px 12px;border-radius:6px;background:rgba(52,211,153,.14);border-color:rgba(52,211,153,.4);color:#34d399;">Venta</button>
+              <button class="btn small ghost bot-ads-side-btn" type="button" data-side="BUY" onclick="window.botSetAdsSideFilter('BUY')" style="font-size:11px;padding:5px 12px;border-radius:6px;color:#fb7185;border-color:rgba(251,113,133,.25);">Compra</button>
             </div>
             <div id="botAdsList" class="bot-ads-row">
               <div style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">Cargando anuncios...</div>
@@ -802,7 +807,7 @@ function addP2PBotStyles(){
           <div id="botCycleSection" class="bot-card" style="grid-column:1/-1;">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
               <div style="display:flex;align-items:center;gap:8px;">
-                <span style="font-size:14px;font-weight:800;color:#f1f5f9;letter-spacing:.2px;">🔄 Ciclo de Ventas</span>
+                <span id="botCycleSectionTitle" style="font-size:14px;font-weight:800;color:#f1f5f9;letter-spacing:.2px;">🔄 Ciclo de Ventas</span>
                 <span id="botCycleLabel" style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:999px;background:rgba(148,163,184,.12);color:#94a3b8;">Inactivo</span>
               </div>
               <span style="flex:1;"></span>
@@ -810,6 +815,14 @@ function addP2PBotStyles(){
               <button class="btn small secondary" id="botCycleAddSaleBtn" onclick="window.botCycleAddSale()" style="font-size:11px;padding:6px 14px;border-radius:7px;display:none;font-weight:700;">+ Venta Manual</button>
               <button class="btn small" id="botCycleCloseBtn" onclick="window.botCycleClose()" style="font-size:11px;padding:6px 14px;border-radius:7px;display:none;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.3);color:#fca5a5;font-weight:700;">■ Cerrar Ciclo</button>
               <button class="btn small secondary" onclick="window.botCycleShowHistory()" style="font-size:11px;padding:6px 14px;border-radius:7px;font-weight:700;">📜 Historial</button>
+            </div>
+            <!-- Selector Venta/Compra -- mismo patrón que el de "Anuncios" (sep
+                 2026): separa el Ciclo de Compra del de Venta sin tocar nada
+                 del camino de Venta si nadie toca este selector (default
+                 "SELL", ver window.botCycleSideFilter más abajo). -->
+            <div style="display:flex;gap:6px;margin-top:10px;">
+              <button class="btn small ghost bot-cycle-side-btn active" type="button" data-side="SELL" onclick="window.botSetCycleSideFilter('SELL')" style="font-size:11px;padding:5px 12px;border-radius:6px;background:rgba(52,211,153,.14);border-color:rgba(52,211,153,.4);color:#34d399;">Venta</button>
+              <button class="btn small ghost bot-cycle-side-btn" type="button" data-side="BUY" onclick="window.botSetCycleSideFilter('BUY')" style="font-size:11px;padding:5px 12px;border-radius:6px;color:#fb7185;border-color:rgba(251,113,133,.25);">Compra</button>
             </div>
             <p id="botCycleEmptyHint" style="margin-top:10px;font-size:12px;color:#64748b;">No hay un ciclo activo. Inicia uno para llevar el conteo automático de ventas de esta cuenta.</p>
             <div id="botCycleInfo" style="margin-top:12px;display:none;">
@@ -819,7 +832,7 @@ function addP2PBotStyles(){
                   <div class="bot-cycle-tile-value" id="botCycleStartTime" style="font-size:13px;">—</div>
                 </div>
                 <div class="bot-cycle-tile">
-                  <div class="bot-cycle-tile-label">USDT vendidos</div>
+                  <div class="bot-cycle-tile-label" id="botCycleUsdtLabel">USDT vendidos</div>
                   <div class="bot-cycle-tile-value" id="botCycleUsdt">0</div>
                 </div>
                 <div class="bot-cycle-tile">
@@ -1315,10 +1328,17 @@ function addP2PBotStyles(){
     window.botAdsSideFilter = (side === "BUY") ? "BUY" : "SELL";
     document.querySelectorAll(".bot-ads-side-btn").forEach(function(btn){
       const active = btn.getAttribute("data-side") === window.botAdsSideFilter;
+      const isBuyBtn = btn.getAttribute("data-side") === "BUY";
       btn.classList.toggle("active", active);
-      btn.style.background = active ? "rgba(52,211,153,.14)" : "";
-      btn.style.borderColor = active ? "rgba(52,211,153,.4)" : "";
-      btn.style.color = active ? "#34d399" : "";
+      // Pedido explícito del usuario (sep 2026): Venta siempre en verde,
+      // Compra siempre en rojo -- NO solo cuando está seleccionado (antes
+      // el botón inactivo perdía el color y volvía al outline azul genérico,
+      // el usuario lo pidió corregir: el color de cada botón identifica de
+      // qué lado es, esté o no activo; solo el relleno/borde más marcado
+      // indica cuál está seleccionado ahora mismo).
+      btn.style.color = isBuyBtn ? "#fb7185" : "#34d399";
+      btn.style.background = active ? (isBuyBtn ? "rgba(251,113,133,.14)" : "rgba(52,211,153,.14)") : "transparent";
+      btn.style.borderColor = active ? (isBuyBtn ? "rgba(251,113,133,.4)" : "rgba(52,211,153,.4)") : (isBuyBtn ? "rgba(251,113,133,.25)" : "rgba(52,211,153,.25)");
     });
     window.botLoadAds();
   };
@@ -1432,12 +1452,11 @@ function addP2PBotStyles(){
 
   function botRenderAdPill(a, idx){
     const isFirst = idx === 0;
-    // Parte 1 de la integración de Compra (sep 2026): el motor de precios
-    // (engine.ts) y el chat (chat-agent.ts) todavía ignoran por completo
-    // cualquier anuncio que no sea de Venta -- ver AGENTS.md/plan. Mientras
-    // eso no exista (Parte 2/3), un anuncio de Compra se muestra pero SIN el
-    // toggle de bot ni el panel de configuración de estrategia, para no
-    // mostrar un control que hoy no tendría ningún efecto real.
+    // Parte 2 de la integración de Compra (sep 2026): el motor de precios
+    // (engine.ts, función processBuyAds) ya gestiona anuncios de Compra --
+    // el bloqueo de la Parte 1 ("Bot: aún no disponible") se quitó. El chat
+    // (chat-agent.ts, Parte 3) sigue ignorando por completo cualquier orden
+    // que no sea Venta -- eso no cambia acá.
     const isBuy = (a.tradeType || '').toUpperCase() === 'BUY';
     const botEnabled = a.botEnabled === true;
     const realId = a.id;
@@ -1447,10 +1466,7 @@ function addP2PBotStyles(){
     var pmBadges = (pms && Array.isArray(pms)) ? pms.slice(0,3) : [];
     var pmExtra = (pms && Array.isArray(pms) && pms.length > 3) ? '+' + (pms.length - 3) : '';
     const isOnline = botEnabled && (a.status === 'online' || a.isActive === true);
-    // Para Compra, el panel de configuración de estrategia nunca se abre
-    // todavía (ver comentario de isBuy arriba) -- se ignora el estado de
-    // _adCfgOpen a propósito para este lado.
-    const cfgDisplay = (!isBuy && window['_adCfgOpen'] && window['_adCfgOpen'][realId]) ? '' : 'none';
+    const cfgDisplay = (window['_adCfgOpen'] && window['_adCfgOpen'][realId]) ? '' : 'none';
     // Config grid template
     var strategy = a.botStrategy || 'top1';
     var top1Diff = a.botTop1Diff != null ? a.botTop1Diff : '';
@@ -1458,6 +1474,12 @@ function addP2PBotStyles(){
     var priceSource = a.botPriceSource || 'capacity';
     var priceFloor = a.botPriceFloorPct != null ? a.botPriceFloorPct : '';
     var commission = a.botCommissionPct != null ? a.botCommissionPct : '';
+    // Para Venta, botSafeMarginPct es un % de margen sobre costo+comisión.
+    // Para Compra (sin capacity, confirmado explícitamente con el usuario),
+    // el MISMO campo se reutiliza con otro significado: el techo máximo en
+    // CLP que el anuncio puede ofrecer, directo (no un %) -- ver
+    // processBuyAds en engine.ts. Dos campos de DB, un solo storage, la
+    // etiqueta/hint del panel es lo único que cambia según el lado.
     var safeMargin = a.botSafeMarginPct != null ? a.botSafeMarginPct : '';
     var minCapital = a.botMinCompetitorCapital != null ? a.botMinCompetitorCapital : '';
     var competeTransAmount = a.botCompeteTransAmount != null ? a.botCompeteTransAmount : '';
@@ -1467,22 +1489,24 @@ function addP2PBotStyles(){
     const cfgFields = [];
     if (strategy !== 'spread') cfgFields.push('Top1Diff');
     if (strategy !== 'top1') cfgFields.push('SpreadPct');
-    cfgFields.push('PriceSource','CommissionPct','SafeMarginPct','MinCompetitorCapital','CompeteTransAmount','CompetePayType','ExcludedMerchants','CycleInterval','CircuitBreakPct','MinAdPriceDiffPct');
+    if (isBuy) {
+      cfgFields.push('SafeMarginPct','CommissionPct','MinCompetitorCapital','CompeteTransAmount','CompetePayType','ExcludedMerchants','CycleInterval','MinAdPriceDiffPct');
+    } else {
+      cfgFields.push('PriceSource','CommissionPct','SafeMarginPct','MinCompetitorCapital','CompeteTransAmount','CompetePayType','ExcludedMerchants','CycleInterval','CircuitBreakPct','MinAdPriceDiffPct');
+    }
     const cfgCount = cfgFields.length;
     return `<div class="bot-ad-pill" data-ad-real-id="${realId}" data-ad-adid="${a.adId||''}" data-ad-paytype="${payType}" data-ad-paymethods="${escHtml(JSON.stringify(pms || []))}" data-ad-tradetype="${isBuy ? 'BUY' : 'SELL'}">
       <div class="bot-ad-card-header">
-        <span class="sell-label">${isBuy ? 'Comprar' : 'Vender'}</span>
+        <span class="sell-label${isBuy ? ' buy-label' : ''}">${isBuy ? 'Comprar' : 'Vender'}</span>
         <span style="flex:1;min-width:0;font-size:12px;font-weight:500;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${a.asset||'USDT'} / ${a.fiat||'CLP'}">${a.nickname ? '<span style=\"color:#f8fafc;font-weight:700;\">'+escHtml(a.nickname)+'</span> · ' : ''}${a.asset||'USDT'} / ${a.fiat||'CLP'}</span>
         <span class="status-badge${isOnline?'':' offline'}"><span class="dot"></span>${isOnline ? 'En línea' : 'Desconectado'}</span>
-        ${isBuy ? `<span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:#64748b;letter-spacing:.3px;text-transform:uppercase;" title="El bot todavía no gestiona anuncios de Compra">
-          <span>Bot: aún no disponible</span>
-        </span>` : `<span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:${botEnabled ? '#34d399' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
+        <span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:${botEnabled ? '#34d399' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
           <span>Bot</span>
-          <span class="toggle-switch" title="${botEnabled ? 'Apagar bot' : 'Prender bot'}" onclick="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',!${botEnabled})">
+          <span class="toggle-switch" title="${botEnabled ? 'Apagar bot' : 'Prender bot'}" onclick="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',!${botEnabled},'${isBuy?'BUY':'SELL'}')">
             <input type="checkbox" ${botEnabled?'checked':''}>
             <span class="slider"></span>
           </span>
-        </span>`}
+        </span>
         ${a.fromBinance ? (() => {
           const isAdOnline = a.status === 'online' || a.status === 'active';
           return `<span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:${isAdOnline ? '#60a5fa' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
@@ -1512,29 +1536,31 @@ function addP2PBotStyles(){
         ${pmBadges.map(function(pm){ return '<span class="pm-badge">'+fmtPayName(pm)+'</span>'; }).join('')}
         ${pmExtra ? '<span class="pm-badge" style="background:rgba(148,163,184,.06);color:#64748b;border-color:rgba(148,163,184,.08);">'+escHtml(pmExtra)+'</span>' : ''}
       </div>
-      ${isBuy ? `<div class="bot-config-toggle" style="opacity:.55;cursor:default;">
-        <span class="cfg-label">Aún no gestionado por el bot</span>
-      </div>` : `<button class="bot-config-toggle" type="button" onclick="botToggleAdCfg(${realId})">
+      <button class="bot-config-toggle" type="button" onclick="botToggleAdCfg(${realId})">
         <span class="arrow" id="adCfgArrow_${realId}">▼</span>
         <span class="cfg-label">Configuración</span>
         <span class="cfg-count">${cfgCount} campos</span>
-      </button>`}
+      </button>
       <div class="bot-ad-pill-cfg" id="adCfg_${realId}" style="display:${cfgDisplay};padding:8px 14px 12px;">
         <div class="bot-config-grid">
           <label>Estrategia
             <select id="adCfg_${realId}_Strategy" onchange="botAdCfgStrategyChange(${realId},this.value);botSaveAdCfgField(${realId},'botStrategy',this.value)">
               <option value="top1" ${strategy==='top1'?'selected':''}>Top 1</option>
-              <option value="spread" ${strategy==='spread'?'selected':''}>Spread fijo</option>
+              <option value="spread" ${strategy==='spread'?'selected':''}>${isBuy?'Precio fijo':'Spread fijo'}</option>
             </select>
           </label>
           <label id="adCfg_${realId}_Top1DiffLabel" style="${top1Style}">Diferencia top 1 (CLP)
             <span style="display:flex;align-items:center;gap:4px;"><input id="adCfg_${realId}_Top1Diff" type="number" step="0.01" value="${top1Diff}" placeholder="0.10" onchange="botSaveAdCfgField(${realId},'botTop1Diff',this.value)" style="flex:1;"><button class="btn small ghost" type="button" onclick="botSaveAdCfgBulk(${realId})" title="Guardar" style="font-size:12px;padding:1px 4px;">💾</button></span>
+            ${isBuy ? `<span class="help-text">Cuánto sumarle al mejor comprador competidor para ganarle la venta</span>` : ''}
           </label>
-          <label id="adCfg_${realId}_SpreadPctLabel" style="${spreadStyle}">Precio spread (CLP)
+          ${isBuy ? `<label id="adCfg_${realId}_SpreadPctLabel" style="${spreadStyle}">Precio fijo a ofrecer (CLP)
+            <input id="adCfg_${realId}_SpreadPct" type="number" step="0.01" value="${spreadPct}" placeholder="955.00" onchange="botSaveAdCfgField(${realId},'botSpreadPct',this.value)">
+            <span class="help-text">Precio fijo, sin mirar competencia -- nunca por encima del techo</span>
+          </label>` : `<label id="adCfg_${realId}_SpreadPctLabel" style="${spreadStyle}">Precio spread (CLP)
             <input id="adCfg_${realId}_SpreadPct" type="number" step="0.01" data-stored-pct="${spreadPct}" placeholder="923.00" oninput="window.botAdUpdateSpreadHint(${realId})" onchange="window.botAdSpreadPriceChanged(${realId},this.value)">
             <span id="adCfg_${realId}_SpreadHint" style="font-size:10px;color:#34d399;"></span>
-          </label>
-          <label>Precio fuente
+          </label>`}
+          ${isBuy ? '' : `<label>Precio fuente
             <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
               <select id="adCfg_${realId}_PriceSource" onchange="botSaveAdCfgField(${realId},'botPriceSource',this.value);botUpdateAdCostBadge(${realId});botAdUpdateSafeMarginHint(${realId})" style="flex:0 0 100px;padding:7px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;outline:none;font-family:inherit;">
                 <option value="capacity" ${priceSource==='capacity'?'selected':''}>Capacity</option>
@@ -1542,19 +1568,28 @@ function addP2PBotStyles(){
               </select>
               <input id="adCfg_${realId}_PriceFloorPct" type="number" step="0.01" value="${priceFloor}" placeholder="895.83" onchange="botUpdateAdCostBadge(${realId});botSaveAdCfgField(${realId},'botPriceFloorPct',this.value);botAdUpdateRealCost(${realId});botAdUpdateSafeMarginHint(${realId})" oninput="botAdUpdateRealCost(${realId});botAdUpdateSafeMarginHint(${realId})" style="flex:1;min-width:0;">
             </div>
-          </label>
+          </label>`}
+          ${isBuy ? `<form autocomplete="off" style="display:contents"><label>Techo máximo (CLP)
+            <div style="display:flex;align-items:center;gap:4px;">
+              <button type="button" class="btn small ghost" onclick="window.botMarginStep('adCfg_${realId}_SafeMarginPct',-0.1)" style="flex:0 0 auto;padding:6px 12px;font-size:15px;line-height:1;">−</button>
+              <input id="adCfg_${realId}_SafeMarginPct" type="number" step="0.01" value="${safeMargin}" placeholder="960.00" autocomplete="off" oninput="window.botBuyCeilingHint(${realId});window.botSafeSave(${realId},this)" style="flex:1;min-width:0;text-align:center;">
+              <button type="button" class="btn small ghost" onclick="window.botMarginStep('adCfg_${realId}_SafeMarginPct',0.1)" style="flex:0 0 auto;padding:6px 12px;font-size:15px;line-height:1;">+</button>
+            </div>
+            <span id="adCfg_${realId}_SafeMarginHint" style="font-size:10px;color:#34d399;"></span>
+            <span class="help-text">Nunca vas a pagar más que esto (ya con la comisión descontada)</span>
+          </label></form>` : ''}
           <label id="adCfg_${realId}_CommissionPctLabel" class="ad-pill-comm-field" style="display:${botSelectedExchange==='bybit'?'none':''};">Comisión (%)
-            <input id="adCfg_${realId}_CommissionPct" type="number" step="0.01" value="${commission}" placeholder="0.14" onchange="botSaveAdCfgField(${realId},'botCommissionPct',this.value);botUpdateAdCostBadge(${realId})">
-            <span id="adCfg_${realId}_RealCost" style="font-size:11px;color:#34d399;font-weight:600;"></span>
+            <input id="adCfg_${realId}_CommissionPct" type="number" step="0.01" value="${commission}" placeholder="0.14" onchange="botSaveAdCfgField(${realId},'botCommissionPct',this.value);${isBuy?`window.botBuyCeilingHint(${realId})`:`botUpdateAdCostBadge(${realId})`}">
+            ${isBuy ? '' : `<span id="adCfg_${realId}_RealCost" style="font-size:11px;color:#34d399;font-weight:600;"></span>`}
           </label>
-          <form autocomplete="off" style="display:contents"><label>Margen seguridad (%)
+          ${isBuy ? '' : `<form autocomplete="off" style="display:contents"><label>Margen seguridad (%)
             <div style="display:flex;align-items:center;gap:4px;">
               <button type="button" class="btn small ghost" onclick="window.botMarginStep('adCfg_${realId}_SafeMarginPct',-0.01)" style="flex:0 0 auto;padding:6px 12px;font-size:15px;line-height:1;">−</button>
               <input id="adCfg_${realId}_SafeMarginPct" type="number" step="0.01" value="${safeMargin}" placeholder="0" autocomplete="off" oninput="botAdUpdateSafeMarginHint(${realId});window.botSafeSave(${realId},this)" style="flex:1;min-width:0;text-align:center;">
               <button type="button" class="btn small ghost" onclick="window.botMarginStep('adCfg_${realId}_SafeMarginPct',0.01)" style="flex:0 0 auto;padding:6px 12px;font-size:15px;line-height:1;">+</button>
             </div>
             <span id="adCfg_${realId}_SafeMarginHint" style="font-size:10px;color:#34d399;"></span>
-          </label></form>
+          </label></form>`}
           <label>Capital min competidor (USDT)
             <input id="adCfg_${realId}_MinCompetitorCapital" type="number" step="1" value="${minCapital}" placeholder="Sin filtro" onchange="botSaveAdCfgField(${realId},'botMinCompetitorCapital',this.value)">
           </label>
@@ -1571,16 +1606,16 @@ function addP2PBotStyles(){
           <form autocomplete="off" style="display:contents"><label>Excluir comerciantes
             <span style="display:flex;align-items:center;gap:4px;">
               <input id="adCfg_${realId}_ExcludedMerchants" type="text" value="${escHtml(Array.isArray(a.botExcludedMerchants) ? a.botExcludedMerchants.join(', ') : '')}" placeholder="Ninguno" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botExcludedMerchants',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" style="flex:1;min-width:0;">
-              <button type="button" class="btn small ghost" onclick="window.botOpenExcludeMerchantsModal(${realId})" title="Elegir de la lista de comerciantes en el mercado ahora" style="flex:0 0 auto;padding:6px 10px;font-size:12px;white-space:nowrap;">Elegir</button>
+              ${isBuy ? '' : `<button type="button" class="btn small ghost" onclick="window.botOpenExcludeMerchantsModal(${realId})" title="Elegir de la lista de comerciantes en el mercado ahora" style="flex:0 0 auto;padding:6px 10px;font-size:12px;white-space:nowrap;">Elegir</button>`}
             </span>
             <span class="help-text">Nunca se les sigue el precio a estos comerciantes</span>
           </label></form>
           <label>Intervalo ciclo (seg)
             <input id="adCfg_${realId}_CycleInterval" type="number" step="1" min="1" value="${a.botCycleInterval != null ? a.botCycleInterval : ''}" placeholder="10" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botCycleInterval',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
           </label>
-          <label>Circuit breaker (% caída)
+          ${isBuy ? '' : `<label>Circuit breaker (% caída)
             <input id="adCfg_${realId}_CircuitBreakPct" type="number" step="0.1" value="${a.botCircuitBreakPct != null ? a.botCircuitBreakPct : ''}" placeholder="3" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botCircuitBreakPct',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
-          </label>
+          </label>`}
           <form autocomplete="off" style="display:contents"><label>Límite diferencia anuncios (%)
             <input id="adCfg_${realId}_MinAdPriceDiffPct" type="number" step="0.01" value="${a.botMinAdPriceDiffPct != null ? a.botMinAdPriceDiffPct : ''}" placeholder="0.1" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botMinAdPriceDiffPct',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
             <span class="help-text">Distancia mínima con tus otros anuncios (Binance exige ≥0.1%)</span>
@@ -1591,13 +1626,8 @@ function addP2PBotStyles(){
   }
 
   window.botToggleAdCfg = async function(realId){
-    // Guarda centralizada: un anuncio de Compra no tiene panel de
-    // configuración de estrategia todavía (Parte 1 de la integración de
-    // Compra) -- se ignora el click tanto si viene del botón de
-    // "Configuración" (que ya no se dibuja para Compra) como del cuerpo de
-    // la tarjeta (que sigue teniendo el mismo onclick para los dos lados).
     var pillEl = document.querySelector('.bot-ad-pill[data-ad-real-id="' + realId + '"]');
-    if(pillEl && pillEl.getAttribute('data-ad-tradetype') === 'BUY') return;
+    var isBuy = pillEl && pillEl.getAttribute('data-ad-tradetype') === 'BUY';
     if(!window._adCfgOpen) window._adCfgOpen = {};
     var open = !window._adCfgOpen[realId];
     window._adCfgOpen[realId] = open;
@@ -1605,6 +1635,14 @@ function addP2PBotStyles(){
     if(el) el.style.display = open ? '' : 'none';
     var arrow = document.getElementById("adCfgArrow_" + realId);
     if(arrow) arrow.style.transform = open ? 'rotate(180deg)' : '';
+    if(isBuy){
+      // Compra no tiene "costo real"/capacity -- ninguno de los hints de
+      // Venta (botUpdateAdCostBadge, botAdUpdateSafeMarginHint, etc.) aplica
+      // acá, y varios asumen campos (Precio fuente/Precio piso) que el panel
+      // de Compra no dibuja. Solo se refresca el hint propio del techo.
+      window.botBuyCeilingHint(realId);
+      return;
+    }
     // Sincronizar capacities del servidor antes de leer
     if(typeof syncP2PCapacityFromServer === 'function'){
       await syncP2PCapacityFromServer();
@@ -1613,6 +1651,22 @@ function addP2PBotStyles(){
     botAdUpdateSafeMarginHint(realId);
     botAdUpdateRealCost(realId);
     window.botAdUpdateSpreadPriceField(realId);
+  };
+
+  // Hint del "Techo máximo" de un anuncio de Compra -- espejo simple del
+  // hint de "Margen seguridad" de Venta, pero sin capacity: el precio
+  // máximo REAL que el anuncio puede ofrecer es el techo menos la comisión
+  // de Binance (fórmula confirmada explícitamente con el usuario, sep 2026).
+  window.botBuyCeilingHint = function(realId){
+    var hint = document.getElementById("adCfg_" + realId + "_SafeMarginHint");
+    var ceilingInput = document.getElementById("adCfg_" + realId + "_SafeMarginPct");
+    if(!hint || !ceilingInput) return;
+    var ceiling = parseFloat(ceilingInput.value);
+    if(isNaN(ceiling) || ceiling <= 0){ hint.textContent = ""; return; }
+    var commPct = parseFloat(document.getElementById("adCfg_" + realId + "_CommissionPct")?.value) || 0;
+    var real = ceiling * (1 - commPct / 100);
+    hint.textContent = "→ precio máximo real: $" + real.toFixed(2);
+    hint.style.color = "#34d399";
   };
 
   window.botAdCfgStrategyChange = function(realId, value){
@@ -1908,25 +1962,41 @@ function addP2PBotStyles(){
     var container = document.querySelector('[data-ad-real-id="' + realId + '"]');
     var adId = container ? container.getAttribute('data-ad-adid') : '';
     if (adId) body.adId = adId;
-    body.botStrategy       = document.getElementById("adCfg_" + realId + "_Strategy").value;
-    body.botTop1Diff       = parseFloat(document.getElementById("adCfg_" + realId + "_Top1Diff").value);
+    // Bug real (sep 2026): esta función leía varios campos con `.value`
+    // directo, sin chequear null primero -- funcionaba porque Venta siempre
+    // dibuja los 10 campos. El panel de Compra (nuevo) dibuja un set MÁS
+    // CHICO de campos (no existe "Precio fuente"/"Precio piso" para Compra,
+    // no hay "costo" del cual derivar un piso) -- sin el `?.`, clickear el
+    // botón 💾 de un anuncio de Compra tiraba un TypeError y no guardaba
+    // nada. Con `?.` cada campo ausente simplemente queda `null` (comportamiento
+    // ya esperado más abajo), cero cambio para Venta donde todos existen.
+    body.botStrategy       = document.getElementById("adCfg_" + realId + "_Strategy")?.value;
+    body.botTop1Diff       = parseFloat(document.getElementById("adCfg_" + realId + "_Top1Diff")?.value);
     if(isNaN(body.botTop1Diff)) body.botTop1Diff = null;
     // El campo ahora muestra un PRECIO (CLP), no el %; el % real que usa el
     // motor de precios queda guardado en data-stored-pct (lo actualiza
-    // botAdSpreadPriceChanged cada vez que se edita el precio).
+    // botAdSpreadPriceChanged cada vez que se edita el precio). Para Compra
+    // no hay traducción a % -- el precio fijo se guarda directo (ver
+    // botRenderAdPill), por eso primero se intenta data-stored-pct y si no
+    // existe se cae al valor crudo del campo.
     var spreadPctInp = document.getElementById("adCfg_" + realId + "_SpreadPct");
     body.botSpreadPct = spreadPctInp ? parseFloat(spreadPctInp.getAttribute('data-stored-pct')) : NaN;
+    if(isNaN(body.botSpreadPct)) body.botSpreadPct = spreadPctInp ? parseFloat(spreadPctInp.value) : NaN;
     if(isNaN(body.botSpreadPct)) body.botSpreadPct = null;
-    body.botPriceSource    = document.getElementById("adCfg_" + realId + "_PriceSource").value;
-    body.botPriceFloorPct  = parseFloat(document.getElementById("adCfg_" + realId + "_PriceFloorPct").value);
-    if(isNaN(body.botPriceFloorPct)) body.botPriceFloorPct = null;
-    body.botCommissionPct  = parseFloat(document.getElementById("adCfg_" + realId + "_CommissionPct").value);
+    var priceSourceInp = document.getElementById("adCfg_" + realId + "_PriceSource");
+    if(priceSourceInp) body.botPriceSource = priceSourceInp.value;
+    var priceFloorInp = document.getElementById("adCfg_" + realId + "_PriceFloorPct");
+    if(priceFloorInp){
+      body.botPriceFloorPct = parseFloat(priceFloorInp.value);
+      if(isNaN(body.botPriceFloorPct)) body.botPriceFloorPct = null;
+    }
+    body.botCommissionPct  = parseFloat(document.getElementById("adCfg_" + realId + "_CommissionPct")?.value);
     if(isNaN(body.botCommissionPct)) body.botCommissionPct = null;
-    body.botSafeMarginPct  = parseFloat(document.getElementById("adCfg_" + realId + "_SafeMarginPct").value);
+    body.botSafeMarginPct  = parseFloat(document.getElementById("adCfg_" + realId + "_SafeMarginPct")?.value);
     if(isNaN(body.botSafeMarginPct)) body.botSafeMarginPct = null;
-    body.botMinCompetitorCapital = parseFloat(document.getElementById("adCfg_" + realId + "_MinCompetitorCapital").value);
+    body.botMinCompetitorCapital = parseFloat(document.getElementById("adCfg_" + realId + "_MinCompetitorCapital")?.value);
     if(isNaN(body.botMinCompetitorCapital)) body.botMinCompetitorCapital = null;
-    var payType = document.getElementById("adCfg_" + realId + "_CompetePayType").value;
+    var payType = document.getElementById("adCfg_" + realId + "_CompetePayType")?.value;
     body.botCompetePayTypes = payType === "match" ? ["__match_ad__"] : null;
     var excludedInp = document.getElementById("adCfg_" + realId + "_ExcludedMerchants");
     if(excludedInp){
@@ -2056,8 +2126,16 @@ function addP2PBotStyles(){
     document.querySelectorAll(".bot-ad-menu-dropdown.open").forEach(function(m){ m.classList.remove("open"); });
   });
 
-  window.botToggleAdMain = function(id, adId, enabled){
+  window.botToggleAdMain = function(id, adId, enabled, tradeType){
+    // Bug real corregido (sep 2026): esta llamada nunca mandaba `tradeType`,
+    // así que la PRIMERA vez que se prendía "Bot" para un anuncio que
+    // todavía no tenía fila en nuestra base (típico: un anuncio de Compra
+    // real recién creado en Binance) la ruta lo guardaba con el default
+    // "SELL" -- quedaba mal etiquetado en la base para siempre, aunque la
+    // pantalla lo mostrara bien (esa parte ya se corrigió leyendo el dato
+    // en vivo de Binance). Mandar el lado real acá evita que se repita.
     var body = { exchange: botSelectedExchange, botEnabled: enabled, botManaged: enabled, label: botActiveLabel || "ONZE" };
+    if(tradeType) body.tradeType = tradeType;
     if(adId) body.adId = String(adId);
     else if(id) body.id = Number(id);
     fetch("/api/p2p/bot/ads", {
@@ -5635,6 +5713,30 @@ function addP2PBotStyles(){
     return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
   }
 
+  // Lado elegido en el selector Venta/Compra de "🔄 Ciclo de...". Default
+  // "SELL" a propósito -- mismo criterio que window.botAdsSideFilter: si
+  // nadie toca el selector nuevo, el panel se comporta EXACTO como antes.
+  window.botCycleSideFilter = window.botCycleSideFilter || "SELL";
+  window.botSetCycleSideFilter = function(side){
+    window.botCycleSideFilter = (side === "BUY") ? "BUY" : "SELL";
+    document.querySelectorAll(".bot-cycle-side-btn").forEach(function(btn){
+      const active = btn.getAttribute("data-side") === window.botCycleSideFilter;
+      const isBuyBtn = btn.getAttribute("data-side") === "BUY";
+      btn.classList.toggle("active", active);
+      // Mismo criterio que el selector de Anuncios: Venta siempre verde,
+      // Compra siempre roja, esté o no seleccionada -- solo el relleno/borde
+      // más marcado indica cuál está activa ahora mismo.
+      btn.style.color = isBuyBtn ? "#fb7185" : "#34d399";
+      btn.style.background = active ? (isBuyBtn ? "rgba(251,113,133,.14)" : "rgba(52,211,153,.14)") : "transparent";
+      btn.style.borderColor = active ? (isBuyBtn ? "rgba(251,113,133,.4)" : "rgba(52,211,153,.4)") : (isBuyBtn ? "rgba(251,113,133,.25)" : "rgba(52,211,153,.25)");
+    });
+    const titleEl = document.getElementById("botCycleSectionTitle");
+    if(titleEl) titleEl.textContent = window.botCycleSideFilter === "BUY" ? "🔄 Ciclo de Compra" : "🔄 Ciclo de Ventas";
+    const usdtLabelEl = document.getElementById("botCycleUsdtLabel");
+    if(usdtLabelEl) usdtLabelEl.textContent = window.botCycleSideFilter === "BUY" ? "USDT comprados" : "USDT vendidos";
+    botCycleRefresh();
+  };
+
   let botCycleLastRefreshAt = 0;
   // Bug real confirmado en vivo (sep 2026): /api/p2p/cycle/status hace hasta
   // 5 llamadas SEGUIDAS (no en paralelo) a Binance más una consulta de TODOS
@@ -5668,12 +5770,13 @@ function addP2PBotStyles(){
     // datos correctos de la pestaña actual de todos modos.
     const requestedLabel = botActiveLabel || "ONZE";
     const requestedExchange = botSelectedExchange || "binance";
-    const lbl = "?label=" + encodeURIComponent(requestedLabel) + "&exchange=" + encodeURIComponent(requestedExchange);
+    const requestedSide = window.botCycleSideFilter || "SELL";
+    const lbl = "?label=" + encodeURIComponent(requestedLabel) + "&exchange=" + encodeURIComponent(requestedExchange) + "&side=" + encodeURIComponent(requestedSide);
     try{
       const res = await fetch("/api/p2p/cycle/status" + lbl, { credentials:"include" });
       const data = await res.json();
       if(!data?.ok) return;
-      if((botActiveLabel || "ONZE") !== requestedLabel || (botSelectedExchange || "binance") !== requestedExchange) return;
+      if((botActiveLabel || "ONZE") !== requestedLabel || (botSelectedExchange || "binance") !== requestedExchange || (window.botCycleSideFilter || "SELL") !== requestedSide) return;
       const cycle = data.active;
       const startBtn = document.getElementById("botCycleStartBtn");
       const addBtn = document.getElementById("botCycleAddSaleBtn");
@@ -5694,7 +5797,9 @@ function addP2PBotStyles(){
         labelEl.style.background = "rgba(0,255,136,.14)";
         labelEl.style.color = "#00ff88";
         const clpLabelEl = document.getElementById("botCycleClpLabel");
-        if(clpLabelEl) clpLabelEl.textContent = "CLP " + (botSelectedExchange || "binance").charAt(0).toUpperCase() + (botSelectedExchange || "binance").slice(1);
+        if(clpLabelEl) clpLabelEl.textContent = requestedSide === "BUY" ? "CLP gastado" : "CLP " + (botSelectedExchange || "binance").charAt(0).toUpperCase() + (botSelectedExchange || "binance").slice(1);
+        const usdtLabelEl2 = document.getElementById("botCycleUsdtLabel");
+        if(usdtLabelEl2) usdtLabelEl2.textContent = requestedSide === "BUY" ? "USDT comprados" : "USDT vendidos";
         document.getElementById("botCycleStartTime").textContent = new Date(cycle.startTime).toLocaleString();
         document.getElementById("botCycleUsdt").textContent = Number(cycle.totalUsdt || 0).toFixed(2);
         document.getElementById("botCycleBinanceClp").textContent = "$" + Math.round(Number(cycle.totalBinanceClp || 0)).toLocaleString();
@@ -5824,7 +5929,8 @@ function addP2PBotStyles(){
   window.botCycleStart = function(){
     const lbl = botActiveLabel || "ONZE";
     const cuentaTag = botSelectedExchange === "binance" ? lbl : botSelectedExchange.toUpperCase();
-    botCycleModalShell("botCycleStartModal", "▶ Iniciar ciclo de ventas", `
+    const modalTitle = window.botCycleSideFilter === "BUY" ? "▶ Iniciar ciclo de compra" : "▶ Iniciar ciclo de ventas";
+    botCycleModalShell("botCycleStartModal", modalTitle, `
       <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
         Cuenta: <strong style="color:#fff;">${escHtml(cuentaTag)}</strong><br>
         Se contarán las ventas P2P y manuales desde este momento hasta que cierres el ciclo.
@@ -5852,7 +5958,7 @@ function addP2PBotStyles(){
       const res = await fetch("/api/p2p/cycle/start", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ label: lbl, exchange: botSelectedExchange || "binance", minCloseBalance: minClose })
+        body: JSON.stringify({ label: lbl, exchange: botSelectedExchange || "binance", side: window.botCycleSideFilter || "SELL", minCloseBalance: minClose })
       });
       const data = await res.json();
       if(!data.ok){
@@ -5903,7 +6009,7 @@ function addP2PBotStyles(){
       const res = await fetch("/api/p2p/cycle/min-close", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ label: lbl, exchange: botSelectedExchange || "binance", minCloseBalance: minClose })
+        body: JSON.stringify({ label: lbl, exchange: botSelectedExchange || "binance", side: window.botCycleSideFilter || "SELL", minCloseBalance: minClose })
       });
       const data = await res.json();
       if(!data.ok){
@@ -5947,7 +6053,7 @@ function addP2PBotStyles(){
     if(!concept){ showErr("Ingresa un concepto"); return; }
     if(!amountClp || amountClp <= 0){ showErr("Ingresa un monto válido"); return; }
     try{
-      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(botActiveLabel || "ONZE") + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance"), { credentials:"include" });
+      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(botActiveLabel || "ONZE") + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance") + "&side=" + encodeURIComponent(window.botCycleSideFilter || "SELL"), { credentials:"include" });
       const status = await res.json();
       if(!status?.ok || !status?.active){ showErr("No hay ciclo activo"); return; }
       const addRes = await fetch("/api/p2p/cycle/manual-sale", {
@@ -5966,13 +6072,14 @@ function addP2PBotStyles(){
     const lbl = botActiveLabel || "ONZE";
     let preview = null;
     try{
-      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(lbl) + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance"), { credentials:"include" });
+      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(lbl) + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance") + "&side=" + encodeURIComponent(window.botCycleSideFilter || "SELL"), { credentials:"include" });
       const status = await res.json();
       preview = status?.active || null;
     }catch(e){}
     const totalUsdt = preview ? Number(preview.totalUsdt || 0).toFixed(2) : "—";
     const totalClp = preview ? Math.round(Number(preview.totalBinanceClp || 0) + Number(preview.totalManualClp || 0)).toLocaleString() : "—";
-    botCycleModalShell("botCycleCloseModal", "■ Cerrar ciclo de ventas", `
+    const closeModalTitle = window.botCycleSideFilter === "BUY" ? "■ Cerrar ciclo de compra" : "■ Cerrar ciclo de ventas";
+    botCycleModalShell("botCycleCloseModal", closeModalTitle, `
       <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
         Se calcularán los totales finales de este ciclo y quedará archivado.
       </p>
@@ -5996,7 +6103,7 @@ function addP2PBotStyles(){
       const res = await fetch("/api/p2p/cycle/close", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ label: botActiveLabel || "ONZE", exchange: botSelectedExchange || "binance" })
+        body: JSON.stringify({ label: botActiveLabel || "ONZE", exchange: botSelectedExchange || "binance", side: window.botCycleSideFilter || "SELL" })
       });
       const data = await res.json();
       if(!data.ok){
@@ -6045,7 +6152,7 @@ function addP2PBotStyles(){
     const lbl = botActiveLabel || "ONZE";
     let cycles = [];
     try{
-      const res = await fetch("/api/p2p/cycle/status?historyOnly=1&label=" + encodeURIComponent(lbl) + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance"), { credentials:"include" });
+      const res = await fetch("/api/p2p/cycle/status?historyOnly=1&label=" + encodeURIComponent(lbl) + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance") + "&side=" + encodeURIComponent(window.botCycleSideFilter || "SELL"), { credentials:"include" });
       const data = await res.json();
       cycles = data?.recent || [];
     }catch(e){}
@@ -6086,7 +6193,8 @@ function addP2PBotStyles(){
         </div>
       </div>`;
     }).join("") : `<p style="color:#64748b;font-size:13px;">Todavía no hay ciclos cerrados para ${escHtml(botSelectedExchange === "binance" ? lbl : exLabel)}.</p>`;
-    botCycleModalShell("botCycleHistoryModal", "📜 Historial de ciclos", `
+    const historyModalTitle = window.botCycleSideFilter === "BUY" ? "📜 Historial de ciclos (Compra)" : "📜 Historial de ciclos (Venta)";
+    botCycleModalShell("botCycleHistoryModal", historyModalTitle, `
       <div style="max-height:440px;overflow-y:auto;margin-bottom:16px;">${rows}</div>
       <div style="display:flex;justify-content:space-between;">
         ${cycles.length ? `<button onclick="window.botCycleDeleteAll()"
@@ -6223,7 +6331,7 @@ function addP2PBotStyles(){
       const res = await fetch("/api/p2p/cycle/delete", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ all: true, label: lbl, exchange: botSelectedExchange || "binance" })
+        body: JSON.stringify({ all: true, label: lbl, exchange: botSelectedExchange || "binance", side: window.botCycleSideFilter || "SELL" })
       });
       const data = await res.json();
       if(!data.ok){ onzeAlert(data.error || "No se pudo vaciar"); return; }
@@ -6240,7 +6348,7 @@ function addP2PBotStyles(){
       const res = await fetch("/api/p2p/cycle/set-aside", {
         method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderNumber, amount, totalPrice, createTime, label: botActiveLabel || "ONZE", exchange: botSelectedExchange || "binance" }),
+        body: JSON.stringify({ orderNumber, amount, totalPrice, createTime, label: botActiveLabel || "ONZE", exchange: botSelectedExchange || "binance", side: window.botCycleSideFilter || "SELL" }),
       });
       const data = await res.json();
       if(!data.ok){ onzeAlert(data.error || "No se pudo sacar la venta"); return; }
@@ -6266,7 +6374,7 @@ function addP2PBotStyles(){
     try{
       const lbl = botActiveLabel || "ONZE";
       const ex = botSelectedExchange || "binance";
-      const res = await fetch("/api/p2p/cycle/set-aside?label=" + encodeURIComponent(lbl) + "&exchange=" + encodeURIComponent(ex), { credentials: "include" });
+      const res = await fetch("/api/p2p/cycle/set-aside?label=" + encodeURIComponent(lbl) + "&exchange=" + encodeURIComponent(ex) + "&side=" + encodeURIComponent(window.botCycleSideFilter || "SELL"), { credentials: "include" });
       const data = await res.json();
       const orders = data?.orders || [];
       if(!orders.length){

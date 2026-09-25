@@ -1689,6 +1689,10 @@ model P2PCycle {
   tenantId         Int
   label            String               @default("ONZE")
   exchange         String               @default("binance")
+  // "SELL" (default, todo lo que ya existe) o "BUY" -- separa el Ciclo de
+  // Venta del Ciclo de Compra (sep 2026). El default preserva el
+  // comportamiento de cada fila y llamada ya existente sin migración.
+  side             String               @default("SELL")
   // Número mostrado en el panel ("Ciclo #N"), propio de cada
   // tenant+exchange+label -- calculado UNA VEZ al crear el ciclo (ver
   // start/route.ts) y guardado acá. Antes se recalculaba en CADA consulta
@@ -1746,6 +1750,9 @@ model P2PCycleSetAsideOrder {
   tenantId         Int
   exchange         String
   label            String
+  // Mismo criterio que P2PCycle.side -- default "SELL" no cambia nada de lo
+  // que ya existe.
+  side             String    @default("SELL")
   orderNumber      String
   amount           Decimal   @db.Decimal(18, 8)
   totalPrice       Decimal   @db.Decimal(18, 2)

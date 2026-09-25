@@ -16,11 +16,11 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { id, all, label, exchange } = body;
+    const { id, all, label, exchange, side } = body;
 
     if (all) {
       const result = await prisma.p2PCycle.deleteMany({
-        where: { tenantId: session.tenantId, exchange: exchange || "binance", label: label || "ONZE", status: "closed" },
+        where: { tenantId: session.tenantId, exchange: exchange || "binance", label: label || "ONZE", side: side === "BUY" ? "BUY" : "SELL", status: "closed" },
       });
       return Response.json({ ok: true, deleted: result.count });
     }

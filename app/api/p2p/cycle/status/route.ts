@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const label = searchParams.get("label") || "ONZE";
     const exchange = searchParams.get("exchange") || "binance";
+    const side = searchParams.get("side") === "BUY" ? "BUY" : "SELL";
     // El modal "Ver historial" (botCycleShowHistory) solo usa `recent` --
     // pero reusaba este mismo endpoint, pagando siempre el cálculo en vivo
     // del ciclo ACTIVO (llamada a Binance + producción) aunque nunca lo
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
     const historyOnly = searchParams.get("historyOnly") === "1";
 
     const active = historyOnly ? null : await prisma.p2PCycle.findFirst({
-      where: { tenantId: session.tenantId, exchange, label, status: "active" },
+      where: { tenantId: session.tenantId, exchange, label, side, status: "active" },
       include: { manualSales: true },
     });
 
@@ -60,10 +61,10 @@ export async function GET(req: NextRequest) {
           });
           if (creds) {
             const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
-            stats = await computeCycleOrderStats(client, startMs);
+            stats = await computeCycleOrderStats(client, startMs, undefined, [], side);
           }
         } else {
-          stats = await computeLocalCycleStats(prisma, session.tenantId, exchange, startMs);
+          stats = await computeLocalCycleStats(prisma, session.tenantId, exchange, startMs, undefined, side);
         }
         if (stats) {
           // Botón "Sacar del ciclo" (ago 2026): las ventas apartadas SIN
@@ -73,7 +74,7 @@ export async function GET(req: NextRequest) {
           // createTime real sea anterior al startTime de este ciclo -- por
           // eso se agregan aparte, no filtrando por rango de fecha de nuevo.
           const setAsideRows = await prisma.p2PCycleSetAsideOrder.findMany({
-            where: { tenantId: session.tenantId, exchange, label, OR: [{ claimedByCycleId: null }, { claimedByCycleId: active.id }] },
+            where: { tenantId: session.tenantId, exchange, label, side, OR: [{ claimedByCycleId: null }, { claimedByCycleId: active.id }] },
           });
           const unclaimed = setAsideRows.filter((o: any) => o.claimedByCycleId === null);
           const claimedByThisCycle = setAsideRows.filter((o: any) => o.claimedByCycleId === active.id);
@@ -127,7 +128,7 @@ export async function GET(req: NextRequest) {
     }
 
     const recent = await prisma.p2PCycle.findMany({
-      where: { tenantId: session.tenantId, exchange, label, status: "closed" },
+      where: { tenantId: session.tenantId, exchange, label, side, status: "closed" },
       orderBy: { startTime: "desc" },
       take: 100,
       include: { manualSales: true },

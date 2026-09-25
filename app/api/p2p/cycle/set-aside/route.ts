@@ -23,9 +23,10 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const label = searchParams.get("label") || "ONZE";
     const exchange = searchParams.get("exchange") || "binance";
+    const side = searchParams.get("side") === "BUY" ? "BUY" : "SELL";
 
     const orders = await prisma.p2PCycleSetAsideOrder.findMany({
-      where: { tenantId: session.tenantId, exchange, label, claimedByCycleId: null, discarded: false },
+      where: { tenantId: session.tenantId, exchange, label, side, claimedByCycleId: null, discarded: false },
       orderBy: { setAsideAt: "desc" },
     });
     return Response.json({ ok: true, orders });
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
     const { orderNumber, amount, totalPrice, createTime } = body;
     const label = body.label || "ONZE";
     const exchange = body.exchange || "binance";
+    const side = body.side === "BUY" ? "BUY" : "SELL";
     if (!orderNumber || amount === undefined || totalPrice === undefined || !createTime) {
       return Response.json({ ok: false, error: "Faltan datos de la orden" }, { status: 400 });
     }
@@ -57,6 +59,7 @@ export async function POST(req: NextRequest) {
         tenantId: session.tenantId,
         exchange,
         label,
+        side,
         orderNumber: String(orderNumber),
         amount: Number(amount),
         totalPrice: Number(totalPrice),

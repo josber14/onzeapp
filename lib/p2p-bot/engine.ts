@@ -46,6 +46,13 @@ interface BinanceState {
   lastCompetitorCount: number;
   adStates: Map<string, AdState>;
   lastBuySideFetch: number;
+  // Motor de precio de anuncios de Compra (Parte 2, sep 2026, processBuyAds)
+  // -- cache DE COMPETIDORES DE COMPRA, separada de cachedCompetitors (que es
+  // de Venta) para no mezclar las dos direcciones de mercado.
+  lastBuyCompetitorFetch: number;
+  cachedBuyCompetitors: any[];
+  isFetchingBuy: boolean;
+  lastBuyCompetitorCount: number;
 }
 const binanceStates = new Map<number, BinanceState>();
 
@@ -90,6 +97,10 @@ function getBinanceState(tenantId: number): BinanceState {
       lastCompetitorCount: 0,
       adStates: new Map(),
       lastBuySideFetch: 0,
+      lastBuyCompetitorFetch: 0,
+      cachedBuyCompetitors: [],
+      isFetchingBuy: false,
+      lastBuyCompetitorCount: 0,
     };
     binanceStates.set(tenantId, s);
   }
@@ -1613,6 +1624,19 @@ async function runBinanceCycle(
       }
     }
 
+    // ── Anuncios de Compra (Parte 2, sep 2026) ──
+    // Espejo del bloque de Venta de arriba, en función aparte
+    // (processBuyAds) para que un bug ahí nunca pueda tocar una sola línea
+    // de la lógica de Venta ya probada. Usa managedAds (el mismo query de
+    // arriba, sin filtrar por lado) y cruza contra myAds/ourBuyAds en vivo --
+    // así funciona sin importar si la columna tradeType de un anuncio
+    // guardado quedó desactualizada.
+    try {
+      await processBuyAds(tenantId, config, client, myAds, managedAds, bs, rateLimitKey, label, log, actions);
+    } catch (e: any) {
+      await log("error", "binance", `Error en ciclo de Compra: ${e.message}`);
+    }
+
     // 5. Sync orders -- extraída a syncBinanceOrdersOnly() (también se llama
     // de forma independiente desde executeBotCycle, sin importar si el bot
     // de precio está prendido o no, ver el comentario ahí).
@@ -1622,7 +1646,7 @@ async function runBinanceCycle(
     await log( "info", "binance", `Ciclo completado: managedAds: ${managedAds.length}`);
 
     try {
-      await autoCloseCycle(prisma, tenantId, label, client, log, "binance");
+      await autoCloseCycle(prisma, tenantId, label, client, log, "binance", "SELL");
     } catch (e: any) {
       await log( "warn", "binance", `Auto-close cycle check: ${e.message}`);
     }
@@ -1631,6 +1655,396 @@ async function runBinanceCycle(
   }
 
   return { actions };
+}
+
+// ═══════════════ Motor de precio de Anuncios de Compra (Parte 2, sep 2026) ═══════════════
+// Espejo del bloque de Venta de runBinanceCycle de arriba, pero persiguiendo
+// el precio hacia ARRIBA con un TECHO en vez de hacia abajo con un piso.
+// Reglas de negocio confirmadas explícitamente con el usuario:
+//   - No existe "capacity" para Compra -- el techo es un precio fijo en CLP
+//     que el usuario escribe a mano por anuncio (reusa la columna
+//     botSafeMarginPct, reinterpretada: para Venta es un %, para Compra es
+//     un precio absoluto -- ver botRenderAdPill en part-04.js).
+//   - El precio máximo REAL que el anuncio puede ofrecer descuenta la
+//     comisión de Binance: ceiling = techo × (1 - comisión% / 100).
+//   - Misma estrategia top1/spread que Venta, misma familia de filtros de
+//     competencia (capital mínimo, monto, método de pago, comerciantes
+//     excluidos, distancia mínima entre anuncios propios).
+//   - Dirección de urgencia invertida: para Compra, BAJAR precio (recuperar
+//     margen) es prioritario; SUBIR (perseguir competencia por ganar la
+//     venta) no es urgente -- espejo exacto del razonamiento ya usado en
+//     Venta ("subir precio es prioritario, bajar persiguiendo competencia no
+//     es urgente").
+// managedAds llega ya calculado por runBinanceCycle (mismo query, sin
+// filtrar por lado) -- acá se cruza contra ourBuyAds (derivado de myAds, la
+// lectura EN VIVO de Binance) para encontrar cuáles son de Compra, en vez de
+// confiar en la columna tradeType guardada (que puede haber quedado
+// desactualizada para anuncios creados antes de este arreglo).
+async function processBuyAds(
+  tenantId: number,
+  config: P2PBotConfigData | P2PBotExchangeConfigData,
+  client: BinanceP2PClient,
+  myAds: any[],
+  managedAds: any[],
+  bs: BinanceState,
+  rateLimitKey: string,
+  label: string,
+  log: (level: string, exchange: string | null, message: string, details?: any) => Promise<void>,
+  actions: BotAction[]
+): Promise<void> {
+  const ourBuyAds = myAds.filter(
+    (a: any) => a.side === 0 && a.tokenId === "USDT" && a.currencyId === "CLP"
+  );
+  let managedBuyAds = managedAds.filter(
+    (ma: any) => ma.adId && ourBuyAds.some((a: any) => String(a.id) === String(ma.adId))
+  );
+  if (managedBuyAds.length === 0) return;
+
+  const exchangeTop1Diff = Number(config.top1Diff) || 0.1;
+  const exchangeCommissionPct = Number((config as any).commissionPct) || 0.14;
+  const exchangeMinCapital = Number((config as any).minCompetitorCapital) || 0;
+  const exchangeCompetePayTypes = (config as any).competePayTypes as string[] | null | undefined;
+  const exchangeMinAdPriceDiffPct = (config as any).minAdPriceDiffPct != null ? Number((config as any).minAdPriceDiffPct) : 0.1;
+
+  // ── Chequeo de límites duplicados entre anuncios de Compra propios ──
+  // Mismo criterio que el bloque de Venta (Binance cierra anuncios con
+  // mismo límite en la misma dirección) -- acá solo compara Compra contra
+  // Compra, nunca contra un anuncio de Venta.
+  {
+    const duplicateLimitAdIds = new Set<number>();
+    const duplicateLimitBinanceAdIds = new Set<string>();
+    for (let i = 0; i < managedBuyAds.length; i++) {
+      for (let j = i + 1; j < managedBuyAds.length; j++) {
+        const adA = managedBuyAds[i];
+        const adB = managedBuyAds[j];
+        if (String(adA.adId) === String(adB.adId)) continue;
+        const buyA = ourBuyAds.find((a: any) => String(a.id) === String(adA.adId));
+        const buyB = ourBuyAds.find((a: any) => String(a.id) === String(adB.adId));
+        if (!buyA || !buyB) continue;
+        const sameLimit = Number(buyA.minAmount) > 0
+          && Number(buyA.minAmount) === Number(buyB.minAmount)
+          && Number(buyA.maxAmount) === Number(buyB.maxAmount);
+        if (!sameLimit) continue;
+        duplicateLimitAdIds.add(adA.id);
+        duplicateLimitAdIds.add(adB.id);
+        duplicateLimitBinanceAdIds.add(String(adA.adId));
+        duplicateLimitBinanceAdIds.add(String(adB.adId));
+        await log("error", "binance",
+          `🚫 Anuncios de Compra ${adA.adId} y ${adB.adId} tienen el MISMO límite (${buyA.minAmount}-${buyA.maxAmount} CLP) -- Binance puede cerrarlos por esto. Se desactivó el bot en ambos automáticamente. Corrige el límite en la app de Binance y vuelve a activarlos manualmente desde el panel cuando el límite sea distinto.`);
+      }
+    }
+    if (duplicateLimitAdIds.size > 0) {
+      await prisma.p2PBotAd.updateMany({ where: { id: { in: [...duplicateLimitAdIds] } }, data: { botEnabled: false } });
+      for (const binanceAdId of duplicateLimitBinanceAdIds) {
+        try {
+          await client.updateAd({ adId: binanceAdId, visible: 0 });
+          await log("warn", "binance", `🔒 Ad ${binanceAdId}: ocultado en Binance (visible: 0) por límite duplicado.`);
+        } catch (e: any) {
+          await log("warn", "binance", `Ad ${binanceAdId}: no se pudo ocultar en Binance (${e.message}) -- igual quedó apagado de nuestro lado.`);
+        }
+      }
+      managedBuyAds = managedBuyAds.filter((ma: any) => !duplicateLimitAdIds.has(ma.id));
+      if (managedBuyAds.length === 0) return;
+    }
+  }
+
+  // ── Competidores de Compra (cache propia, separada de la de Venta) ──
+  // Mismo quirk de Binance ya documentado: tradeType invertido -- pedir
+  // "SELL" es lo que trae los anuncios de COMPRA reales de otros usuarios
+  // (confirmado en vivo antes de escribir este código).
+  const now = Date.now();
+  if (now - bs.lastBuyCompetitorFetch > 300 && !bs.isFetchingBuy) {
+    bs.isFetchingBuy = true;
+    try {
+      const [page1, page2] = await Promise.all([
+        client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "SELL", rows: 20, page: 1, payTypes: [] }),
+        client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "SELL", rows: 20, page: 2, payTypes: [] }),
+      ]);
+      const allRaw = [...(page1?.data ?? []), ...(page2?.data ?? [])];
+      await log("debug", "binance", `Fetch Compra: ${allRaw.length} competidores`);
+      if (allRaw.length > 0 || bs.cachedBuyCompetitors.length === 0) {
+        bs.cachedBuyCompetitors = allRaw.map(normalizeBinanceAd);
+      } else {
+        await log("warn", "binance", `API Compra devolvió 0 competidores, preservando cache anterior (${bs.cachedBuyCompetitors.length} items)`);
+      }
+      bs.lastBuyCompetitorFetch = Date.now();
+      bs.lastBuyCompetitorCount = bs.cachedBuyCompetitors.length;
+    } catch (e: any) {
+      await log("warn", "binance", `Fetch competidores Compra: ${e.message}`);
+    } finally {
+      bs.isFetchingBuy = false;
+    }
+  }
+  const rawBuyCompetitors = bs.cachedBuyCompetitors;
+
+  const ownBuyAdPrices = new Map<string, number>();
+  for (const ma of managedBuyAds) {
+    const buyAd = ourBuyAds.find((a: any) => String(a.id) === String(ma.adId));
+    if (buyAd) ownBuyAdPrices.set(String(ma.adId), Number(buyAd.price));
+  }
+
+  for (const managedAd of managedBuyAds) {
+    const adId = managedAd.adId;
+    const ourBuyAd = ourBuyAds.find((a: any) => String(a.id) === String(adId));
+    if (!ourBuyAd) {
+      await log("warn", "binance", `Ad Compra ${adId}: no encontrado (se saltó)`);
+      continue;
+    }
+    const currentPrice = Number(ourBuyAd.price);
+    const as = getAdState(bs, adId);
+
+    const adTop1Diff = managedAd.botTop1Diff != null ? Number(managedAd.botTop1Diff) : exchangeTop1Diff;
+    const adCommissionPct = managedAd.botCommissionPct != null ? Number(managedAd.botCommissionPct) : exchangeCommissionPct;
+    const adMinCapital = managedAd.botMinCompetitorCapital != null ? Number(managedAd.botMinCompetitorCapital) : exchangeMinCapital;
+    let adCompetePayTypes = managedAd.botCompetePayTypes != null ? (managedAd.botCompetePayTypes as string[] | null | undefined) : exchangeCompetePayTypes;
+    if (adCompetePayTypes && adCompetePayTypes[0] === "all") {
+      adCompetePayTypes = null;
+    } else if (!adCompetePayTypes || !adCompetePayTypes.length) {
+      adCompetePayTypes = null;
+    }
+    const adExcludedMerchants = new Set(
+      ((managedAd.botExcludedMerchants as string[] | null) || [])
+        .map((n) => String(n).trim().toLowerCase())
+        .filter(Boolean)
+    );
+    const adMinAdPriceDiffPct = (managedAd as any).botMinAdPriceDiffPct != null ? Number((managedAd as any).botMinAdPriceDiffPct) : exchangeMinAdPriceDiffPct;
+
+    // Techo real -- reusa botSafeMarginPct como PRECIO ABSOLUTO (no %) para
+    // Compra, confirmado explícitamente con el usuario: "no existe capacity
+    // para Compra, el margen de seguridad sería directamente ese techo".
+    const rawCeilingInput = managedAd.botSafeMarginPct != null ? Number(managedAd.botSafeMarginPct) : 0;
+    if (rawCeilingInput <= 0) {
+      await log("warn", "binance", `Ad Compra ${adId}: sin techo máximo configurado, saltando`);
+      continue;
+    }
+    const ceiling = rawCeilingInput * (1 - adCommissionPct / 100);
+
+    const adStrategy = managedAd.botStrategy === "spread" ? "spread" : "top1";
+    let targetPrice: number;
+
+    if (adStrategy === "spread") {
+      // Precio fijo que el usuario escribe directamente (sin traducción a %
+      // -- a diferencia de Venta, acá no hay "costo" del cual calcular un %).
+      const fixedPrice = managedAd.botSpreadPct != null ? Number(managedAd.botSpreadPct) : ceiling;
+      targetPrice = Math.min(fixedPrice, ceiling);
+      await log("debug", "binance", `Ad Compra ${adId}: estrategia precio fijo — fixedPrice=${fixedPrice} ceiling=${ceiling.toFixed(4)} targetPrice=${targetPrice.toFixed(4)}`);
+    } else {
+      let competitors: any[];
+      let needsPaymentFilter = true;
+      const adTransAmount = managedAd.botCompeteTransAmount ? Number(managedAd.botCompeteTransAmount) : null;
+
+      if (adCompetePayTypes?.[0] === "__match_ad__") {
+        const ids = (ourBuyAd?.payments || []).map((p: any) => String(p));
+        const names = (ourBuyAd?.paymentMethods || []).map((p: any) => String(p));
+        const payTypes = [...new Set([...ids, ...names])];
+        if (payTypes.length > 0) {
+          try {
+            const [page1, page2] = await Promise.all([
+              client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "SELL", rows: 20, page: 1, payTypes, ...(adTransAmount ? { transAmount: adTransAmount } : {}) }),
+              client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "SELL", rows: 20, page: 2, payTypes, ...(adTransAmount ? { transAmount: adTransAmount } : {}) }),
+            ]);
+            const combined = [...(page1?.data ?? []), ...(page2?.data ?? [])];
+            competitors = combined.map(normalizeBinanceAd);
+            needsPaymentFilter = false;
+            await log("debug", "binance", `Ad Compra ${adId}: API filtrada devolvió ${competitors.length} competidores con payTypes=${JSON.stringify(payTypes)}${adTransAmount ? ` transAmount=${adTransAmount}` : ""}`);
+          } catch (e: any) {
+            await log("warn", "binance", `Ad Compra ${adId}: error API filtrada, usando cache: ${e.message}`);
+            competitors = [...rawBuyCompetitors];
+          }
+        } else {
+          competitors = [...rawBuyCompetitors];
+        }
+      } else if (adTransAmount) {
+        try {
+          const [page1, page2] = await Promise.all([
+            client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "SELL", rows: 20, page: 1, payTypes: [], transAmount: adTransAmount }),
+            client.getOnlineAds({ asset: "USDT", fiat: "CLP", tradeType: "SELL", rows: 20, page: 2, payTypes: [], transAmount: adTransAmount }),
+          ]);
+          const combined = [...(page1?.data ?? []), ...(page2?.data ?? [])];
+          competitors = combined.map(normalizeBinanceAd);
+          await log("debug", "binance", `Ad Compra ${adId}: API filtrada por transAmount=${adTransAmount} devolvió ${competitors.length} competidores`);
+        } catch (e: any) {
+          await log("warn", "binance", `Ad Compra ${adId}: error API filtrada por transAmount, usando cache: ${e.message}`);
+          competitors = [...rawBuyCompetitors];
+        }
+      } else {
+        competitors = [...rawBuyCompetitors];
+      }
+
+      if (needsPaymentFilter) {
+        let ourPayMethods: string[] | undefined;
+        let rawPayTypes = adCompetePayTypes;
+        if (typeof rawPayTypes === "string") {
+          if (rawPayTypes === "all" || rawPayTypes === "*") rawPayTypes = null;
+        }
+        if (rawPayTypes && rawPayTypes.length > 0 && rawPayTypes[0] !== "*") {
+          if (rawPayTypes[0] === "__match_ad__") {
+            const ids = (ourBuyAd?.payments || []).map((p: any) => String(p));
+            const names = (ourBuyAd?.paymentMethods || []).map((p: any) => String(p));
+            ourPayMethods = [...new Set([...ids, ...names])];
+          } else if (Array.isArray(rawPayTypes)) {
+            ourPayMethods = rawPayTypes;
+          }
+          if (ourPayMethods && ourPayMethods.length > 0) {
+            const beforeCount = competitors.length;
+            competitors = competitors.filter((c: any) => {
+              const cmpAll = [
+                ...(c.payments || []).map((p: any) => String(p)),
+                ...(c.paymentMethods || []).map((p: any) => String(p)),
+              ];
+              return cmpAll.some((p: string) => ourPayMethods!.includes(p));
+            });
+            if (competitors.length === 0 && beforeCount > 0) {
+              await log("warn", "binance", `Ad Compra ${adId}: filtro pago eliminó ${beforeCount} competidores.`);
+            }
+          }
+        }
+      }
+      if (adExcludedMerchants.size > 0) {
+        competitors = competitors.filter((c: any) => !adExcludedMerchants.has(String(c.nickName || "").trim().toLowerCase()));
+      }
+      if (competitors.length === 0) {
+        await log("warn", "binance", `Ad Compra ${adId}: sin competidores tras filtro`);
+        continue;
+      }
+
+      // Viabilidad: nunca seguir a un competidor que YA pide más de nuestro
+      // techo (lo contrario del piso de Venta) -- el usuario confirmó que no
+      // hay una sub-capa extra de margen, el techo ya cumple ese rol.
+      const viable = competitors.filter((c: any) => {
+        if (Number(c.price) > ceiling) return false;
+        if (c.userType && c.userType !== "merchant") return false;
+        if (adMinCapital > 0) {
+          const cap = Number(c.lastQuantity ?? c.surplusAmount ?? c.tradableQuantity ?? c.quantity ?? 0);
+          if (cap < adMinCapital) return false;
+        }
+        return true;
+      });
+      if (viable.length === 0) {
+        await log("debug", "binance", `Ad Compra ${adId}: viable vacío — ${competitors.length} competidores tras filtro, ceiling=${ceiling.toFixed(4)} — cayendo al techo`);
+      }
+
+      // Orden DESCENDENTE (el competidor más caro primero -- el más
+      // atractivo para un vendedor real, al revés que Venta).
+      viable.sort((a: any, b: any) => Number(b.price) - Number(a.price));
+      const myAdIds = new Set(myAds.map((a: any) => a.id));
+      const sortedCompetitors = viable.filter((c: any) => !myAdIds.has(c.id));
+
+      const targetCompetitor = sortedCompetitors.length > 0 ? sortedCompetitors[0] : null;
+
+      // Sin competidor viable (ej: todo el mercado pide más que nuestro
+      // techo) → el anuncio cae directo al techo, nunca se queda fijo en el
+      // precio anterior (mismo principio ya validado por el usuario para
+      // Venta: el límite de seguridad no es un valor de reposo).
+      targetPrice = targetCompetitor ? Number(targetCompetitor.price) + adTop1Diff : ceiling;
+      if (targetPrice > ceiling) { targetPrice = ceiling; }
+    }
+
+    // ── Distancia mínima con nuestros otros anuncios de Compra ──
+    if (adMinAdPriceDiffPct > 0) {
+      for (const [otherId, otherPrice] of ownBuyAdPrices) {
+        if (otherId === String(adId) || !otherPrice) continue;
+        const gapPct = (Math.abs(targetPrice - otherPrice) / otherPrice) * 100;
+        if (gapPct < adMinAdPriceDiffPct) {
+          const requiredGap = otherPrice * (adMinAdPriceDiffPct / 100);
+          let adjusted = targetPrice <= otherPrice ? otherPrice - requiredGap : otherPrice + requiredGap;
+          if (adjusted > ceiling) adjusted = otherPrice - requiredGap;
+          await log("info", "binance",
+            `Ad Compra ${adId}: precio ${targetPrice.toFixed(2)} muy cerca del anuncio ${otherId} (${otherPrice}) — ajustado a ${adjusted.toFixed(2)} para respetar el ${adMinAdPriceDiffPct}% mínimo que exige Binance entre anuncios propios`);
+          targetPrice = adjusted;
+        }
+      }
+    }
+    ownBuyAdPrices.set(String(adId), targetPrice);
+
+    const diff = Math.abs(currentPrice - targetPrice);
+    await log("debug", "binance", `Ad Compra ${adId}: currentPrice=${currentPrice} targetPrice=${targetPrice} diff=${diff} ceiling=${ceiling.toFixed(4)}`);
+    if (diff < 0.005) {
+      continue;
+    }
+
+    // Espejo invertido de la lógica de urgencia de Venta: para Compra, BAJAR
+    // precio (recuperar margen) es prioritario; SUBIR (perseguir competencia
+    // por ganar la venta) no es urgente. Reusa los mismos contadores de
+    // AdState que Venta (priceUpTimestamps/updateTimestamps) -- cada anuncio
+    // tiene su propio AdState por adId, así que un anuncio de Compra nunca
+    // comparte contador con uno de Venta.
+    const isPriceDown = targetPrice < currentPrice;
+    if (isPriceDown) {
+      const oneHourAgo = Date.now() - 3600000;
+      as.priceUpTimestamps = as.priceUpTimestamps.filter(t => t > oneHourAgo);
+      as.currentWeight = Math.max(as.currentWeight, client.latestWeight);
+      if (as.currentWeight >= 4000) { await log("warn", "binance", `Ad Compra ${adId}: weight ${as.currentWeight} ≥ 4000, pausando bajada`); continue; }
+      if (as.priceUpTimestamps.length >= 80) { await log("warn", "binance", `Ad Compra ${adId}: límite 80 movimientos prioritarios/hora alcanzado, saltando`); continue; }
+      if (as.lastPriceUpAt > 0 && (Date.now() - as.lastPriceUpAt < 300)) { continue; }
+    } else {
+      as.currentWeight = Math.max(as.currentWeight, client.latestWeight);
+      const oneHourAgo = Date.now() - 3600000;
+      as.updateTimestamps = as.updateTimestamps.filter(t => t > oneHourAgo);
+      if (as.updateTimestamps.length >= 3600) { await log("warn", "binance", `Ad Compra ${adId}: límite 3600/hr alcanzado, saltando`); continue; }
+      if (as.lastUpdateAt > 0 && (Date.now() - as.lastUpdateAt < 300)) { continue; }
+      if (as.currentWeight >= 4000) { await log("warn", "binance", `Ad Compra ${adId}: weight ${as.currentWeight} ≥ 4000, pausando`); continue; }
+    }
+
+    const rateOk = isPriceDown ? await canCallPriority(rateLimitKey) : await canCallNonUrgent(rateLimitKey);
+    if (!rateOk) {
+      const u = await getUsage(rateLimitKey);
+      await log("info", "binance",
+        `Ad Compra ${adId}: autolímite (${u.used}/${u.cap} por minuto) — ${isPriceDown ? "esperando cupo para bajar" : "subida no urgente, se salta este ciclo"}`);
+      continue;
+    }
+    if (as.lastRetryAttemptAt > 0 && Date.now() - as.lastRetryAttemptAt < 8000) {
+      continue;
+    }
+
+    try {
+      const payload: any = { adId, price: targetPrice.toFixed(2) };
+      if (as.hiddenAt > 0) payload.visible = 1;
+      await recordCall(rateLimitKey);
+      as.lastRetryAttemptAt = Date.now();
+      await log("info", "binance",
+        `Ad Compra ${adId}: price update → price=${targetPrice.toFixed(2)}${as.hiddenAt > 0 ? " (restaurando visibilidad)" : ""}`);
+      await client.updateAd(payload);
+      as.lastUpdateAt = Date.now();
+      as.correctionFailSince = 0;
+      if (as.hiddenAt > 0) {
+        const hiddenForS = Math.round((Date.now() - as.hiddenAt) / 1000);
+        await log("info", "binance", `Ad Compra ${adId}: reactivado — estuvo oculto ${hiddenForS}s`);
+        as.hiddenAt = 0;
+      }
+      if (isPriceDown) { as.priceUpTimestamps.push(Date.now()); as.lastPriceUpAt = Date.now(); }
+      else { as.updateTimestamps.push(Date.now()); }
+      actions.push({ action: "update_price", exchange: "binance", adId, currentPrice, suggestedPrice: targetPrice, reason: `Precio Compra: ${currentPrice} → ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
+      await log("info", "binance", `Ad Compra ${adId}: ${currentPrice} → ${targetPrice.toFixed(2)}`);
+    } catch (e: any) {
+      if (e.message?.includes("187049") || e.message?.includes("187040")) {
+        if (as.correctionFailSince === 0) as.correctionFailSince = Date.now();
+        const failingForMs = Date.now() - as.correctionFailSince;
+        const u2 = await getUsage(rateLimitKey);
+        await log("warn", "binance",
+          `Ad Compra ${adId}: 187049/187040 (autolímite en ${u2.used}/${u2.cap}/min) — lleva ${Math.round(failingForMs / 1000)}s sin poder corregir, reintenta el próximo ciclo`);
+        if (failingForMs > 25000 && as.hiddenAt === 0 && await canCallPriority(rateLimitKey)) {
+          try {
+            await recordCall(rateLimitKey);
+            await client.updateAd({ adId, visible: 0 });
+            as.hiddenAt = Date.now();
+            await log("warn", "binance",
+              `🔒 Ad Compra ${adId}: oculto automáticamente tras ${Math.round(failingForMs / 1000)}s sin poder corregir el precio — se reactivará solo en cuanto haya cupo`);
+          } catch (e3: any) {
+            await log("warn", "binance", `Ad Compra ${adId}: intento de ocultar también falló: ${e3.message}`);
+          }
+        }
+      } else if (e.message?.includes("83229") || e.message?.includes("83230")) {
+        await log("warn", "binance", `Ad Compra ${adId}: ad offline (${e.message}), saltando`);
+      } else {
+        await log("warn", "binance", `Ad Compra ${adId}: error update — reintentando próximo ciclo: ${e.message}`);
+      }
+    }
+
+    if (managedBuyAds.length > 1 && managedBuyAds.indexOf(managedAd) < managedBuyAds.length - 1) {
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
 }
 
 const bybitLastUpdateAt = new Map<string, number>();
@@ -2293,7 +2707,7 @@ async function runBybitCycle(
     await log( "info", "bybit", `Ciclo completado: ${bybitOrders.length} órdenes, managedAds: ${managedAds.length}`);
 
     try {
-      await autoCloseCycle(prisma, tenantId, label, client, log, "bybit");
+      await autoCloseCycle(prisma, tenantId, label, client, log, "bybit", "SELL");
     } catch (e: any) {
       await log( "warn", "bybit", `Auto-close cycle check: ${e.message}`);
     }
@@ -2310,10 +2724,11 @@ async function autoCloseCycle(
   label: string,
   client: any,
   log: (level: string, exchange: string | null, message: string) => Promise<void>,
-  exchange: string = "binance"
+  exchange: string = "binance",
+  side: string = "SELL"
 ) {
   const cycle = await prisma.p2PCycle.findFirst({
-    where: { tenantId, exchange, label, status: "active" },
+    where: { tenantId, exchange, label, side, status: "active" },
   });
   if (!cycle) return;
 
@@ -2380,14 +2795,14 @@ async function autoCloseCycle(
   const startMs = Number(cycle.startTime);
   const endMs = Date.now();
   let stats: any = exchange === "binance"
-    ? await computeCycleOrderStats(client, startMs, endMs, recentOrders)
-    : await computeLocalCycleStats(prisma, tenantId, exchange, startMs, endMs);
+    ? await computeCycleOrderStats(client, startMs, endMs, recentOrders, side)
+    : await computeLocalCycleStats(prisma, tenantId, exchange, startMs, endMs, side);
 
   // Botón "Sacar del ciclo" (ago 2026): mismo criterio que el cierre manual
   // (app/api/p2p/cycle/close/route.ts) -- lo apartado sin reclamar no debe
   // colarse en el auto-cierre.
   const setAsideRows = await prisma.p2PCycleSetAsideOrder.findMany({
-    where: { tenantId, exchange, label, OR: [{ claimedByCycleId: null }, { claimedByCycleId: cycle.id }] },
+    where: { tenantId, exchange, label, side, OR: [{ claimedByCycleId: null }, { claimedByCycleId: cycle.id }] },
   });
   const unclaimed = setAsideRows.filter((o: any) => o.claimedByCycleId === null);
   const claimedByThisCycle = setAsideRows.filter((o: any) => o.claimedByCycleId === cycle.id);

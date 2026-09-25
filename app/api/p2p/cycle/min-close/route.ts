@@ -23,13 +23,14 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const label = body.label || "ONZE";
     const exchange = body.exchange || "binance";
+    const side = body.side === "BUY" ? "BUY" : "SELL";
     const minCloseBalance = Number(body.minCloseBalance);
     if (!Number.isFinite(minCloseBalance) || minCloseBalance < 0) {
       return Response.json({ ok: false, error: "Monto inválido" }, { status: 400 });
     }
 
     const cycle = await prisma.p2PCycle.findFirst({
-      where: { tenantId, exchange, label, status: "active" },
+      where: { tenantId, exchange, label, side, status: "active" },
     });
     if (!cycle) {
       return Response.json({ ok: false, error: "No hay ciclo activo para esta cuenta" }, { status: 404 });

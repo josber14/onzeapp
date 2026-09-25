@@ -24,9 +24,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const label = body.label || "ONZE";
     const exchange = body.exchange || "binance";
+    const side = body.side === "BUY" ? "BUY" : "SELL";
 
     const cycle = await prisma.p2PCycle.findFirst({
-      where: { tenantId: session.tenantId, exchange, label, status: "active" },
+      where: { tenantId: session.tenantId, exchange, label, side, status: "active" },
       include: { manualSales: true },
     });
     if (!cycle) {
@@ -46,11 +47,11 @@ export async function POST(req: NextRequest) {
         return Response.json({ ok: false, error: "Sin credenciales Binance" });
       }
       const client = new BinanceP2PClient(creds.apiKey, creds.secretKey);
-      stats = await computeCycleOrderStats(client, startMs, endMs);
+      stats = await computeCycleOrderStats(client, startMs, endMs, [], side);
     } else {
       // Bybit/OKX: sin API de historial propia integrada acá todavía --
       // usamos las órdenes que el ciclo del bot ya sincroniza a P2PBotOrder.
-      stats = await computeLocalCycleStats(prisma, session.tenantId, exchange, startMs, endMs);
+      stats = await computeLocalCycleStats(prisma, session.tenantId, exchange, startMs, endMs, side);
     }
 
     // Botón "Sacar del ciclo" (ago 2026): mismo criterio que status/route.ts
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
     // guardar; lo que este mismo ciclo ya reclamó (si el usuario sacó algo y
     // después empezó ESTE ciclo mientras seguía activo) se suma igual.
     const setAsideRows = await prisma.p2PCycleSetAsideOrder.findMany({
-      where: { tenantId: session.tenantId, exchange, label, OR: [{ claimedByCycleId: null }, { claimedByCycleId: cycle.id }] },
+      where: { tenantId: session.tenantId, exchange, label, side, OR: [{ claimedByCycleId: null }, { claimedByCycleId: cycle.id }] },
     });
     const unclaimed = setAsideRows.filter((o: any) => o.claimedByCycleId === null);
     const claimedByThisCycle = setAsideRows.filter((o: any) => o.claimedByCycleId === cycle.id);

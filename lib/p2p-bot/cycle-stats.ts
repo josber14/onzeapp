@@ -39,7 +39,8 @@ export async function computeCycleOrderStats(
   client: BinanceP2PClient,
   startMs: number,
   endMs?: number,
-  extraOrders: any[] = []
+  extraOrders: any[] = [],
+  side: string = "SELL"
 ) {
   const endTimestamp = endMs ?? Date.now();
   // Antes: hasta 5 llamadas a Binance UNA DETRÁS DE OTRA (cada una esperando
@@ -49,11 +50,11 @@ export async function computeCycleOrderStats(
   // ciclos caben ahí, sin gastar llamadas de más); si viene LLENA (100 filas,
   // señal de que hay más), recién ahí se piden las 4 páginas restantes TODAS
   // A LA VEZ en vez de una por una.
-  const firstPageRes = await client.getOrders({ page: 1, rows: 100, startTimestamp: startMs, endTimestamp });
+  const firstPageRes = await client.getOrders({ page: 1, rows: 100, tradeType: side, startTimestamp: startMs, endTimestamp });
   const allOrders: any[] = [...(firstPageRes?.data || [])];
   if (allOrders.length === 100) {
     const remainingPages = await Promise.all(
-      [2, 3, 4, 5].map((page) => client.getOrders({ page, rows: 100, startTimestamp: startMs, endTimestamp }))
+      [2, 3, 4, 5].map((page) => client.getOrders({ page, rows: 100, tradeType: side, startTimestamp: startMs, endTimestamp }))
     );
     for (const pageRes of remainingPages) {
       allOrders.push(...(pageRes?.data || []));
@@ -168,7 +169,8 @@ export async function computeLocalCycleStats(
   tenantId: number,
   exchange: string,
   startMs: number,
-  endMs?: number
+  endMs?: number,
+  side: string = "SELL"
 ) {
   const endTimestamp = endMs ?? Date.now();
   const rows = await prisma.p2PBotOrder.findMany({
@@ -180,7 +182,12 @@ export async function computeLocalCycleStats(
     orderBy: { executedAt: "asc" },
   });
 
-  const completed = rows.filter((o: any) => COMPLETED_STATUSES.has(o.status));
+  // Hueco real que ya existía antes de este cambio: esta función nunca filtró
+  // por lado (Bybit no tenía separación Compra/Venta). Con el Ciclo de Compra
+  // separado, hay que filtrar acá igual que ya hace Binance vía `tradeType`
+  // en `getOrders` -- si no, una orden de compra se sumaría también al total
+  // de un Ciclo de Venta de Bybit (y viceversa).
+  const completed = rows.filter((o: any) => COMPLETED_STATUSES.has(o.status) && (o.tradeType || "SELL") === side);
 
   let totalUsdt = 0;
   let totalClp = 0;
