@@ -3318,6 +3318,34 @@
     return 0;
   }
 
+  // Caché de "ganancia de este mes" para la tarjeta Capital P2P -- pedido
+  // explícito del usuario (sep 2026): esta función se llama desde 41
+  // lugares distintos del panel (cada sync de ventas, cada acción, cada
+  // 60s de fondo), y cada llamada recalculaba "Este mes" desde cero
+  // recorriendo venta por venta TODO el mes en curso -- medido en vivo:
+  // ~125ms por llamada en una PC rápida, varios segundos reales en un
+  // celular de gama baja (Android, confirmado con la cuenta de Hector).
+  //
+  // La huella (fingerprint) de abajo se arma SOLO con los campos ya
+  // agregados de cada capacity (clpReceived, usedUsdt, commissionUsdt,
+  // buyPrice, provider, finishedAt) -- nunca con el detalle de saleParts.
+  // Estos campos SIEMPRE se actualizan en el mismo momento que saleParts
+  // (ver el bloque de asignación en calculateP2PCapacityStats, más arriba
+  // en este archivo: cada vez que se agrega una parte a saleParts, se suma
+  // a la vez a clpReceived/usedUsdt/commissionUsdt) -- por construcción,
+  // si estos campos no cambiaron para NINGÚN capacity, el detalle tampoco
+  // cambió, así que el resultado cacheado sigue siendo exactamente el
+  // mismo que si se recalculara de cero. Se agrega también el mes actual
+  // (hora Chile) para que el caché se invalide solo al cambiar de mes.
+  let __p2pMonthProfitCache = { key: null, value: 0 };
+  function p2pCapacitiesFingerprint(capacities){
+    let fp = "";
+    for(const c of (capacities || [])){
+      fp += c.id + ":" + c.status + ":" + c.clpReceived + ":" + c.usedUsdt + ":" + c.commissionUsdt + ":" + c.buyPrice + ":" + c.provider + ":" + (c.finishedAt || "") + "|";
+    }
+    return fp;
+  }
+
   window.updateP2PCapitalCard = function updateP2PCapitalCard(stats){
     const capitalEl = document.getElementById("p2pDashVolume");
     const subEl = document.getElementById("p2pDashVolumeSub");
@@ -3333,7 +3361,14 @@
     // confirmar con el usuario primero -- ya se probó y el inicial debe
     // quedar fijo siempre.
     const safeStats = stats || (typeof calculateP2PCapacityStats === "function" ? calculateP2PCapacityStats() : {});
-    const monthlyProfit = Number(getP2PRangeStatsFromCapacity(safeStats, "month").profitUsdt || 0);
+    const monthCacheKey = p2pCapacitiesFingerprint(safeStats.capacities) + "|" + p2pChileMonthKey(new Date());
+    let monthlyProfit;
+    if(__p2pMonthProfitCache.key === monthCacheKey){
+      monthlyProfit = __p2pMonthProfitCache.value;
+    } else {
+      monthlyProfit = Number(getP2PRangeStatsFromCapacity(safeStats, "month").profitUsdt || 0);
+      __p2pMonthProfitCache = { key: monthCacheKey, value: monthlyProfit };
+    }
     const accumulatedProfit = Number(window.__p2pAccumulatedProfitUsdt || 0);
     // Pedido explícito del usuario (ago 2026): igual que en el capital del
     // socio, cada retiro/gasto registrado resta al instante del total.
