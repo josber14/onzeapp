@@ -765,6 +765,17 @@ function addP2PBotStyles(){
               <button class="btn small ghost" type="button" onclick="window.botSyncNow()" style="font-size:10px;padding:5px 10px;border-radius:6px;">↻ Sincronizar</button>
               <button class="btn small" type="button" onclick="window.botPanelNewAd()" style="font-size:10px;padding:5px 12px;border-radius:6px;">+ Nuevo anuncio</button>
             </div>
+            <!-- Selector Venta/Compra -- pedido explícito del usuario (sep 2026):
+                 hoy el panel principal solo mostraba anuncios de Venta (el motor
+                 de precios y el chat todavía solo operan ese lado -- ver
+                 window.botAdsSideFilter más abajo). Esto agrega la vista de
+                 Compra sin tocar en nada el camino de Venta: si nadie toca este
+                 selector, el filtro por defecto sigue siendo "SELL", igual que
+                 siempre. -->
+            <div style="display:flex;gap:6px;margin-bottom:10px;">
+              <button class="btn small ghost bot-ads-side-btn" type="button" data-side="SELL" onclick="window.botSetAdsSideFilter('SELL')" style="font-size:11px;padding:5px 12px;border-radius:6px;">Venta</button>
+              <button class="btn small ghost bot-ads-side-btn" type="button" data-side="BUY" onclick="window.botSetAdsSideFilter('BUY')" style="font-size:11px;padding:5px 12px;border-radius:6px;">Compra</button>
+            </div>
             <div id="botAdsList" class="bot-ads-row">
               <div style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">Cargando anuncios...</div>
             </div>
@@ -1296,6 +1307,22 @@ function addP2PBotStyles(){
 
   /* Per-ad functions for main view */
 
+  // Lado elegido en el selector Venta/Compra de la sección "Anuncios".
+  // Default "SELL" a propósito -- si nadie toca el selector nuevo, el panel
+  // se comporta EXACTO como antes de agregar esto.
+  window.botAdsSideFilter = window.botAdsSideFilter || "SELL";
+  window.botSetAdsSideFilter = function(side){
+    window.botAdsSideFilter = (side === "BUY") ? "BUY" : "SELL";
+    document.querySelectorAll(".bot-ads-side-btn").forEach(function(btn){
+      const active = btn.getAttribute("data-side") === window.botAdsSideFilter;
+      btn.classList.toggle("active", active);
+      btn.style.background = active ? "rgba(52,211,153,.14)" : "";
+      btn.style.borderColor = active ? "rgba(52,211,153,.4)" : "";
+      btn.style.color = active ? "#34d399" : "";
+    });
+    window.botLoadAds();
+  };
+
   window.botSyncNow = async function(){
     try{
       await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ label: botActiveLabel || "ONZE", force: true }) });
@@ -1321,20 +1348,28 @@ function addP2PBotStyles(){
         container.innerHTML = '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px 0;border:1px dashed rgba(148,163,184,.08);border-radius:10px;margin-top:4px;">Sin anuncios disponibles</div>';
         return;
       }
-      const sellAds = d.ads.filter(a => (a.tradeType||'').toUpperCase() === 'SELL' && (a.asset||'').toUpperCase() === 'USDT' && (a.fiat||'').toUpperCase() === 'CLP');
+      const sideFilter = window.botAdsSideFilter || "SELL";
+      const sellAds = d.ads.filter(a => (a.tradeType||'').toUpperCase() === sideFilter && (a.asset||'').toUpperCase() === 'USDT' && (a.fiat||'').toUpperCase() === 'CLP');
       if(!sellAds.length){
-        container.innerHTML = '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px 0;border:1px dashed rgba(148,163,184,.08);border-radius:10px;margin-top:4px;">Sin anuncios de venta USDT/CLP</div>';
+        const emptyMsg = sideFilter === "BUY" ? "Sin anuncios de compra USDT/CLP" : "Sin anuncios de venta USDT/CLP";
+        container.innerHTML = '<div style="color:#64748b;font-size:13px;text-align:center;padding:20px 0;border:1px dashed rgba(148,163,184,.08);border-radius:10px;margin-top:4px;">' + emptyMsg + '</div>';
         return;
       }
       container.innerHTML = sellAds.map(function(a, idx){
         return botRenderAdPill(a, idx);
       }).join('');
-      botUpdateBuyPrice();
-      botRefreshAdPrices();
-      sellAds.forEach(function(a){
-        if(a.botSafeMarginPct > 0 && window.botAdUpdateSafeMarginHint) botAdUpdateSafeMarginHint(a.id);
-        if(window.botAdUpdateRealCost) botAdUpdateRealCost(a.id);
-      });
+      botRefreshAdPrices(); // genérico (precio/balance/límites), sirve para cualquier lado
+      if(sideFilter === "SELL"){
+        // botUpdateBuyPrice/safeMarginHint/realCost se basan en el costo real
+        // de capacity para VENDER -- no aplican todavía a un anuncio de Compra
+        // (ver Parte 2 del plan). Se saltean a propósito para no mostrar un
+        // número que no significa nada en ese lado.
+        botUpdateBuyPrice();
+        sellAds.forEach(function(a){
+          if(a.botSafeMarginPct > 0 && window.botAdUpdateSafeMarginHint) botAdUpdateSafeMarginHint(a.id);
+          if(window.botAdUpdateRealCost) botAdUpdateRealCost(a.id);
+        });
+      }
     }catch(e){ console.warn("[P2P Bot] botLoadAds error:", e); }
   };
 
@@ -1397,6 +1432,13 @@ function addP2PBotStyles(){
 
   function botRenderAdPill(a, idx){
     const isFirst = idx === 0;
+    // Parte 1 de la integración de Compra (sep 2026): el motor de precios
+    // (engine.ts) y el chat (chat-agent.ts) todavía ignoran por completo
+    // cualquier anuncio que no sea de Venta -- ver AGENTS.md/plan. Mientras
+    // eso no exista (Parte 2/3), un anuncio de Compra se muestra pero SIN el
+    // toggle de bot ni el panel de configuración de estrategia, para no
+    // mostrar un control que hoy no tendría ningún efecto real.
+    const isBuy = (a.tradeType || '').toUpperCase() === 'BUY';
     const botEnabled = a.botEnabled === true;
     const realId = a.id;
     var pms = a.paymentMethods;
@@ -1405,7 +1447,10 @@ function addP2PBotStyles(){
     var pmBadges = (pms && Array.isArray(pms)) ? pms.slice(0,3) : [];
     var pmExtra = (pms && Array.isArray(pms) && pms.length > 3) ? '+' + (pms.length - 3) : '';
     const isOnline = botEnabled && (a.status === 'online' || a.isActive === true);
-    const cfgDisplay = (window['_adCfgOpen'] && window['_adCfgOpen'][realId]) ? '' : 'none';
+    // Para Compra, el panel de configuración de estrategia nunca se abre
+    // todavía (ver comentario de isBuy arriba) -- se ignora el estado de
+    // _adCfgOpen a propósito para este lado.
+    const cfgDisplay = (!isBuy && window['_adCfgOpen'] && window['_adCfgOpen'][realId]) ? '' : 'none';
     // Config grid template
     var strategy = a.botStrategy || 'top1';
     var top1Diff = a.botTop1Diff != null ? a.botTop1Diff : '';
@@ -1424,18 +1469,20 @@ function addP2PBotStyles(){
     if (strategy !== 'top1') cfgFields.push('SpreadPct');
     cfgFields.push('PriceSource','CommissionPct','SafeMarginPct','MinCompetitorCapital','CompeteTransAmount','CompetePayType','ExcludedMerchants','CycleInterval','CircuitBreakPct','MinAdPriceDiffPct');
     const cfgCount = cfgFields.length;
-    return `<div class="bot-ad-pill" data-ad-real-id="${realId}" data-ad-adid="${a.adId||''}" data-ad-paytype="${payType}" data-ad-paymethods="${escHtml(JSON.stringify(pms || []))}">
+    return `<div class="bot-ad-pill" data-ad-real-id="${realId}" data-ad-adid="${a.adId||''}" data-ad-paytype="${payType}" data-ad-paymethods="${escHtml(JSON.stringify(pms || []))}" data-ad-tradetype="${isBuy ? 'BUY' : 'SELL'}">
       <div class="bot-ad-card-header">
-        <span class="sell-label">Vender</span>
+        <span class="sell-label">${isBuy ? 'Comprar' : 'Vender'}</span>
         <span style="flex:1;min-width:0;font-size:12px;font-weight:500;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${a.asset||'USDT'} / ${a.fiat||'CLP'}">${a.nickname ? '<span style=\"color:#f8fafc;font-weight:700;\">'+escHtml(a.nickname)+'</span> · ' : ''}${a.asset||'USDT'} / ${a.fiat||'CLP'}</span>
         <span class="status-badge${isOnline?'':' offline'}"><span class="dot"></span>${isOnline ? 'En línea' : 'Desconectado'}</span>
-        <span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:${botEnabled ? '#34d399' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
+        ${isBuy ? `<span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:#64748b;letter-spacing:.3px;text-transform:uppercase;" title="El bot todavía no gestiona anuncios de Compra">
+          <span>Bot: aún no disponible</span>
+        </span>` : `<span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:${botEnabled ? '#34d399' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
           <span>Bot</span>
           <span class="toggle-switch" title="${botEnabled ? 'Apagar bot' : 'Prender bot'}" onclick="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',!${botEnabled})">
             <input type="checkbox" ${botEnabled?'checked':''}>
             <span class="slider"></span>
           </span>
-        </span>
+        </span>`}
         ${a.fromBinance ? (() => {
           const isAdOnline = a.status === 'online' || a.status === 'active';
           return `<span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:${isAdOnline ? '#60a5fa' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
@@ -1455,7 +1502,7 @@ function addP2PBotStyles(){
       </div>
       <div class="bot-ad-card-body" style="cursor:pointer;" onclick="botToggleAdCfg(${realId})">
         <div class="bot-ad-card-price"><span id="botAdPrice_${realId}">${fmt(a.price)}</span><span class="currency">CLP</span></div>
-        <div class="bot-ad-card-pair">USDT → CLP</div>
+        <div class="bot-ad-card-pair">${isBuy ? 'CLP → USDT' : 'USDT → CLP'}</div>
         <div class="bot-ad-card-rows">
           <div class="row"><span class="label">Balance</span><span class="value" id="botAdAmount_${realId}">${fmtFlex(a.amount)} USDT</span><span class="sync-btn" onclick="event.stopPropagation();botSyncQuantity(${realId})" title="Sincronizar saldo">⟳</span></div>
           <div class="row"><span class="label">Límite</span><span class="value" id="botAdLimits_${realId}">$${fmtInt(a.minAmount||0)} – $${fmtInt(a.maxAmount||0)}</span></div>
@@ -1465,11 +1512,13 @@ function addP2PBotStyles(){
         ${pmBadges.map(function(pm){ return '<span class="pm-badge">'+fmtPayName(pm)+'</span>'; }).join('')}
         ${pmExtra ? '<span class="pm-badge" style="background:rgba(148,163,184,.06);color:#64748b;border-color:rgba(148,163,184,.08);">'+escHtml(pmExtra)+'</span>' : ''}
       </div>
-      <button class="bot-config-toggle" type="button" onclick="botToggleAdCfg(${realId})">
+      ${isBuy ? `<div class="bot-config-toggle" style="opacity:.55;cursor:default;">
+        <span class="cfg-label">Aún no gestionado por el bot</span>
+      </div>` : `<button class="bot-config-toggle" type="button" onclick="botToggleAdCfg(${realId})">
         <span class="arrow" id="adCfgArrow_${realId}">▼</span>
         <span class="cfg-label">Configuración</span>
         <span class="cfg-count">${cfgCount} campos</span>
-      </button>
+      </button>`}
       <div class="bot-ad-pill-cfg" id="adCfg_${realId}" style="display:${cfgDisplay};padding:8px 14px 12px;">
         <div class="bot-config-grid">
           <label>Estrategia
@@ -1542,6 +1591,13 @@ function addP2PBotStyles(){
   }
 
   window.botToggleAdCfg = async function(realId){
+    // Guarda centralizada: un anuncio de Compra no tiene panel de
+    // configuración de estrategia todavía (Parte 1 de la integración de
+    // Compra) -- se ignora el click tanto si viene del botón de
+    // "Configuración" (que ya no se dibuja para Compra) como del cuerpo de
+    // la tarjeta (que sigue teniendo el mismo onclick para los dos lados).
+    var pillEl = document.querySelector('.bot-ad-pill[data-ad-real-id="' + realId + '"]');
+    if(pillEl && pillEl.getAttribute('data-ad-tradetype') === 'BUY') return;
     if(!window._adCfgOpen) window._adCfgOpen = {};
     var open = !window._adCfgOpen[realId];
     window._adCfgOpen[realId] = open;
@@ -3505,13 +3561,14 @@ function addP2PBotStyles(){
 
   window.botPanelNewAd = function(){
     botPanelAdEditingId = null;
+    var initialTradeType = window.botAdsSideFilter === "BUY" ? "BUY" : "SELL";
     var modal = document.getElementById("botPanelModal");
     if(modal && modal.style.display !== "block"){
       window.botOpenPanel();
       setTimeout(function(){ window.botSwitchPanelTab('ads'); }, 50);
-      setTimeout(function(){ renderAdForm(); }, 100);
+      setTimeout(function(){ renderAdForm(null, initialTradeType); }, 100);
     }else{
-      renderAdForm();
+      renderAdForm(null, initialTradeType);
     }
   };
 
@@ -3695,11 +3752,15 @@ function addP2PBotStyles(){
   window.formatLiveInt = formatLiveInt;
   window.formatLiveDecimal = formatLiveDecimal;
 
-  function renderAdForm(editAd){
+  function renderAdForm(editAd, initialTradeType){
     const container = document.getElementById("botPanelAdForm");
     if(!container) return;
     const isEdit = !!editAd;
-    const tradeType = editAd ? editAd.tradeType : "SELL";
+    // initialTradeType: comodidad para que "+ Nuevo anuncio" arranque en
+    // Comprar/Vender según la pestaña activa en la sección "Anuncios" (ver
+    // window.botAdsSideFilter) -- no afecta la edición de un anuncio
+    // existente, que siempre respeta su propio tradeType.
+    const tradeType = editAd ? editAd.tradeType : (initialTradeType || "SELL");
     const asset = editAd ? editAd.asset : "USDT";
     const fiat = editAd ? editAd.fiat : "CLP";
     const priceType = editAd ? editAd.priceType : "fixed";
