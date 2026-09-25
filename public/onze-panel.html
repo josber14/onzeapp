@@ -19809,6 +19809,16 @@ function addP2PBotStyles(){
         if(!key) return;
         lockedByOrder[key] = (lockedByOrder[key] || 0) + Number(part.assignedClp || 0);
       });
+      // Capacitys "aligerados" (terminados hace más de un mes -- ver
+      // /api/p2p/capacity y AGENTS.md) ya no traen saleParts completo, pero
+      // sí traen lockedOrders: la misma info mínima (orden + monto) que esta
+      // protección necesita, para que un capacity viejo nunca deje de
+      // "reservar" sus ventas aunque ya no se mande el detalle fino.
+      (cap.lockedOrders || []).forEach(lo => {
+        const key = String(lo.orderNumber || "");
+        if(!key) return;
+        lockedByOrder[key] = (lockedByOrder[key] || 0) + Number(lo.assignedClp || 0);
+      });
     });
 
     // Ventas marcadas como "capital propio" (botón del aviso "Ventas sin
@@ -20995,12 +21005,24 @@ function addP2PBotStyles(){
           .sort((a,b)=> new Date(a.createdAt || 0) - new Date(b.createdAt || 0))
       : [];
 
-    const first = parts[0];
-    const last = parts[parts.length - 1];
+    // Capacitys terminados hace más de un mes viajan "aligerados" (ver
+    // /api/p2p/capacity, AGENTS.md): ya no traen el detalle venta-por-venta
+    // (parts queda vacío a propósito), solo un resumen por día. Los totales
+    // de acá SÍ siguen siendo exactos -- salen directo de finalSoldUsdt/
+    // finalClpReceived/finalCommissionUsdt (guardados en Neon desde que el
+    // capacity se cerró, nunca se tocan) en vez de sumar parts.
+    const isLightened = item.status === "finished" && Array.isArray(item.dailyBuckets) && item.dailyBuckets.length > 0;
 
-    const totalAssignedUsdt = parts.reduce((sum, part)=> sum + Number(part.assignedUsdt || 0), 0);
-    const totalAssignedClp = parts.reduce((sum, part)=> sum + Number(part.assignedClp || 0), 0);
-    const totalCommissionUsdt = parts.reduce((sum, part)=> sum + Number(part.commissionUsdt || 0), 0);
+    const first = isLightened ? null : parts[0];
+    const last = isLightened ? null : parts[parts.length - 1];
+    const bucketDays = isLightened ? item.dailyBuckets.map(b => b.day).filter(Boolean).sort() : [];
+    const firstBucketDay = bucketDays[0];
+    const lastBucketDay = bucketDays[bucketDays.length - 1];
+
+    const totalAssignedUsdt = isLightened ? Number(item.usedUsdt || 0) : parts.reduce((sum, part)=> sum + Number(part.assignedUsdt || 0), 0);
+    const totalAssignedClp = isLightened ? Number(item.clpReceived || 0) : parts.reduce((sum, part)=> sum + Number(part.assignedClp || 0), 0);
+    const totalCommissionUsdt = isLightened ? Number(item.commissionUsdt || 0) : parts.reduce((sum, part)=> sum + Number(part.commissionUsdt || 0), 0);
+    const totalOrdersCount = isLightened ? item.dailyBuckets.reduce((s,b)=> s + Number(b.ordersCount || 0), 0) : parts.length;
 
     content.innerHTML = `
       <div class="p2p-capacity-card">
@@ -21024,21 +21046,21 @@ function addP2PBotStyles(){
         <div class="p2p-detail-summary-grid">
           <div class="p2p-capacity-mini">
             <span>Primera operación</span>
-            <strong>${first ? p2pFormatAssignedSaleDate(first) : "Sin operación"}</strong>
+            <strong>${isLightened ? (firstBucketDay || "Sin operación") : (first ? p2pFormatAssignedSaleDate(first) : "Sin operación")}</strong>
             <div class="p2p-capacity-meta" style="margin-top:5px;word-break:break-all;">
-              ${first ? `Orden: ${first.orderNumber || "Sin número"}` : ""}
+              ${!isLightened && first ? `Orden: ${first.orderNumber || "Sin número"}` : ""}
             </div>
           </div>
           <div class="p2p-capacity-mini">
             <span>Última operación</span>
-            <strong>${last ? p2pFormatAssignedSaleDate(last) : "Sin operación"}</strong>
+            <strong>${isLightened ? (lastBucketDay || "Sin operación") : (last ? p2pFormatAssignedSaleDate(last) : "Sin operación")}</strong>
             <div class="p2p-capacity-meta" style="margin-top:5px;word-break:break-all;">
-              ${last ? `Orden: ${last.orderNumber || "Sin número"}` : ""}
+              ${!isLightened && last ? `Orden: ${last.orderNumber || "Sin número"}` : ""}
             </div>
           </div>
           <div class="p2p-capacity-mini">
             <span>Total operaciones</span>
-            <strong>${parts.length}</strong>
+            <strong>${totalOrdersCount}</strong>
           </div>
           <div class="p2p-capacity-mini">
             <span>USDT vendido</span>
@@ -21082,7 +21104,9 @@ function addP2PBotStyles(){
         <h3 class="section-title" style="margin-bottom:8px;">Operaciones asignadas</h3>
 
         ${
-          !parts.length
+          isLightened
+            ? `<div class="p2p-dashboard-empty">Este capacity es de un mes anterior -- para aligerar el panel, el detalle venta por venta ya no se guarda acá (los totales de arriba SÍ son exactos, salen del cierre original del capacity).</div>`
+          : !parts.length
             ? `<div class="p2p-dashboard-empty">Todavía no hay operaciones asignadas a este capacity.</div>`
             : `<div class="p2p-capacity-card">
                 ${parts.map((part, index) => {
@@ -23255,9 +23279,45 @@ function addP2PBotStyles(){
     };
 
     const seenOrders = new Set();
+    let bucketOrdersCount = 0;
 
     (stats.capacities || []).forEach(cap => {
       const buyPrice = Number(cap.buyPrice || 0);
+      const provider = cap.provider || "Proveedor";
+
+      // Capacitys "aligerados" (ver /api/p2p/capacity, AGENTS.md): ya no
+      // traen saleParts, sino un resumen por día (dailyBuckets). Alcanza
+      // para sumar los totales de cualquier rango (Hoy/Este mes/Total/
+      // Personalizado, todos agrupan por día) -- lo único que se pierde es
+      // el detalle línea-por-línea en result.parts, que no aplica a un
+      // capacity de hace más de un mes (nunca hace falta, confirmado con
+      // el usuario).
+      if(Array.isArray(cap.dailyBuckets) && cap.dailyBuckets.length){
+        cap.dailyBuckets.forEach(bucket => {
+          if(!bucket.day) return;
+          if(!isP2PInRange(bucket.day, range)) return;
+          if(exchange && exchange !== "all" && (bucket.exchange || "binance") !== exchange) return;
+
+          result.soldUsdt += Number(bucket.soldUsdt || 0);
+          result.clpReceived += Number(bucket.clpReceived || 0);
+          result.commissionUsdt += Number(bucket.commissionUsdt || 0);
+          result.commissionClp += Number(bucket.commissionClp || 0);
+          result.costClp += Number(bucket.costClp || 0);
+          result.profitClp += Number(bucket.profitClp || 0);
+          bucketOrdersCount += Number(bucket.ordersCount || 0);
+
+          if(!result.providers[provider]){
+            result.providers[provider] = { provider, soldUsdt: 0, clpReceived: 0, commissionUsdt: 0, commissionClp: 0, profitClp: 0, costClp: 0 };
+          }
+          result.providers[provider].soldUsdt += Number(bucket.soldUsdt || 0);
+          result.providers[provider].clpReceived += Number(bucket.clpReceived || 0);
+          result.providers[provider].commissionUsdt += Number(bucket.commissionUsdt || 0);
+          result.providers[provider].commissionClp += Number(bucket.commissionClp || 0);
+          result.providers[provider].profitClp += Number(bucket.profitClp || 0);
+          result.providers[provider].costClp += Number(bucket.costClp || 0);
+        });
+        return;
+      }
 
       (cap.saleParts || []).forEach(part => {
         if(!part.createdAt) return;
@@ -23285,7 +23345,6 @@ function addP2PBotStyles(){
         const orderNumber = String(part.orderNumber || "");
         if(orderNumber) seenOrders.add(orderNumber);
 
-        const provider = cap.provider || "Proveedor";
         if(!result.providers[provider]){
           result.providers[provider] = {
             provider,
@@ -23321,7 +23380,7 @@ function addP2PBotStyles(){
       });
     });
 
-    result.ordersCount = seenOrders.size;
+    result.ordersCount = seenOrders.size + bucketOrdersCount;
     result.avgSellPrice = result.soldUsdt > 0 ? result.clpReceived / result.soldUsdt : 0;
     result.profitUsdt = result.avgSellPrice > 0 ? result.profitClp / result.avgSellPrice : 0;
     result.profitPct = result.costClp > 0 ? (result.profitClp / result.costClp) * 100 : 0;
@@ -23339,6 +23398,27 @@ function addP2PBotStyles(){
     const months = {};
     (stats.capacities || []).forEach(cap => {
       const buyPrice = Number(cap.buyPrice || 0);
+
+      // Capacitys "aligerados" -- ver getP2PRangeStatsFromCapacity más
+      // arriba, mismo mecanismo: el resumen por día alcanza para agrupar
+      // por mes también (un día siempre cae en un solo mes).
+      if(Array.isArray(cap.dailyBuckets) && cap.dailyBuckets.length){
+        cap.dailyBuckets.forEach(bucket => {
+          if(!bucket.day) return;
+          if(!isP2PAfterCapacityBaseline(bucket.day)) return;
+          if(exchange && exchange !== "all" && (bucket.exchange || "binance") !== exchange) return;
+          const key = bucket.day.slice(0, 7);
+          if(!key) return;
+          if(!months[key]) months[key] = { key, soldUsdt: 0, clpReceived: 0, commissionClp: 0, costClp: 0, profitClp: 0 };
+          months[key].soldUsdt += Number(bucket.soldUsdt || 0);
+          months[key].clpReceived += Number(bucket.clpReceived || 0);
+          months[key].commissionClp += Number(bucket.commissionClp || 0);
+          months[key].costClp += Number(bucket.costClp || 0);
+          months[key].profitClp += Number(bucket.profitClp || 0);
+        });
+        return;
+      }
+
       (cap.saleParts || []).forEach(part => {
         if(!part.createdAt) return;
         if(!isP2PAfterCapacityBaseline(part.createdAt)) return;
@@ -23446,6 +23526,26 @@ function addP2PBotStyles(){
     const byDay = new Map();
     (stats.capacities || []).forEach(cap => {
       const buyPrice = Number(cap.buyPrice || 0);
+
+      // Capacitys "aligerados" -- mismo mecanismo que getP2PRangeStatsFromCapacity.
+      if(Array.isArray(cap.dailyBuckets) && cap.dailyBuckets.length){
+        cap.dailyBuckets.forEach(bucket => {
+          if(!bucket.day) return;
+          if(!isP2PInRange(bucket.day, range)) return;
+          if(exchange && exchange !== "all" && (bucket.exchange || "binance") !== exchange) return;
+          let entry = byDay.get(bucket.day);
+          if(!entry){
+            entry = { date: bucket.day, clpReceived: 0, profitClp: 0, costClp: 0, soldUsdt: 0 };
+            byDay.set(bucket.day, entry);
+          }
+          entry.clpReceived += Number(bucket.clpReceived || 0);
+          entry.profitClp += Number(bucket.profitClp || 0);
+          entry.costClp += Number(bucket.costClp || 0);
+          entry.soldUsdt += Number(bucket.soldUsdt || 0);
+        });
+        return;
+      }
+
       (cap.saleParts || []).forEach(part => {
         if(!part.createdAt) return;
         if(!isP2PInRange(part.createdAt, range)) return;
@@ -24987,6 +25087,8 @@ function addP2PBotStyles(){
     delete cap.finalCommissionUsdt;
     delete cap.finalCommissionClp;
     delete cap.finalSaleParts;
+    delete cap.dailyBuckets;
+    delete cap.lockedOrders;
     cap.usedUsdt = carryoverUsdt || 0;
     cap.clpReceived = carryoverClp || 0;
     cap.commissionUsdt = carryoverCommissionUsdt || 0;
