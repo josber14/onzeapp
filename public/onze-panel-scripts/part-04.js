@@ -2039,6 +2039,35 @@ function addP2PBotStyles(){
 
   /* end per-ad functions */
 
+  // Pedido explícito del usuario (sep 2026): "Actividad en vivo" se quedaba
+  // congelada minutos enteros -- medido en vivo: el llamado a
+  // /api/p2p/bot/cycle desde el navegador debería completarse cada ~1s, pero
+  // en producción (no en localhost, que pega directo a Binance desde la
+  // conexión de casa) los huecos reales entre ciclos promediaron 27s y
+  // llegaron a 131s -- coincide con el límite de 35s que ya existe del lado
+  // del servidor para el procesamiento de chat de una orden (ver
+  // processOrder en chat-agent.ts), que en Vercel tarda más en responder.
+  // Como scheduleBotCycle espera a que ESTA llamada termine antes de volver
+  // a pintar la pantalla (botRefreshExchange) Y antes de programar el
+  // siguiente ciclo, un solo procesamiento lento congelaba TODO el panel
+  // hasta que terminaba. Esto NO toca el procesamiento de chat en sí (sigue
+  // corriendo igual, con su propio límite de 35s en el servidor) -- solo
+  // hace que el NAVEGADOR deje de esperarlo indefinidamente: si no responde
+  // en FETCH_TIMEOUT_MS, se aborta esta vuelta puntual y se sigue con el
+  // próximo tick normal, así la pantalla no se queda pegada.
+  const BOT_CYCLE_FETCH_TIMEOUT_MS = 20_000;
+  function fetchBotCycleWithTimeout(label){
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), BOT_CYCLE_FETCH_TIMEOUT_MS);
+    return fetch("/api/p2p/bot/cycle", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label }),
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
+  }
+
   window.botStartExchange = async function(){
     const ex = botSelectedExchange;
     const startLabel = botActiveLabel; // fija la cuenta a la que se le da "Iniciar", no la variable en vivo
@@ -2060,7 +2089,7 @@ function addP2PBotStyles(){
     startEntry.active = true;
     async function scheduleBotCycle(){
       try{
-        const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ label: startLabel }) });
+        const res = await fetchBotCycleWithTimeout(startLabel);
         const data = await res.json();
         if(data?.state?.binance){
           const st = data.state.binance;
@@ -2134,7 +2163,7 @@ function addP2PBotStyles(){
     entry.chatActive = true;
     async function scheduleBotCycle(){
       try{
-        const res = await fetch("/api/p2p/bot/cycle", { method:"POST", credentials:"include", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ label: chatLabel }) });
+        await fetchBotCycleWithTimeout(chatLabel);
         window.botRefreshExchange(true);
       }catch(e){}
       if(entry.chatActive) entry.chatTimer = setTimeout(scheduleBotCycle, 2000);
