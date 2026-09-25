@@ -27,6 +27,43 @@ const LOCK_STALE_MS = 70_000;
 // que llegue el siguiente disparo del cron.
 const RUN_BUDGET_MS = 50_000;
 const ROUND_DELAY_MS = 3_000;
+// Bug real confirmado en vivo (sep 2026, costo real en Vercel + cortes del
+// bot sin explicación): el chequeo de presupuesto de arriba solo se hace
+// ANTES de llamar a executeBotCycle() para cada cuenta -- si ESA llamada
+// puntual tarda de más (Binance lento, un reintento de los 10s que ya se
+// documentaron en otros lados de este proyecto, contención de la base),
+// nada la corta a mitad de camino. El total se pasa de los 60s que permite
+// Vercel (maxDuration) y la plataforma mata la función a la fuerza (504
+// "Task timed out") -- confirmado con los logs reales: ~50 apagones así en
+// menos de 9 horas, aprox uno cada 10 minutos. Cuando Vercel mata así la
+// función (no es una excepción de JS, es la plataforma cortando el
+// proceso), el bloque `finally` de abajo NUNCA corre -- releaseLock() no se
+// llama, y el candado (P2PCronLock) queda trabado los 70s completos de
+// LOCK_STALE_MS, haciendo que el SIGUIENTE minuto entero del bot se salte
+// también. Cada apagón de estos paga el máximo de tiempo posible (60s en
+// vez de los 50s pensados) y además corta el bot por ~2 minutos reales.
+//
+// Arreglo: cada llamada a executeBotCycle() ahora tiene su propio límite de
+// tiempo (CYCLE_TIMEOUT_MS) -- si una cuenta puntual se cuelga, se abandona
+// esa cuenta sola (se reintenta en la próxima vuelta) en vez de arrastrar a
+// toda la función con ella. Además, el chequeo de presupuesto deja un
+// margen de seguridad (CYCLE_SAFETY_MARGIN_MS) antes de arrancar cualquier
+// llamada nueva, para que la función SIEMPRE termine y responda sola dentro
+// de los 60s, sin que Vercel tenga que matarla nunca.
+const CYCLE_TIMEOUT_MS = 15_000;
+const CYCLE_SAFETY_MARGIN_MS = 15_000;
+
+async function runCycleWithTimeout(tenantId: number, label: string): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`cycle timeout (${CYCLE_TIMEOUT_MS}ms)`)), CYCLE_TIMEOUT_MS);
+  });
+  try {
+    await Promise.race([executeBotCycle(tenantId, label), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 // Si alguien tiene el panel abierto, el navegador ya está ciclando esa cuenta
 // cada ~1s por su cuenta. Sin este chequeo, el cron repetía exactamente el
 // mismo trabajo (mismas llamadas a Binance, mismo cálculo de precio) sin
@@ -105,14 +142,15 @@ export async function GET(req: NextRequest) {
       select: { tenantId: true, label: true },
     });
     for (const { tenantId, label } of disabledBinanceConfigs) {
+      if (Date.now() - startedAt >= RUN_BUDGET_MS - CYCLE_SAFETY_MARGIN_MS) break;
       try {
-        await executeBotCycle(tenantId, label);
+        await runCycleWithTimeout(tenantId, label);
       } catch (e: any) {
         errors.push(`sync-only tenant ${tenantId} (${label}): ${e?.message || e}`);
       }
     }
 
-    while (Date.now() - startedAt < RUN_BUDGET_MS) {
+    while (Date.now() - startedAt < RUN_BUDGET_MS - CYCLE_SAFETY_MARGIN_MS) {
       const configs = await prisma.p2PBotExchangeConfig.findMany({
         where: { enabled: true },
         select: { tenantId: true, label: true, lastCycleAt: true },
@@ -133,13 +171,13 @@ export async function GET(req: NextRequest) {
       }
 
       for (const { tenantId, label, lastCycleAt } of byPair.values()) {
-        if (Date.now() - startedAt >= RUN_BUDGET_MS) break;
+        if (Date.now() - startedAt >= RUN_BUDGET_MS - CYCLE_SAFETY_MARGIN_MS) break;
         if (lastCycleAt && Date.now() - lastCycleAt.getTime() < SKIP_IF_CYCLED_WITHIN_MS) {
           cyclesSkipped++;
           continue;
         }
         try {
-          await executeBotCycle(tenantId, label);
+          await runCycleWithTimeout(tenantId, label);
           cyclesRun++;
         } catch (e: any) {
           errors.push(`tenant ${tenantId} (${label}): ${e?.message || e}`);
@@ -147,7 +185,7 @@ export async function GET(req: NextRequest) {
       }
 
       rounds++;
-      if (Date.now() - startedAt >= RUN_BUDGET_MS) break;
+      if (Date.now() - startedAt >= RUN_BUDGET_MS - CYCLE_SAFETY_MARGIN_MS) break;
       await new Promise((r) => setTimeout(r, ROUND_DELAY_MS));
     }
   } finally {
