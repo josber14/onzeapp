@@ -2815,17 +2815,34 @@
     // día por sí sola. Throttle de 10s (no en cada render, que puede
     // llamarse varias veces seguidas tras una acción) para no saturar el
     // servidor.
+    // Bug real confirmado en vivo (sep 2026, dinero real afectado -- ver
+    // AGENTS.md): acá abajo se disparaban las 3 sincronizaciones de arriba
+    // y, EN LA MISMA LÍNEA SIGUIENTE, se llamaba a autoFinishP2PCapacities()
+    // sin esperar ninguna de ellas -- como fetch() es asíncrono, la decisión
+    // de "¿este capacity ya se llenó?" se tomaba con los datos VIEJOS que
+    // ya estaban en el navegador, exactamente en el instante en que los
+    // datos frescos venían en camino pero todavía no habían llegado. Ahora
+    // se espera (Promise.all) a que las 3 terminen antes de decidir -- el
+    // cierre automático sigue siendo automático (nadie tiene que tocar
+    // nada), solo que ahora mira los datos más frescos posibles antes de
+    // cerrar algo, en vez de una foto vieja de la pestaña.
     const __now = Date.now();
     if(!window.__p2pCapacitySalesSyncLastAt || __now - window.__p2pCapacitySalesSyncLastAt > 10000){
       window.__p2pCapacitySalesSyncLastAt = __now;
       // ONZE y ZINPLE, no solo la etiqueta activa -- el capacity es de toda
       // la cuenta (ver comentario junto a syncAllLabelsBinanceSalesForCapacity).
-      if(typeof syncAllLabelsBinanceSalesForCapacity === 'function') syncAllLabelsBinanceSalesForCapacity();
-      if(typeof syncBybitSales === 'function') syncBybitSales(true);
-      if(typeof window.syncP2PManualSalesFromServer === 'function') window.syncP2PManualSalesFromServer();
+      const __freshSyncs = [];
+      if(typeof syncAllLabelsBinanceSalesForCapacity === 'function') __freshSyncs.push(syncAllLabelsBinanceSalesForCapacity());
+      if(typeof syncBybitSales === 'function') __freshSyncs.push(syncBybitSales(true));
+      if(typeof window.syncP2PManualSalesFromServer === 'function') __freshSyncs.push(window.syncP2PManualSalesFromServer());
+      Promise.all(__freshSyncs).catch(() => {}).then(() => {
+        if(typeof autoFinishP2PCapacities === "function") autoFinishP2PCapacities();
+      });
+    } else if(typeof autoFinishP2PCapacities === "function"){
+      // Ya se sincronizó hace menos de 10s (throttle de arriba) -- los datos
+      // siguen razonablemente frescos, se puede decidir con lo que ya hay.
+      autoFinishP2PCapacities();
     }
-
-    if(typeof autoFinishP2PCapacities === "function") autoFinishP2PCapacities();
 
     const stats = calculateP2PCapacityStats();
     const items = stats.capacities;
@@ -5110,8 +5127,14 @@
   // navegador): el algoritmo de asignación en sí es correcto, el problema
   // era pura falta de datos frescos. Por eso el refresco de la pestaña de
   // Capacity trae SIEMPRE ambas cuentas, no solo la que se está mirando.
+  // Devuelve una Promise que resuelve cuando AMBAS etiquetas (ONZE y ZINPLE)
+  // ya se sincronizaron -- pedido explícito del usuario (sep 2026): el
+  // cierre automático de un capacity (autoFinishP2PCapacities) no debe
+  // decidir con datos de solo UNA de las dos cuentas mientras la otra
+  // todavía está en camino. El caller que quiera esperar a que esto termine
+  // antes de decidir algo puede hacer `await syncAllLabelsBinanceSalesForCapacity()`.
   function syncAllLabelsBinanceSalesForCapacity(){
-    for (const lbl of ["ONZE", "ZINPLE"]) {
+    return Promise.all(["ONZE", "ZINPLE"].map(lbl =>
       fetch('/api/binance/p2p-history?label=' + encodeURIComponent(lbl))
         .then(res => res.json())
         .then(data => {
@@ -5122,8 +5145,8 @@
             if(typeof updateP2PDashboardWithCapacity === 'function') updateP2PDashboardWithCapacity();
           }
         })
-        .catch(() => {});
-    }
+        .catch(() => {})
+    ));
   }
 
   function saveBinanceSales(orders){
@@ -5363,7 +5386,11 @@
   }
 
   window.syncBybitSales = function syncBybitSales(silent = false){
-    if(window.__p2pBybitSyncInFlight) return;
+    // Devuelve una Promise (resuelve sola si ya hay una sincronización en
+    // curso, para que un caller que hace `await syncBybitSales(...)` -- ver
+    // autoFinishP2PCapacities -- nunca se quede colgado esperando algo que
+    // no va a pasar.
+    if(window.__p2pBybitSyncInFlight) return Promise.resolve();
     // Igual que syncBinanceSales: el botón solo existe en la pestaña
     // "Ventas Bybit", pero esta función también se dispara desde la
     // pestaña de Capacity -- si no hay botón, se sincroniza igual.
@@ -5373,7 +5400,7 @@
     const oldText = btn ? btn.textContent : null;
     if(btn){ btn.disabled = true; btn.textContent = 'Sincronizando...'; }
 
-    fetch('/api/bybit/p2p-history')
+    return fetch('/api/bybit/p2p-history')
       .then(res => res.json())
       .then(data => {
         if(data.ok && data.orders){
