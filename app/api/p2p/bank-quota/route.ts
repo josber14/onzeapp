@@ -68,6 +68,21 @@ export async function GET(req: NextRequest) {
       return Response.json({ ok: false, error: "Solo disponible para Binance por ahora" }, { status: 400 });
     }
 
+    // Guardia del lado del servidor (sep 2026, pedido explícito del
+    // usuario): esta consulta escanea el día completo de órdenes contra
+    // Binance en vivo (hasta 5 páginas seguidas) -- si nadie prendió el
+    // seguimiento de este banco para esta cuenta, se corta ACÁ, antes de
+    // gastar ni una sola llamada a Binance. El panel ya deja de sondear solo
+    // cuando está apagado, pero este chequeo es la defensa real: cualquier
+    // llamada perdida (caché vieja, pestaña vieja, etc.) tampoco hace nada.
+    const exchangeConfig = await prisma.p2PBotExchangeConfig.findUnique({
+      where: { tenantId_exchange_label: { tenantId, exchange, label } },
+      select: { bankQuotaEnabled: true },
+    });
+    if (!exchangeConfig?.bankQuotaEnabled) {
+      return Response.json({ ok: true, enabled: false, total: 0, limit, bank, orders: [] });
+    }
+
     const creds = await prisma.binanceCredentials.findFirst({
       where: { tenantId, isActive: true, label },
       orderBy: { id: "asc" },
@@ -145,7 +160,7 @@ export async function GET(req: NextRequest) {
 
     const total = bankOrders.filter((o) => !o.excluded).reduce((sum, o) => sum + o.amountClp, 0);
 
-    return Response.json({ ok: true, total, limit, bank, orders: bankOrders });
+    return Response.json({ ok: true, enabled: true, total, limit, bank, orders: bankOrders });
   } catch (error: any) {
     return Response.json({ ok: false, error: error?.message || "Error obteniendo cupo de banco" }, { status: 500 });
   }

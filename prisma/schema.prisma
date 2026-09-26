@@ -1568,6 +1568,13 @@ model P2PBotExchangeConfig {
   // mismo trabajo cuando el panel estaba abierto (sep 2026, ver
   // bot-cycle-cron/route.ts).
   lastCycleAt          DateTime?
+  // Prende/apaga el seguimiento del cupo diario de un banco (ej. Banco
+  // Estado, limite $5.000.000 CLP/dia) -- ver app/api/p2p/bank-quota.
+  // Default false a proposito (sep 2026, pedido explicito del usuario): esa
+  // consulta escanea el dia completo contra Binance en vivo cada vez que se
+  // llama, y el panel la refresca sola cada 3 min mientras este prendida --
+  // sin usarla activamente no debe generar NINGUN llamado ni gasto.
+  bankQuotaEnabled     Boolean   @default(false)
   Tenant               Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, exchange, label])

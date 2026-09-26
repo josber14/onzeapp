@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
         safeMarginPct: Number(c.safeMarginPct) || 0,
         minAdPriceDiffPct: c.minAdPriceDiffPct != null ? Number(c.minAdPriceDiffPct) : 0.1,
         operatorWhatsapp: c.operatorWhatsapp || null,
+        bankQuotaEnabled: c.bankQuotaEnabled ?? false,
         pauseUntil: c.pauseUntil?.toISOString() || null,
         lastStartedAt: c.lastStartedAt?.toISOString() || null,
         lastStoppedAt: c.lastStoppedAt?.toISOString() || null,
@@ -106,6 +107,7 @@ export async function PUT(req: NextRequest) {
     if (data.safeMarginPct !== undefined) update.safeMarginPct = data.safeMarginPct;
     if (data.minAdPriceDiffPct !== undefined) update.minAdPriceDiffPct = data.minAdPriceDiffPct;
     if (data.operatorWhatsapp !== undefined) update.operatorWhatsapp = data.operatorWhatsapp === "" ? null : data.operatorWhatsapp;
+    if (data.bankQuotaEnabled !== undefined) update.bankQuotaEnabled = !!data.bankQuotaEnabled;
     if (data.action === "start") {
       update.enabled = true;
       update.pauseUntil = null;
@@ -161,6 +163,7 @@ export async function PUT(req: NextRequest) {
         minAdPriceDiffPct: data.minAdPriceDiffPct ?? 0.1,
         chatBotEnabled: data.chatBotEnabled ?? false,
         operatorWhatsapp: data.operatorWhatsapp || null,
+        bankQuotaEnabled: data.bankQuotaEnabled ?? false,
       },
     });
 
@@ -184,6 +187,7 @@ export async function PUT(req: NextRequest) {
         safeMarginPct: Number(config.safeMarginPct) || 0,
         minAdPriceDiffPct: config.minAdPriceDiffPct != null ? Number(config.minAdPriceDiffPct) : 0.1,
         operatorWhatsapp: config.operatorWhatsapp || null,
+        bankQuotaEnabled: config.bankQuotaEnabled ?? false,
         pauseUntil: config.pauseUntil?.toISOString() || null,
         lastStartedAt: config.lastStartedAt?.toISOString() || null,
         lastStoppedAt: config.lastStoppedAt?.toISOString() || null,

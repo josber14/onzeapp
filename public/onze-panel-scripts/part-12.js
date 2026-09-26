@@ -2883,16 +2883,30 @@
             const badgeText = cached ? `${p2pCapMoney(cached.total, 0)}/${p2pCapMoney(cached.limit, 0)}` : "···";
             const pct = cached && cached.limit > 0 ? Math.min(100, (cached.total / cached.limit) * 100) : 0;
             const color = pct >= 100 ? "#fb7185" : pct >= 80 ? "#fbbf24" : "#34d399";
+            // Prende/apaga el seguimiento (sep 2026, pedido explícito del
+            // usuario): esta consulta escanea el día completo contra Binance
+            // en vivo cada vez que corre -- si nadie la está usando, no debe
+            // llamarse NUNCA. Por defecto (estado desconocido todavía, o
+            // apagado) se trata como apagado -- nunca se asume "prendido"
+            // sin haberlo confirmado con el servidor.
+            const enabled = window.__p2pBankQuotaEnabledCache === true;
+            if(typeof window.p2pEnsureBankQuotaPolling === "function") window.p2pEnsureBankQuotaPolling();
             return `
-            <button class="btn secondary" type="button" onclick="window.p2pOpenBankQuotaModal()" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;white-space:nowrap;flex-shrink:0;min-width:150px;">
-              <span style="display:flex;align-items:center;gap:6px;">
-                🏦 Banco Estado
-                <span id="p2pBankQuotaBadge" style="font-size:11px;font-weight:700;color:${cached ? color : "#8aa0ba"};">${badgeText}</span>
+            <div class="btn secondary" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;white-space:nowrap;flex-shrink:0;min-width:170px;cursor:default;">
+              <span style="display:flex;align-items:center;gap:8px;width:100%;">
+                <span style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;${enabled ? "cursor:pointer;" : ""}" ${enabled ? `onclick="window.p2pOpenBankQuotaModal()"` : ""}>
+                  🏦 Banco Estado
+                  <span id="p2pBankQuotaBadge" style="font-size:11px;font-weight:700;color:${enabled ? (cached ? color : "#8aa0ba") : "#64748b"};">${enabled ? badgeText : "Apagado"}</span>
+                </span>
+                <span class="toggle-switch" title="${enabled ? "Apagar seguimiento" : "Prender seguimiento"}" onclick="event.stopPropagation();window.p2pToggleBankQuotaEnabled(${!enabled})">
+                  <input type="checkbox" ${enabled ? "checked" : ""}>
+                  <span class="slider"></span>
+                </span>
               </span>
-              <span style="width:100%;height:5px;border-radius:4px;background:rgba(148,163,184,.2);overflow:hidden;">
+              <span style="width:100%;height:5px;border-radius:4px;background:rgba(148,163,184,.2);overflow:hidden;display:${enabled ? "block" : "none"};">
                 <span id="p2pBankQuotaBadgeBar" style="display:block;height:100%;width:${pct}%;background:${color};transition:width .3s;"></span>
               </span>
-            </button>
+            </div>
           `; })() : ""}
         </div>
       </div>
@@ -3083,20 +3097,10 @@
 
     document.getElementById("openP2PCapacityBtn")?.addEventListener("click", openP2PCapacityModal);
 
-    // Pedido explícito del usuario (ago 2026): que el cupo de Banco Estado
-    // se vea también AFUERA del botón (no solo al abrir el modal), sumando
-    // en vivo. Bug real confirmado en vivo: llamar a p2pRefreshBankQuotaBadge()
-    // acá directo (en cada render) quedaba en una carrera -- panel.innerHTML
-    // reemplaza el DOM y crea un <span> NUEVO en cada render, pero la
-    // consulta anterior (que tarda 2.5-5s por ser en vivo contra Binance)
-    // seguía en vuelo apuntando al <span> VIEJO ya desconectado del DOM, así
-    // que su resultado nunca se veía y el badge quedaba pegado en "···" para
-    // siempre. Por eso el refresco ahora vive en un intervalo propio,
-    // arrancado UNA sola vez (idempotente), totalmente aparte del ciclo de
-    // renders de este panel.
-    if(!window.HAS_ONZE_CORE_BUSINESS && typeof window.p2pEnsureBankQuotaPolling === "function"){
-      window.p2pEnsureBankQuotaPolling();
-    }
+    // p2pEnsureBankQuotaPolling() ya se llama arriba, dentro del render del
+    // botón mismo (necesita saber ahí si el seguimiento está prendido o
+    // apagado para dibujar el toggle correcto) -- no hace falta llamarlo de
+    // nuevo acá.
   }
 
   const P2P_INITIAL_CAPITAL_KEY = "onze_p2p_initial_capital_usdt" + (window.__p2pTenantSuffix || "");
@@ -3481,6 +3485,10 @@
   };
 
   window.p2pOpenBankQuotaModal = async function(){
+    // Defensa extra: el botón solo dibuja este onclick cuando el
+    // seguimiento está prendido, pero por si se llega a llamar de otra
+    // forma, no se abre nada mientras esté apagado.
+    if(window.__p2pBankQuotaEnabledCache !== true) return;
     let modal = document.getElementById("p2pBankQuotaModal");
     if(!modal){
       modal = document.createElement("div");
@@ -3620,10 +3628,66 @@
   // un precio que cambie segundo a segundo -- no necesita esta frecuencia.
   // 3 minutos (180s) sigue siendo varias actualizaciones por hora, de sobra
   // para no pasarse del límite sin darse cuenta.
+  // Prende/apaga el sondeo de fondo según el interruptor que el usuario deja
+  // guardado por cuenta (sep 2026, pedido explícito del usuario: "si no lo
+  // va a usar que se mantenga apagado y así no existe ningún llamado ni
+  // ningún gasto"). Mientras no se sepa el estado real (undefined, primera
+  // vez), se pregunta al servidor y NO se arranca nada -- nunca se asume
+  // "prendido" por defecto.
+  let __p2pBankQuotaEnabledFetchInFlight = false;
+  async function p2pFetchBankQuotaEnabledState(){
+    if(__p2pBankQuotaEnabledFetchInFlight) return;
+    __p2pBankQuotaEnabledFetchInFlight = true;
+    try{
+      const label = window.botActiveLabel || "ONZE";
+      const res = await fetch("/api/p2p/bot/exchange-config?label=" + encodeURIComponent(label), { credentials: "include" });
+      const data = await res.json();
+      window.__p2pBankQuotaEnabledCache = !!(data?.ok && data.configs?.binance?.bankQuotaEnabled);
+    }catch(e){
+      // Si falla, se queda en undefined -- se vuelve a intentar en el
+      // próximo render en vez de arriesgar a prender algo que cuesta plata
+      // por una falla de red pasajera.
+    }
+    __p2pBankQuotaEnabledFetchInFlight = false;
+    if(typeof renderP2PCapacityPanel === "function") renderP2PCapacityPanel();
+    window.p2pEnsureBankQuotaPolling();
+  }
+
   window.p2pEnsureBankQuotaPolling = function(){
+    if(window.__p2pBankQuotaEnabledCache === undefined){
+      p2pFetchBankQuotaEnabledState();
+      return;
+    }
+    if(window.__p2pBankQuotaEnabledCache !== true){
+      if(window.__p2pBankQuotaInterval){ clearInterval(window.__p2pBankQuotaInterval); window.__p2pBankQuotaInterval = null; }
+      return;
+    }
     window.p2pRefreshBankQuotaBadge();
     if(window.__p2pBankQuotaInterval) return;
     window.__p2pBankQuotaInterval = setInterval(window.p2pRefreshBankQuotaBadge, 180000);
+  };
+
+  // Prende/apaga el toggle -- guarda en el servidor (por cuenta, no global)
+  // y arranca/detiene el sondeo al instante, sin esperar el próximo render.
+  window.p2pToggleBankQuotaEnabled = async function(newValue){
+    window.__p2pBankQuotaEnabledCache = !!newValue;
+    if(!newValue){
+      // Apagado: se limpia la caché de datos mostrados (no dejar un número
+      // viejo dando vueltas) y se corta el sondeo de inmediato.
+      window.__p2pBankQuotaCache = null;
+      if(window.__p2pBankQuotaInterval){ clearInterval(window.__p2pBankQuotaInterval); window.__p2pBankQuotaInterval = null; }
+    }
+    if(typeof renderP2PCapacityPanel === "function") renderP2PCapacityPanel();
+    if(newValue) window.p2pEnsureBankQuotaPolling();
+    try{
+      await fetch("/api/p2p/bot/exchange-config", {
+        method: "PUT", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ exchange: "binance", label: window.botActiveLabel || "ONZE", bankQuotaEnabled: !!newValue }),
+      });
+    }catch(e){
+      console.warn("[BankQuota] error guardando el interruptor:", e);
+    }
   };
 
   window.p2pRefreshBankQuotaModal = async function(){
