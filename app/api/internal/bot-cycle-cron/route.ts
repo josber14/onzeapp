@@ -23,9 +23,22 @@ const LOCK_STALE_MS = 70_000;
 // no perder tanta velocidad de reacción cuando nadie tiene el navegador
 // abierto (pedido explícito del usuario, ago 2026: automatizar el bot para
 // que corra solo mientras viaja), esta ruta no hace un solo ciclo y termina
-// -- se queda corriendo en loop casi todo el minuto, dejando margen antes de
-// que llegue el siguiente disparo del cron.
-const RUN_BUDGET_MS = 50_000;
+// -- se queda corriendo en loop, dejando margen antes de que llegue el
+// siguiente disparo del cron.
+//
+// Bajado de 50s a 18s (sep 2026, pedido explícito del usuario -- factura de
+// Vercel disparada: Fluid Provisioned Memory +527%, Fluid Active CPU +488%
+// en la semana). Confirmado en vivo antes de este cambio: esta función
+// corría activa ~50-60 de cada 60 segundos, 24/7, para TODOS los tenants
+// juntos (no solo el que tenga el panel cerrado) -- y ~1 de cada 4
+// invocaciones se pasaba del límite duro de 60s y terminaba en 504 (que
+// igual se cobra completo). Con 18s el loop hace ~5-6 vueltas al principio
+// de cada minuto en vez de ~16, dejando un hueco de ~40s sin corrección de
+// precio SOLO para cuentas sin el panel abierto (con el panel abierto, el
+// navegador sigue ciclando cada ~1s por su cuenta, sin cambios). No toca el
+// candado (P2PCronLock) ni la lógica de precio -- solo acorta cuánto tiempo
+// el while de abajo se queda dando vueltas antes de terminar normalmente.
+const RUN_BUDGET_MS = 18_000;
 const ROUND_DELAY_MS = 3_000;
 // Si alguien tiene el panel abierto, el navegador ya está ciclando esa cuenta
 // cada ~1s por su cuenta. Sin este chequeo, el cron repetía exactamente el
