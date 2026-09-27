@@ -117,6 +117,7 @@ export async function GET(req: NextRequest) {
               botCompeteTransAmount: localAd?.botCompeteTransAmount ? Number(localAd.botCompeteTransAmount) : null,
               botCompetePayTypes: localAd?.botCompetePayTypes as string[] | null || null,
               botExcludedMerchants: localAd?.botExcludedMerchants as string[] | null || null,
+              botMatchAllowedMerchants: localAd?.botMatchAllowedMerchants as string[] | null || null,
               botCycleInterval: localAd?.botCycleInterval ? Number(localAd.botCycleInterval) : null,
               botCircuitBreakPct: localAd?.botCircuitBreakPct ? Number(localAd.botCircuitBreakPct) : null,
               botDailyVolumeCapUsdt: localAd?.botDailyVolumeCapUsdt ? Number(localAd.botDailyVolumeCapUsdt) : null,
@@ -254,6 +255,7 @@ export async function GET(req: NextRequest) {
             botCompeteTransAmount: localAd?.botCompeteTransAmount ? Number(localAd.botCompeteTransAmount) : null,
             botCompetePayTypes: localAd?.botCompetePayTypes as string[] | null || null,
             botExcludedMerchants: localAd?.botExcludedMerchants as string[] | null || null,
+            botMatchAllowedMerchants: localAd?.botMatchAllowedMerchants as string[] | null || null,
             botCycleInterval: localAd?.botCycleInterval ? Number(localAd.botCycleInterval) : null,
             botCircuitBreakPct: localAd?.botCircuitBreakPct ? Number(localAd.botCircuitBreakPct) : null,
             botDailyVolumeCapUsdt: localAd?.botDailyVolumeCapUsdt ? Number(localAd.botDailyVolumeCapUsdt) : null,
@@ -299,6 +301,7 @@ export async function GET(req: NextRequest) {
       botCompeteTransAmount: a.botCompeteTransAmount ? Number(a.botCompeteTransAmount) : null,
       botCompetePayTypes: a.botCompetePayTypes as string[] | null || null,
       botExcludedMerchants: a.botExcludedMerchants as string[] | null || null,
+      botMatchAllowedMerchants: a.botMatchAllowedMerchants as string[] | null || null,
       botCycleInterval: a.botCycleInterval ? Number(a.botCycleInterval) : null,
       botCircuitBreakPct: a.botCircuitBreakPct ? Number(a.botCircuitBreakPct) : null,
       botDailyVolumeCapUsdt: a.botDailyVolumeCapUsdt ? Number(a.botDailyVolumeCapUsdt) : null,
@@ -334,7 +337,7 @@ export async function PUT(req: NextRequest) {
 
     const body = await req.json();
     const label = body.label || req.nextUrl.searchParams.get("label") || "ONZE";
-    const { id, adId, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged, botEnabled, botTop1Diff, botSafeMarginPct, botCompetePayTypes, botExcludedMerchants, botPriceFloorPct, botPriceSource, botCommissionPct, botMinCompetitorCapital, botCompeteTransAmount, botStrategy, botSpreadPct, botCycleInterval, botCircuitBreakPct, botDailyVolumeCapUsdt, botMinAdPriceDiffPct, adOnline, nickname } = body;
+    const { id, adId, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged, botEnabled, botTop1Diff, botSafeMarginPct, botCompetePayTypes, botExcludedMerchants, botMatchAllowedMerchants, botPriceFloorPct, botPriceSource, botCommissionPct, botMinCompetitorCapital, botCompeteTransAmount, botStrategy, botSpreadPct, botCycleInterval, botCircuitBreakPct, botDailyVolumeCapUsdt, botMinAdPriceDiffPct, adOnline, nickname } = body;
 
     if (!exchange) {
       return Response.json({ ok: false, error: "exchange es requerido" }, { status: 400 });
@@ -458,6 +461,7 @@ export async function PUT(req: NextRequest) {
     if (botCompeteTransAmount !== undefined) updateData.botCompeteTransAmount = botCompeteTransAmount;
     if (botCompetePayTypes !== undefined) updateData.botCompetePayTypes = botCompetePayTypes;
     if (botExcludedMerchants !== undefined) updateData.botExcludedMerchants = botExcludedMerchants;
+    if (botMatchAllowedMerchants !== undefined) updateData.botMatchAllowedMerchants = botMatchAllowedMerchants;
     if (botCycleInterval !== undefined) updateData.botCycleInterval = botCycleInterval;
     if (botCircuitBreakPct !== undefined) updateData.botCircuitBreakPct = botCircuitBreakPct;
     if (botDailyVolumeCapUsdt !== undefined) updateData.botDailyVolumeCapUsdt = botDailyVolumeCapUsdt;

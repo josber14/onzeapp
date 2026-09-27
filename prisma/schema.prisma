@@ -1678,6 +1678,13 @@ model P2PBotAd {
   // 2026, pedido explícito del usuario). Lista vacía/null = sin cambios de
   // comportamiento, se compite contra todo el mercado como siempre.
   botExcludedMerchants    Json?
+  // Nicknames con los que el anuncio puede EMPATAR precio exacto (diff 0)
+  // en vez de tener que ir más barato por el "top1Diff" de siempre (sep
+  // 2026, pedido explícito del usuario). Solo aplica cuando ESE competidor
+  // puntual termina siendo el objetivo del ciclo -- si el objetivo es otro
+  // comerciante no listado acá, se sigue restando el top1Diff normal. Lista
+  // vacía/null = sin cambios de comportamiento (siempre se resta el diff).
+  botMatchAllowedMerchants Json?
   botCycleInterval        Int?
   botCircuitBreakPct      Decimal?  @db.Decimal(8, 4)
   botDailyVolumeCapUsdt   Decimal?  @db.Decimal(18, 8)

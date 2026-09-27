@@ -1208,6 +1208,16 @@ async function runBinanceCycle(
           .map((n) => String(n).trim().toLowerCase())
           .filter(Boolean)
       );
+      // Nicknames con los que este anuncio puede EMPATAR precio exacto (sin
+      // restar top1Diff) en vez de tener que ir más barato -- sep 2026,
+      // pedido explícito del usuario.
+      const adMatchAllowedMerchants = new Set(
+        ((managedAd as any).botMatchAllowedMerchants as string[] | null || [])
+          .map((n) => String(n).trim().toLowerCase())
+          .filter(Boolean)
+      );
+      const matchDiff = (c: any) =>
+        adMatchAllowedMerchants.has(String(c.nickName || "").trim().toLowerCase()) ? 0 : adTop1Diff;
       const adPriceSource = managedAd.botPriceSource || exchangePriceSource;
       const adPriceFloorPct = managedAd.botPriceFloorPct != null ? Number(managedAd.botPriceFloorPct) : (exchangePriceFloorPct > 0 ? exchangePriceFloorPct : null);
       const adCircuitBreakPct = managedAd.botCircuitBreakPct != null ? Number(managedAd.botCircuitBreakPct) : exchangeCircuitBreakPct;
@@ -1234,7 +1244,15 @@ async function runBinanceCycle(
       // velocidad de Binance) aplican igual en los dos modos -- por eso
       // "spread" solo reemplaza CÓMO se calcula targetPrice, todo lo que
       // viene después de este bloque queda intacto sin importar el modo.
-      const adStrategy = managedAd.botStrategy === "spread" ? "spread" : "top1";
+      // "top2"/"top3" (sep 2026, pedido explícito del usuario): misma
+      // lógica de siempre pero saltándose a propósito 1 o 2 competidores más
+      // baratos -- el anuncio se acomoda en el puesto 2º/3º del mercado en
+      // vez de pelear siempre por ser el más barato de todos.
+      const adStrategy = managedAd.botStrategy === "spread" ? "spread"
+        : managedAd.botStrategy === "top2" ? "top2"
+        : managedAd.botStrategy === "top3" ? "top3"
+        : "top1";
+      const adRankOffset = adStrategy === "top2" ? 1 : adStrategy === "top3" ? 2 : 0;
       const adSpreadPct = managedAd.botSpreadPct != null ? Number(managedAd.botSpreadPct) : 0;
 
       let targetPrice: number;
@@ -1386,43 +1404,52 @@ async function runBinanceCycle(
 
       // Safe margin floor (basado en costo real + margen de seguridad)
       safeFloor = minSellPrice * (1 + (adCommissionPct + adSafeMarginPct) / 100);
-      // Target calculation
+      // Target calculation -- arranca en adRankOffset (0 para top1) para
+      // que top2/top3 dejen a propósito 1 o 2 competidores más baratos.
       let targetCompetitor: any = null;
       let targetIndex = -1;
+      let targetDiff = adTop1Diff;
 
       if (viableCompetitors.length === 0 && sortedCompetitors.length > 0) {
-        let closestAbove: any = null;
+        let closestAboveIdx = -1;
         for (let i = 0; i < sortedCompetitors.length; i++) {
           const comp = sortedCompetitors[i];
-          if (Number(comp.price) > currentPrice) { closestAbove = comp; targetIndex = i; break; }
+          if (Number(comp.price) > currentPrice) { closestAboveIdx = i; break; }
         }
-        if (closestAbove) {
-          const testPrice = Number(closestAbove.price) - adTop1Diff;
-          if (testPrice > safeFloor) { targetCompetitor = closestAbove; }
+        if (closestAboveIdx !== -1) {
+          const idx = Math.min(closestAboveIdx + adRankOffset, sortedCompetitors.length - 1);
+          const closestAbove = sortedCompetitors[idx];
+          const diff = matchDiff(closestAbove);
+          const testPrice = Number(closestAbove.price) - diff;
+          if (testPrice > safeFloor) { targetCompetitor = closestAbove; targetIndex = idx; targetDiff = diff; }
         }
       } else if (viableCompetitors.length > 0) {
-        const firstComp = viableCompetitors[0];
-        const firstTargetRaw = Number(firstComp.price) - adTop1Diff;
+        const startIdx = Math.min(adRankOffset, viableCompetitors.length - 1);
+        const firstComp = viableCompetitors[startIdx];
+        const firstDiff = matchDiff(firstComp);
+        const firstTargetRaw = Number(firstComp.price) - firstDiff;
         if (firstTargetRaw > safeFloor) {
-          targetCompetitor = firstComp; targetIndex = 0;
+          targetCompetitor = firstComp; targetIndex = startIdx; targetDiff = firstDiff;
         } else {
-          for (let i = 1; i < viableCompetitors.length; i++) {
+          for (let i = startIdx + 1; i < viableCompetitors.length; i++) {
             const comp = viableCompetitors[i];
-            const testPrice = Number(comp.price) - adTop1Diff;
-            if (testPrice > safeFloor) { targetCompetitor = comp; targetIndex = i; break; }
+            const diff = matchDiff(comp);
+            const testPrice = Number(comp.price) - diff;
+            if (testPrice > safeFloor) { targetCompetitor = comp; targetIndex = i; targetDiff = diff; break; }
           }
         }
         if (!targetCompetitor) {
           const highest = viableCompetitors[viableCompetitors.length - 1];
-          const testPrice = Number(highest.price) - adTop1Diff;
-          if (testPrice > safeFloor) { targetCompetitor = highest; targetIndex = viableCompetitors.length - 1; }
+          const diff = matchDiff(highest);
+          const testPrice = Number(highest.price) - diff;
+          if (testPrice > safeFloor) { targetCompetitor = highest; targetIndex = viableCompetitors.length - 1; targetDiff = diff; }
         }
       }
 
       // Sin competidor objetivo (nadie viable, ej: mercado completo por debajo de
       // nuestro costo) → el anuncio cae al piso de seguridad, nunca se queda fijo
       // en el precio anterior.
-      targetPrice = targetCompetitor ? Number(targetCompetitor.price) - adTop1Diff : safeFloor;
+      targetPrice = targetCompetitor ? Number(targetCompetitor.price) - targetDiff : safeFloor;
       // Nunca quedarse debajo del precio mínimo de seguridad
       if (targetPrice < safeFloor) { targetPrice = safeFloor; }
 
@@ -2305,6 +2332,32 @@ async function runBybitCycle(
           .map((n) => String(n).trim().toLowerCase())
           .filter(Boolean)
       );
+      // Nicknames con los que este anuncio puede EMPATAR precio exacto (sin
+      // restar top1Diff) en vez de tener que ir más barato -- sep 2026,
+      // pedido explícito del usuario, mismo criterio que runBinanceCycle.
+      const adMatchAllowedMerchants = new Set(
+        ((managedAd as any).botMatchAllowedMerchants as string[] | null || [])
+          .map((n) => String(n).trim().toLowerCase())
+          .filter(Boolean)
+      );
+      const matchDiff = (c: any) =>
+        adMatchAllowedMerchants.has(String(c.nickName || "").trim().toLowerCase()) ? 0 : adTop1Diff;
+      // Estrategia (sep 2026, pedido explícito del usuario): antes Bybit
+      // ignoraba por completo el selector "Estrategia" del panel (compartido
+      // con Binance desde que el anuncio de Bybit reusa la misma tarjeta,
+      // ver botRenderAdPill) -- siempre corría como si fuera "top1" sin
+      // importar lo que estuviera guardado. Ahora sí lo respeta:
+      // "top1"/"top2"/"top3" corren la misma lógica de siempre pero
+      // saltándose 0/1/2 competidores más baratos a propósito (para que el
+      // anuncio se acomode en el puesto 2º/3º en vez de pelear siempre por
+      // ser el más barato); "spread" es precio fijo, sin mirar competidores
+      // -- misma idea que Binance, sin comisión (Bybit no cobra).
+      const adStrategy = managedAd.botStrategy === "spread" ? "spread"
+        : managedAd.botStrategy === "top2" ? "top2"
+        : managedAd.botStrategy === "top3" ? "top3"
+        : "top1";
+      const adRankOffset = adStrategy === "top2" ? 1 : adStrategy === "top3" ? 2 : 0;
+      const adSpreadPct = managedAd.botSpreadPct != null ? Number(managedAd.botSpreadPct) : 0;
 
       // Min sell price
       let minSellPrice = 0;
@@ -2315,6 +2368,17 @@ async function runBybitCycle(
         continue;
       }
       await log( "info", "bybit", `Ad ${adId}: minSell=${minSellPrice}, top1Diff=${adTop1Diff}, safeMargin=${adSafeMarginPct}%`);
+
+      let targetPrice: number;
+      let safeFloor: number;
+
+      if (adStrategy === "spread") {
+        // Precio fijo sobre el costo real, sin comisión (Bybit no cobra) --
+        // no mira competidores para nada.
+        targetPrice = minSellPrice * (1 + adSpreadPct / 100);
+        safeFloor = targetPrice;
+        await log("debug", "bybit", `Ad ${adId}: estrategia spread fijo — minSellPrice=${minSellPrice} adSpreadPct=${adSpreadPct} targetPrice=${targetPrice.toFixed(4)}`);
+      } else {
 
       // Filter & sort competitors
       let competitors = rawCompetitors.filter((c: any) => {
@@ -2340,33 +2404,42 @@ async function runBybitCycle(
       }
 
       // Safe margin floor (incluye margen de seguridad)
-      const safeFloor = minSellPrice * (1 + adSafeMarginPct / 100);
+      safeFloor = minSellPrice * (1 + adSafeMarginPct / 100);
 
-      // Safe margin filter — solo competidores sobre safeFloor
+      // Safe margin filter — solo competidores sobre safeFloor. Arranca en
+      // adRankOffset (0 para top1) para que top2/top3 dejen a propósito 1 o
+      // 2 competidores más baratos sin pelear por ellos.
       let targetCompetitor: any = null;
-      let targetIndex = 0;
-      for (let i = 0; i < sortedCompetitors.length; i++) {
+      let targetIndex = adRankOffset;
+      let targetDiff = adTop1Diff;
+      for (let i = adRankOffset; i < sortedCompetitors.length; i++) {
         const comp = sortedCompetitors[i];
         const marginPct = minSellPrice > 0 ? ((Number(comp.price) - minSellPrice) / minSellPrice) * 100 : 999;
         if (marginPct >= adSafeMarginPct) {
-          const testPrice = Number(comp.price) - adTop1Diff;
+          const diff = matchDiff(comp);
+          const testPrice = Number(comp.price) - diff;
           if (testPrice > safeFloor) {
             targetCompetitor = comp;
             targetIndex = i;
+            targetDiff = diff;
             break;
           }
         }
       }
 
-      // Fallback: closest above current price (respetando safeFloor)
+      // Fallback: closest above current price (respetando safeFloor) --
+      // mismo salto de adRankOffset para no perder el criterio de top2/top3
+      // en este camino tampoco.
       if (!targetCompetitor && sortedCompetitors.length > 0) {
-        for (let i = 0; i < sortedCompetitors.length; i++) {
+        for (let i = adRankOffset; i < sortedCompetitors.length; i++) {
           const comp = sortedCompetitors[i];
           if (currentPrice > 0 && Number(comp.price) > currentPrice) {
-            const testPrice = Number(comp.price) - adTop1Diff;
+            const diff = matchDiff(comp);
+            const testPrice = Number(comp.price) - diff;
             if (testPrice > safeFloor) {
               targetCompetitor = comp;
               targetIndex = i;
+              targetDiff = diff;
               await log( "warn", "bybit", `Ad ${adId}: sin margen/piso, usando más cercano sobre precio: ${Number(targetCompetitor.price).toFixed(2)}`);
               break;
             }
@@ -2374,10 +2447,10 @@ async function runBybitCycle(
         }
       }
 
-      let targetPrice = currentPrice;
+      targetPrice = currentPrice;
       if (targetCompetitor) {
         await log( "info", "bybit", `Ad ${adId}: target #${targetIndex + 1}: ${Number(targetCompetitor.price).toFixed(2)}`);
-        const targetRaw = Number(targetCompetitor.price) - adTop1Diff;
+        const targetRaw = Number(targetCompetitor.price) - targetDiff;
         if (targetRaw > safeFloor) {
           targetPrice = targetRaw;
         } else {
@@ -2388,6 +2461,8 @@ async function runBybitCycle(
       }
       // Nunca quedarse debajo del safeFloor
       if (targetPrice < safeFloor) { targetPrice = Math.max(currentPrice, safeFloor); }
+
+      } // fin del bloque "top1/top2/top3" (adStrategy !== "spread")
 
       // Rate limit protection solo tras rate-limit real (recreación), no en updates normales
       const lastUpdateKey = `bybit:${adId}`;

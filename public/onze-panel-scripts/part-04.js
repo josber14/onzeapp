@@ -1462,11 +1462,14 @@ function addP2PBotStyles(){
     var minCapital = a.botMinCompetitorCapital != null ? a.botMinCompetitorCapital : '';
     var competeTransAmount = a.botCompeteTransAmount != null ? a.botCompeteTransAmount : '';
     var payType = (a.botCompetePayTypes && a.botCompetePayTypes.length && a.botCompetePayTypes[0] === '__match_ad__') ? 'match' : 'all';
-    var top1Style = strategy === 'spread' ? 'display:none;' : '';
-    var spreadStyle = strategy === 'top1' ? 'display:none;' : '';
+    // "top2"/"top3" (sep 2026) usan el mismo campo "Diferencia top 1" que
+    // "top1" -- mismo criterio que botAdCfgStrategyChange más abajo.
+    var isTopNStrategy = strategy === 'top1' || strategy === 'top2' || strategy === 'top3';
+    var top1Style = isTopNStrategy ? '' : 'display:none;';
+    var spreadStyle = isTopNStrategy ? 'display:none;' : '';
     const cfgFields = [];
-    if (strategy !== 'spread') cfgFields.push('Top1Diff');
-    if (strategy !== 'top1') cfgFields.push('SpreadPct');
+    if (isTopNStrategy) cfgFields.push('Top1Diff'); else cfgFields.push('SpreadPct');
+    cfgFields.push('MatchAllowedMerchants');
     if (isBuy) {
       cfgFields.push('SafeMarginPct','CommissionPct','MinCompetitorCapital','CompeteTransAmount','CompetePayType','ExcludedMerchants','CycleInterval','MinAdPriceDiffPct');
     } else {
@@ -1524,8 +1527,11 @@ function addP2PBotStyles(){
           <label>Estrategia
             <select id="adCfg_${realId}_Strategy" onchange="botAdCfgStrategyChange(${realId},this.value);botSaveAdCfgField(${realId},'botStrategy',this.value)">
               <option value="top1" ${strategy==='top1'?'selected':''}>Top 1</option>
+              <option value="top2" ${strategy==='top2'?'selected':''}>Top 2</option>
+              <option value="top3" ${strategy==='top3'?'selected':''}>Top 3</option>
               <option value="spread" ${strategy==='spread'?'selected':''}>${isBuy?'Precio fijo':'Spread fijo'}</option>
             </select>
+            ${strategy==='top2'||strategy==='top3' ? `<span class="help-text">El anuncio deja a propósito ${strategy==='top2'?'1 competidor':'2 competidores'} más barato(s) -- no pelea por ser el más barato del mercado</span>` : ''}
           </label>
           <label id="adCfg_${realId}_Top1DiffLabel" style="${top1Style}">Diferencia top 1 (CLP)
             <span style="display:flex;align-items:center;gap:4px;"><input id="adCfg_${realId}_Top1Diff" type="number" step="0.01" value="${top1Diff}" placeholder="0.10" onchange="botSaveAdCfgField(${realId},'botTop1Diff',this.value)" style="flex:1;"><button class="btn small ghost" type="button" onclick="botSaveAdCfgBulk(${realId})" title="Guardar" style="font-size:12px;padding:1px 4px;">💾</button></span>
@@ -1587,6 +1593,13 @@ function addP2PBotStyles(){
               ${isBuy ? '' : `<button type="button" class="btn small ghost" onclick="window.botOpenExcludeMerchantsModal(${realId})" title="Elegir de la lista de comerciantes en el mercado ahora" style="flex:0 0 auto;padding:6px 10px;font-size:12px;white-space:nowrap;">Elegir</button>`}
             </span>
             <span class="help-text">Nunca se les sigue el precio a estos comerciantes</span>
+          </label></form>
+          <form autocomplete="off" style="display:contents"><label>Comerciantes con los que puedo igualar precio
+            <span style="display:flex;align-items:center;gap:4px;">
+              <input id="adCfg_${realId}_MatchAllowedMerchants" type="text" value="${escHtml(Array.isArray(a.botMatchAllowedMerchants) ? a.botMatchAllowedMerchants.join(', ') : '')}" placeholder="Ninguno" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botMatchAllowedMerchants',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}" style="flex:1;min-width:0;">
+              ${isBuy ? '' : `<button type="button" class="btn small ghost" onclick="window.botOpenExcludeMerchantsModal(${realId},'match')" title="Elegir de la lista de comerciantes en el mercado ahora" style="flex:0 0 auto;padding:6px 10px;font-size:12px;white-space:nowrap;">Elegir</button>`}
+            </span>
+            <span class="help-text">Con estos comerciantes el anuncio puede quedar en el MISMO precio, sin necesidad de ir más barato</span>
           </label></form>
           <label>Intervalo ciclo (seg)
             <input id="adCfg_${realId}_CycleInterval" type="number" step="1" min="1" value="${a.botCycleInterval != null ? a.botCycleInterval : ''}" placeholder="10" autocomplete="off" onblur="botSaveAdCfgField(${realId},'botCycleInterval',this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
@@ -1650,8 +1663,12 @@ function addP2PBotStyles(){
   window.botAdCfgStrategyChange = function(realId, value){
     var t = document.getElementById("adCfg_" + realId + "_Top1DiffLabel");
     var s = document.getElementById("adCfg_" + realId + "_SpreadPctLabel");
-    if(t) t.style.display = value === 'spread' ? 'none' : '';
-    if(s) s.style.display = value === 'top1' ? 'none' : '';
+    // "top2"/"top3" (sep 2026) usan el mismo campo "Diferencia top 1" que
+    // "top1" -- antes esta condición solo miraba 'top1' exacto, así que
+    // top2/top3 mostraban SpreadPct (equivocado) en vez de la diferencia.
+    var isTopN = value === 'top1' || value === 'top2' || value === 'top3';
+    if(t) t.style.display = isTopN ? '' : 'none';
+    if(s) s.style.display = isTopN ? 'none' : '';
     if(value === 'spread') window.botAdUpdateSpreadPriceField(realId);
   };
 
@@ -1798,9 +1815,10 @@ function addP2PBotStyles(){
     if (adId) body.adId = adId;
     if(field === 'botCompetePayTypes'){
       body[field] = value === 'match' ? ['__match_ad__'] : ['all'];
-    } else if(field === 'botExcludedMerchants'){
+    } else if(field === 'botExcludedMerchants' || field === 'botMatchAllowedMerchants'){
       // Nicknames de Binance separados por coma -- guardado como lista,
-      // vacío = sin exclusiones (comportamiento normal de siempre).
+      // vacío = sin exclusiones/sin permisos de empate (comportamiento
+      // normal de siempre).
       var excludedList = String(value || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
       body[field] = excludedList.length ? excludedList : null;
     } else {
@@ -1835,8 +1853,19 @@ function addP2PBotStyles(){
   // foto de los competidores en cada ciclo del bot) -- no crea ningún
   // endpoint nuevo. Solo llena el mismo input de texto de siempre y dispara
   // el mismo guardado (botSaveAdCfgField) -- cero cambios en cómo se guarda.
-  window.botOpenExcludeMerchantsModal = async function(realId){
-    var input = document.getElementById("adCfg_" + realId + "_ExcludedMerchants");
+  // mode "exclude" (default, comportamiento de siempre) o "match" (sep
+  // 2026, pedido explícito del usuario: el mismo picker para elegir con
+  // quién el anuncio puede EMPATAR precio, no solo a quién excluir).
+  window.botOpenExcludeMerchantsModal = async function(realId, mode){
+    mode = mode === 'match' ? 'match' : 'exclude';
+    var fieldSuffix = mode === 'match' ? 'MatchAllowedMerchants' : 'ExcludedMerchants';
+    var fieldName = mode === 'match' ? 'botMatchAllowedMerchants' : 'botExcludedMerchants';
+    var modalId = mode === 'match' ? 'botMatchAllowedMerchantsModal' : 'botExcludeMerchantsModal';
+    var listId = mode === 'match' ? 'botMatchAllowedMerchantsList' : 'botExcludeMerchantsList';
+    var titleText = mode === 'match' ? 'Comerciantes con los que puedo igualar precio' : 'Excluir comerciantes';
+    var introText = mode === 'match' ? 'Marca con quién el anuncio puede quedar en el mismo precio, sin restarle la diferencia.' : 'Marca a quién NO seguirle el precio.';
+
+    var input = document.getElementById("adCfg_" + realId + "_" + fieldSuffix);
     var current = new Set(
       (input ? input.value : "").split(",").map(function(s){ return s.trim(); }).filter(Boolean)
     );
@@ -1851,28 +1880,28 @@ function addP2PBotStyles(){
     try{ adPayMethods = JSON.parse((container && container.getAttribute('data-ad-paymethods')) || '[]'); }catch(e){}
     var adPayMethodsLower = adPayMethods.map(function(p){ return String(p).trim().toLowerCase(); });
 
-    var backdrop = document.getElementById("botExcludeMerchantsModal");
+    var backdrop = document.getElementById(modalId);
     if(backdrop) backdrop.remove();
     backdrop = document.createElement("div");
-    backdrop.id = "botExcludeMerchantsModal";
+    backdrop.id = modalId;
     backdrop.style.cssText = "position:fixed;inset:0;z-index:1000002;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;background:rgba(2,6,23,.72);backdrop-filter:blur(10px);";
     backdrop.addEventListener("mousedown", function(e){ if(e.target === backdrop) backdrop.remove(); });
 
     backdrop.innerHTML = '<div style="width:min(440px,100%);border:1px solid rgba(148,163,184,.18);background:linear-gradient(180deg,rgba(15,23,42,.98),rgba(2,6,23,.98));border-radius:16px;padding:20px;position:relative;">'
-      + '<button type="button" onclick="document.getElementById(\'botExcludeMerchantsModal\').remove()" style="position:absolute;top:14px;right:14px;width:26px;height:26px;border-radius:8px;border:1px solid rgba(148,163,184,.2);background:rgba(148,163,184,.1);color:#cbd5e1;cursor:pointer;font-size:15px;line-height:1;">✕</button>'
-      + '<h3 style="color:#f8fafc;margin-bottom:4px;padding-right:30px;font-size:16px;">Excluir comerciantes</h3>'
-      + '<p style="color:#8aa0ba;font-size:12px;margin-bottom:14px;">Marca a quién NO seguirle el precio. Lista tomada del último ciclo del bot' + (adPayType === 'match' ? ' — filtrada al mismo método de pago de este anuncio' : ' — mercado completo') + '.</p>'
-      + '<div id="botExcludeMerchantsList" style="max-height:50vh;overflow-y:auto;display:flex;flex-direction:column;gap:2px;">Cargando comerciantes…</div>'
+      + '<button type="button" onclick="document.getElementById(\'' + modalId + '\').remove()" style="position:absolute;top:14px;right:14px;width:26px;height:26px;border-radius:8px;border:1px solid rgba(148,163,184,.2);background:rgba(148,163,184,.1);color:#cbd5e1;cursor:pointer;font-size:15px;line-height:1;">✕</button>'
+      + '<h3 style="color:#f8fafc;margin-bottom:4px;padding-right:30px;font-size:16px;">' + titleText + '</h3>'
+      + '<p style="color:#8aa0ba;font-size:12px;margin-bottom:14px;">' + introText + ' Lista tomada del último ciclo del bot' + (adPayType === 'match' ? ' — filtrada al mismo método de pago de este anuncio' : ' — mercado completo') + '.</p>'
+      + '<div id="' + listId + '" style="max-height:50vh;overflow-y:auto;display:flex;flex-direction:column;gap:2px;">Cargando comerciantes…</div>'
       + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">'
-      + '<button type="button" class="btn secondary" onclick="document.getElementById(\'botExcludeMerchantsModal\').remove()">Cancelar</button>'
-      + '<button type="button" class="btn" id="botExcludeMerchantsSaveBtn" onclick="window.botSaveExcludedMerchantsFromModal(' + realId + ')">Guardar</button>'
+      + '<button type="button" class="btn secondary" onclick="document.getElementById(\'' + modalId + '\').remove()">Cancelar</button>'
+      + '<button type="button" class="btn" onclick="window.botSaveExcludedMerchantsFromModal(' + realId + ',\'' + mode + '\')">Guardar</button>'
       + '</div></div>';
     document.body.appendChild(backdrop);
 
     try{
       var res = await fetch("/api/p2p/bot/market?type=latest&exchange=" + encodeURIComponent(botSelectedExchange) + "&label=" + encodeURIComponent(botActiveLabel || "ONZE") + "&limit=60&live=true", { credentials: "include" });
       var data = await res.json();
-      var listEl = document.getElementById("botExcludeMerchantsList");
+      var listEl = document.getElementById(listId);
       if(!listEl) return;
       if(!data.ok){
         listEl.innerHTML = '<div style="padding:16px;text-align:center;color:#fb7185;font-size:13px;">Error trayendo el mercado: ' + escHtml(data.error || 'desconocido') + '</div>';
@@ -1894,7 +1923,7 @@ function addP2PBotStyles(){
           return cmpValues.some(function(v){ return adPayMethodsLower.indexOf(v) !== -1; });
         });
       }
-      // Por si algún nickname que ya estaba excluido ya no aparece en el mercado ahora mismo -- lo mostramos igual, marcado, al final.
+      // Por si algún nickname que ya estaba marcado ya no aparece en el mercado ahora mismo -- lo mostramos igual, marcado, al final.
       var seenNick = new Set(ranked.map(function(c){ return c.nickName; }));
       var extra = Array.from(current).filter(function(n){ return !seenNick.has(n); }).map(function(n){ return { nickName: n, price: null, available: null }; });
       var all = ranked.concat(extra);
@@ -1916,19 +1945,23 @@ function addP2PBotStyles(){
           + '</label>';
       }).join("");
     }catch(e){
-      var listEl2 = document.getElementById("botExcludeMerchantsList");
+      var listEl2 = document.getElementById(listId);
       if(listEl2) listEl2.innerHTML = '<div style="padding:16px;text-align:center;color:#fb7185;font-size:13px;">Error cargando la lista: ' + escHtml(e.message || "") + '</div>';
     }
   };
 
-  window.botSaveExcludedMerchantsFromModal = function(realId){
-    var modal = document.getElementById("botExcludeMerchantsModal");
+  window.botSaveExcludedMerchantsFromModal = function(realId, mode){
+    mode = mode === 'match' ? 'match' : 'exclude';
+    var fieldSuffix = mode === 'match' ? 'MatchAllowedMerchants' : 'ExcludedMerchants';
+    var fieldName = mode === 'match' ? 'botMatchAllowedMerchants' : 'botExcludedMerchants';
+    var modalId = mode === 'match' ? 'botMatchAllowedMerchantsModal' : 'botExcludeMerchantsModal';
+    var modal = document.getElementById(modalId);
     if(!modal) return;
     var checked = Array.from(modal.querySelectorAll('input[type="checkbox"]:checked')).map(function(el){ return el.value; }).filter(Boolean);
-    var input = document.getElementById("adCfg_" + realId + "_ExcludedMerchants");
+    var input = document.getElementById("adCfg_" + realId + "_" + fieldSuffix);
     if(input){
       input.value = checked.join(", ");
-      botSaveAdCfgField(realId, "botExcludedMerchants", input.value);
+      botSaveAdCfgField(realId, fieldName, input.value);
     }
     modal.remove();
   };
