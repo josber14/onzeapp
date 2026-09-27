@@ -6217,7 +6217,7 @@ function addP2PBotStyles(){
       </div>
       <div style="margin-bottom:16px;">
         <div style="font-weight:700;color:#cbd5e1;margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:.3px;">Órdenes del ciclo</div>
-        <div id="botCycleOrdersList" style="max-height:220px;overflow-y:auto;">
+        <div id="botCycleDetailOrdersList" style="max-height:220px;overflow-y:auto;">
           <p style="color:#64748b;font-size:12px;">Cargando órdenes...</p>
         </div>
       </div>
@@ -6232,6 +6232,15 @@ function addP2PBotStyles(){
     // en vivo pidiéndolas a este endpoint nuevo, igual que ya se hace para
     // el ciclo activo. Se carga aparte (no bloquea la apertura del modal)
     // porque puede tardar unos segundos en paginar el historial de Binance.
+    //
+    // Bug real (sep 2026): este bloque de detalle usaba el mismo id
+    // "botCycleOrdersList" que ya existe en la vista del ciclo ACTIVO
+    // (siempre presente en el fondo de la página). getElementById devuelve
+    // el PRIMERO en orden del documento -- como ese otro está antes en la
+    // página, el fetch de acá actualizaba el elemento equivocado y este
+    // modal se quedaba pegado en "Cargando órdenes..." para siempre. Se
+    // renombró el id del modal a "botCycleDetailOrdersList" (único) para
+    // que ya no choque.
     try {
       // Timeout de seguridad -- caso real (ago 2026): sin esto, si la
       // petición se demoraba de más (navegador ocupado con el polling del
@@ -6246,7 +6255,7 @@ function addP2PBotStyles(){
         clearTimeout(timeoutId);
       }
       const ordersData = await ordersRes.json();
-      const listEl = document.getElementById("botCycleOrdersList");
+      const listEl = document.getElementById("botCycleDetailOrdersList");
       if (!listEl) return; // el usuario ya cerró el modal
       if (!ordersData?.ok) {
         listEl.innerHTML = `<p style="color:#f87171;font-size:12px;">No se pudo cargar la lista de órdenes.</p>`;
@@ -6269,7 +6278,7 @@ function addP2PBotStyles(){
           </div>
         </div>`).join("");
     } catch (e) {
-      const listEl = document.getElementById("botCycleOrdersList");
+      const listEl = document.getElementById("botCycleDetailOrdersList");
       if (listEl) listEl.innerHTML = `<p style="color:#f87171;font-size:12px;">No se pudo cargar la lista de órdenes.</p>`;
     }
   };
