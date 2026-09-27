@@ -852,25 +852,6 @@ function addP2PBotStyles(){
                   <div class="bot-cycle-tile-value" id="botCycleMinClose" style="font-size:13px;">—</div>
                 </div>
               </div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px;">
-                <div class="bot-cycle-tile" style="border-color:rgba(52,211,153,.25);">
-                  <div class="bot-cycle-tile-label">Ganancia estimada</div>
-                  <div class="bot-cycle-tile-value" id="botCycleProfit" style="color:#34d399;font-size:13px;">—</div>
-                </div>
-                <div class="bot-cycle-tile">
-                  <div class="bot-cycle-tile-label">Cambios de precio</div>
-                  <div class="bot-cycle-tile-value" id="botCycleProdUpdates" style="font-size:13px;">—</div>
-                </div>
-                <div class="bot-cycle-tile">
-                  <div class="bot-cycle-tile-label">Cambios / hora</div>
-                  <div class="bot-cycle-tile-value" id="botCycleProdRate" style="font-size:13px;">—</div>
-                </div>
-                <div class="bot-cycle-tile">
-                  <div class="bot-cycle-tile-label">Promedio por orden</div>
-                  <div class="bot-cycle-tile-value" id="botCycleAvgOrder" style="font-size:13px;">—</div>
-                </div>
-              </div>
-              <p id="botCycleProfitHint" style="margin-top:6px;font-size:10px;color:#64748b;"></p>
               <div style="margin-top:10px;">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
                   <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.3px;">Órdenes de este ciclo</div>
@@ -5826,32 +5807,6 @@ function addP2PBotStyles(){
         document.getElementById("botCycleTotalClp").textContent = "$" + Math.round(totalClpNum).toLocaleString();
         document.getElementById("botCycleMinClose").textContent = cycle.minCloseBalance ? Number(cycle.minCloseBalance).toFixed(2) + " USDT" : "—";
         window.__botCycleActiveMinClose = cycle.minCloseBalance ? Number(cycle.minCloseBalance) : 0;
-
-        // Ganancia estimada (viene calculada del servidor con el costo de la
-        // capacity activa AHORA -- se marca como estimado, no contabilidad exacta).
-        const profitEl = document.getElementById("botCycleProfit");
-        const profitHintEl = document.getElementById("botCycleProfitHint");
-        if(data.profitEstimate != null){
-          const p = Number(data.profitEstimate);
-          const pUsdt = Number(data.profitEstimateUsdt || 0);
-          const sign = p >= 0 ? "+" : "-";
-          profitEl.innerHTML = sign + "$" + Math.round(Math.abs(p)).toLocaleString() +
-            "<span style='font-size:10px;font-weight:600;color:#94a3b8;margin-left:4px;'>(" + sign + Math.abs(pUsdt).toFixed(2) + " USDT)</span>";
-          profitEl.style.color = p >= 0 ? "#34d399" : "#fb7185";
-          if(profitHintEl) profitHintEl.textContent = "Estimado con costo actual ($" + Number(data.costPriceUsed).toFixed(2) + "/USDT) -- no es contabilidad exacta por capacity";
-        }else{
-          profitEl.textContent = "—";
-          if(profitHintEl) profitHintEl.textContent = "Sin capacity activa para estimar costo";
-        }
-
-        // Producción del bot
-        const prod = data.production;
-        document.getElementById("botCycleProdUpdates").textContent = prod ? prod.priceUpdates : "—";
-        document.getElementById("botCycleProdRate").textContent = prod ? prod.priceUpdatesPerHour.toFixed(1) : "—";
-        const orderCountForAvg = Number(cycle.totalUsdt || 0) > 0 ? (data.orders || []).length : 0;
-        document.getElementById("botCycleAvgOrder").textContent = orderCountForAvg > 0
-          ? "$" + Math.round(totalClpNum / orderCountForAvg).toLocaleString()
-          : "—";
 
         // Chip de "ventas apartadas" (botón "Sacar del ciclo", ago 2026)
         const setAsideChipEl = document.getElementById("botCycleSetAsideChip");
