@@ -839,7 +839,7 @@ function addP2PBotStyles(){
                   <div class="bot-cycle-tile-label" id="botCycleClpLabel">CLP Binance</div>
                   <div class="bot-cycle-tile-value" id="botCycleBinanceClp">0</div>
                 </div>
-                <div class="bot-cycle-tile">
+                <div class="bot-cycle-tile" id="botCycleManualClpTile">
                   <div class="bot-cycle-tile-label">CLP manual</div>
                   <div class="bot-cycle-tile-value" id="botCycleManualClp">0</div>
                 </div>
@@ -5733,6 +5733,11 @@ function addP2PBotStyles(){
     if(titleEl) titleEl.textContent = window.botCycleSideFilter === "BUY" ? "🔄 Ciclo de Compra" : "🔄 Ciclo de Ventas";
     const usdtLabelEl = document.getElementById("botCycleUsdtLabel");
     if(usdtLabelEl) usdtLabelEl.textContent = window.botCycleSideFilter === "BUY" ? "USDT comprados" : "USDT vendidos";
+    // "CLP manual" / "+ Venta Manual" no aplican al Ciclo de Compra (pedido
+    // explícito del usuario, sep 2026) -- se ocultan solo para esa vista, sin
+    // tocar nada del lado Venta.
+    const manualTileEl = document.getElementById("botCycleManualClpTile");
+    if(manualTileEl) manualTileEl.style.display = (window.botCycleSideFilter === "BUY") ? "none" : "";
     botCycleRefresh();
   };
 
@@ -5785,7 +5790,10 @@ function addP2PBotStyles(){
       const emptyHint = document.getElementById("botCycleEmptyHint");
       if(cycle){
         startBtn.style.display = "none";
-        addBtn.style.display = "";
+        // "+ Venta Manual" no aplica al Ciclo de Compra (pedido explícito
+        // del usuario, sep 2026) -- no tiene sentido registrar una "venta"
+        // manual sobre un anuncio que compra, no vende.
+        addBtn.style.display = requestedSide === "BUY" ? "none" : "";
         closeBtn.style.display = "";
         info.style.display = "block";
         if(emptyHint) emptyHint.style.display = "none";
@@ -5797,6 +5805,8 @@ function addP2PBotStyles(){
         labelEl.style.color = "#00ff88";
         const clpLabelEl = document.getElementById("botCycleClpLabel");
         if(clpLabelEl) clpLabelEl.textContent = requestedSide === "BUY" ? "CLP gastado" : "CLP " + (botSelectedExchange || "binance").charAt(0).toUpperCase() + (botSelectedExchange || "binance").slice(1);
+        const manualTileEl2 = document.getElementById("botCycleManualClpTile");
+        if(manualTileEl2) manualTileEl2.style.display = requestedSide === "BUY" ? "none" : "";
         const usdtLabelEl2 = document.getElementById("botCycleUsdtLabel");
         if(usdtLabelEl2) usdtLabelEl2.textContent = requestedSide === "BUY" ? "USDT comprados" : "USDT vendidos";
         document.getElementById("botCycleStartTime").textContent = new Date(cycle.startTime).toLocaleString();
@@ -5805,7 +5815,9 @@ function addP2PBotStyles(){
         document.getElementById("botCycleManualClp").textContent = "$" + Math.round(Number(cycle.totalManualClp || 0)).toLocaleString();
         const totalClpNum = Number(cycle.totalBinanceClp || 0) + Number(cycle.totalManualClp || 0);
         document.getElementById("botCycleTotalClp").textContent = "$" + Math.round(totalClpNum).toLocaleString();
-        document.getElementById("botCycleMinClose").textContent = cycle.minCloseBalance ? Number(cycle.minCloseBalance).toFixed(2) + " USDT" : "—";
+        document.getElementById("botCycleMinClose").textContent = cycle.minCloseBalance
+          ? (requestedSide === "BUY" ? "$" + Math.round(Number(cycle.minCloseBalance)).toLocaleString() + " CLP" : Number(cycle.minCloseBalance).toFixed(2) + " USDT")
+          : "—";
         window.__botCycleActiveMinClose = cycle.minCloseBalance ? Number(cycle.minCloseBalance) : 0;
 
         // Chip de "ventas apartadas" (botón "Sacar del ciclo", ago 2026)
@@ -5902,15 +5914,25 @@ function addP2PBotStyles(){
   window.botCycleStart = function(){
     const lbl = botActiveLabel || "ONZE";
     const cuentaTag = botSelectedExchange === "binance" ? lbl : botSelectedExchange.toUpperCase();
-    const modalTitle = window.botCycleSideFilter === "BUY" ? "▶ Iniciar ciclo de compra" : "▶ Iniciar ciclo de ventas";
+    const isBuy = window.botCycleSideFilter === "BUY";
+    const modalTitle = isBuy ? "▶ Iniciar ciclo de compra" : "▶ Iniciar ciclo de ventas";
+    // Para Compra, el auto-cierre es un límite de CLP GASTADO en el ciclo (ej.
+    // un cupo diario de banco) -- al llegar ahí, el ciclo se cierra Y el
+    // anuncio de Compra se apaga y se oculta en Binance (pedido explícito del
+    // usuario, sep 2026). Para Venta sigue siendo el saldo mínimo en USDT,
+    // sin ningún cambio de comportamiento.
+    const minLabel = isBuy ? "Monto CLP para auto-cierre" : "Monto mínimo USDT para auto-cierre";
+    const minHint = isBuy
+      ? "Cuando el CLP gastado en este ciclo llegue a este monto, el ciclo se cierra solo y el anuncio de Compra se apaga y se oculta en Binance. Deja 0 para no autocerrar."
+      : "Cuando el saldo del bot baje a este nivel, el ciclo se cerrará solo. Deja 0 para cerrarlo solo al llegar a 0.";
     botCycleModalShell("botCycleStartModal", modalTitle, `
       <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
         Cuenta: <strong style="color:#fff;">${escHtml(cuentaTag)}</strong><br>
         Se contarán las ventas P2P y manuales desde este momento hasta que cierres el ciclo.
       </p>
-      <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">Monto mínimo USDT para auto-cierre</label>
-      <p style="color:#64748b;font-size:11px;margin-bottom:8px;">Cuando el saldo del bot baje a este nivel, el ciclo se cerrará solo. Deja 0 para cerrarlo solo al llegar a 0.</p>
-      <input id="botCycleStartMinInput" type="text" inputmode="decimal" value="90"
+      <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">${minLabel}</label>
+      <p style="color:#64748b;font-size:11px;margin-bottom:8px;">${minHint}</p>
+      <input id="botCycleStartMinInput" type="text" inputmode="decimal" value="${isBuy ? "" : "90"}" placeholder="${isBuy ? "Ej: 8000000" : ""}"
         style="width:100%;box-sizing:border-box;padding:10px;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#fff;margin-bottom:8px;">
       <p id="botCycleStartErr" style="color:#fca5a5;font-size:12px;margin-bottom:8px;display:none;"></p>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
@@ -5951,11 +5973,16 @@ function addP2PBotStyles(){
   // una con su propio ciclo aislado por tenant.
   window.botCycleEditMinClose = function(){
     const current = Number(window.__botCycleActiveMinClose || 0);
+    const isBuy = window.botCycleSideFilter === "BUY";
+    const minLabel = isBuy ? "Monto CLP para auto-cierre" : "Monto mínimo USDT para auto-cierre";
+    const minHint = isBuy
+      ? "Cuando el CLP gastado en este ciclo llegue a este monto, el ciclo se cierra solo y el anuncio de Compra se apaga y se oculta en Binance."
+      : "Cuando el saldo del bot baje a este nivel, el ciclo se cerrará solo.";
     botCycleModalShell("botCycleEditMinCloseModal", "✏️ Editar auto-cierre", `
       <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
-        Cuando el saldo del bot baje a este nivel, el ciclo se cerrará solo.
+        ${minHint}
       </p>
-      <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">Monto mínimo USDT para auto-cierre</label>
+      <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">${minLabel}</label>
       <input id="botCycleEditMinInput" type="text" inputmode="decimal" value="${current}"
         style="width:100%;box-sizing:border-box;padding:10px;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#fff;margin-bottom:8px;">
       <p id="botCycleEditMinErr" style="color:#fca5a5;font-size:12px;margin-bottom:8px;display:none;"></p>

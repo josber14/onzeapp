@@ -71,6 +71,17 @@ const MIN_CYCLE_GAP_MS = 300;
 const lastOrderSyncOnlyAt = new Map<string, number>();
 const ORDER_SYNC_ONLY_GAP_MS = 10000;
 
+// Freno para el chequeo de auto-cierre del Ciclo de Compra por CLP gastado
+// (autoCloseCycle, rama side==="BUY"): a diferencia de Venta (que solo lee un
+// saldo en vivo, barato), Compra necesita paginar el historial real de
+// órdenes para saber cuánto CLP lleva gastado el ciclo -- si esto corriera en
+// cada vuelta del motor (cada ~1s con el panel abierto) repetiría esa consulta
+// sin necesidad, el mismo tipo de gasto de Vercel/Binance ya identificado y
+// corregido esta sesión para bank-quota y el cron de precio. Se limita a
+// 1 vez por minuto por cuenta -- de sobra para un límite diario en CLP.
+const lastBuyAutoCloseCheckAt = new Map<string, number>();
+const BUY_AUTO_CLOSE_CHECK_GAP_MS = 60_000;
+
 // Captura del lado de compra (side="0") para el Oráculo de mercado -- es
 // solo para el panel de análisis, no alimenta ninguna decisión de precio,
 // por eso se limita a 1 vez cada 30s (no cada ciclo) para no sumarle mas
@@ -1677,6 +1688,12 @@ async function runBinanceCycle(
     } catch (e: any) {
       await log( "warn", "binance", `Auto-close cycle check: ${e.message}`);
     }
+
+    try {
+      await autoCloseCycle(prisma, tenantId, label, client, log, "binance", "BUY", myAds);
+    } catch (e: any) {
+      await log( "warn", "binance", `Auto-close cycle Compra check: ${e.message}`);
+    }
   } catch (e: any) {
     await log( "error", "binance", `Error en ciclo: ${e.message}`);
   }
@@ -2812,12 +2829,83 @@ async function autoCloseCycle(
   client: any,
   log: (level: string, exchange: string | null, message: string) => Promise<void>,
   exchange: string = "binance",
-  side: string = "SELL"
+  side: string = "SELL",
+  myAds?: any[]
 ) {
   const cycle = await prisma.p2PCycle.findFirst({
     where: { tenantId, exchange, label, side, status: "active" },
   });
   if (!cycle) return;
+
+  // ── Ciclo de Compra: auto-cierre por CLP GASTADO, no por saldo USDT ──
+  // Regla de negocio confirmada explícitamente con el usuario (sep 2026):
+  // este método opera con un límite diario en CLP (ej. un cupo de banco) --
+  // al llegar al monto configurado en minCloseBalance (mismo campo que
+  // Venta, reinterpretado como CLP en vez de USDT -- ver el panel), el ciclo
+  // se cierra Y el anuncio de Compra se apaga (botEnabled=false) y se oculta
+  // en Binance (visible:0) para no seguir comprando el resto del día. Rama
+  // completamente separada de la lógica de Venta de abajo -- no la toca.
+  if (side === "BUY") {
+    const minCloseClp = cycle.minCloseBalance ? Number(cycle.minCloseBalance) : 0;
+    if (minCloseClp <= 0) return; // sin límite configurado, nunca autocierra
+
+    const throttleKey = `${tenantId}:${label}:${exchange}:BUY`;
+    const lastCheck = lastBuyAutoCloseCheckAt.get(throttleKey) || 0;
+    if (Date.now() - lastCheck < BUY_AUTO_CLOSE_CHECK_GAP_MS) return;
+    lastBuyAutoCloseCheckAt.set(throttleKey, Date.now());
+
+    const startMs = Number(cycle.startTime);
+    const endMs = Date.now();
+    const stats = exchange === "binance"
+      ? await computeCycleOrderStats(client, startMs, endMs, [], "BUY")
+      : await computeLocalCycleStats(prisma, tenantId, exchange, startMs, endMs, "BUY");
+    const { totalUsdt, totalBinanceClp, firstOrder, lastOrder, orders } = stats;
+
+    if (totalBinanceClp < minCloseClp) {
+      await log("debug", null, `Ciclo Compra ${cycle.id}: CLP gastado ${totalBinanceClp} / límite ${minCloseClp}`);
+      return;
+    }
+
+    await log("info", null, `Auto-cerrando ciclo de Compra ${cycle.id}: CLP gastado=${totalBinanceClp} alcanzó el límite de ${minCloseClp}`);
+
+    await prisma.p2PCycle.update({
+      where: { id: cycle.id },
+      data: {
+        status: "closed",
+        endTime: new Date(endMs),
+        totalUsdt,
+        totalBinanceClp,
+        totalManualClp: Number(cycle.totalManualClp),
+        firstOrderNumber: firstOrder?.orderNumber ?? null,
+        firstOrderClp: firstOrder ? Math.round(Number(firstOrder.totalPrice)) || 0 : null,
+        firstOrderTime: firstOrder ? new Date(Number(firstOrder.createTime)) : null,
+        lastOrderNumber: lastOrder?.orderNumber ?? null,
+        lastOrderClp: lastOrder ? Math.round(Number(lastOrder.totalPrice)) || 0 : null,
+        lastOrderTime: lastOrder ? new Date(Number(lastOrder.createTime)) : null,
+        ordersJson: mapCycleOrdersForDisplay(orders),
+      },
+    });
+
+    const ourBuyAds = (myAds || []).filter(
+      (a: any) => a.side === 0 && a.tokenId === "USDT" && a.currencyId === "CLP"
+    );
+    if (ourBuyAds.length > 0) {
+      const adIds = ourBuyAds.map((a: any) => String(a.id));
+      await prisma.p2PBotAd.updateMany({
+        where: { tenantId, label, exchange, adId: { in: adIds } },
+        data: { botEnabled: false },
+      });
+      for (const a of ourBuyAds) {
+        try {
+          await client.updateAd({ adId: a.id, visible: 0 });
+          await log("warn", exchange, `🔒 Ad Compra ${a.id}: apagado y ocultado — se alcanzó el límite diario de ${minCloseClp} CLP`);
+        } catch (e: any) {
+          await log("warn", exchange, `Ad Compra ${a.id}: no se pudo ocultar en Binance (${e.message}) -- igual quedó apagado de nuestro lado`);
+        }
+      }
+    }
+    return;
+  }
 
   const balanceRes = await client.getBalance("USDT");
   // Si la consulta de saldo falla o no trae el campo esperado, NO se puede
