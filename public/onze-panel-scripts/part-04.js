@@ -1301,9 +1301,14 @@ function addP2PBotStyles(){
       if(bybitSection) bybitSection.style.display = "none";
     }
 
-    // Show/hide exchange config section (hidden for Binance, visible for others like Bybit)
+    // Show/hide exchange config section -- oculta para Binance Y Bybit (sep
+    // 2026, pedido explícito del usuario): ambos ya tienen su propia
+    // configuración completa DENTRO de cada anuncio (ver botRenderAdPill),
+    // así que esta sección "default para todos los anuncios" quedaba
+    // duplicada y confusa. OKX sigue mostrándola (todavía no tiene panel de
+    // configuración por anuncio).
     const exchangeConfigSection = document.getElementById("botExchangeConfigSection");
-    if(exchangeConfigSection) exchangeConfigSection.style.display = exchange === "binance" ? "none" : "";
+    if(exchangeConfigSection) exchangeConfigSection.style.display = (exchange === "binance" || exchange === "bybit") ? "none" : "";
 
     // Show exchange config grid (circuit breaker, volume, interval)
     const exchangeConfigGrid = document.getElementById("botExchangeConfigGrid");
@@ -1409,42 +1414,15 @@ function addP2PBotStyles(){
         content.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:8px 0;">Sin anuncio de venta</div>';
         return;
       }
-      const botEnabled = a.botEnabled === true;
-    const isOnline = botEnabled && (a.status === 'online' || a.status === 'active' || a.isActive === true);
-      var pms = a.paymentMethods;
-      if(pms && typeof pms === 'string') pms = [pms];
-      var pmBadges = (pms && Array.isArray(pms)) ? pms.slice(0,3) : [];
-      var pmExtra = (pms && Array.isArray(pms) && pms.length > 3) ? '+' + (pms.length - 3) : '';
-      function pmName(pm){ return typeof pm === 'object' && pm !== null ? String(pm.name || pm.id || '') : String(pm); }
-      content.innerHTML = `
-        <div class="bot-ad-pill" data-ad-real-id="${a.id}" data-ad-adid="${a.adId||''}">
-          <div class="bot-ad-card-header">
-            <span class="sell-label">Vender</span>
-            <span style="flex:1;font-size:12px;font-weight:500;color:#94a3b8;">${a.asset||'USDT'} / ${a.fiat||'CLP'}</span>
-            <span class="status-badge${isOnline?'':' offline'}"><span class="dot"></span>${isOnline ? 'En línea' : 'Desconectado'}</span>
-            <span class="toggle-switch" onclick="event.stopPropagation();window.botToggleAdMain('${escHtml(String(a.id))}','${escHtml(a.adId||'')}',!${botEnabled})">
-              <input type="checkbox" ${botEnabled?'checked':''}>
-              <span class="slider"></span>
-            </span>
-            <button class="menu-btn" onclick="event.stopPropagation();window.botToggleAdMenu(${a.id},event);">⋯</button>
-            <div class="bot-ad-menu-dropdown" id="botAdMenu_${a.id}">
-              <button class="menu-item" onclick="event.stopPropagation();window.botSimpleEditAd(${a.id})">Editar anuncio</button>
-              <button class="menu-item danger" onclick="event.stopPropagation();window.botPanelDeleteAd(${a.id},'${escHtml(a.adId||'')}')">Borrar anuncio</button>
-            </div>
-          </div>
-          <div class="bot-ad-card-body" style="flex-direction:column;align-items:flex-start;gap:6px;">
-            <div class="bot-ad-card-price"><span id="botAdPrice_${a.id}">${fmt(a.price)}</span><span class="currency">CLP</span></div>
-            <div class="bot-ad-card-rows" style="padding:0;">
-              <div class="row"><span class="label">Balance</span><span class="value" id="botAdAmount_${a.id}">${fmtFlex(a.amount)} ${a.asset||'USDT'}</span></div>
-              <div class="row"><span class="label">Límite</span><span class="value" id="botAdLimits_${a.id}">$${fmtInt(a.minAmount||0)} – $${fmtInt(a.maxAmount||0)}</span></div>
-            </div>
-          </div>
-          <div class="bot-ad-card-methods">
-            ${pmBadges.map(function(pm){ return '<span class="pm-badge">'+fmtPayName(pmName(pm))+'</span>'; }).join('')}
-            ${pmExtra ? '<span class="pm-badge" style="background:rgba(148,163,184,.06);color:#64748b;border-color:rgba(148,163,184,.08);">'+escHtml(pmExtra)+'</span>' : ''}
-          </div>
-        </div>
-      `;
+      // Pedido explícito del usuario (sep 2026): que la configuración del
+      // anuncio de Bybit aparezca EN el mismo anuncio, igual que Binance --
+      // en vez de un template propio y más chico, se reusa botRenderAdPill
+      // (la misma tarjeta rica con Estrategia/Top1Diff/Precio fuente/Margen
+      // seguridad/Excluir comerciantes/etc.), que YA tenía casos especiales
+      // para Bybit (ej. esconder "Comisión" porque Bybit no cobra) pero
+      // nunca se había conectado acá -- Bybit siempre usó este template
+      // aparte, más simple, sin ningún panel de configuración.
+      content.innerHTML = botRenderAdPill(a, 0);
     }catch(e){
       content.innerHTML = '<div style="color:#fb7185;font-size:12px;text-align:center;padding:8px 0;">Error cargando anuncio</div>';
     }
@@ -3731,6 +3709,13 @@ function addP2PBotStyles(){
   }
 
    function fmtPayName(name){
+    if(!name) return "";
+    // Bybit devuelve cada método de pago como objeto {id, name} (ver
+    // app/api/p2p/bot/ads/route.ts) en vez de un string plano como Binance
+    // -- sin este desenvolvido, String(name) daba literalmente
+    // "[object Object]" en las etiquetas del anuncio de Bybit (sep 2026,
+    // confirmado en vivo).
+    if(typeof name === "object") name = name.name || name.id || "";
     if(!name) return "";
     var s = String(name)
       .replace(/_/g, " ")
