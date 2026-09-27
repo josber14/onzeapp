@@ -2294,6 +2294,17 @@ async function runBybitCycle(
       const adMinCapital = managedAd.botMinCompetitorCapital != null ? Number(managedAd.botMinCompetitorCapital) : exchangeMinCapital;
       const adPriceSource = managedAd.botPriceSource || exchangePriceSource;
       const adPriceFloorPct = managedAd.botPriceFloorPct != null ? Number(managedAd.botPriceFloorPct) : (exchangePriceFloorPct > 0 ? exchangePriceFloorPct : null);
+      // Bug real corregido (sep 2026, confirmado en vivo por el usuario: "ya
+      // seleccioné un comerciante y sigue compitiendo con él"): este ciclo
+      // nunca leía botExcludedMerchants -- el campo se guardaba bien desde
+      // el panel (mismo camino que Binance), pero acá nunca se aplicaba.
+      // Mismo criterio que runBinanceCycle: nickName normalizado a
+      // minúsculas sin espacios en los extremos.
+      const adExcludedMerchants = new Set(
+        ((managedAd.botExcludedMerchants as string[] | null) || [])
+          .map((n) => String(n).trim().toLowerCase())
+          .filter(Boolean)
+      );
 
       // Min sell price
       let minSellPrice = 0;
@@ -2312,6 +2323,7 @@ async function runBybitCycle(
           const cap = Number(c.lastQuantity ?? c.surplusAmount ?? c.tradableQuantity ?? c.quantity ?? 0);
           if (cap < adMinCapital) return false;
         }
+        if (adExcludedMerchants.size > 0 && adExcludedMerchants.has(String(c.nickName || "").trim().toLowerCase())) return false;
         return true;
       });
       if (competitors.length === 0) {
