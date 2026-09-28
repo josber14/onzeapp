@@ -3083,19 +3083,25 @@ function addP2PBotStyles(){
 
   function botPlayOrderSound(){
     // Dos notas ASCENDENTES (E6 -> A6) para "llegó una orden nueva".
+    // Ganancia subida de 0.28/0.24 a 0.9/0.85 (pedido explícito del
+    // usuario, sep 2026: "por más que tengo todo el volumen aun suena muy
+    // bajo, debe tener mayor potencia el sonido") -- el volumen del sistema
+    // no puede compensar una señal generada floja; 0.9 es el tope antes de
+    // arriesgar distorsión por clipping (1.0 = ganancia unitaria).
     botPlayTone([
-      { freq: 1318.5, start: 0, duration: 0.16, gain: 0.28 },
-      { freq: 1760, start: 0.13, duration: 0.22, gain: 0.24 },
+      { freq: 1318.5, start: 0, duration: 0.16, gain: 0.9 },
+      { freq: 1760, start: 0.13, duration: 0.22, gain: 0.85 },
     ]);
   }
 
   function botPlayPaidSound(){
     // Dos notas DESCENDENTES, más graves (B5 -> E5), tipo "confirmación" --
     // a propósito muy distinto al de "orden nueva" (que sube de tono) para
-    // poder diferenciarlos de oído sin mirar la pantalla.
+    // poder diferenciarlos de oído sin mirar la pantalla. Misma subida de
+    // volumen que botPlayOrderSound, mismo pedido.
     botPlayTone([
-      { freq: 987.8, start: 0, duration: 0.18, gain: 0.28 },
-      { freq: 659.3, start: 0.15, duration: 0.28, gain: 0.26 },
+      { freq: 987.8, start: 0, duration: 0.18, gain: 0.9 },
+      { freq: 659.3, start: 0.15, duration: 0.28, gain: 0.85 },
     ]);
   }
 

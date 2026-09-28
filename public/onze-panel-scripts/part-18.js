@@ -38,7 +38,9 @@
   }
 
   // Beep corto generado con Web Audio API -- sin depender de ningún archivo
-  // de sonido externo.
+  // de sonido externo. Ganancia subida de 0.15 a 0.7 (mismo pedido del
+  // usuario que en botPlayOrderSound/botPlayPaidSound, part-04.js: "por más
+  // que tengo todo el volumen aun suena muy bajo").
   function usdtNotifPlayBeep(){
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -47,7 +49,7 @@
       const gain = ctx.createGain();
       osc.type = 'sine';
       osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.setValueAtTime(0.7, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
       osc.connect(gain);
       gain.connect(ctx.destination);
