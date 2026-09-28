@@ -365,13 +365,33 @@ export async function PUT(req: NextRequest) {
     }
 
     // For Bybit: auto-delete old ad before creating new one
-    if (exchange === "bybit") {
+    //
+    // Bug real confirmado en vivo (sep 2026): el switch "BOT" de un anuncio
+    // manda `adId` (el id real de Bybit), NUNCA `id` (el id interno de
+    // nuestra base) -- ver botToggleAdMain en part-04.js. Esta rama solo
+    // reconocía `id` como evidencia de "este anuncio ya existe"; con `id`
+    // ausente, CUALQUIER toggle de bot caía en la rama de "crear anuncio
+    // nuevo", que primero BORRA todos los anuncios de Bybit existentes.
+    // Resultado real: tocar el interruptor "Bot" borraba el anuncio de
+    // Bybit del usuario. Arreglo: (1) esta llamada a la API de Bybit solo
+    // corre si el request realmente trae algún campo de contenido del
+    // anuncio para cambiar (precio/monto/límites/pagos/horario/status) --
+    // un toggle puro de bot no toca nada de esto, así que ya ni entra acá
+    // (igual que Binance, cuyo toggle tampoco llama a su API); (2) `adId`
+    // ahora cuenta igual que `id` como "este anuncio ya existe" y se
+    // prefiere como identificador real hacia Bybit (el id interno nuestro
+    // nunca es un id real de Bybit).
+    const isBybitContentUpdate =
+      price !== undefined || amount !== undefined || minAmount !== undefined ||
+      maxAmount !== undefined || paymentMethods !== undefined || payTime !== undefined ||
+      status !== undefined;
+    if (exchange === "bybit" && isBybitContentUpdate) {
       try {
         const client = await getBybitClient(session.tenantId);
         if (client) {
-          if (tradeType && id) {
+          if (tradeType && (id || adId)) {
             // Update existing ad on Bybit
-            const updateParams: any = { id: String(id) };
+            const updateParams: any = { id: String(adId || id) };
             if (price !== undefined) updateParams.price = String(price);
             if (amount !== undefined) updateParams.quantity = String(amount);
             if (minAmount !== undefined) updateParams.minAmount = String(minAmount);
@@ -380,7 +400,7 @@ export async function PUT(req: NextRequest) {
             if (payTime) updateParams.paymentPeriod = payTime;
             if (status) updateParams.status = status === "online" ? 10 : 20;
             await client.updateAd(updateParams);
-          } else if (!id) {
+          } else if (!id && !adId) {
             // Creating new ad: delete ALL existing Bybit ads first
             const existingAds = await prisma.p2PBotAd.findMany({
               where: { tenantId: session.tenantId, exchange: "bybit" },
