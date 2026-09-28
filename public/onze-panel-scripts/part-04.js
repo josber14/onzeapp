@@ -775,13 +775,18 @@ function addP2PBotStyles(){
               </div>
             </div>
           </div>
-          <div id="botBybitAdSection" class="bot-card" style="grid-column:1/-1;display:none;">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-              <span style="font-size:13px;font-weight:700;color:#e2e8f0;">Anuncio Bybit</span>
-              <span style="flex:1;"></span>
-              <button class="btn small ghost" type="button" onclick="window.botSyncNow()" style="font-size:10px;">↻</button>
+          <div id="botBybitAdSection" class="bot-card onze-ads-bg" style="grid-column:1/-1;display:none;">
+            <span class="onze-usdt-glyph" aria-hidden="true" style="top:6%; left:48%; transform:translateX(-50%); font-size:110px; color:rgba(0,212,255,.16); animation:none;"><span class="onze-usdt-glyph-inner" style="animation-delay:0s;">₮</span></span>
+            <span class="onze-usdt-glyph" aria-hidden="true" style="bottom:6%; left:57%; transform:translateX(-50%); font-size:70px; color:rgba(94,208,255,.15); animation:none;"><span class="onze-usdt-glyph-inner" style="animation-delay:2.6s;">$</span></span>
+            <span class="onze-usdt-glyph" aria-hidden="true" style="top:42%; left:42%; transform:translateX(-50%); font-size:60px; color:rgba(247,147,26,.17); animation:none;"><span class="onze-usdt-glyph-inner" style="animation-delay:4.4s;">₿</span></span>
+            <div class="onze-ads-content">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                <span style="font-size:13px;font-weight:700;color:#e2e8f0;">Anuncio Bybit</span>
+                <span style="flex:1;"></span>
+                <button class="btn small ghost" type="button" onclick="window.botSyncNow()" style="font-size:10px;">↻</button>
+              </div>
+              <div id="botBybitAdContent"></div>
             </div>
-            <div id="botBybitAdContent"></div>
           </div>
 
           <!-- Cycle de ventas P2P -->
