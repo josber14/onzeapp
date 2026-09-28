@@ -66,22 +66,6 @@
     return Number.isFinite(n) ? n : 0;
   }
 
-  function loadP2POwnCapital(){
-    try{
-      return JSON.parse(localStorage.getItem(OWN_CAPITAL_KEY) || "[]");
-    }catch(e){
-      return [];
-    }
-  }
-
-  function saveP2POwnCapital(items){
-    localStorage.setItem(OWN_CAPITAL_KEY, JSON.stringify(Array.isArray(items) ? items : []));
-  }
-
-  function getP2POwnCapitalTotalUsdt(){
-    return loadP2POwnCapital().reduce((sum, item)=> sum + Number(item.usdtAmount || 0), 0);
-  }
-
   // Cache en memoria sincronizada con la base de datos
   window.__p2pCapacityCache = (() => {
     try { return JSON.parse(localStorage.getItem(CAPACITY_KEY) || "[]"); } catch(e) { return []; }
@@ -862,7 +846,22 @@
       remainingCapacityUsdt: smartRemainingUsdt,
       smartReceivedUsdt,
       smartCoveredClp,
-      unassignedSaleUsdt: Math.max(unassignedSaleUsdt - getP2POwnCapitalTotalUsdt(), 0),
+      // Bug real reportado por el usuario (sep 2026): una venta nueva sin
+      // capacity (ej. una venta de Bybit real) no aparecía en el aviso
+      // "Ventas sin compra/capacity detectadas" pese a que el resumen
+      // diario SÍ la mostraba (arreglado por separado en
+      // getP2PRangeStatsFromCapacity) -- acá se restaba
+      // getP2POwnCapitalTotalUsdt(), un TOTAL agregado viejo guardado en
+      // localStorage de una versión anterior de "Marcar como capital
+      // propio" (antes de que ese botón empezara a excluir cada venta
+      // puntual por su orderNumber vía P2PCapitalMarkedSale en Neon, ver
+      // el bloque de lockedByOrder más arriba). Ese localStorage viejo
+      // nunca se limpiaba solo -- quedaba ahí neutralizando CUALQUIER
+      // venta nueva sin asignar mientras su total acumulado alcanzara,
+      // sin importar si esa venta específica ya se había resuelto o no.
+      // La exclusión correcta (por orden puntual) ya pasa antes, en el
+      // loop de arriba -- esta resta ya no hace falta.
+      unassignedSaleUsdt,
       unassignedSaleClp,
       unassignedCommissionUsdt,
       unassignedSaleDetail
