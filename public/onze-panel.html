@@ -363,6 +363,18 @@
       user-select:none;
       animation:onzeGlyphFloat 9s ease-in-out infinite;
     }
+    /* Para símbolos centrados con transform:translateX(-50%) en el propio
+       .onze-usdt-glyph (ver Anuncios en part-04.js): ese transform de
+       centrado y el del float (@keyframes onzeGlyphFloat) no pueden
+       convivir en el mismo elemento -- una animación de CSS reemplaza el
+       transform entero en cada frame, no lo combina con uno inline. El
+       símbolo centrado apaga su propia animación (animation:none inline)
+       y delega el float a este span interno, que solo se mueve a sí
+       mismo sin tocar el transform:translateX del padre. */
+    .onze-usdt-glyph-inner{
+      display:inline-block;
+      animation:onzeGlyphFloat 9s ease-in-out infinite;
+    }
     /* Cada símbolo trae su posición/tamaño/color/delay inline (11
        instancias distintas, pedido explícito del usuario: "necesito que
        existan más de esos atrás moviéndose") -- con tantas variantes
@@ -520,7 +532,7 @@
     .quick-card-icon svg{ width:22px; height:22px; }
 
     @media (prefers-reduced-motion: reduce){
-      .quick-card, .onze-badge .dot, .onze-usdt-glyph,
+      .quick-card, .onze-badge .dot, .onze-usdt-glyph, .onze-usdt-glyph-inner,
       .onze-brand-word, .onze-flow-connector:after{ animation:none !important; }
     }
 

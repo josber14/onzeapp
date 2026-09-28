@@ -741,9 +741,15 @@ function addP2PBotStyles(){
 
           <!-- Anuncios (second) -->
           <div id="botAdsSection" class="bot-card onze-ads-bg" style="grid-column:1/-1;">
-            <span class="onze-usdt-glyph" aria-hidden="true" style="top:6%; right:4%; font-size:110px; color:rgba(0,212,255,.16); animation-delay:0s;">₮</span>
-            <span class="onze-usdt-glyph" aria-hidden="true" style="bottom:8%; left:4%; font-size:70px; color:rgba(94,208,255,.15); animation-delay:2.6s;">$</span>
-            <span class="onze-usdt-glyph" aria-hidden="true" style="top:42%; right:1%; font-size:60px; color:rgba(247,147,26,.17); animation-delay:4.4s;">₿</span>
+            <!-- Centrados en el medio de la sección (pedido explícito del
+                 usuario, sep 2026: "que todos los simbolos entren como en
+                 el medio") -- necesitan un span exterior aparte para el
+                 transform:translateX(-50%) de centrado, porque el float
+                 (@keyframes onzeGlyphFloat) también anima "transform" y
+                 lo hubiera pisado si fuera el mismo elemento. -->
+            <span class="onze-usdt-glyph" aria-hidden="true" style="top:6%; left:48%; transform:translateX(-50%); font-size:110px; color:rgba(0,212,255,.16); animation:none;"><span class="onze-usdt-glyph-inner" style="animation-delay:0s;">₮</span></span>
+            <span class="onze-usdt-glyph" aria-hidden="true" style="bottom:6%; left:57%; transform:translateX(-50%); font-size:70px; color:rgba(94,208,255,.15); animation:none;"><span class="onze-usdt-glyph-inner" style="animation-delay:2.6s;">$</span></span>
+            <span class="onze-usdt-glyph" aria-hidden="true" style="top:42%; left:42%; transform:translateX(-50%); font-size:60px; color:rgba(247,147,26,.17); animation:none;"><span class="onze-usdt-glyph-inner" style="animation-delay:4.4s;">₿</span></span>
             <div class="onze-ads-content">
               <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
                 <span style="font-size:14px;font-weight:800;color:#f1f5f9;letter-spacing:.2px;">Anuncios</span>
