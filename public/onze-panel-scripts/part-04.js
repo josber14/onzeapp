@@ -355,7 +355,9 @@ function addP2PBotStyles(){
     .bot-payment-methods .pm-chip .remove{color:#fb7185;font-size:13px;line-height:1;margin-left:2px;}
     .bot-payment-input{display:flex;gap:6px;}
     .bot-payment-input input{flex:1;padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;font-family:inherit;}
-    /* Fondo animado de la pestaña Anuncios (pedido explícito, sep 2026):
+    /* Fondo animado de la sección "Anuncios" de la vista P2P Bot (la
+       grande, "de afuera", NO el modal chico -- pedido explícito, sep 2026,
+       corrigiendo un primer intento que lo puso en el lugar equivocado):
        mismo canvas/red que la pantalla de Inicio (.onze-hero-canvas,
        .onze-usdt-glyph vienen de onze-panel.html) -- .onze-ads-content
        necesita position+z-index explícitos para pintarse ARRIBA del canvas
@@ -700,28 +702,34 @@ function addP2PBotStyles(){
           </div>
 
           <!-- Anuncios (second) -->
-          <div id="botAdsSection" class="bot-card" style="grid-column:1/-1;">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
-              <span style="font-size:14px;font-weight:800;color:#f1f5f9;letter-spacing:.2px;">Anuncios</span>
-              <span class="bot-section-title" style="margin:0;font-size:12px;font-weight:500;color:#64748b;"><span id="botAdsExchangeLabel">Binance</span></span>
-              <span style="font-size:11px;font-weight:600;color:#fbbf24;" id="botCambiosCounter"></span>
-              <span style="flex:1;"></span>
-              <button class="btn small ghost" type="button" onclick="window.botSyncNow()" style="font-size:10px;padding:5px 10px;border-radius:6px;">↻ Sincronizar</button>
-              <button class="btn small" type="button" onclick="window.botPanelNewAd()" style="font-size:10px;padding:5px 12px;border-radius:6px;">+ Nuevo anuncio</button>
-            </div>
-            <!-- Selector Venta/Compra -- pedido explícito del usuario (sep 2026):
-                 hoy el panel principal solo mostraba anuncios de Venta (el motor
-                 de precios y el chat todavía solo operan ese lado -- ver
-                 window.botAdsSideFilter más abajo). Esto agrega la vista de
-                 Compra sin tocar en nada el camino de Venta: si nadie toca este
-                 selector, el filtro por defecto sigue siendo "SELL", igual que
-                 siempre. -->
-            <div style="display:flex;gap:6px;margin-bottom:10px;">
-              <button class="btn small ghost bot-ads-side-btn active" type="button" data-side="SELL" onclick="window.botSetAdsSideFilter('SELL')" style="font-size:11px;padding:5px 12px;border-radius:6px;background:rgba(52,211,153,.14);border-color:rgba(52,211,153,.4);color:#34d399;">Venta</button>
-              <button class="btn small ghost bot-ads-side-btn" type="button" data-side="BUY" onclick="window.botSetAdsSideFilter('BUY')" style="font-size:11px;padding:5px 12px;border-radius:6px;color:#fb7185;border-color:rgba(251,113,133,.25);">Compra</button>
-            </div>
-            <div id="botAdsList" class="bot-ads-row">
-              <div style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">Cargando anuncios...</div>
+          <div id="botAdsSection" class="bot-card onze-ads-bg" style="grid-column:1/-1;">
+            <canvas class="onze-hero-canvas" id="onzeAdsCanvas"></canvas>
+            <span class="onze-usdt-glyph" aria-hidden="true" style="top:8%; right:5%; font-size:46px; color:rgba(0,212,255,.10); animation-delay:0s;">₮</span>
+            <span class="onze-usdt-glyph" aria-hidden="true" style="bottom:12%; left:6%; font-size:30px; color:rgba(94,208,255,.09); animation-delay:2.6s;">$</span>
+            <span class="onze-usdt-glyph" aria-hidden="true" style="top:45%; right:2%; font-size:26px; color:rgba(247,147,26,.11); animation-delay:4.4s;">₿</span>
+            <div class="onze-ads-content">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+                <span style="font-size:14px;font-weight:800;color:#f1f5f9;letter-spacing:.2px;">Anuncios</span>
+                <span class="bot-section-title" style="margin:0;font-size:12px;font-weight:500;color:#64748b;"><span id="botAdsExchangeLabel">Binance</span></span>
+                <span style="font-size:11px;font-weight:600;color:#fbbf24;" id="botCambiosCounter"></span>
+                <span style="flex:1;"></span>
+                <button class="btn small ghost" type="button" onclick="window.botSyncNow()" style="font-size:10px;padding:5px 10px;border-radius:6px;">↻ Sincronizar</button>
+                <button class="btn small" type="button" onclick="window.botPanelNewAd()" style="font-size:10px;padding:5px 12px;border-radius:6px;">+ Nuevo anuncio</button>
+              </div>
+              <!-- Selector Venta/Compra -- pedido explícito del usuario (sep 2026):
+                   hoy el panel principal solo mostraba anuncios de Venta (el motor
+                   de precios y el chat todavía solo operan ese lado -- ver
+                   window.botAdsSideFilter más abajo). Esto agrega la vista de
+                   Compra sin tocar en nada el camino de Venta: si nadie toca este
+                   selector, el filtro por defecto sigue siendo "SELL", igual que
+                   siempre. -->
+              <div style="display:flex;gap:6px;margin-bottom:10px;">
+                <button class="btn small ghost bot-ads-side-btn active" type="button" data-side="SELL" onclick="window.botSetAdsSideFilter('SELL')" style="font-size:11px;padding:5px 12px;border-radius:6px;background:rgba(52,211,153,.14);border-color:rgba(52,211,153,.4);color:#34d399;">Venta</button>
+                <button class="btn small ghost bot-ads-side-btn" type="button" data-side="BUY" onclick="window.botSetAdsSideFilter('BUY')" style="font-size:11px;padding:5px 12px;border-radius:6px;color:#fb7185;border-color:rgba(251,113,133,.25);">Compra</button>
+              </div>
+              <div id="botAdsList" class="bot-ads-row">
+                <div style="color:#64748b;font-size:12px;text-align:center;padding:16px 0;">Cargando anuncios...</div>
+              </div>
             </div>
           </div>
           <div id="botBybitAdSection" class="bot-card" style="grid-column:1/-1;display:none;">
@@ -733,15 +741,6 @@ function addP2PBotStyles(){
             <div id="botBybitAdContent"></div>
           </div>
 
-          <!-- Credenciales (third) -->
-          <div id="botCredentialsSection" class="bot-card" style="grid-column:1/-1;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:13px;font-weight:700;color:#e2e8f0;">Credenciales</span>
-              <span style="font-size:11px;color:#64748b;" id="botCredExchangeLabel">Binance</span>
-            </div>
-            <div id="botCredFields" class="bot-cred-fields" style="margin-top:10px;"></div>
-            <div id="botCredStatus" style="margin-top:8px;font-size:12px;color:#94a3b8;"></div>
-          </div>
           <!-- Cycle de ventas P2P -->
           <div id="botCycleSection" class="bot-card" style="grid-column:1/-1;">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -820,6 +819,20 @@ function addP2PBotStyles(){
             <div id="botOrdersContainer" class="bot-orders-container">
               <div style="color:#64748b;font-size:11px;text-align:center;padding:16px 0;">Sin ordenes registradas</div>
             </div>
+          </div>
+        </div>
+
+        <!-- Credenciales -- pedido explícito del usuario (sep 2026): que
+             vaya de última, debajo de Actividad y Órdenes (antes estaba
+             entre Anuncios y Ciclo de Ventas). -->
+        <div class="bot-cols">
+          <div id="botCredentialsSection" class="bot-card" style="grid-column:1/-1;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:13px;font-weight:700;color:#e2e8f0;">Credenciales</span>
+              <span style="font-size:11px;color:#64748b;" id="botCredExchangeLabel">Binance</span>
+            </div>
+            <div id="botCredFields" class="bot-cred-fields" style="margin-top:10px;"></div>
+            <div id="botCredStatus" style="margin-top:8px;font-size:12px;color:#94a3b8;"></div>
           </div>
         </div>
       </div>
@@ -936,21 +949,15 @@ function addP2PBotStyles(){
                <!-- Chat overlay moved to body by JS -->
             </div>
             <!-- Tab: Anuncios -->
-            <div id="botPanelAds" class="bot-panel-tab-content onze-ads-bg" style="display:none;">
-              <canvas class="onze-hero-canvas" id="onzeAdsCanvas"></canvas>
-              <span class="onze-usdt-glyph" aria-hidden="true" style="top:6%; right:6%; font-size:40px; color:rgba(0,212,255,.10); animation-delay:0s;">₮</span>
-              <span class="onze-usdt-glyph" aria-hidden="true" style="bottom:10%; left:8%; font-size:28px; color:rgba(94,208,255,.09); animation-delay:2.6s;">$</span>
-              <span class="onze-usdt-glyph" aria-hidden="true" style="top:40%; right:3%; font-size:24px; color:rgba(247,147,26,.11); animation-delay:4.4s;">₿</span>
-              <div class="onze-ads-content">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
-                  <p class="section-text" style="margin:0;">Tus anuncios en el exchange.</p>
-                </div>
-                <!-- Ad form -->
-                <div id="botPanelAdForm" style="display:none;"></div>
-                <!-- Ad list -->
-                <div id="botPanelAdsList" class="bot-ads-list">
-                  <div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Cargando anuncios...</div>
-                </div>
+            <div id="botPanelAds" class="bot-panel-tab-content" style="display:none;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
+                <p class="section-text" style="margin:0;">Tus anuncios en el exchange.</p>
+              </div>
+              <!-- Ad form -->
+              <div id="botPanelAdForm" style="display:none;"></div>
+              <!-- Ad list -->
+              <div id="botPanelAdsList" class="bot-ads-list">
+                <div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Cargando anuncios...</div>
               </div>
             </div>
             <!-- Tab: Cuentas bancarias -->

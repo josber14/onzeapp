@@ -169,12 +169,16 @@
     syncHero();
   }
 
-  // ── Anuncios (panel P2P Bot) -- pedido explícito del usuario, sep 2026:
-  //    "el fondo de los anuncios quiero que se vean como el fondo que
-  //    hiciste en la pantalla de inicio". Contenedor más chico que el hero,
-  //    por eso una red algo menos densa (24 nodos / 150px). Solo corre
-  //    mientras el modal Y la pestaña Anuncios estén realmente visibles --
-  //    mismo criterio de "no gastar CPU de fondo sin necesidad" que Inicio. ──
+  // ── Anuncios (vista grande "P2P Bot", NO el modal chico) -- pedido
+  //    explícito del usuario, sep 2026: "el fondo de los anuncios... es en
+  //    los anuncios de afuera los que tiene su propia configuración"
+  //    (primer intento lo puso por error dentro del modal). Contenedor más
+  //    chico que el hero de Inicio, por eso una red algo menos densa (24
+  //    nodos / 150px). Solo corre mientras la vista "P2P Bot" esté activa Y
+  //    la sección de Anuncios no esté oculta (se oculta con display:none
+  //    cuando el exchange elegido es Bybit, que usa su propia sección
+  //    aparte) -- mismo criterio de "no gastar CPU de fondo sin necesidad"
+  //    que Inicio. ──
   var adsNet = createNetworkBackground("onzeAdsCanvas", { nodeCount: 24, linkDist: 150 });
 
   function isVisible(el) {
@@ -182,25 +186,21 @@
   }
 
   function isAdsActive() {
-    return !!(
-      isVisible(document.getElementById("botPanelModal")) &&
-      isVisible(document.getElementById("botPanelAds")) &&
-      document.visibilityState === "visible"
-    );
+    return !!(isVisible(document.getElementById("botAdsSection")) && document.visibilityState === "visible");
   }
 
   function syncAds() { adsNet.sync(isAdsActive()); }
 
   function initAdsObserver() {
-    var modal = document.getElementById("botPanelModal");
-    var tabs = document.getElementById("botPanelAds");
-    if (!modal || !tabs) { setTimeout(initAdsObserver, 300); return; }
-    // El modal se abre/cierra con style.display y las pestañas cambian con
-    // style.display propio -- ningún classList.toggle acá, así que se
-    // observa el atributo "style" de ambos en vez de "class".
+    var view = document.getElementById("view-p2p-bot");
+    var section = document.getElementById("botAdsSection");
+    if (!view || !section) { setTimeout(initAdsObserver, 300); return; }
+    // La vista "P2P Bot" cambia con classList (.view.active, igual que
+    // Inicio), pero la sección de Anuncios en sí se oculta con su propio
+    // style.display cuando el exchange es Bybit -- se observan los dos.
     var obs = new MutationObserver(syncAds);
-    obs.observe(modal, { attributes: true, attributeFilter: ["style"] });
-    obs.observe(tabs, { attributes: true, attributeFilter: ["style"] });
+    obs.observe(view, { attributes: true, attributeFilter: ["class"] });
+    obs.observe(section, { attributes: true, attributeFilter: ["style"] });
     syncAds();
   }
 
