@@ -82,5 +82,8 @@ export function bybitProxyDebugInfo() {
     url: PROXY_URL || null,
     caLength: PROXY_CA ? PROXY_CA.length : 0,
     caStartsCorrectly: PROXY_CA ? PROXY_CA.trimStart().startsWith("-----BEGIN CERTIFICATE-----") : false,
+    testVar: process.env.ONZE_TEST_DEBUG_VAR || null,
+    binanceHasUrl: !!process.env.BINANCE_PROXY_URL,
+    binanceHasCa: !!process.env.BINANCE_PROXY_CA,
   };
 }
