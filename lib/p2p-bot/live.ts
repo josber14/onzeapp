@@ -40,6 +40,121 @@ async function getClient(exchange: BotExchange, tenantId: number, label = "ONZE"
   throw new Error("Exchange no soportado: " + exchange);
 }
 
+// Restaurada (sep 2026): se había borrado junto con el Oráculo de Mercado
+// (que sí gastaba de más, escribiendo un snapshot en cada ciclo del bot),
+// pero el selector "Elegir" comerciante (Excluir comerciantes / Comerciantes
+// con los que puedo igualar precio, en la config de cada anuncio) TAMBIÉN
+// la usaba para traer la lista de comerciantes en vivo -- quedó rota
+// (fetch a una ruta borrada, "Unexpected token '<' ... is not valid JSON")
+// hasta este arreglo. A diferencia del Oráculo, esto NO escribe nada a la
+// base de datos ni corre solo -- solo se llama cuando el usuario abre ese
+// selector puntual, así que no reintroduce el gasto que se eliminó.
+export async function fetchLiveMarket(exchange: BotExchange, tenantId: number, side: "0" | "1" = "1", label = "ONZE") {
+  const cacheKey = `market:${tenantId}:${label}:${exchange}:${side}`;
+  const cached = getCached<{ competitors: any[]; totalCompetitors: number; cycleAt: string; ourAd: null; targetPrice: null }>(cacheKey);
+  if (cached) return cached;
+
+  const { client } = await getClient(exchange, tenantId, label);
+
+  let rawCompetitors: any[] = [];
+  if (exchange === "binance") {
+    for (let page = 1; page <= 2; page++) {
+      const res = await client.getOnlineAds({
+        asset: "USDT", fiat: "CLP", tradeType: side === "1" ? "BUY" : "SELL", rows: 20, page, payTypes: [],
+      });
+      const pageData = res?.data ?? [];
+      if (pageData.length > 0) rawCompetitors = rawCompetitors.concat(pageData);
+      if (pageData.length === 0) break;
+    }
+    rawCompetitors = rawCompetitors.map(normalizeBinanceAd);
+  } else {
+    const res = await client.getOnlineAds({
+      tokenId: "USDT", currencyId: "CLP", side,
+    });
+    rawCompetitors = res?.result?.items ?? [];
+    rawCompetitors = rawCompetitors.map(normalizeBybitAd);
+  }
+
+  const competitors = rawCompetitors
+    .sort((a: any, b: any) => Number(a.price) - Number(b.price))
+    .slice(0, 200)
+    .map((c: any, i: number) => ({
+      rank: i + 1,
+      nickName: c.nickName || c.advertiser?.nickName || "",
+      price: Number(c.price),
+      minAmount: Number(c.minAmount ?? c.minSingleTransAmount ?? 0),
+      maxAmount: Number(c.maxAmount ?? c.maxSingleTransAmount ?? 0),
+      available: Number(c.lastQuantity ?? c.quantity ?? c.surplusAmount ?? 0),
+      orderCount: Number(c.orderCount ?? c.monthOrderCount ?? 0),
+      completionRate: Number(c.completionRate ?? c.monthFinishRate ?? 0),
+      paymentMethods: (c.paymentMethods || c.tradeMethods || []).map((pm: any) => ({
+        name: pm.name || pm.tradeMethodName || pm.paymentMethodName || String(pm),
+        identifier: pm.identifier || pm.paymentMethodId || "",
+      })),
+    }));
+
+  const result = {
+    competitors,
+    totalCompetitors: competitors.length,
+    cycleAt: new Date().toISOString(),
+    ourAd: null,
+    targetPrice: null,
+  };
+
+  setCache(cacheKey, result, 6000);
+  return result;
+}
+
+function normalizeBinanceAd(ad: any): any {
+  const adv = ad.adv ?? ad;
+  const advertiser = ad.advertiser ?? {};
+  return {
+    id: adv.advNo ?? adv.adNo ?? adv.id ?? "",
+    tokenId: adv.asset ?? "USDT",
+    currencyId: adv.fiatUnit ?? adv.fiat ?? "CLP",
+    side: adv.tradeType === "SELL" ? 1 : adv.tradeType === "BUY" ? 0 : (adv.side ?? 1),
+    price: Number(adv.price) || 0,
+    lastQuantity: Number(adv.surplusAmount ?? adv.tradableQuantity ?? adv.lastQuantity ?? adv.quantity ?? 0),
+    quantity: Number(adv.surplusAmount ?? adv.tradableQuantity ?? adv.lastQuantity ?? adv.quantity ?? 0),
+    minAmount: Number(adv.minSingleTransAmount ?? adv.minAmount ?? 0),
+    maxAmount: Number(adv.maxSingleTransAmount ?? adv.maxAmount ?? 0),
+    paymentMethods: (adv.tradeMethods ?? adv.paymentMethods ?? []).map((pm: any) => ({
+      name: pm.tradeMethodName ?? pm.paymentMethodName ?? pm.name ?? String(pm),
+      identifier: pm.paymentMethodId ?? pm.identifier ?? pm.payType ?? "",
+    })),
+    payments: (adv.tradeMethods ?? adv.paymentMethods ?? []).map((pm: any) =>
+      pm.paymentMethodId ?? pm.identifier ?? pm.payType ?? String(pm)
+    ),
+    orderCount: Number(advertiser.monthOrderCount ?? adv.orderCount ?? 0),
+    completionRate: Number(advertiser.monthFinishRate ?? adv.completionRate ?? 0),
+    nickName: advertiser.nickName ?? adv.nickName ?? "",
+    userType: advertiser.userType ?? "",
+  };
+}
+
+function normalizeBybitAd(ad: any): any {
+  return {
+    id: ad.id ?? ad.itemId ?? ad.adId ?? "",
+    tokenId: ad.tokenId ?? "USDT",
+    currencyId: ad.currencyId ?? "CLP",
+    side: ad.side === 0 ? 0 : 1,
+    price: Number(ad.price) || 0,
+    lastQuantity: Number(ad.quantity ?? ad.maxQuantity ?? 0),
+    quantity: Number(ad.quantity ?? 0),
+    minAmount: Number(ad.minAmount ?? 0),
+    maxAmount: Number(ad.maxAmount ?? 0),
+    paymentMethods: (ad.paymentMethods ?? []).map((pm: any) => ({
+      name: pm.name ?? String(pm),
+      identifier: pm.identifier ?? String(pm),
+    })),
+    payments: (ad.paymentMethods ?? []).map((pm: any) => pm.identifier ?? String(pm)),
+    orderCount: Number(ad.orderCount ?? 0),
+    completionRate: Number(ad.completionRate ?? 0),
+    nickName: ad.nickName ?? ad.advertiser?.nickName ?? "",
+    userType: ad.userType ?? "",
+  };
+}
+
 export async function fetchLiveOrders(exchange: BotExchange, tenantId: number, limit = 50, label = "ONZE") {
   // Bug real confirmado en vivo (sep 2026): esta clave de caché NO incluía
   // tenantId ni label -- dos pestañas/cuentas pidiendo órdenes del mismo
