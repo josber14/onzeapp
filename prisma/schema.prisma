@@ -77,7 +77,6 @@ model Tenant {
   p2pBotAds               P2PBotAd[]
   p2pChatStates           P2PChatState[]
   p2pBuyerIdentities      P2PBuyerIdentity[]
-  p2pBotMarketSnapshots   P2PBotMarketSnapshot[]
   p2pCapacities           P2PCapacity[]
   p2pCapacityEngineLogs   P2PCapacityEngineLog[]
   p2pManualSales          P2PManualSale[]
@@ -1836,23 +1835,6 @@ model CountryRateHistory {
   recordedAt DateTime @default(now())
 
   @@index([country, recordedAt])
-}
-
-model P2PBotMarketSnapshot {
-  id          Int      @id @default(autoincrement())
-  tenantId    Int
-  exchange    String
-  side        String   @default("1")
-  cycleAt     DateTime @default(now())
-  competitors Json     @default("[]")
-  ourAd       Json?
-  targetPrice Decimal? @db.Decimal(18, 4)
-  createdAt   DateTime @default(now())
-
-  Tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, exchange, cycleAt])
-  @@index([tenantId, cycleAt])
 }
 
 enum AccountRole {

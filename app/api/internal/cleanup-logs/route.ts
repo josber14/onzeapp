@@ -18,14 +18,15 @@ function isAuthorized(req: NextRequest): boolean {
   return timingSafeEqual(received, expected);
 }
 
-// Disparado por el cron diario de Vercel (ver vercel.json) -- borra logs y
-// snapshots de mercado del bot más viejos que RETENTION_DAYS. Nunca toca
-// tablas de dinero/negocio (capacity, ventas, órdenes, cuentas) -- solo
-// P2PBotLog/P2PBotMarketSnapshot, que son pura telemetría operativa sin
-// valor contable. Confirmado ago 2026: la base llegó a ~1.960 MB, el 99%
-// eran estos logs (8M+ filas) sin ninguna limpieza automática desde que el
-// bot arrancó (10 jul 2026). Borrado en lotes (no un DELETE gigante) para no
-// mantener una transacción larga bloqueando al bot en vivo.
+// Disparado por el cron diario de Vercel (ver vercel.json) -- borra logs del
+// bot más viejos que RETENTION_DAYS. Nunca toca tablas de dinero/negocio
+// (capacity, ventas, órdenes, cuentas) -- solo P2PBotLog, que es pura
+// telemetría operativa sin valor contable. Confirmado ago 2026: la base
+// llegó a ~1.960 MB, el 99% eran estos logs (8M+ filas) sin ninguna limpieza
+// automática desde que el bot arrancó (10 jul 2026). Borrado en lotes (no un
+// DELETE gigante) para no mantener una transacción larga bloqueando al bot
+// en vivo. (El Oráculo de Mercado / P2PBotMarketSnapshot se eliminó por
+// completo, sep 2026 -- no se usaba y escribía sin parar 24/7.)
 export async function GET(req: NextRequest) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
@@ -46,24 +47,12 @@ export async function GET(req: NextRequest) {
     if (Number(deleted) < BATCH_SIZE) break;
   }
 
-  let deletedSnapshots = 0;
-  while (Date.now() - startedAt < maxMs) {
-    const deleted = await prisma.$executeRaw`
-      DELETE FROM "P2PBotMarketSnapshot" WHERE id IN (
-        SELECT id FROM "P2PBotMarketSnapshot" WHERE "cycleAt" < ${cutoff} LIMIT ${BATCH_SIZE}
-      )
-    `;
-    deletedSnapshots += Number(deleted);
-    if (Number(deleted) < BATCH_SIZE) break;
-  }
-
   const deletedAlerts = await prisma.systemAlertLog.deleteMany({ where: { createdAt: { lt: cutoff } } });
 
   return NextResponse.json({
     ok: true,
     cutoff: cutoff.toISOString(),
     deletedLogs,
-    deletedSnapshots,
     deletedAlerts: deletedAlerts.count,
     durationMs: Date.now() - startedAt,
   });
