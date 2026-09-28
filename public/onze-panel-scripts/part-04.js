@@ -355,56 +355,52 @@ function addP2PBotStyles(){
     .bot-payment-methods .pm-chip .remove{color:#fb7185;font-size:13px;line-height:1;margin-left:2px;}
     .bot-payment-input{display:flex;gap:6px;}
     .bot-payment-input input{flex:1;padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;font-family:inherit;}
-    /* Fondo animado de la sección "Anuncios" de la vista P2P Bot (la
-       grande, "de afuera", NO el modal chico -- pedido explícito, sep 2026,
-       corrigiendo un primer intento que lo puso en el lugar equivocado):
-       mismo canvas/red que la pantalla de Inicio (.onze-hero-canvas,
-       .onze-usdt-glyph vienen de onze-panel.html) -- .onze-ads-content
-       necesita position+z-index explícitos para pintarse ARRIBA del canvas
-       (si quedara sin position, un descendiente no posicionado se pinta
-       antes que uno posicionado con z-index, aunque ese z-index sea 0). */
-    .onze-ads-bg{ position:relative; isolation:isolate; }
-    .onze-ads-content{ position:relative; z-index:1; }
+    /* Fondo de la sección "Anuncios" de la vista P2P Bot (la grande, "de
+       afuera", NO el modal chico -- pedido explícito, sep 2026,
+       corrigiendo un primer intento que lo puso en el lugar equivocado).
+       .onze-ads-content necesita position+z-index explícitos para
+       pintarse ARRIBA del brillo de fondo (si quedara sin position, un
+       descendiente no posicionado se pinta antes que uno posicionado con
+       z-index, aunque ese z-index sea 0).
 
-    /* En el teléfono la red de nodos se ve saturada en un espacio angosto
-       (pedido explícito del usuario, sep 2026: "se ve muy sobrecargado...
-       busquemos otro diseño que no sobrecargue tanto pero que esa parte la
-       haga ver diferente"). Se prueba primero con un brillo ambiental --
-       dos manchas de luz suaves que se mueven lento, sin líneas ni
-       símbolos -- en vez de apagar directamente la red y dejar la sección
-       plana. */
-    @media (max-width:560px){
-      .onze-ads-bg{ overflow:hidden; }
-      .onze-ads-bg .onze-hero-canvas,
-      .onze-ads-bg .onze-usdt-glyph{ display:none; }
-      .onze-ads-bg:before,
-      .onze-ads-bg:after{
-        content:"";
-        position:absolute;
-        z-index:0;
-        border-radius:50%;
-        filter:blur(40px);
-        pointer-events:none;
-        animation:onzeAdsGlowDrift 14s ease-in-out infinite;
-      }
-      .onze-ads-bg:before{
-        width:200px; height:200px;
-        top:-50px; left:-50px;
-        background:rgba(56,189,248,.24);
-      }
-      .onze-ads-bg:after{
-        width:170px; height:170px;
-        bottom:-40px; right:-40px;
-        background:rgba(52,211,153,.2);
-        animation-delay:4s;
-        animation-direction:reverse;
-      }
-      @keyframes onzeAdsGlowDrift{
-        0%,100%{ transform:translate(0,0) scale(1); }
-        50%{ transform:translate(18px,22px) scale(1.12); }
-      }
+       Primero se probó acá la misma red de nodos animada que tiene la
+       pantalla de Inicio (canvas + líneas + pulsos) -- el usuario pidió
+       sacarla por completo, en escritorio y en el teléfono: "no me gusta
+       como se ve" / "se ve muy sobrecargado". Se reemplazó por un brillo
+       ambiental (dos manchas de luz suaves que se mueven lento, sin
+       líneas) más los símbolos flotantes (₮/$/₿), ahora bien grandes
+       ("casi no se ven... pero mas grande") ya que eran lo único que el
+       usuario pidió mantener. Ver los <span class="onze-usdt-glyph"> en
+       el markup de #botAdsSection (más abajo en este mismo archivo). */
+    .onze-ads-bg{ position:relative; isolation:isolate; overflow:hidden; }
+    .onze-ads-content{ position:relative; z-index:1; }
+    .onze-ads-bg:before,
+    .onze-ads-bg:after{
+      content:"";
+      position:absolute;
+      z-index:0;
+      border-radius:50%;
+      filter:blur(70px);
+      pointer-events:none;
+      animation:onzeAdsGlowDrift 16s ease-in-out infinite;
     }
-    @media (max-width:560px) and (prefers-reduced-motion: reduce){
+    .onze-ads-bg:before{
+      width:360px; height:360px;
+      top:-100px; left:-80px;
+      background:rgba(56,189,248,.22);
+    }
+    .onze-ads-bg:after{
+      width:300px; height:300px;
+      bottom:-90px; right:-60px;
+      background:rgba(52,211,153,.18);
+      animation-delay:5s;
+      animation-direction:reverse;
+    }
+    @keyframes onzeAdsGlowDrift{
+      0%,100%{ transform:translate(0,0) scale(1); }
+      50%{ transform:translate(30px,34px) scale(1.12); }
+    }
+    @media (prefers-reduced-motion: reduce){
       .onze-ads-bg:before, .onze-ads-bg:after{ animation:none !important; }
     }
     .bot-ads-list{display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;}
@@ -745,10 +741,9 @@ function addP2PBotStyles(){
 
           <!-- Anuncios (second) -->
           <div id="botAdsSection" class="bot-card onze-ads-bg" style="grid-column:1/-1;">
-            <canvas class="onze-hero-canvas" id="onzeAdsCanvas"></canvas>
-            <span class="onze-usdt-glyph" aria-hidden="true" style="top:8%; right:5%; font-size:46px; color:rgba(0,212,255,.10); animation-delay:0s;">₮</span>
-            <span class="onze-usdt-glyph" aria-hidden="true" style="bottom:12%; left:6%; font-size:30px; color:rgba(94,208,255,.09); animation-delay:2.6s;">$</span>
-            <span class="onze-usdt-glyph" aria-hidden="true" style="top:45%; right:2%; font-size:26px; color:rgba(247,147,26,.11); animation-delay:4.4s;">₿</span>
+            <span class="onze-usdt-glyph" aria-hidden="true" style="top:6%; right:4%; font-size:110px; color:rgba(0,212,255,.16); animation-delay:0s;">₮</span>
+            <span class="onze-usdt-glyph" aria-hidden="true" style="bottom:8%; left:4%; font-size:70px; color:rgba(94,208,255,.15); animation-delay:2.6s;">$</span>
+            <span class="onze-usdt-glyph" aria-hidden="true" style="top:42%; right:1%; font-size:60px; color:rgba(247,147,26,.17); animation-delay:4.4s;">₿</span>
             <div class="onze-ads-content">
               <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
                 <span style="font-size:14px;font-weight:800;color:#f1f5f9;letter-spacing:.2px;">Anuncios</span>

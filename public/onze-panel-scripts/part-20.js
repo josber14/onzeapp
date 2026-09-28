@@ -1,22 +1,23 @@
-// Escaparates animados (sep 2026) -- fondo de red de nodos reutilizable.
-// Nació para la pantalla de Inicio ("que impacte y refleje lo que hace
-// ONZE") y se generalizó para poder reusarlo también detrás de la lista de
-// Anuncios (pedido explícito: "el fondo de los anuncios quiero que se vean
-// como el fondo que hiciste en la pantalla de inicio"). Puramente
-// visual/decorativo -- no toca ningún dato real, no llama a ninguna API, y
-// no depende de nada del resto del panel: si este archivo fallara por
-// completo, el resto de la web sigue funcionando exactamente igual (todo el
-// código corre con chequeos de existencia de elementos).
+// Escaparate animado de Inicio (sep 2026) -- fondo de red de nodos.
+// Puramente visual/decorativo -- no toca ningún dato real, no llama a
+// ninguna API, y no depende de nada del resto del panel: si este archivo
+// fallara por completo, el resto de la web sigue funcionando exactamente
+// igual (todo el código corre con chequeos de existencia de elementos).
+//
+// Nació con la idea de reusarse también detrás de la lista de Anuncios,
+// pero el usuario pidió sacarla de ahí por completo (en escritorio y en
+// el teléfono): "no me gusta como se ve" / "se ve muy sobrecargado".
+// Anuncios se quedó con el brillo ambiental + símbolos flotantes (puro
+// CSS, ver .onze-ads-bg en part-04.js) -- sin canvas ni JS -- por eso acá
+// solo queda el motor de Inicio, sin la instancia genérica que antes
+// también alimentaba a #onzeAdsCanvas.
 (function () {
   "use strict";
 
   var reduceMotion = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   var dpr = Math.max(1, window.devicePixelRatio || 1);
 
-  // Crea un fondo de red animada independiente para el <canvas> con el id
-  // dado. `isActiveFn` decide si le toca correr en cada sync (cada instancia
-  // tiene su propio criterio: Inicio mira su .view.active, Anuncios mira si
-  // el modal + esa pestaña están realmente visibles).
+  // Crea un fondo de red animada para el <canvas> con el id dado.
   function createNetworkBackground(canvasId, opts) {
     opts = opts || {};
     var nodeCount = opts.nodeCount || 32;
@@ -169,61 +170,10 @@
     syncHero();
   }
 
-  // ── Anuncios (vista grande "P2P Bot", NO el modal chico) -- pedido
-  //    explícito del usuario, sep 2026: "el fondo de los anuncios... es en
-  //    los anuncios de afuera los que tiene su propia configuración"
-  //    (primer intento lo puso por error dentro del modal). Contenedor más
-  //    chico que el hero de Inicio, por eso una red algo menos densa (24
-  //    nodos / 150px). Solo corre mientras la vista "P2P Bot" esté activa Y
-  //    la sección de Anuncios no esté oculta (se oculta con display:none
-  //    cuando el exchange elegido es Bybit, que usa su propia sección
-  //    aparte) -- mismo criterio de "no gastar CPU de fondo sin necesidad"
-  //    que Inicio. ──
-  var adsNet = createNetworkBackground("onzeAdsCanvas", { nodeCount: 24, linkDist: 150 });
-
-  function isVisible(el) {
-    return !!(el && el.offsetWidth > 0 && el.offsetHeight > 0);
-  }
-
-  function isAdsActive() {
-    // Chequea el propio canvas, no solo la sección -- en el teléfono
-    // (pedido explícito del usuario, sep 2026: "se ve muy sobrecargado")
-    // el canvas se oculta con CSS (display:none) dentro de #botAdsSection
-    // sin ocultar la sección entera (queda el brillo ambiental en su
-    // lugar). Si solo se chequeara la sección, el motor seguiría dibujando
-    // de fondo sobre un canvas invisible, gastando batería para nada.
-    return !!(isVisible(document.getElementById("onzeAdsCanvas")) && document.visibilityState === "visible");
-  }
-
-  function syncAds() { adsNet.sync(isAdsActive()); }
-
-  function initAdsObserver() {
-    var view = document.getElementById("view-p2p-bot");
-    var section = document.getElementById("botAdsSection");
-    if (!view || !section) { setTimeout(initAdsObserver, 300); return; }
-    // La vista "P2P Bot" cambia con classList (.view.active, igual que
-    // Inicio), pero la sección de Anuncios en sí se oculta con su propio
-    // style.display cuando el exchange es Bybit -- se observan los dos.
-    var obs = new MutationObserver(syncAds);
-    obs.observe(view, { attributes: true, attributeFilter: ["class"] });
-    obs.observe(section, { attributes: true, attributeFilter: ["style"] });
-    syncAds();
-  }
-
-  document.addEventListener("visibilitychange", function () {
-    syncHero();
-    syncAds();
-  });
+  document.addEventListener("visibilitychange", syncHero);
   window.addEventListener("resize", function () {
-    // sync() además de resize(): el fondo de Anuncios se oculta por CSS al
-    // cruzar el ancho de teléfono (ver media query en part-04.js) sin que
-    // cambie ningún atributo que el MutationObserver de arriba pueda ver
-    // -- sync() es lo que realmente prende/apaga el motor según el nuevo
-    // tamaño; resize() solo actualiza las dimensiones si ya sigue activo.
     syncHero();
     heroNet.resize(isInicioActive());
-    syncAds();
-    adsNet.resize(isAdsActive());
   });
 
   // ── Inclinación 3D de las tarjetas rápidas (Inicio) ──
@@ -263,7 +213,6 @@
 
   function init() {
     initHeroObserver();
-    initAdsObserver();
     initTilt();
     initSpotlight();
   }
