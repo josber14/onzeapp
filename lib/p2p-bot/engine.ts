@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { BybitP2PClient, bybitOrderGroup, bybitOrderStatusLabel } from "./bybit-adapter";
-import { bybitProxyDebugInfo } from "./bybit-proxy";
 import { BinanceP2PClient } from "./binance-adapter";
 import { canCallPriority, canCallNonUrgent, recordCall, getUsage } from "./rate-limiter";
 import { computeCycleOrderStats, computeLocalCycleStats, mapCycleOrdersForDisplay, excludeOrdersFromStats, mergeExtraOrdersIntoStats } from "./cycle-stats";
@@ -2036,12 +2035,6 @@ const bybitLastUpdateAt = new Map<string, number>();
 const bybitModCount = new Map<string, number>();
 const bybitAdCache = new Map<string, any>();
 
-// Diagnóstico TEMPORAL (sep 2026) -- ver comentario en bybitProxyDebugInfo()
-// dentro de bybit-proxy.ts. Se loguea 1 sola vez por proceso (no por ciclo)
-// para no ensuciar la Actividad -- borrar todo esto en cuanto se resuelva
-// por qué el proxy de Bybit no se está usando en producción.
-let bybitProxyDebugLogged = false;
-
 // Lock a nivel de base de datos (no solo en memoria) para "recrear anuncio"
 // -- confirmado en vivo: dos ejecuciones del ciclo corriendo al mismo tiempo
 // (ej. dos pestañas/servidores del panel abiertos) recreaban el MISMO
@@ -2081,11 +2074,6 @@ async function runBybitCycle(
   const client = new BybitP2PClient(apiKey, secretKey);
   const log = (level: string, exchange: string | null, message: string, details?: any): Promise<void> =>
     logBot(tenantId, level, exchange, message, details, label);
-
-  if (!bybitProxyDebugLogged) {
-    bybitProxyDebugLogged = true;
-    await log("info", "bybit", `[DEBUG PROXY] ${JSON.stringify(bybitProxyDebugInfo())}`);
-  }
 
   try {
     // 1. Get our current balance (non-critical, continue if fails)
