@@ -2405,8 +2405,19 @@ async function runBybitCycle(
           }
 
           // Recreate at mod 9 (before hitting Bybit's 10-mod limit)
+          // Pedido explícito del usuario (sep 2026): si no se puede recrear
+          // (ej. la cuenta está bloqueada para crear anuncios nuevos por la
+          // restricción de "alto riesgo" de Bybit), el anuncio NO debe
+          // quedarse congelado sin competir -- debe seguir intentando
+          // actualizar su precio normalmente sobre el mismo anuncio viejo
+          // mientras Bybit se lo siga permitiendo, hasta que de verdad
+          // rechace el cambio (ahí entra el manejo de 912120050 más abajo,
+          // que también intenta recrear con el mismo criterio de "crear
+          // antes de borrar"). "9" es nuestro propio límite preventivo, no
+          // necesariamente el límite real de Bybit en este momento.
+          let recreatedThisCycle = false;
           if (currentMods >= 9 && !(await claimBybitRecreateLock(managedAd.id))) {
-            await log( "debug", "bybit", `Ad ${adId}: otra ejecución ya está recreando este anuncio, se salta`);
+            await log( "debug", "bybit", `Ad ${adId}: otra ejecución ya está recreando este anuncio -- mientras tanto, se intenta actualizar el precio normalmente`);
           } else if (currentMods >= 9) {
             await log( "info", "bybit", `Ad ${adId}: ${currentMods} modificaciones, recreando...`);
             // Bug real confirmado en vivo (jul 2026): acá se usaba
@@ -2507,11 +2518,13 @@ async function runBybitCycle(
               if (!removed) {
                 await log( "warn", "bybit", `Ad ${adId} (viejo): no se pudo eliminar tras crear el reemplazo ${createdId} -- corregir manualmente en Bybit para evitar un anuncio duplicado.`);
               }
+              recreatedThisCycle = true;
               // Skip normal update below — ya recreamos
             } else {
-              await log( "error", "bybit", `Ad ${adId}: no se pudo crear el reemplazo -- el anuncio viejo NO se tocó y sigue activo con normalidad.`);
+              await log( "error", "bybit", `Ad ${adId}: no se pudo crear el reemplazo -- el anuncio viejo sigue activo, se intenta actualizar su precio normalmente a continuación.`);
             }
-          } else {
+          }
+          if (!recreatedThisCycle) {
             await client.updateAd(updateFields);
             bybitModCount.set(modKey, currentMods + 1);
             actions.push({ action: "update_price", exchange: "bybit", adId, currentPrice, suggestedPrice: targetPrice, reason: `Ad ${adId} actualizado a ${targetPrice.toFixed(2)}`, timestamp: Date.now() });
