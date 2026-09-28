@@ -826,6 +826,7 @@ function addP2PBotStyles(){
               <button id="botSoundToggle" class="btn small ghost" type="button" onclick="window.botToggleSound()" style="padding:4px 6px;display:inline-flex;align-items:center;" title="Activar/desactivar sonido de notificaciones">
                 <svg id="botSoundIcon" viewBox="0 0 24 24" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
               </button>
+              <button class="btn small ghost" type="button" onclick="window.botTestSound()" style="padding:4px 10px;font-size:11px;" title="Reproducir el sonido de notificación para probar el volumen">🔊 Probar sonido</button>
               <button class="close-btn" type="button" onclick="window.botClosePanel()">&times;</button>
             </div>
           </div>
@@ -3057,8 +3058,8 @@ function addP2PBotStyles(){
   // oscilador/ganancia para un decaimiento limpio por nota. Extraído a un
   // helper (botPlayTone) para poder reusarlo con otro sonido distinto
   // cuando una orden pasa a "pagado" (pedido explícito, sep 2026).
-  function botPlayTone(notes){
-    if(!botSoundEnabled) return;
+  function botPlayTone(notes, force){
+    if(!force && !botSoundEnabled) return;
     try{
       if(!botAudioContext){
         botAudioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -3081,7 +3082,7 @@ function addP2PBotStyles(){
     }catch(e){ console.warn("Sound error:", e); }
   }
 
-  function botPlayOrderSound(){
+  function botPlayOrderSound(force){
     // Dos notas ASCENDENTES (E6 -> A6) para "llegó una orden nueva".
     // Ganancia subida de 0.28/0.24 a 0.9/0.85 (pedido explícito del
     // usuario, sep 2026: "por más que tengo todo el volumen aun suena muy
@@ -3091,8 +3092,16 @@ function addP2PBotStyles(){
     botPlayTone([
       { freq: 1318.5, start: 0, duration: 0.16, gain: 0.9 },
       { freq: 1760, start: 0.13, duration: 0.22, gain: 0.85 },
-    ]);
+    ], force);
   }
+
+  // Botón "Probar sonido" (pedido explícito del usuario, sep 2026: "puedes
+  // hacer un sonido de prueba para ver") -- fuerza la reproducción aunque
+  // el toggle de sonido esté apagado, para poder confirmar el volumen sin
+  // esperar a que entre una orden real.
+  window.botTestSound = function(){
+    botPlayOrderSound(true);
+  };
 
   function botPlayPaidSound(){
     // Dos notas DESCENDENTES, más graves (B5 -> E5), tipo "confirmación" --
