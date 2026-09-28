@@ -15,8 +15,11 @@
   var nodes = [], pulses = [];
   var canvasW = 0, canvasH = 0;
   var dpr = Math.max(1, window.devicePixelRatio || 1);
-  var NODE_COUNT = 16;
-  var LINK_DIST = 130;
+  // Subido de 16 a 32 nodos y de 130 a 175px de distancia de enlace (pedido
+  // explícito del usuario, sep 2026: "que se vean más líneas así
+  // moviéndose") -- más nodos + más alcance = red visualmente más densa.
+  var NODE_COUNT = 32;
+  var LINK_DIST = 175;
 
   function initNodes() {
     nodes = [];
@@ -24,9 +27,9 @@
       nodes.push({
         x: Math.random() * canvasW,
         y: Math.random() * canvasH,
-        vx: (Math.random() - 0.5) * 0.25,
-        vy: (Math.random() - 0.5) * 0.25,
-        r: 1.6 + Math.random() * 1.6,
+        vx: (Math.random() - 0.5) * 0.32,
+        vy: (Math.random() - 0.5) * 0.32,
+        r: 1.6 + Math.random() * 1.8,
       });
     }
   }
@@ -45,7 +48,7 @@
   }
 
   function maybeSpawnPulse() {
-    if (Math.random() > 0.02 || nodes.length < 2) return;
+    if (Math.random() > 0.045 || nodes.length < 2 || pulses.length >= 6) return;
     var a = nodes[Math.floor(Math.random() * nodes.length)];
     var candidates = [];
     for (var i = 0; i < nodes.length; i++) {
@@ -65,9 +68,9 @@
         var dx = a.x - b.x, dy = a.y - b.y;
         var dist = Math.sqrt(dx * dx + dy * dy);
         if (dist < LINK_DIST) {
-          var alpha = (1 - dist / LINK_DIST) * 0.35;
-          ctx.strokeStyle = "rgba(56,189,248," + alpha.toFixed(3) + ")";
-          ctx.lineWidth = 1;
+          var alpha = (1 - dist / LINK_DIST) * 0.5;
+          ctx.strokeStyle = "rgba(94,208,255," + alpha.toFixed(3) + ")";
+          ctx.lineWidth = 1.1;
           ctx.beginPath();
           ctx.moveTo(a.x, a.y);
           ctx.lineTo(b.x, b.y);
@@ -180,9 +183,25 @@
     }
   }
 
+  // ── Brillo que sigue al mouse dentro del hero (pedido explícito: "más
+  //    producción", sep 2026) -- reacciona a la posición real del cursor,
+  //    no es una animación automática, así que no depende de reduceMotion. ──
+  function initSpotlight() {
+    var hero = document.getElementById("onzeHero");
+    if (!hero) return;
+    hero.addEventListener("mousemove", function (e) {
+      var rect = hero.getBoundingClientRect();
+      var mx = ((e.clientX - rect.left) / rect.width) * 100;
+      var my = ((e.clientY - rect.top) / rect.height) * 100;
+      hero.style.setProperty("--onze-mx", mx.toFixed(1) + "%");
+      hero.style.setProperty("--onze-my", my.toFixed(1) + "%");
+    });
+  }
+
   function init() {
     initCanvasObserver();
     initTilt();
+    initSpotlight();
   }
 
   if (document.readyState === "loading") {
