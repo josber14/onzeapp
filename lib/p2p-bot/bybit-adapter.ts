@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { createHmac, randomUUID } from "crypto";
+import { createHmac } from "crypto";
 import { bybitApiBase, bybitFetch } from "./bybit-proxy";
 
 export async function getBybitCredentials(tenantId: number, label = "ONZE") {
@@ -221,25 +221,112 @@ export class BybitP2PClient {
   }
 
   // ─── Chat ─────────────────────────────────────────────────────
-  // Endpoints y forma del payload confirmados contra la documentación oficial
-  // (bybit-exchange.github.io/docs/p2p/order/send-chat-msg y .../chat-msg,
-  // jul 2026) -- los que había antes (/v5/p2p/order/chatSend,
-  // /v5/p2p/order/chatMsg) NO EXISTEN en la API real de Bybit y devolvían
-  // HTTP 404 en cada intento, así que ningún mensaje llegaba nunca al
-  // comprador. Confirmado en vivo revisando P2PBotLog: cientos de intentos
-  // de "sendMsg", todos con el mismo error.
+  // ACTUALIZACIÓN (sep 2026): Bybit CERRÓ los endpoints de chat de arriba
+  // (/v5/p2p/order/message/send, /v5/p2p/order/message/listpage) --
+  // devuelven "912200387: chat open api close, pls chat with new open
+  // api". Confirmado en vivo, a mano, contra la cuenta real (sin arriesgar
+  // mandar nada real a un comprador -- cada endpoint se probó con campos
+  // obligatorios faltantes a propósito hasta confirmar el error exacto de
+  // "falta tal campo", nunca completando un envío real):
+  //
+  //   - /v5/p2p/chat/session/list_v1 (lastId, size, readStatus): lista
+  //     las conversaciones -- una por CONTRAPARTE (comprador/vendedor), no
+  //     por orden. Cada una trae sessionName (su nickname), sessionId
+  //     (cifrado, opaco) y unreadCount.
+  //   - /v5/p2p/chat/message/listpage_v1 (sessionId, limit -- OJO, no
+  //     "size"/"lastId" como sugiere la librería oficial de Python de
+  //     Bybit, confirmado a mano que esos nombres devuelven vacío):
+  //     mensajes de una sesión. El campo `message` de cada item viene como
+  //     un STRING con JSON adentro: {"content":"...","msgType":301,
+  //     "fileName":"",...} -- no como texto plano directo (formato viejo).
+  //   - /v5/p2p/chat/message/send_v1: requiere los 4 juntos -- orderId,
+  //     sessionId, contentType, message (confirmado probando con cada uno
+  //     faltante por turno, cada vez devolvía el error "X is null" del
+  //     campo que faltaba, sin llegar nunca a completar un envío real).
+  //
+  // Como la sesión no trae el orderId directo, se resuelve por nickname de
+  // la contraparte (sessionName === targetNickName de la orden, vía
+  // getOrderDetail). getChatMessages/sendChatMessage mantienen la MISMA
+  // firma y la MISMA forma de respuesta que antes (adaptando el formato
+  // nuevo al viejo) para no tener que tocar chat-agent.ts, que ya sabe leer
+  // esa forma.
+  //
+  // Limitación conocida: el formato nuevo no documenta cómo distinguir un
+  // mensaje de "sistema" (ej. el viejo msgType:0) de uno de texto normal --
+  // por ahora todo se trata como texto (igual que ya hacía el código viejo
+  // para cualquier msgType distinto de 0), hasta confirmar en vivo si
+  // Bybit sigue mandando algún evento de sistema por este canal nuevo.
+
+  private ownNickname: string | null = null;
+  private async getOwnNickname(): Promise<string> {
+    if (this.ownNickname) return this.ownNickname;
+    const info = await this.getAccountInfo();
+    this.ownNickname = String(info?.result?.nickName || "");
+    return this.ownNickname;
+  }
+
+  private chatSessionCache = new Map<string, { sessionId: string; expiresAt: number }>();
+  private async resolveChatSessionId(orderId: string): Promise<string | null> {
+    const cached = this.chatSessionCache.get(orderId);
+    if (cached && Date.now() < cached.expiresAt) return cached.sessionId;
+
+    const detail = await this.getOrderDetail(orderId);
+    const counterpartyName = detail?.result?.targetNickName;
+    if (!counterpartyName) return null;
+
+    // size máximo confirmado en vivo: 50 devuelve "913100009: page size
+    // error" -- 20 es el mismo tope que ya usan otros endpoints paginados
+    // de Bybit (ver getOnlineAds).
+    const sessions = await this.request("/v5/p2p/chat/session/list_v1", { lastId: 0, size: 20, readStatus: 2 });
+    const list = sessions?.result?.chatSession ?? [];
+    const match = list.find((s: any) => s.sessionName === counterpartyName);
+    if (!match) return null;
+
+    this.chatSessionCache.set(orderId, { sessionId: match.sessionId, expiresAt: Date.now() + 5 * 60 * 1000 });
+    return match.sessionId;
+  }
 
   async sendChatMessage(orderId: string, message: string) {
-    const msgUuid = randomUUID();
-    return this.request("/v5/p2p/order/message/send", { orderId, message, contentType: "str", msgUuid });
+    const sessionId = await this.resolveChatSessionId(orderId);
+    if (!sessionId) {
+      throw new Error(`No se encontró la sesión de chat de Bybit para la orden ${orderId} (contraparte no aparece en la lista de sesiones)`);
+    }
+    return this.request("/v5/p2p/chat/message/send_v1", { orderId, sessionId, contentType: "str", message });
   }
 
   async getChatMessages(orderId: string, page = 1, size = 20) {
-    return this.request("/v5/p2p/order/message/listpage", {
-      orderId,
-      currentPage: String(page),
-      size: String(size),
+    const sessionId = await this.resolveChatSessionId(orderId);
+    if (!sessionId) return { ret_code: 0, ret_msg: "SUCCESS", result: { result: [] } };
+
+    const res = await this.request("/v5/p2p/chat/message/listpage_v1", { sessionId, limit: size });
+    const raw = res?.result?.messages ?? [];
+    const ownNickname = await this.getOwnNickname();
+    const ownUserId = await this.getOwnUserId();
+
+    const mapped = raw.map((m: any) => {
+      let inner: any = {};
+      try { inner = JSON.parse(m.message ?? "{}"); } catch { inner = { content: String(m.message ?? "") }; }
+      const senderNick = String(m.sendUserNickName ?? "");
+      const isSelf = senderNick === ownNickname;
+      // Confirmado en vivo (sep 2026): los mensajes de sistema del nuevo
+      // chat vienen con sendUserNickName "SYSTEM" (ej. "The buyer has
+      // successfully completed the payment...", "You've successfully
+      // released USDT to the buyer.") -- sin esto se tratarían como si el
+      // COMPRADOR los hubiera escrito, y el bot intentaría "responderle" a
+      // un aviso automático de Bybit. msgType:0 es lo que chat-agent.ts ya
+      // interpreta como "system" (ver fetchMessages) y descarta.
+      const isSystem = senderNick === "SYSTEM";
+      return {
+        id: String(m.id ?? ""),
+        msgType: isSystem ? 0 : 1,
+        contentType: inner.fileName ? "pic" : "str",
+        message: inner.fileName || inner.content || "",
+        userId: isSelf ? ownUserId : `other:${senderNick}`,
+        createDate: m.createDate,
+      };
     });
+
+    return { ret_code: 0, ret_msg: "SUCCESS", result: { result: mapped } };
   }
 
   // Necesario para distinguir "mensaje nuestro" vs "mensaje del comprador" en
