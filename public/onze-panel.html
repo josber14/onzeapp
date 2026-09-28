@@ -363,10 +363,11 @@
       user-select:none;
       animation:onzeGlyphFloat 9s ease-in-out infinite;
     }
-    .onze-usdt-glyph.g1{ top:6%; right:8%; font-size:60px; animation-delay:0s; }
-    .onze-glyph-dollar{ top:40%; right:3%; font-size:42px; animation-delay:1.6s; color:rgba(94,208,255,.13); }
-    .onze-glyph-btc{ bottom:26%; right:20%; font-size:38px; animation-delay:3.4s; color:rgba(247,147,26,.15); }
-    .onze-glyph-chart{ bottom:8%; right:6%; width:50px; height:auto; animation-delay:5s; color:rgba(52,211,153,.16); }
+    /* Cada símbolo trae su posición/tamaño/color/delay inline (11
+       instancias distintas, pedido explícito del usuario: "necesito que
+       existan más de esos atrás moviéndose") -- con tantas variantes
+       distintas, una clase por posición hubiera sido más CSS muerto que
+       esto. */
     @keyframes onzeGlyphFloat{
       0%,100%{ transform:translateY(0) rotate(0deg); }
       50%{ transform:translateY(-14px) rotate(6deg); }
@@ -2520,10 +2521,22 @@
         <div class="hero" id="onzeHero">
           <canvas class="onze-hero-canvas" id="onzeHeroCanvas"></canvas>
           <div class="onze-spotlight" id="onzeSpotlight"></div>
-          <span class="onze-usdt-glyph g1" aria-hidden="true">₮</span>
-          <span class="onze-usdt-glyph g2 onze-glyph-dollar" aria-hidden="true">$</span>
-          <span class="onze-usdt-glyph g3 onze-glyph-btc" aria-hidden="true">₿</span>
-          <svg class="onze-usdt-glyph g4 onze-glyph-chart" aria-hidden="true" viewBox="0 0 48 32" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <span class="onze-usdt-glyph" aria-hidden="true" style="top:5%; right:8%; font-size:60px; color:rgba(0,212,255,.14); animation-delay:0s;">₮</span>
+          <span class="onze-usdt-glyph" aria-hidden="true" style="top:58%; left:4%; font-size:34px; color:rgba(0,212,255,.10); animation-delay:1.8s;">₮</span>
+          <span class="onze-usdt-glyph" aria-hidden="true" style="bottom:10%; left:16%; font-size:26px; color:rgba(0,212,255,.09); animation-delay:4.2s;">₮</span>
+
+          <span class="onze-usdt-glyph" aria-hidden="true" style="top:36%; right:3%; font-size:42px; color:rgba(94,208,255,.13); animation-delay:1.6s;">$</span>
+          <span class="onze-usdt-glyph" aria-hidden="true" style="top:9%; left:9%; font-size:30px; color:rgba(94,208,255,.10); animation-delay:3.1s;">$</span>
+          <span class="onze-usdt-glyph" aria-hidden="true" style="bottom:28%; right:42%; font-size:24px; color:rgba(94,208,255,.09); animation-delay:5.6s;">$</span>
+
+          <span class="onze-usdt-glyph" aria-hidden="true" style="bottom:24%; right:20%; font-size:38px; color:rgba(247,147,26,.15); animation-delay:3.4s;">₿</span>
+          <span class="onze-usdt-glyph" aria-hidden="true" style="top:20%; left:22%; font-size:30px; color:rgba(247,147,26,.12); animation-delay:.8s;">₿</span>
+          <span class="onze-usdt-glyph" aria-hidden="true" style="bottom:5%; right:55%; font-size:22px; color:rgba(247,147,26,.10); animation-delay:6s;">₿</span>
+
+          <svg class="onze-usdt-glyph" aria-hidden="true" viewBox="0 0 48 32" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="bottom:8%; right:6%; width:50px; height:auto; color:rgba(52,211,153,.16); animation-delay:5s;">
+            <polyline points="2 26 13 16 21 21 34 8 46 12"></polyline>
+          </svg>
+          <svg class="onze-usdt-glyph" aria-hidden="true" viewBox="0 0 48 32" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="top:15%; right:32%; width:32px; height:auto; color:rgba(52,211,153,.12); animation-delay:2.4s;">
             <polyline points="2 26 13 16 21 21 34 8 46 12"></polyline>
           </svg>
           <div class="hero-content">
