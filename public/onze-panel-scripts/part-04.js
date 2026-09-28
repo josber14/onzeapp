@@ -355,6 +355,14 @@ function addP2PBotStyles(){
     .bot-payment-methods .pm-chip .remove{color:#fb7185;font-size:13px;line-height:1;margin-left:2px;}
     .bot-payment-input{display:flex;gap:6px;}
     .bot-payment-input input{flex:1;padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.12);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;font-family:inherit;}
+    /* Fondo animado de la pestaña Anuncios (pedido explícito, sep 2026):
+       mismo canvas/red que la pantalla de Inicio (.onze-hero-canvas,
+       .onze-usdt-glyph vienen de onze-panel.html) -- .onze-ads-content
+       necesita position+z-index explícitos para pintarse ARRIBA del canvas
+       (si quedara sin position, un descendiente no posicionado se pinta
+       antes que uno posicionado con z-index, aunque ese z-index sea 0). */
+    .onze-ads-bg{ position:relative; isolation:isolate; }
+    .onze-ads-content{ position:relative; z-index:1; }
     .bot-ads-list{display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;}
     .bot-ad-card{background:rgba(15,23,42,.35);border:1px solid rgba(148,163,184,.08);border-radius:12px;padding:14px;transition:border-color .15s,box-shadow .15s;}
     .bot-ad-card:hover{border-color:rgba(148,163,184,.16);box-shadow:0 1px 6px rgba(0,0,0,.15);}
@@ -928,15 +936,21 @@ function addP2PBotStyles(){
                <!-- Chat overlay moved to body by JS -->
             </div>
             <!-- Tab: Anuncios -->
-            <div id="botPanelAds" class="bot-panel-tab-content" style="display:none;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
-                <p class="section-text" style="margin:0;">Tus anuncios en el exchange.</p>
-              </div>
-              <!-- Ad form -->
-              <div id="botPanelAdForm" style="display:none;"></div>
-              <!-- Ad list -->
-              <div id="botPanelAdsList" class="bot-ads-list">
-                <div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Cargando anuncios...</div>
+            <div id="botPanelAds" class="bot-panel-tab-content onze-ads-bg" style="display:none;">
+              <canvas class="onze-hero-canvas" id="onzeAdsCanvas"></canvas>
+              <span class="onze-usdt-glyph" aria-hidden="true" style="top:6%; right:6%; font-size:40px; color:rgba(0,212,255,.10); animation-delay:0s;">₮</span>
+              <span class="onze-usdt-glyph" aria-hidden="true" style="bottom:10%; left:8%; font-size:28px; color:rgba(94,208,255,.09); animation-delay:2.6s;">$</span>
+              <span class="onze-usdt-glyph" aria-hidden="true" style="top:40%; right:3%; font-size:24px; color:rgba(247,147,26,.11); animation-delay:4.4s;">₿</span>
+              <div class="onze-ads-content">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
+                  <p class="section-text" style="margin:0;">Tus anuncios en el exchange.</p>
+                </div>
+                <!-- Ad form -->
+                <div id="botPanelAdForm" style="display:none;"></div>
+                <!-- Ad list -->
+                <div id="botPanelAdsList" class="bot-ads-list">
+                  <div style="color:#64748b;font-size:12px;text-align:center;padding:20px 0;">Cargando anuncios...</div>
+                </div>
               </div>
             </div>
             <!-- Tab: Cuentas bancarias -->
