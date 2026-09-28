@@ -2433,18 +2433,23 @@ async function runBybitCycle(
             // archivo). Pedido explícito del usuario: la configuración de
             // seguridad SIEMPRE se respeta, sin excepción.
             const recreatePrice = targetPrice;
-            // ORDEN INVERTIDO (sep 2026, bug real confirmado en vivo): antes
-            // se borraba el anuncio viejo PRIMERO y recién después se
-            // intentaba crear el reemplazo. Si la creación fallaba por
-            // cualquier motivo (ej. Bybit marcó la cuenta como "alto
-            // riesgo" y rechazó nuevos anuncios, error 912300077, visto en
-            // producción), el anuncio viejo ya no existía y no había nada
-            // que lo reemplazara -- se perdía por completo la presencia en
-            // el mercado para ese anuncio. Ahora se crea el reemplazo
-            // PRIMERO; solo si eso funciona se borra el viejo. Si crear
-            // falla, el viejo queda intacto y el bot reintenta en el
-            // próximo ciclo, sin perder nada.
-            await new Promise(r => setTimeout(r, 1000));
+            // ORDEN (sep 2026, pedido explícito del usuario tras confirmar
+            // a mano en la app de Bybit): se había probado "crear antes de
+            // borrar" para nunca perder el anuncio si la creación fallaba,
+            // pero el usuario confirmó en vivo -- borrando y creando a mano
+            // en la app, con tiempo de sobra entre un paso y otro -- que el
+            // rechazo 912300077 ("alto riesgo... 1 moneda fiat a la vez")
+            // ocurre porque Bybit no permite 2 anuncios a la vez durante el
+            // período de "Trial Advertiser", NO porque bloquee toda
+            // creación. El bot solo esperaba 1-3s entre borrar y crear --
+            // mucho menos que el tiempo real que toma hacerlo a mano en la
+            // app. Se vuelve a borrar primero, pero ahora con una espera de
+            // 7s (pedida explícitamente por el usuario) antes de crear el
+            // reemplazo, con un segundo intento si el primero falla. Si
+            // ambos fallan, el anuncio ya no existe (se borró) -- en vez de
+            // quedar en un limbo silencioso, se desactiva el bot en este
+            // anuncio puntual (mismo patrón que el freno de límites
+            // duplicados) y se avisa fuerte para que se revise a mano.
             const postFields: any = {
               tokenId: "USDT", currencyId: "CLP", side: "1",
               price: recreatePrice.toFixed(2),
@@ -2458,70 +2463,69 @@ async function runBybitCycle(
               tradingPreferenceSet: strTps,
               itemType: String(fullAd.itemType ?? "ORIGIN"), status: 10,
             };
-            let createdId: string | null = null;
             const extractAdId = (res: any) =>
               res?.result?.itemId ?? res?.result?.item?.id ?? res?.result?.id;
-            try {
-              const newAdRes = await client.postAd(postFields);
-              createdId = extractAdId(newAdRes);
-              if (!createdId) {
-                await log( "warn", "bybit", `Ad ${adId}: postAd OK pero no se pudo extraer ID (respuesta: ${JSON.stringify(newAdRes).slice(0, 300)})`);
-              }
-            } catch (e2: any) {
-              if (e2.message?.includes("90043")) {
-                const retryPrice = Math.max(recreatePrice * 1.005, minSellPrice * 1.005);
-                postFields.price = retryPrice.toFixed(2);
-                try {
-                  const retryRes = await client.postAd(postFields);
-                  createdId = extractAdId(retryRes);
-                  if (!createdId) {
-                    await log( "warn", "bybit", `Ad ${adId}: postAd retry OK pero no se pudo extraer ID`);
-                  }
-                } catch {
-                  await log( "error", "bybit", `Ad ${adId}: postAd retry falló incluso con precio ajustado -- el anuncio viejo NO se tocó y sigue activo con normalidad.`);
-                }
-              } else {
-                await log( "warn", "bybit", `Ad ${adId}: error al crear el reemplazo -- el anuncio viejo NO se tocó y sigue activo con normalidad: ${e2.message}`);
+
+            let removed = false;
+            for (let retry = 0; retry < 3; retry++) {
+              try { await client.removeAd(adId); removed = true; break; }
+              catch (removeErr: any) {
+                await log( "warn", "bybit", `Ad ${adId}: remove intento ${retry + 1} falló: ${removeErr.message}`);
+                if (retry < 2) await new Promise(r => setTimeout(r, 2000));
               }
             }
-            if (createdId) {
-              await new Promise(r => setTimeout(r, 2000));
-              bybitModCount.set(modKey, 0);
-              await prisma.p2PBotAd.update({ where: { id: managedAd.id }, data: { adId: String(createdId) } });
-              bybitAdCache.set(String(createdId), {
-                id: String(createdId), price: String(recreatePrice),
-                side: 1, tokenId: "USDT", currencyId: "CLP",
-                priceType: fullAd.priceType, premium: fullAd.premium,
-                lastQuantity: fullAd.lastQuantity, quantity: fullAd.quantity,
-                minAmount: fullAd.minAmount, maxAmount: fullAd.maxAmount,
-                paymentPeriod: fullAd.paymentPeriod,
-                payments: fullAd.payments, paymentTerms: fullAd.paymentTerms,
-                remark: fullAd.remark, tradingPreferenceSet: fullAd.tradingPreferenceSet,
-                itemType: fullAd.itemType,
-              });
-              bybitAdCache.delete(adId);
-              await log( "info", "bybit", `Anuncio recreado como ${createdId} (precio: ${recreatePrice.toFixed(2)})`);
-              actions.push({ action: "recreate_ad", exchange: "bybit", adId: createdId, suggestedPrice: recreatePrice, reason: `Recreado (${currentMods} mods)`, timestamp: Date.now() });
 
-              // Recién ahora, con el reemplazo ya confirmado y online, se
-              // borra el viejo -- si esto falla no se pierde nada: el viejo
-              // queda como duplicado temporal (hay que borrarlo a mano en
-              // Bybit), nunca se pierde presencia en el mercado.
-              let removed = false;
-              for (let retry = 0; retry < 3; retry++) {
-                try { await client.removeAd(adId); removed = true; break; }
-                catch (removeErr: any) {
-                  await log( "warn", "bybit", `Ad ${adId} (viejo, ya reemplazado por ${createdId}): remove intento ${retry + 1} falló: ${removeErr.message}`);
-                  if (retry < 2) await new Promise(r => setTimeout(r, 2000));
+            if (!removed) {
+              await log( "error", "bybit", `Ad ${adId}: no se pudo eliminar, abortando recreación -- el anuncio sigue activo, se intenta actualizar su precio normalmente a continuación.`);
+            } else {
+              let createdId: string | null = null;
+              for (let attempt = 0; attempt < 2 && !createdId; attempt++) {
+                await new Promise(r => setTimeout(r, 7000));
+                try {
+                  const newAdRes = await client.postAd(postFields);
+                  createdId = extractAdId(newAdRes);
+                  if (!createdId) {
+                    await log( "warn", "bybit", `Ad ${adId}: postAd OK pero no se pudo extraer ID (respuesta: ${JSON.stringify(newAdRes).slice(0, 300)})`);
+                  }
+                } catch (e2: any) {
+                  if (e2.message?.includes("90043")) {
+                    const retryPrice = Math.max(recreatePrice * 1.005, minSellPrice * 1.005);
+                    postFields.price = retryPrice.toFixed(2);
+                    try {
+                      const retryRes = await client.postAd(postFields);
+                      createdId = extractAdId(retryRes);
+                    } catch { /* se cuenta como intento fallido, ver abajo */ }
+                  }
+                  if (!createdId) {
+                    await log( attempt === 0 ? "warn" : "error", "bybit", `Ad ${adId}: intento ${attempt + 1} de crear el reemplazo (tras borrar el viejo) falló: ${e2.message}`);
+                  }
                 }
               }
-              if (!removed) {
-                await log( "warn", "bybit", `Ad ${adId} (viejo): no se pudo eliminar tras crear el reemplazo ${createdId} -- corregir manualmente en Bybit para evitar un anuncio duplicado.`);
+
+              if (createdId) {
+                bybitModCount.set(modKey, 0);
+                await prisma.p2PBotAd.update({ where: { id: managedAd.id }, data: { adId: String(createdId) } });
+                bybitAdCache.set(String(createdId), {
+                  id: String(createdId), price: String(recreatePrice),
+                  side: 1, tokenId: "USDT", currencyId: "CLP",
+                  priceType: fullAd.priceType, premium: fullAd.premium,
+                  lastQuantity: fullAd.lastQuantity, quantity: fullAd.quantity,
+                  minAmount: fullAd.minAmount, maxAmount: fullAd.maxAmount,
+                  paymentPeriod: fullAd.paymentPeriod,
+                  payments: fullAd.payments, paymentTerms: fullAd.paymentTerms,
+                  remark: fullAd.remark, tradingPreferenceSet: fullAd.tradingPreferenceSet,
+                  itemType: fullAd.itemType,
+                });
+                bybitAdCache.delete(adId);
+                await log( "info", "bybit", `Anuncio recreado como ${createdId} (precio: ${recreatePrice.toFixed(2)})`);
+                actions.push({ action: "recreate_ad", exchange: "bybit", adId: createdId, suggestedPrice: recreatePrice, reason: `Recreado (${currentMods} mods)`, timestamp: Date.now() });
+                recreatedThisCycle = true;
+                // Skip normal update below — ya recreamos
+              } else {
+                await prisma.p2PBotAd.update({ where: { id: managedAd.id }, data: { botEnabled: false } });
+                await log( "error", "bybit", `🚫 Ad ${adId}: se borró para recrearlo pero los 2 intentos de crear el reemplazo fallaron -- se desactivó el bot en este anuncio para no quedar en un limbo. Publicarlo a mano en Bybit y reactivarlo desde el panel cuando exista.`);
+                recreatedThisCycle = true; // el ad ya no existe, no intentar el update normal de abajo
               }
-              recreatedThisCycle = true;
-              // Skip normal update below — ya recreamos
-            } else {
-              await log( "error", "bybit", `Ad ${adId}: no se pudo crear el reemplazo -- el anuncio viejo sigue activo, se intenta actualizar su precio normalmente a continuación.`);
             }
           }
           if (!recreatedThisCycle) {
@@ -2534,13 +2538,14 @@ async function runBybitCycle(
           if (e.message?.includes("912120050") && !(await claimBybitRecreateLock(managedAd.id))) {
             await log( "debug", "bybit", `Ad ${adId}: otra ejecución ya está recreando este anuncio tras rate limit, se salta`);
           } else if (e.message?.includes("912120050")) {
-            await log( "info", "bybit", `Rate limit, recreando anuncio ${adId} en 5s...`);
-            await new Promise(r => setTimeout(r, 5000));
-            // ORDEN INVERTIDO (sep 2026, mismo motivo documentado en el otro
-            // camino de recreación más arriba en este archivo): se crea el
-            // reemplazo PRIMERO y solo se borra el viejo si eso funciona --
-            // así nunca se pierde el anuncio por completo si la creación
-            // falla (ej. cuenta marcada "alto riesgo" por Bybit, 912300077).
+            await log( "info", "bybit", `Rate limit, recreando anuncio ${adId}...`);
+            // ORDEN (sep 2026, mismo cambio y mismo motivo documentado en el
+            // otro camino de recreación más arriba en este archivo -- ver
+            // ese comentario): se vuelve a borrar primero, con 7s de espera
+            // (pedida explícitamente por el usuario, confirmado a mano en
+            // la app de Bybit que así SÍ deja crear el reemplazo). Si los 2
+            // intentos de crear fallan tras borrar, se desactiva el bot en
+            // este anuncio (no queda en un limbo) y se avisa fuerte.
             const recreatePrice = targetPrice;
             const postFields: any = {
               tokenId: "USDT", currencyId: "CLP", side: "1",
@@ -2557,60 +2562,61 @@ async function runBybitCycle(
               itemType: String(fullAd.itemType ?? "ORIGIN"),
               status: 10,
             };
-            let newAdId: string | null = null;
-            try {
-              const newAdRes = await client.postAd(postFields);
-              newAdId = newAdRes?.result?.item?.id ?? newAdRes?.result?.id ?? null;
-            } catch (e2: any) {
-              if (e2.message?.includes("90043")) {
-                // Price too close — retry with 0.5% higher difference
-                const retryPrice = Math.max(currentPrice * 1.005, minSellPrice * 1.005);
-                postFields.price = retryPrice.toFixed(2);
-                try {
-                  const retryRes = await client.postAd(postFields);
-                  newAdId = retryRes?.result?.item?.id ?? retryRes?.result?.id ?? null;
-                } catch {
-                  await log( "error", "bybit", `Ad ${adId}: postAd retry falló incluso con precio ajustado -- el anuncio viejo NO se tocó y sigue activo con normalidad.`);
-                }
-              } else {
-                await log( "warn", "bybit", `Ad ${adId}: error al crear el reemplazo tras rate-limit -- el anuncio viejo NO se tocó y sigue activo con normalidad: ${e2.message}`);
+
+            let removed = false;
+            for (let retry = 0; retry < 3; retry++) {
+              try { await client.removeAd(adId); removed = true; break; }
+              catch (removeErr: any) {
+                await log( "warn", "bybit", `Ad ${adId}: remove intento ${retry + 1} falló: ${removeErr.message}`);
+                if (retry < 2) await new Promise(r => setTimeout(r, 2000));
               }
             }
-            if (newAdId) {
-              // Activate online (same format as 912120031 handler)
-              await new Promise(r => setTimeout(r, 2000));
-              try {
-                await client.updateAd({ id: String(newAdId), status: 10 });
-                await log( "info", "bybit", `Anuncio ${newAdId} creado y activado online`);
-              } catch (e3: any) {
-                await log( "warn", "bybit", `Anuncio ${newAdId}: no se pudo activar online (${e3.message}), reintentando próximo ciclo`);
-              }
-              bybitModCount.set(modKey, 0);
-              bybitLastUpdateAt.set(lastUpdateKey, Date.now() + 120000);
-              actions.push({ action: "recreate_ad", exchange: "bybit", adId: newAdId, suggestedPrice: targetPrice, reason: `Nuevo anuncio creado tras rate-limit`, timestamp: Date.now() });
-              await prisma.p2PBotAd.update({
-                where: { id: managedAd.id },
-                data: { adId: String(newAdId) },
-              });
-              await log( "info", "bybit", `Anuncio recreado como ${newAdId}`);
 
-              // Recién ahora, con el reemplazo ya confirmado y online, se
-              // borra el viejo -- si falla no se pierde nada: el viejo queda
-              // como duplicado temporal (borrar a mano en Bybit), nunca se
-              // pierde presencia en el mercado.
-              let removed = false;
-              for (let retry = 0; retry < 3; retry++) {
-                try { await client.removeAd(adId); removed = true; break; }
-                catch (removeErr: any) {
-                  await log( "warn", "bybit", `Ad ${adId} (viejo, ya reemplazado por ${newAdId}): remove intento ${retry + 1} falló: ${removeErr.message}`);
-                  if (retry < 2) await new Promise(r => setTimeout(r, 2000));
+            if (!removed) {
+              await log( "error", "bybit", `Ad ${adId}: no se pudo eliminar tras rate-limit, abortando recreación.`);
+            } else {
+              let newAdId: string | null = null;
+              for (let attempt = 0; attempt < 2 && !newAdId; attempt++) {
+                await new Promise(r => setTimeout(r, 7000));
+                try {
+                  const newAdRes = await client.postAd(postFields);
+                  newAdId = newAdRes?.result?.item?.id ?? newAdRes?.result?.id ?? null;
+                } catch (e2: any) {
+                  if (e2.message?.includes("90043")) {
+                    const retryPrice = Math.max(currentPrice * 1.005, minSellPrice * 1.005);
+                    postFields.price = retryPrice.toFixed(2);
+                    try {
+                      const retryRes = await client.postAd(postFields);
+                      newAdId = retryRes?.result?.item?.id ?? retryRes?.result?.id ?? null;
+                    } catch { /* se cuenta como intento fallido, ver abajo */ }
+                  }
+                  if (!newAdId) {
+                    await log( attempt === 0 ? "warn" : "error", "bybit", `Ad ${adId}: intento ${attempt + 1} de crear el reemplazo tras rate-limit falló: ${e2.message}`);
+                  }
                 }
               }
-              if (!removed) {
-                await log( "warn", "bybit", `Ad ${adId} (viejo): no se pudo eliminar tras crear el reemplazo ${newAdId} -- corregir manualmente en Bybit para evitar un anuncio duplicado.`);
+
+              if (newAdId) {
+                // Activate online (same format as 912120031 handler)
+                await new Promise(r => setTimeout(r, 2000));
+                try {
+                  await client.updateAd({ id: String(newAdId), status: 10 });
+                  await log( "info", "bybit", `Anuncio ${newAdId} creado y activado online`);
+                } catch (e3: any) {
+                  await log( "warn", "bybit", `Anuncio ${newAdId}: no se pudo activar online (${e3.message}), reintentando próximo ciclo`);
+                }
+                bybitModCount.set(modKey, 0);
+                bybitLastUpdateAt.set(lastUpdateKey, Date.now() + 120000);
+                actions.push({ action: "recreate_ad", exchange: "bybit", adId: newAdId, suggestedPrice: targetPrice, reason: `Nuevo anuncio creado tras rate-limit`, timestamp: Date.now() });
+                await prisma.p2PBotAd.update({
+                  where: { id: managedAd.id },
+                  data: { adId: String(newAdId) },
+                });
+                await log( "info", "bybit", `Anuncio recreado como ${newAdId}`);
+              } else {
+                await prisma.p2PBotAd.update({ where: { id: managedAd.id }, data: { botEnabled: false } });
+                await log( "error", "bybit", `🚫 Ad ${adId}: se borró para recrearlo tras rate-limit pero los 2 intentos de crear el reemplazo fallaron -- se desactivó el bot en este anuncio para no quedar en un limbo. Publicarlo a mano en Bybit y reactivarlo desde el panel cuando exista.`);
               }
-            } else {
-              await log( "error", "bybit", `Ad ${adId}: no se pudo crear el reemplazo tras rate-limit -- el anuncio viejo NO se tocó y sigue activo con normalidad.`);
             }
           } else if (e.message?.includes("912120031")) {
             await log( "info", "bybit", `Ad ${adId} offline, reactivando para próximo ciclo...`);
