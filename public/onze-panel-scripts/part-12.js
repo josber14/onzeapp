@@ -739,6 +739,12 @@
           usdt: remainingUsdt,
           date: sale.createdAt || null,
           ts: Number(getOrderTs(sale) || 0),
+          // Comisión de ESTA venta puntual (no la suma total de arriba) --
+          // pedido explícito del usuario (sep 2026): una venta sin capacity
+          // activo debe seguir sumando al resumen diario (USDT vendidos/CLP
+          // recibido), y para eso getP2PRangeStatsFromCapacity necesita
+          // poder filtrar/sumar por venta individual, no solo el agregado.
+          commissionUsdt: saleCommissionUsdt * remainingRatio,
         });
       }
     }
@@ -4281,6 +4287,57 @@
           profitClp,
           createdAt: part.createdAt
         });
+      });
+    });
+
+    // Ventas SIN capacity activo que las absorba (pedido explícito del
+    // usuario, sep 2026: "si entra una venta y no hay capacity activo ella
+    // debe estar en ventas sin asignar... pero también debe verse
+    // reflejada en el resumen porque es una venta que ya entró"). Antes
+    // este resumen solo sumaba lo YA asignado a algún capacity (cap.parts/
+    // dailyBuckets) -- una venta real sin capacity activo (ej. justo
+    // después de cerrar el último capacity) quedaba invisible acá, aunque
+    // sí aparecía en el aviso amarillo de "ventas sin asignar" más abajo en
+    // el panel. No se le calcula costo/ganancia real (no hay capacity con
+    // el que comparar el precio de compra) -- eso queda en 0 hasta que el
+    // usuario cree un capacity y la venta se reasigne sola.
+    (stats.unassignedSaleDetail || []).forEach(item => {
+      if(!item.date) return;
+      if(!isP2PInRange(item.date, range)) return;
+      if(exchange && exchange !== "all" && (item.exchange || "binance") !== exchange) return;
+
+      const usdt = Number(item.usdt || 0);
+      const clp = Number(item.clp || 0);
+      const commissionUsdt = Number(item.commissionUsdt || 0);
+
+      result.soldUsdt += usdt;
+      result.clpReceived += clp;
+      result.commissionUsdt += commissionUsdt;
+
+      const orderNumber = String(item.orderNumber || "");
+      if(orderNumber) seenOrders.add(orderNumber);
+
+      const provider = "Sin asignar";
+      if(!result.providers[provider]){
+        result.providers[provider] = { provider, soldUsdt: 0, clpReceived: 0, commissionUsdt: 0, commissionClp: 0, profitClp: 0, costClp: 0 };
+      }
+      result.providers[provider].soldUsdt += usdt;
+      result.providers[provider].clpReceived += clp;
+      result.providers[provider].commissionUsdt += commissionUsdt;
+
+      result.parts.push({
+        provider,
+        orderNumber,
+        assignedUsdt: usdt,
+        assignedClp: clp,
+        unitPrice: usdt > 0 ? clp / usdt : 0,
+        commissionUsdt,
+        commissionClp: 0,
+        buyPrice: 0,
+        costClp: 0,
+        profitClp: 0,
+        createdAt: item.date,
+        unassigned: true
       });
     });
 
