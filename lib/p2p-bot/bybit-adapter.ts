@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { createHmac, randomUUID } from "crypto";
+import { bybitApiBase, bybitFetch } from "./bybit-proxy";
 
 export async function getBybitCredentials(tenantId: number, label = "ONZE") {
   return prisma.bybitCredentials.findFirst({
@@ -111,7 +112,7 @@ export class BybitP2PClient {
   constructor(apiKey: string, secretKey: string, testnet?: boolean) {
     this.apiKey = apiKey;
     this.secretKey = secretKey;
-    this.baseUrl = testnet ? "https://api-testnet.bybit.com" : "https://api.bybit.com";
+    this.baseUrl = testnet ? "https://api-testnet.bybit.com" : bybitApiBase();
   }
 
   private sign(timestamp: string, payload: string): string {
@@ -134,7 +135,7 @@ export class BybitP2PClient {
     const payload = isGet ? queryStr.slice(1) : JSON.stringify(body);
     const signature = this.sign(timestamp, payload);
 
-    const res = await fetch(this.baseUrl + endpoint + queryStr, {
+    const res = await bybitFetch(this.baseUrl + endpoint + queryStr, {
       method,
       headers: {
         "X-BAPI-API-KEY": this.apiKey,
