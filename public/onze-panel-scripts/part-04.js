@@ -365,6 +365,48 @@ function addP2PBotStyles(){
        antes que uno posicionado con z-index, aunque ese z-index sea 0). */
     .onze-ads-bg{ position:relative; isolation:isolate; }
     .onze-ads-content{ position:relative; z-index:1; }
+
+    /* En el teléfono la red de nodos se ve saturada en un espacio angosto
+       (pedido explícito del usuario, sep 2026: "se ve muy sobrecargado...
+       busquemos otro diseño que no sobrecargue tanto pero que esa parte la
+       haga ver diferente"). Se prueba primero con un brillo ambiental --
+       dos manchas de luz suaves que se mueven lento, sin líneas ni
+       símbolos -- en vez de apagar directamente la red y dejar la sección
+       plana. */
+    @media (max-width:560px){
+      .onze-ads-bg{ overflow:hidden; }
+      .onze-ads-bg .onze-hero-canvas,
+      .onze-ads-bg .onze-usdt-glyph{ display:none; }
+      .onze-ads-bg:before,
+      .onze-ads-bg:after{
+        content:"";
+        position:absolute;
+        z-index:0;
+        border-radius:50%;
+        filter:blur(40px);
+        pointer-events:none;
+        animation:onzeAdsGlowDrift 14s ease-in-out infinite;
+      }
+      .onze-ads-bg:before{
+        width:200px; height:200px;
+        top:-50px; left:-50px;
+        background:rgba(56,189,248,.24);
+      }
+      .onze-ads-bg:after{
+        width:170px; height:170px;
+        bottom:-40px; right:-40px;
+        background:rgba(52,211,153,.2);
+        animation-delay:4s;
+        animation-direction:reverse;
+      }
+      @keyframes onzeAdsGlowDrift{
+        0%,100%{ transform:translate(0,0) scale(1); }
+        50%{ transform:translate(18px,22px) scale(1.12); }
+      }
+    }
+    @media (max-width:560px) and (prefers-reduced-motion: reduce){
+      .onze-ads-bg:before, .onze-ads-bg:after{ animation:none !important; }
+    }
     .bot-ads-list{display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;}
     .bot-ad-card{background:rgba(15,23,42,.35);border:1px solid rgba(148,163,184,.08);border-radius:12px;padding:14px;transition:border-color .15s,box-shadow .15s;}
     .bot-ad-card:hover{border-color:rgba(148,163,184,.16);box-shadow:0 1px 6px rgba(0,0,0,.15);}

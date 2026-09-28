@@ -186,7 +186,13 @@
   }
 
   function isAdsActive() {
-    return !!(isVisible(document.getElementById("botAdsSection")) && document.visibilityState === "visible");
+    // Chequea el propio canvas, no solo la sección -- en el teléfono
+    // (pedido explícito del usuario, sep 2026: "se ve muy sobrecargado")
+    // el canvas se oculta con CSS (display:none) dentro de #botAdsSection
+    // sin ocultar la sección entera (queda el brillo ambiental en su
+    // lugar). Si solo se chequeara la sección, el motor seguiría dibujando
+    // de fondo sobre un canvas invisible, gastando batería para nada.
+    return !!(isVisible(document.getElementById("onzeAdsCanvas")) && document.visibilityState === "visible");
   }
 
   function syncAds() { adsNet.sync(isAdsActive()); }
@@ -209,7 +215,14 @@
     syncAds();
   });
   window.addEventListener("resize", function () {
+    // sync() además de resize(): el fondo de Anuncios se oculta por CSS al
+    // cruzar el ancho de teléfono (ver media query en part-04.js) sin que
+    // cambie ningún atributo que el MutationObserver de arriba pueda ver
+    // -- sync() es lo que realmente prende/apaga el motor según el nuevo
+    // tamaño; resize() solo actualiza las dimensiones si ya sigue activo.
+    syncHero();
     heroNet.resize(isInicioActive());
+    syncAds();
     adsNet.resize(isAdsActive());
   });
 
