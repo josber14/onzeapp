@@ -66,3 +66,21 @@ export async function bybitFetch(url: string, opts: RequestInit = {}): Promise<R
   if (!proxyEnabled) return fetch(url, opts);
   return undiciFetch(url, { ...(opts as any), dispatcher: getProxyAgent() }) as unknown as Promise<Response>;
 }
+
+// Diagnóstico TEMPORAL (sep 2026) -- el bot en producción seguía pegándole
+// directo a Bybit (error 10010 limpio, sin pasar por el proxy) incluso
+// después de un deploy 100% fresco (--force, sin cache) y 5 minutos con el
+// bot apagado del todo (para descartar reciclado de contenedor). En vez de
+// seguir adivinando por qué, esto reporta en el log real de producción si
+// las variables de entorno realmente están llegando a este proceso. Se
+// borra en cuanto se resuelva el problema real.
+export function bybitProxyDebugInfo() {
+  return {
+    hasUrl: !!PROXY_URL,
+    hasCa: !!PROXY_CA,
+    enabled: proxyEnabled,
+    url: PROXY_URL || null,
+    caLength: PROXY_CA ? PROXY_CA.length : 0,
+    caStartsCorrectly: PROXY_CA ? PROXY_CA.trimStart().startsWith("-----BEGIN CERTIFICATE-----") : false,
+  };
+}
