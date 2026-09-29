@@ -1759,6 +1759,9 @@ function addP2PBotStyles(){
   };
 
   window.botSaveAdCfgField = function(realId, field, value){
+    if (field === 'botCompeteTransAmount') {
+      console.log('[DEBUG botSaveAdCfgField] field=' + field + ' value=' + JSON.stringify(value) + ' typeof=' + typeof value + ' realId=' + realId);
+    }
     var body = { exchange: botSelectedExchange, id: realId, label: botActiveLabel || "ONZE" };
     // Read adId from the parent container's data attribute
     var container = document.querySelector('[data-ad-real-id="' + realId + '"]');
