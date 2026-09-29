@@ -443,7 +443,32 @@ export async function PUT(req: NextRequest) {
         if (!client) {
           return Response.json({ ok: false, error: "Sin credenciales Bybit" }, { status: 400 });
         }
-        await client.updateAd({ id: String(adId), status: adOnline ? 10 : 20 });
+        // Bybit no tiene una acción de "pausa" real (confirmado contra su
+        // documentación oficial -- ver reactivateOfflineAd en
+        // bybit-adapter.ts) -- apagar significa cancelar el anuncio de
+        // verdad, y prender de nuevo significa crear uno nuevo con los
+        // mismos datos (puede fallar mientras la cuenta siga restringida
+        // como "Trial Advertiser", igual que la recreación automática).
+        // A diferencia de Binance (donde "Anuncio" es independiente de
+        // "Bot"), acá SÍ hay que pausar también la gestión del bot al
+        // apagar -- si no, el ciclo de precio seguiría intentando
+        // actualizar un anuncio que ya no existe de verdad, cada pocos
+        // segundos, sin parar.
+        if (!adOnline) {
+          await client.removeAd(String(adId));
+          await prisma.p2PBotAd.updateMany({
+            where: { tenantId: session.tenantId, exchange: "bybit", label, adId: String(adId) },
+            data: { botEnabled: false },
+          });
+        } else {
+          const newAdId = await client.recreateFromCancelled(String(adId));
+          const dbRow = await prisma.p2PBotAd.findFirst({
+            where: { tenantId: session.tenantId, exchange: "bybit", label, adId: String(adId) },
+          });
+          if (dbRow) {
+            await prisma.p2PBotAd.update({ where: { id: dbRow.id }, data: { adId: newAdId, botEnabled: true } });
+          }
+        }
         return Response.json({ ok: true });
       } catch (e: any) {
         return Response.json({ ok: false, error: `Bybit API error: ${e.message}` }, { status: 500 });

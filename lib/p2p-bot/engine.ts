@@ -2597,14 +2597,12 @@ async function runBybitCycle(
               }
 
               if (newAdId) {
-                // Activate online (same format as 912120031 handler)
-                await new Promise(r => setTimeout(r, 2000));
-                try {
-                  await client.updateAd({ id: String(newAdId), status: 10 });
-                  await log( "info", "bybit", `Anuncio ${newAdId} creado y activado online`);
-                } catch (e3: any) {
-                  await log( "warn", "bybit", `Anuncio ${newAdId}: no se pudo activar online (${e3.message}), reintentando próximo ciclo`);
-                }
+                // No hace falta "activarlo" acá -- postFields ya incluye
+                // status:10 en la creación misma (confirmado que Bybit no
+                // tiene un actionType para esto de todos modos: "ACTIVE"
+                // solo sirve para reactivar un anuncio YA offline, y llamarlo
+                // sobre uno recién creado y online fallaría con 912120031
+                // "Unable to proceed due to the status of the advertisement").
                 bybitModCount.set(modKey, 0);
                 bybitLastUpdateAt.set(lastUpdateKey, Date.now() + 120000);
                 actions.push({ action: "recreate_ad", exchange: "bybit", adId: newAdId, suggestedPrice: targetPrice, reason: `Nuevo anuncio creado tras rate-limit`, timestamp: Date.now() });
@@ -2621,7 +2619,16 @@ async function runBybitCycle(
           } else if (e.message?.includes("912120031")) {
             await log( "info", "bybit", `Ad ${adId} offline, reactivando para próximo ciclo...`);
             try {
-              await client.updateAd({ id: adId, status: 10 } as any);
+              // Bug real confirmado en vivo (sep 2026): mandar solo
+              // {id, status:10} acá devolvía éxito pero Bybit lo ignoraba en
+              // silencio -- el anuncio seguía offline (por eso este mismo
+              // log de "reactivando/reactivado" se repetía ciclo tras ciclo
+              // sin que nunca volviera a competir). Confirmado contra la
+              // documentación oficial: ese endpoint no tiene ningún campo
+              // "status" -- reactivar un anuncio offline es actionType
+              // "ACTIVE", no un update con status (ver
+              // reactivateOfflineAd en bybit-adapter.ts).
+              await client.reactivateOfflineAd(adId);
               await log( "info", "bybit", `Ad ${adId} reactivado`);
             } catch(e2: any) {
               await log( "warn", "bybit", `Ad ${adId}: no se pudo reactivar: ${e2.message}`);

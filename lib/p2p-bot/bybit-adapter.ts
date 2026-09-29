@@ -190,6 +190,89 @@ export class BybitP2PClient {
     return this.request("/v5/p2p/item/cancel", { itemId: id });
   }
 
+  // Reactivar un anuncio que BYBIT MISMO puso offline (ej. error 912120031
+  // durante el ciclo normal, típicamente por saldo insuficiente momentáneo).
+  // Confirmado contra la documentación oficial de Bybit (item/update): ese
+  // endpoint NO tiene ningún parámetro "status" -- solo actionType, con
+  // exactamente 2 valores: "MODIFY" (cambiar precio/cantidad de un anuncio
+  // YA online) o "ACTIVE" (reactivar uno que Bybit puso offline). Mandar
+  // {id, status} devolvía ret_code 0 ("éxito") pero Bybit lo ignoraba en
+  // silencio -- confirmado en vivo, probando apagar y prender un anuncio
+  // real: el status nunca cambiaba pese a la respuesta "exitosa". Por eso
+  // NO sirve para apagar un anuncio a propósito (no existe un actionType
+  // para eso) -- solo para el caso contrario, reactivar uno que ya está
+  // offline por una razón ajena a nosotros.
+  async reactivateOfflineAd(id: string) {
+    const detailRes = await this.getAdDetail(id);
+    const ad = detailRes?.result;
+    if (!ad) throw new Error(`No se pudo leer el detalle del anuncio ${id} antes de reactivarlo`);
+
+    const payObjs = ad.paymentTerms ?? ad.payments ?? [];
+    const paymentIds = Array.isArray(payObjs) ? payObjs.map((p: any) => String(p.id ?? p.paymentId ?? p)) : [];
+    const tps = ad.tradingPreferenceSet ?? {};
+    const strTps: any = {};
+    for (const k of Object.keys(tps)) strTps[k] = String(tps[k] ?? "");
+
+    return this.updateAd({
+      id,
+      price: String(ad.price ?? "0"),
+      actionType: "ACTIVE",
+      priceType: String(ad.priceType ?? "0"),
+      premium: String(ad.premium ?? "0"),
+      quantity: String(ad.lastQuantity ?? ad.quantity ?? "0"),
+      minAmount: String(ad.minAmount ?? "0"),
+      maxAmount: String(ad.maxAmount ?? "0"),
+      paymentPeriod: String(ad.paymentPeriod ?? "15") as any,
+      paymentIds,
+      remark: String(ad.remark ?? ""),
+      tradingPreferenceSet: strTps,
+    });
+  }
+
+  // Botón "Apagar/Prender anuncio" del panel (sep 2026, pedido explícito
+  // del usuario -- quiere poder apagar el anuncio de Bybit desde el panel
+  // sin tener que entrar a la app del teléfono). Bybit NO tiene una acción
+  // de "pausa" real (ver comentario de reactivateOfflineAd) -- la única
+  // forma real de que el anuncio deje de estar visible es CANCELARLO de
+  // verdad (removeAd). "Prender" de nuevo entonces no es "reactivar" sino
+  // CREAR un anuncio nuevo con los mismos datos del que se canceló -- igual
+  // que la recreación automática del bot, puede fallar mientras la cuenta
+  // siga restringida como "Trial Advertiser" (ver AGENTS.md). Devuelve el
+  // nuevo adId para que quien llama actualice su propia fila en la base.
+  async recreateFromCancelled(id: string): Promise<string> {
+    const detailRes = await this.getAdDetail(id);
+    const ad = detailRes?.result;
+    if (!ad) throw new Error(`No se pudo leer el detalle del anuncio ${id} para volver a publicarlo`);
+
+    const payObjs = ad.paymentTerms ?? ad.payments ?? [];
+    const paymentIds = Array.isArray(payObjs) ? payObjs.map((p: any) => String(p.id ?? p.paymentId ?? p)) : [];
+    const tps = ad.tradingPreferenceSet ?? {};
+    const strTps: any = {};
+    for (const k of Object.keys(tps)) strTps[k] = String(tps[k] ?? "");
+
+    const res = await this.postAd({
+      tokenId: ad.tokenId || "USDT",
+      currencyId: ad.currencyId || "CLP",
+      side: String(ad.side === 0 ? 0 : 1) as "0" | "1",
+      price: String(ad.price ?? "0"),
+      priceType: String(ad.priceType ?? "0"),
+      premium: String(ad.premium ?? "0"),
+      quantity: String(ad.lastQuantity ?? ad.quantity ?? "0"),
+      minAmount: String(ad.minAmount ?? "0"),
+      maxAmount: String(ad.maxAmount ?? "0"),
+      paymentPeriod: String(ad.paymentPeriod ?? "15") as any,
+      paymentIds,
+      remark: String(ad.remark ?? ""),
+      tradingPreferenceSet: strTps,
+      itemType: String(ad.itemType ?? "ORIGIN"),
+      status: 10,
+    } as any);
+
+    const newAdId = res?.result?.itemId ?? res?.result?.item?.id ?? res?.result?.id;
+    if (!newAdId) throw new Error(`Bybit no devolvió el id del anuncio nuevo (respuesta: ${JSON.stringify(res).slice(0, 300)})`);
+    return String(newAdId);
+  }
+
   // ─── Orders ───────────────────────────────────────────────────
 
   async getOrders(params: {

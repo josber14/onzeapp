@@ -1442,9 +1442,16 @@ function addP2PBotStyles(){
         ${(a.fromBinance || a.fromBybit) ? (() => {
           const isAdOnline = a.status === 'online' || a.status === 'active';
           const exName = a.fromBybit ? 'Bybit' : 'Binance';
+          // Bybit no tiene una acción real de "pausa" -- apagar cancela el
+          // anuncio de verdad, y prender de nuevo publica uno nuevo (puede
+          // fallar mientras la cuenta siga restringida como "Trial
+          // Advertiser"). El título del switch lo deja explícito solo para
+          // Bybit -- en Binance sí es una pausa real, sin ese riesgo.
+          const onTitle = a.fromBybit ? 'Apagar anuncio (lo CANCELA de verdad en Bybit)' : 'Apagar anuncio en ' + exName;
+          const offTitle = a.fromBybit ? 'Prender anuncio (publica uno nuevo en Bybit, puede fallar si la cuenta está restringida)' : 'Prender anuncio en ' + exName;
           return `<span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:${isAdOnline ? '#60a5fa' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
           <span>Anuncio</span>
-          <span class="toggle-switch toggle-switch-ad" title="${isAdOnline ? 'Apagar anuncio en ' + exName : 'Prender anuncio en ' + exName}" onclick="event.stopPropagation();window.toggleAdOnline('${a.fromBybit ? 'bybit' : 'binance'}','${escHtml(a.adId||'')}',!${isAdOnline},this)">
+          <span class="toggle-switch toggle-switch-ad" title="${isAdOnline ? onTitle : offTitle}" onclick="event.stopPropagation();window.toggleAdOnline('${a.fromBybit ? 'bybit' : 'binance'}','${escHtml(a.adId||'')}',!${isAdOnline},this)">
             <input type="checkbox" ${isAdOnline?'checked':''}>
             <span class="slider"></span>
           </span>
@@ -3575,10 +3582,12 @@ function addP2PBotStyles(){
               ${(a.fromBinance || a.fromBybit) ? (() => {
                 const isAdOnline = a.status === 'online' || a.status === 'active';
                 const exName = a.fromBybit ? 'Bybit' : 'Binance';
+                const onTitle = a.fromBybit ? 'Apagar anuncio (lo CANCELA de verdad en Bybit)' : 'Apagar anuncio en ' + exName;
+                const offTitle = a.fromBybit ? 'Prender anuncio (publica uno nuevo en Bybit, puede fallar si la cuenta está restringida)' : 'Prender anuncio en ' + exName;
                 return `
               <span style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:${isAdOnline ? '#60a5fa' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
                 <span>Anuncio</span>
-                <span class="toggle-switch toggle-switch-ad" title="${isAdOnline ? 'Apagar anuncio en ' + exName : 'Prender anuncio en ' + exName}" onclick="event.stopPropagation();window.toggleAdOnline('${a.fromBybit ? 'bybit' : 'binance'}','${escHtml(a.adId||'')}',!${isAdOnline},this)">
+                <span class="toggle-switch toggle-switch-ad" title="${isAdOnline ? onTitle : offTitle}" onclick="event.stopPropagation();window.toggleAdOnline('${a.fromBybit ? 'bybit' : 'binance'}','${escHtml(a.adId||'')}',!${isAdOnline},this)">
                   <input type="checkbox" ${isAdOnline?'checked':''}>
                   <span class="slider"></span>
                 </span>
