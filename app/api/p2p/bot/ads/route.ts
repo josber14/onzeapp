@@ -192,6 +192,32 @@ export async function GET(req: NextRequest) {
                 where: { tenantId: session.tenantId, exchange: "bybit", label, adId: String(a.id) },
               });
               if (freshExisting) { ads.push(freshExisting); continue; }
+
+              // Pedido explícito del usuario (sep 2026): mientras Bybit siga
+              // rechazando la recreación "en caliente" (restricción de
+              // Trial Advertiser), la única salida cuando falla dos veces
+              // es publicar el reemplazo a mano en la app (ver engine.ts,
+              // el aviso "🚫 ... se desactivó el bot en este anuncio").
+              // Ese anuncio nuevo llegaba SIEMPRE en blanco -- Diferencia
+              // top 1, Margen seguridad, Capital mín competidor, etc.
+              // quedaban vacíos otra vez, aunque el usuario ya los hubiera
+              // configurado en el anterior -- confirmado en vivo: 8 filas
+              // distintas para el mismo anuncio "real" en 24h. Se busca el
+              // anuncio de Bybit desactivado MÁS RECIENTE de esta misma
+              // cuenta (heurística simple: en la práctica esta cuenta
+              // gestiona un solo anuncio de Bybit a la vez) y se le copia
+              // su configuración personalizada al nuevo, en vez de dejarlo
+              // en blanco. Ventana de 24h para no heredar de un anuncio
+              // viejo ya irrelevante.
+              const donor = await prisma.p2PBotAd.findFirst({
+                where: {
+                  tenantId: session.tenantId, exchange: "bybit", label,
+                  botEnabled: false,
+                  updatedAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+                },
+                orderBy: { updatedAt: "desc" },
+              });
+
               const created = await prisma.p2PBotAd.create({
                 data: {
                   tenantId: session.tenantId,
@@ -210,6 +236,25 @@ export async function GET(req: NextRequest) {
                   isActive: true,
                   botManaged: true,
                   botEnabled: true,
+                  ...(donor ? {
+                    nickname: donor.nickname,
+                    botStrategy: donor.botStrategy,
+                    botTop1Diff: donor.botTop1Diff,
+                    botSpreadPct: donor.botSpreadPct,
+                    botPriceFloorPct: donor.botPriceFloorPct,
+                    botPriceSource: donor.botPriceSource,
+                    botCommissionPct: donor.botCommissionPct,
+                    botSafeMarginPct: donor.botSafeMarginPct,
+                    botMinCompetitorCapital: donor.botMinCompetitorCapital,
+                    botCompeteTransAmount: donor.botCompeteTransAmount,
+                    botCompetePayTypes: donor.botCompetePayTypes as any,
+                    botExcludedMerchants: donor.botExcludedMerchants as any,
+                    botMatchAllowedMerchants: donor.botMatchAllowedMerchants as any,
+                    botCycleInterval: donor.botCycleInterval,
+                    botCircuitBreakPct: donor.botCircuitBreakPct,
+                    botDailyVolumeCapUsdt: donor.botDailyVolumeCapUsdt,
+                    botMinAdPriceDiffPct: donor.botMinAdPriceDiffPct,
+                  } : {}),
                 },
               });
               ads.push(created);
