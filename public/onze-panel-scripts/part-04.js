@@ -1439,11 +1439,12 @@ function addP2PBotStyles(){
             <span class="slider"></span>
           </span>
         </span>
-        ${a.fromBinance ? (() => {
+        ${(a.fromBinance || a.fromBybit) ? (() => {
           const isAdOnline = a.status === 'online' || a.status === 'active';
+          const exName = a.fromBybit ? 'Bybit' : 'Binance';
           return `<span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:${isAdOnline ? '#60a5fa' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
           <span>Anuncio</span>
-          <span class="toggle-switch toggle-switch-ad" title="${isAdOnline ? 'Apagar anuncio en Binance' : 'Prender anuncio en Binance'}" onclick="event.stopPropagation();toggleBinanceAdOnline('${escHtml(a.adId||'')}',!${isAdOnline},this)">
+          <span class="toggle-switch toggle-switch-ad" title="${isAdOnline ? 'Apagar anuncio en ' + exName : 'Prender anuncio en ' + exName}" onclick="event.stopPropagation();window.toggleAdOnline('${a.fromBybit ? 'bybit' : 'binance'}','${escHtml(a.adId||'')}',!${isAdOnline},this)">
             <input type="checkbox" ${isAdOnline?'checked':''}>
             <span class="slider"></span>
           </span>
@@ -3571,12 +3572,13 @@ function addP2PBotStyles(){
                   <span class="slider"></span>
                 </span>
               </span>
-              ${a.fromBinance ? (() => {
+              ${(a.fromBinance || a.fromBybit) ? (() => {
                 const isAdOnline = a.status === 'online' || a.status === 'active';
+                const exName = a.fromBybit ? 'Bybit' : 'Binance';
                 return `
               <span style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:${isAdOnline ? '#60a5fa' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
                 <span>Anuncio</span>
-                <span class="toggle-switch toggle-switch-ad" title="${isAdOnline ? 'Apagar anuncio en Binance' : 'Prender anuncio en Binance'}" onclick="event.stopPropagation();toggleBinanceAdOnline('${escHtml(a.adId||'')}',!${isAdOnline},this)">
+                <span class="toggle-switch toggle-switch-ad" title="${isAdOnline ? 'Apagar anuncio en ' + exName : 'Prender anuncio en ' + exName}" onclick="event.stopPropagation();window.toggleAdOnline('${a.fromBybit ? 'bybit' : 'binance'}','${escHtml(a.adId||'')}',!${isAdOnline},this)">
                   <input type="checkbox" ${isAdOnline?'checked':''}>
                   <span class="slider"></span>
                 </span>
@@ -4109,22 +4111,23 @@ function addP2PBotStyles(){
   };
 
   // Botón independiente "prender/apagar anuncio" (pedido explícito del
-  // usuario, sep 2026): distinto del switch "Bot" de arriba -- este NO toca
-  // la gestión del bot para nada, solo prende/apaga el anuncio en Binance
-  // (igual que el switch on/off de la propia app de Binance). El precio
-  // sigue actualizándose igual mientras el anuncio esté apagado, tal como
-  // pasa hoy cuando se apaga manualmente desde la app.
-  window.toggleBinanceAdOnline = async function(adId, online, switchEl){
+  // usuario, sep 2026 -- extendido a Bybit sep 2026): distinto del switch
+  // "Bot" de arriba -- este NO toca la gestión del bot para nada, solo
+  // prende/apaga el anuncio en el exchange (igual que el switch on/off de
+  // la propia app). El precio sigue actualizándose igual mientras el
+  // anuncio esté apagado, tal como pasa hoy cuando se apaga manualmente
+  // desde la app.
+  window.toggleAdOnline = async function(exchange, adId, online, switchEl){
     if(switchEl){ switchEl.style.opacity = '0.5'; switchEl.style.pointerEvents = 'none'; }
     try{
       const r = await fetch("/api/p2p/bot/ads", {
         method:"PUT", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ exchange: "binance", adId, adOnline: online, label: botActiveLabel || "ONZE" })
+        body: JSON.stringify({ exchange, adId, adOnline: online, label: botActiveLabel || "ONZE" })
       });
       const d = await r.json().catch(() => null);
-      if(!r.ok || !d?.ok) console.warn("[P2P Bot] toggleBinanceAdOnline error:", d?.error || r.status);
-    }catch(e){ console.warn("[P2P Bot] toggleBinanceAdOnline error:", e); }
+      if(!r.ok || !d?.ok) console.warn("[P2P Bot] toggleAdOnline error:", d?.error || r.status);
+    }catch(e){ console.warn("[P2P Bot] toggleAdOnline error:", e); }
     // Este switch aparece en dos pantallas distintas (la principal con la
     // configuración, y la lista dentro del modal de anuncios) -- refresca
     // las dos, la que no aplique simplemente no hace nada (container null).

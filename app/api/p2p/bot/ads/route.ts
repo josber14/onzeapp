@@ -152,6 +152,7 @@ export async function GET(req: NextRequest) {
             }
           } catch (_) {}
           const res = await client.getMyAds(1, 50);
+          const rawItems = res?.result?.items || [];
           // getMyAds devuelve TODO el historial de anuncios de la cuenta,
           // incluidos los ya cancelados hace tiempo (ej. de recreaciones
           // viejas) -- Bybit nunca los borra de esta lista, solo cambia su
@@ -160,7 +161,7 @@ export async function GET(req: NextRequest) {
           // "Borrar" en uno ya cancelado no hacía nada visible porque no
           // hay nada real que cancelar de nuevo -- pedido explícito del
           // usuario: la lista solo debe mostrar anuncios online reales.
-          const items = (res?.result?.items || []).filter((a: any) => Number(a.status) === 10);
+          const onlineItems = rawItems.filter((a: any) => Number(a.status) === 10);
 
           // Pedido explícito del usuario (jul 2026): un anuncio de Bybit
           // creado desde la app (fuera del panel, ej. tras una recreación
@@ -170,7 +171,7 @@ export async function GET(req: NextRequest) {
           // base de datos, se registra de una vez con el bot YA activado --
           // no solo se muestra el switch prendido, queda gestionado de
           // verdad desde el primer segundo que el panel lo detecta.
-          for (const a of items) {
+          for (const a of onlineItems) {
             if (ads.some(la => la.adId === a.id)) continue;
             try {
               // Bug real confirmado en vivo (jul 2026): el engine (ciclo del
@@ -217,6 +218,21 @@ export async function GET(req: NextRequest) {
             }
           }
 
+          // Pedido explícito del usuario (sep 2026): al agregar el botón
+          // "Anuncio" (prender/apagar directo, igual que Binance) para
+          // Bybit, un anuncio apagado a mano con ese botón quedaba con
+          // status 20 -- EL MISMO código que usan los anuncios cancelados
+          // para siempre (los "fantasma" que el filtro de arriba excluye a
+          // propósito). Sin distinción posible por status, se muestra
+          // igual un anuncio si YA lo gestionamos (fila en nuestra base con
+          // botEnabled true), sin importar si está online ahora mismo --
+          // así el botón nuevo no hace que el anuncio desaparezca sin
+          // forma de volver a prenderlo desde el panel.
+          const managedBybitAdIds = new Set(
+            ads.filter(la => la.exchange === "bybit" && la.botEnabled && la.adId).map(la => la.adId)
+          );
+          const items = rawItems.filter((a: any) => Number(a.status) === 10 || managedBybitAdIds.has(String(a.id)));
+
           bybitAds = items.map((a: any) => {
             const localAd = ads.find(la => la.adId === a.id);
             const rawPays: any[] = a.payments || [];
@@ -240,7 +256,13 @@ export async function GET(req: NextRequest) {
             maxAmount: Number(a.maxSingleTransAmount ?? a.maxAmount) || 0,
             paymentMethods,
             payTime: a.paymentPeriod || 15,
-            status: localAd?.status || bybitLiveStatus,
+            // Mismo criterio que Binance (ver comentario más arriba): el
+            // estado REAL leído de Bybit en este request manda siempre, no
+            // el que quedó guardado en nuestra base al crear la fila --
+            // ahora que un anuncio apagado con el botón "Anuncio" puede
+            // seguir apareciendo en la lista, mostrar su estado real (no
+            // uno viejo) importa más que antes.
+            status: bybitLiveStatus,
             isActive: a.isOnline ?? true,
             botManaged: localAd?.botManaged || false,
             botEnabled: localAd?.botEnabled || false,
@@ -345,9 +367,13 @@ export async function PUT(req: NextRequest) {
 
     // Botón independiente "prender/apagar anuncio" (pedido explícito del
     // usuario, sep 2026): NO toca el switch "Bot" ni ninguna otra config --
-    // solo cambia el estado real del anuncio en Binance (advStatus), igual
-    // que el switch on/off de la propia app de Binance. Corta acá mismo, no
-    // sigue al resto de la lógica de esta ruta (no hay nada más que hacer).
+    // solo cambia el estado real del anuncio en el exchange, igual que el
+    // switch on/off de la propia app. Corta acá mismo, no sigue al resto de
+    // la lógica de esta ruta (no hay nada más que hacer). Binance necesita
+    // reenviar el anuncio completo (lista blanca de 32 campos, ver
+    // setAdOnline) -- Bybit acepta un simple update de status (10=online,
+    // 20=offline), mismo mecanismo ya usado para reactivar anuncios en
+    // engine.ts.
     if (typeof adOnline === "boolean" && exchange === "binance") {
       if (!adId) {
         return Response.json({ ok: false, error: "adId es requerido para prender/apagar el anuncio" }, { status: 400 });
@@ -361,6 +387,21 @@ export async function PUT(req: NextRequest) {
         return Response.json({ ok: true });
       } catch (e: any) {
         return Response.json({ ok: false, error: `Binance API error: ${e.message}` }, { status: 500 });
+      }
+    }
+    if (typeof adOnline === "boolean" && exchange === "bybit") {
+      if (!adId) {
+        return Response.json({ ok: false, error: "adId es requerido para prender/apagar el anuncio" }, { status: 400 });
+      }
+      try {
+        const client = await getBybitClient(session.tenantId);
+        if (!client) {
+          return Response.json({ ok: false, error: "Sin credenciales Bybit" }, { status: 400 });
+        }
+        await client.updateAd({ id: String(adId), status: adOnline ? 10 : 20 });
+        return Response.json({ ok: true });
+      } catch (e: any) {
+        return Response.json({ ok: false, error: `Bybit API error: ${e.message}` }, { status: 500 });
       }
     }
 
