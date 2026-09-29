@@ -1529,7 +1529,7 @@ function addP2PBotStyles(){
             <input id="adCfg_${realId}_MinCompetitorCapital" type="number" step="1" value="${minCapital}" placeholder="Sin filtro" onchange="botSaveAdCfgField(${realId},'botMinCompetitorCapital',this.value)">
           </label>
           <label>Competir en lista de monto (CLP)
-            <input id="adCfg_${realId}_CompeteTransAmount" type="text" inputmode="numeric" value="${competeTransAmount !== '' ? Number(competeTransAmount).toLocaleString('es-CL') : ''}" placeholder="Todos los montos" oninput="window.botFormatAdTransAmountInput(this)" onchange="botSaveAdCfgField(${realId},'botCompeteTransAmount',this.value.replace(/[^\d]/g,''))">
+            <input id="adCfg_${realId}_CompeteTransAmount" type="text" inputmode="numeric" value="${competeTransAmount !== '' ? Number(competeTransAmount).toLocaleString('es-CL') : ''}" placeholder="Todos los montos" oninput="window.botFormatAdTransAmountInput(this)" onchange="botSaveAdCfgField(${realId},'botCompeteTransAmount',this.value.replace(/[^\\d]/g,''))">
             <span class="help-text">Solo compite contra anuncios que aceptarían este monto (ej. 50.000). Vacío = como ahora, contra toda la lista.</span>
           </label>
           <label>Filtrar pago
@@ -1759,9 +1759,6 @@ function addP2PBotStyles(){
   };
 
   window.botSaveAdCfgField = function(realId, field, value){
-    if (field === 'botCompeteTransAmount') {
-      console.log('[DEBUG botSaveAdCfgField] field=' + field + ' value=' + JSON.stringify(value) + ' typeof=' + typeof value + ' realId=' + realId);
-    }
     var body = { exchange: botSelectedExchange, id: realId, label: botActiveLabel || "ONZE" };
     // Read adId from the parent container's data attribute
     var container = document.querySelector('[data-ad-real-id="' + realId + '"]');

@@ -343,20 +343,6 @@ export async function PUT(req: NextRequest) {
       return Response.json({ ok: false, error: "exchange es requerido" }, { status: 400 });
     }
 
-    // DIAGNOSTICO TEMPORAL (sep 2026) -- investigando por qué
-    // botCompeteTransAmount no persiste para ningún tenant. Sacar apenas se
-    // confirme la causa.
-    if (botCompeteTransAmount !== undefined) {
-      try {
-        await prisma.p2PBotLog.create({
-          data: {
-            tenantId: session.tenantId, level: "info", exchange: exchange || null, label,
-            message: `DEBUG competeTransAmount recibido: id=${id} adId=${adId} valor=${JSON.stringify(botCompeteTransAmount)} tipo=${typeof botCompeteTransAmount}`,
-          },
-        });
-      } catch {}
-    }
-
     // Botón independiente "prender/apagar anuncio" (pedido explícito del
     // usuario, sep 2026): NO toca el switch "Bot" ni ninguna otra config --
     // solo cambia el estado real del anuncio en Binance (advStatus), igual
