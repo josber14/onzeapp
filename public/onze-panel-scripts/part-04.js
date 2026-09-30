@@ -504,6 +504,19 @@ function addP2PBotStyles(){
     .bot-cycle-tile-label{font-size:10px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;}
     .bot-cycle-tile-value{font-size:14px;color:#e2e8f0;font-weight:700;}
 
+    /* Resumen combinado Binance+Bybit -- pedido explícito del usuario (sep
+       2026): tarjeta propia, separada visualmente del detalle de cada
+       ciclo individual (que usa .bot-cycle-tile de arriba), para que se
+       note de un vistazo que es un total aparte y no otro dato más del
+       mismo ciclo. */
+    .bot-combined-card{background:linear-gradient(135deg,rgba(0,212,255,.07),rgba(124,58,237,.05));border:1px solid rgba(0,212,255,.22);border-radius:14px;padding:14px 16px;box-shadow:0 0 0 1px rgba(0,212,255,.04) inset;}
+    .bot-combined-title{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800;color:#7dd3fc;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;}
+    .bot-combined-title .dot{width:6px;height:6px;border-radius:50%;background:#00d4ff;box-shadow:0 0 6px 1px rgba(0,212,255,.7);}
+    .bot-combined-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;}
+    .bot-combined-tile{background:rgba(8,15,28,.55);border:1px solid rgba(148,163,184,.14);border-radius:10px;padding:10px 12px;}
+    .bot-combined-tile-label{display:flex;align-items:center;gap:5px;font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px;}
+    .bot-combined-tile-value{font-size:17px;font-weight:800;}
+
     /* Config collapsible */
     .bot-config-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 14px;font-size:11px;color:#64748b;font-weight:600;transition:all .15s;background:none;border:none;font-family:inherit;width:100%;text-align:left;border-top:1px solid rgba(148,163,184,.05);}
     .bot-config-toggle:hover{color:#94a3b8;background:rgba(148,163,184,.03);}
@@ -789,6 +802,33 @@ function addP2PBotStyles(){
             </div>
           </div>
 
+          <!-- Resumen combinado Binance+Bybit (sep 2026, pedido explícito del
+               usuario): tarjeta PROPIA, separada de "Ciclo de Ventas" --
+               antes vivía adentro de esa misma tarjeta y se veía como un
+               dato más del ciclo individual, lo cual confundía. Es un total
+               aparte (suma de los ciclos ACTIVOS de cada exchange, 0 si ese
+               exchange no tiene ninguno abierto -- ver
+               app/api/p2p/cycle/combined-totals/route.ts) y ahora se ve como
+               tal: su propio recuadro, con su propio estilo. Solo aplica a
+               Venta, no a Compra (mismo criterio de siempre). -->
+          <div id="botCycleCombinedSummary" class="bot-combined-card" style="grid-column:1/-1;display:none;">
+            <div class="bot-combined-title"><span class="dot"></span>Resumen combinado · Binance + Bybit</div>
+            <div class="bot-combined-grid">
+              <div class="bot-combined-tile">
+                <div class="bot-combined-tile-label">🟡 CLP Binance</div>
+                <div class="bot-combined-tile-value" id="botCycleCombinedBinance" style="color:#f0b90b;">—</div>
+              </div>
+              <div class="bot-combined-tile">
+                <div class="bot-combined-tile-label">🟠 CLP Bybit</div>
+                <div class="bot-combined-tile-value" id="botCycleCombinedBybit" style="color:#f7a600;">—</div>
+              </div>
+              <div class="bot-combined-tile" style="border-color:rgba(0,212,255,.35);background:rgba(0,212,255,.05);">
+                <div class="bot-combined-tile-label">🔗 Total combinado</div>
+                <div class="bot-combined-tile-value" id="botCycleCombinedTotal" style="color:#00d4ff;">—</div>
+              </div>
+            </div>
+          </div>
+
           <!-- Cycle de ventas P2P -->
           <div id="botCycleSection" class="bot-card" style="grid-column:1/-1;">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -809,28 +849,6 @@ function addP2PBotStyles(){
             <div style="display:flex;gap:6px;margin-top:10px;">
               <button class="btn small ghost bot-cycle-side-btn active" type="button" data-side="SELL" onclick="window.botSetCycleSideFilter('SELL')" style="font-size:11px;padding:5px 12px;border-radius:6px;background:rgba(52,211,153,.14);border-color:rgba(52,211,153,.4);color:#34d399;">Venta</button>
               <button class="btn small ghost bot-cycle-side-btn" type="button" data-side="BUY" onclick="window.botSetCycleSideFilter('BUY')" style="font-size:11px;padding:5px 12px;border-radius:6px;color:#fb7185;border-color:rgba(251,113,133,.25);">Compra</button>
-            </div>
-            <!-- Resumen combinado Binance+Bybit (sep 2026, pedido explícito
-                 del usuario): se ve igual en las dos pantallas de Ciclo de
-                 Ventas -- solo el total de cada exchange, sin el detalle de
-                 órdenes (eso se sigue viendo solo en la pantalla propia de
-                 cada uno). Solo aplica a Venta, no a Compra. -->
-            <div id="botCycleCombinedSummary" style="margin-top:12px;display:none;">
-              <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px;">Resumen combinado</div>
-              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;">
-                <div class="bot-cycle-tile">
-                  <div class="bot-cycle-tile-label">CLP Binance</div>
-                  <div class="bot-cycle-tile-value" id="botCycleCombinedBinance">—</div>
-                </div>
-                <div class="bot-cycle-tile">
-                  <div class="bot-cycle-tile-label">CLP Bybit</div>
-                  <div class="bot-cycle-tile-value" id="botCycleCombinedBybit">—</div>
-                </div>
-                <div class="bot-cycle-tile" style="border-color:rgba(0,212,255,.25);">
-                  <div class="bot-cycle-tile-label">Total combinado</div>
-                  <div class="bot-cycle-tile-value" id="botCycleCombinedTotal" style="color:#00d4ff;">—</div>
-                </div>
-              </div>
             </div>
             <p id="botCycleEmptyHint" style="margin-top:10px;font-size:12px;color:#64748b;">No hay un ciclo activo. Inicia uno para llevar el conteo automático de ventas de esta cuenta.</p>
             <div id="botCycleInfo" style="margin-top:12px;display:none;">
