@@ -810,6 +810,28 @@ function addP2PBotStyles(){
               <button class="btn small ghost bot-cycle-side-btn active" type="button" data-side="SELL" onclick="window.botSetCycleSideFilter('SELL')" style="font-size:11px;padding:5px 12px;border-radius:6px;background:rgba(52,211,153,.14);border-color:rgba(52,211,153,.4);color:#34d399;">Venta</button>
               <button class="btn small ghost bot-cycle-side-btn" type="button" data-side="BUY" onclick="window.botSetCycleSideFilter('BUY')" style="font-size:11px;padding:5px 12px;border-radius:6px;color:#fb7185;border-color:rgba(251,113,133,.25);">Compra</button>
             </div>
+            <!-- Resumen combinado Binance+Bybit (sep 2026, pedido explícito
+                 del usuario): se ve igual en las dos pantallas de Ciclo de
+                 Ventas -- solo el total de cada exchange, sin el detalle de
+                 órdenes (eso se sigue viendo solo en la pantalla propia de
+                 cada uno). Solo aplica a Venta, no a Compra. -->
+            <div id="botCycleCombinedSummary" style="margin-top:12px;display:none;">
+              <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px;">Resumen combinado</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;">
+                <div class="bot-cycle-tile">
+                  <div class="bot-cycle-tile-label">CLP Binance</div>
+                  <div class="bot-cycle-tile-value" id="botCycleCombinedBinance">—</div>
+                </div>
+                <div class="bot-cycle-tile">
+                  <div class="bot-cycle-tile-label">CLP Bybit</div>
+                  <div class="bot-cycle-tile-value" id="botCycleCombinedBybit">—</div>
+                </div>
+                <div class="bot-cycle-tile" style="border-color:rgba(0,212,255,.25);">
+                  <div class="bot-cycle-tile-label">Total combinado</div>
+                  <div class="bot-cycle-tile-value" id="botCycleCombinedTotal" style="color:#00d4ff;">—</div>
+                </div>
+              </div>
+            </div>
             <p id="botCycleEmptyHint" style="margin-top:10px;font-size:12px;color:#64748b;">No hay un ciclo activo. Inicia uno para llevar el conteo automático de ventas de esta cuenta.</p>
             <div id="botCycleInfo" style="margin-top:12px;display:none;">
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;">
@@ -5303,6 +5325,33 @@ function addP2PBotStyles(){
         const listEl2 = document.getElementById("botCycleManualList");
         if(listEl2) listEl2.style.display = "none";
       }
+
+      // Resumen combinado Binance+Bybit -- solo tiene sentido en Venta
+      // (pedido explícito del usuario, sep 2026). Fuera de la promesa
+      // principal para no atrasar el resto del refresco si esta llamada
+      // tarda; mismo chequeo de "¿sigue siendo la pestaña actual?" antes
+      // de tocar el DOM.
+      const combinedEl = document.getElementById("botCycleCombinedSummary");
+      if(requestedSide === "BUY"){
+        if(combinedEl) combinedEl.style.display = "none";
+      }else{
+        botCycleRefreshCombinedSummary(requestedLabel);
+      }
+    }catch(e){}
+  }
+
+  async function botCycleRefreshCombinedSummary(requestedLabel){
+    try{
+      const res = await fetch("/api/p2p/cycle/combined-totals?label=" + encodeURIComponent(requestedLabel), { credentials:"include" });
+      const data = await res.json();
+      if(!data?.ok) return;
+      if((botActiveLabel || "ONZE") !== requestedLabel || (window.botCycleSideFilter || "SELL") === "BUY") return;
+      const combinedEl = document.getElementById("botCycleCombinedSummary");
+      if(!combinedEl) return;
+      combinedEl.style.display = "block";
+      document.getElementById("botCycleCombinedBinance").textContent = "$" + Math.round(Number(data.binanceTotal || 0)).toLocaleString();
+      document.getElementById("botCycleCombinedBybit").textContent = "$" + Math.round(Number(data.bybitTotal || 0)).toLocaleString();
+      document.getElementById("botCycleCombinedTotal").textContent = "$" + Math.round(Number(data.combinedTotal || 0)).toLocaleString();
     }catch(e){}
   }
 
@@ -5511,11 +5560,14 @@ function addP2PBotStyles(){
 
   window.botCycleCloseConfirm = async function(){
     const errEl = document.getElementById("botCycleCloseErr");
+    const closedExchange = botSelectedExchange || "binance";
+    const closedLabel = botActiveLabel || "ONZE";
+    const closedSide = window.botCycleSideFilter || "SELL";
     try{
       const res = await fetch("/api/p2p/cycle/close", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ label: botActiveLabel || "ONZE", exchange: botSelectedExchange || "binance", side: window.botCycleSideFilter || "SELL" })
+        body: JSON.stringify({ label: closedLabel, exchange: closedExchange, side: closedSide })
       });
       const data = await res.json();
       if(!data.ok){
@@ -5523,6 +5575,55 @@ function addP2PBotStyles(){
         return;
       }
       document.getElementById("botCycleCloseModal")?.remove();
+      window.botCycleShowCloseResult(data.cycle);
+      botCycleRefresh();
+      // Pedido explícito del usuario (sep 2026): con Binance y Bybit
+      // corriendo Ciclo de Ventas por separado, preguntar de una vez si
+      // también quiere cerrar el otro -- solo aplica a Venta.
+      if(closedSide === "SELL" && (closedExchange === "binance" || closedExchange === "bybit")){
+        window.botCycleMaybeAskCloseOther(closedExchange, closedLabel);
+      }
+    }catch(e){
+      if(errEl){ errEl.textContent = "Error al cerrar ciclo"; errEl.style.display = "block"; }
+    }
+  };
+
+  window.botCycleMaybeAskCloseOther = async function(closedExchange, label){
+    const otherExchange = closedExchange === "binance" ? "bybit" : "binance";
+    try{
+      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(label) + "&exchange=" + encodeURIComponent(otherExchange) + "&side=SELL", { credentials:"include" });
+      const data = await res.json();
+      if(!data?.ok || !data?.active) return; // sin ciclo activo del otro lado, nada que preguntar
+      const otherName = otherExchange === "binance" ? "Binance" : "Bybit";
+      botCycleModalShell("botCycleCloseOtherModal", "¿Cerrar también " + otherName + "?", `
+        <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
+          También tiene un ciclo de ventas activo en ${otherName}. ¿Quiere cerrarlo ahora mismo también?
+        </p>
+        <p id="botCycleCloseOtherErr" style="color:#fca5a5;font-size:12px;margin-bottom:8px;display:none;"></p>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button onclick="document.getElementById('botCycleCloseOtherModal').remove()"
+            style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">No, dejarlo así</button>
+          <button onclick="window.botCycleCloseOtherConfirm('${otherExchange}','${label}')"
+            style="padding:10px 16px;background:rgba(239,68,68,.85);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Sí, cerrar también</button>
+        </div>
+      `);
+    }catch(e){}
+  };
+
+  window.botCycleCloseOtherConfirm = async function(otherExchange, label){
+    const errEl = document.getElementById("botCycleCloseOtherErr");
+    try{
+      const res = await fetch("/api/p2p/cycle/close", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ label, exchange: otherExchange, side: "SELL" })
+      });
+      const data = await res.json();
+      if(!data.ok){
+        if(errEl){ errEl.textContent = data.error || "Error al cerrar ciclo"; errEl.style.display = "block"; }
+        return;
+      }
+      document.getElementById("botCycleCloseOtherModal")?.remove();
       window.botCycleShowCloseResult(data.cycle);
       botCycleRefresh();
     }catch(e){
