@@ -517,6 +517,37 @@ function addP2PBotStyles(){
     .bot-combined-tile-label{display:flex;align-items:center;gap:5px;font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px;}
     .bot-combined-tile-value{font-size:17px;font-weight:800;}
 
+    /* Ciclo de Ventas -- pedido explícito del usuario (sep 2026): "está muy
+       básico", mismo nivel de cuidado visual que ya se le dio al Resumen
+       combinado de arriba, sin tocar NADA de la lógica -- todos los ids que
+       actualiza el JS existente (botCycleStartTime, botCycleUsdt, etc.)
+       siguen intactos con el mismo comportamiento, solo cambia cómo se ve.
+       Los íconos por tile van con ::before (no en el texto real) porque el
+       JS reemplaza el textContent completo de algunas labels (CLP
+       Binance/Bybit, USDT vendidos/comprados) al refrescar -- un ícono
+       metido en el texto real desaparecería en el próximo refresh. */
+    .bot-cycle-card{background:linear-gradient(160deg,rgba(5,150,105,.055),rgba(15,23,42,.3) 45%);border:1px solid rgba(52,211,153,.14);}
+    .bot-cycle-head-icon{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:rgba(52,211,153,.14);border:1px solid rgba(52,211,153,.25);font-size:13px;flex:0 0 auto;}
+    .bot-cycle-tile2{position:relative;background:rgba(15,23,42,.55);border:1px solid rgba(148,163,184,.12);border-radius:10px;padding:11px 12px 9px;overflow:hidden;}
+    .bot-cycle-tile2::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:var(--bct,#475569);}
+    .bot-cycle-tile2 .bot-cycle-tile-label{display:flex;align-items:center;gap:5px;}
+    .bct-inicio{--bct:#64748b;}
+    .bct-usdt{--bct:#34d399;}
+    .bct-usdt .bot-cycle-tile-label::before{content:"💱";}
+    .bct-clp{--bct:#60a5fa;}
+    .bct-clp .bot-cycle-tile-label::before{content:"💰";}
+    .bct-manual{--bct:#fbbf24;}
+    .bct-manual .bot-cycle-tile-label::before{content:"📝";}
+    .bct-total{--bct:#00d4ff;}
+    .bct-total .bot-cycle-tile-label::before{content:"💵";}
+    .bct-autocierre{--bct:#c084fc;}
+    .bct-autocierre .bot-cycle-tile-label::before{content:"⏳";}
+    .bot-cycle-empty{margin-top:10px;padding:24px 16px;border:1px dashed rgba(148,163,184,.2);border-radius:12px;text-align:center;background:rgba(15,23,42,.2);}
+    .bot-cycle-empty .bce-icon{font-size:22px;margin-bottom:6px;display:block;opacity:.75;}
+    .bot-cycle-empty p{margin:0;font-size:12px;color:#64748b;}
+    #botCycleOrdersList > div:nth-child(even){background:rgba(148,163,184,.03);}
+    #botCycleOrdersList > div:hover{background:rgba(0,212,255,.045);}
+
     /* Config collapsible */
     .bot-config-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 14px;font-size:11px;color:#64748b;font-weight:600;transition:all .15s;background:none;border:none;font-family:inherit;width:100%;text-align:left;border-top:1px solid rgba(148,163,184,.05);}
     .bot-config-toggle:hover{color:#94a3b8;background:rgba(148,163,184,.03);}
@@ -830,14 +861,15 @@ function addP2PBotStyles(){
           </div>
 
           <!-- Cycle de ventas P2P -->
-          <div id="botCycleSection" class="bot-card" style="grid-column:1/-1;">
+          <div id="botCycleSection" class="bot-card bot-cycle-card" style="grid-column:1/-1;">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
               <div style="display:flex;align-items:center;gap:8px;">
-                <span id="botCycleSectionTitle" style="font-size:14px;font-weight:800;color:#f1f5f9;letter-spacing:.2px;">🔄 Ciclo de Ventas</span>
+                <span class="bot-cycle-head-icon">🔄</span>
+                <span id="botCycleSectionTitle" style="font-size:14px;font-weight:800;color:#f1f5f9;letter-spacing:.2px;">Ciclo de Ventas</span>
                 <span id="botCycleLabel" style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:999px;background:rgba(148,163,184,.12);color:#94a3b8;">Inactivo</span>
               </div>
               <span style="flex:1;"></span>
-              <button class="btn small" id="botCycleStartBtn" onclick="window.botCycleStart()" style="font-size:11px;padding:6px 14px;border-radius:7px;background:linear-gradient(135deg,#059669,#047857);border:none;color:#fff;font-weight:700;">▶ Iniciar Ciclo</button>
+              <button class="btn small" id="botCycleStartBtn" onclick="window.botCycleStart()" style="font-size:11px;padding:6px 14px;border-radius:7px;background:linear-gradient(135deg,#059669,#047857);border:none;color:#fff;font-weight:700;box-shadow:0 2px 8px -2px rgba(5,150,105,.5);">▶ Iniciar Ciclo</button>
               <button class="btn small secondary" id="botCycleAddSaleBtn" onclick="window.botCycleAddSale()" style="font-size:11px;padding:6px 14px;border-radius:7px;display:none;font-weight:700;">+ Venta Manual</button>
               <button class="btn small" id="botCycleCloseBtn" onclick="window.botCycleClose()" style="font-size:11px;padding:6px 14px;border-radius:7px;display:none;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.3);color:#fca5a5;font-weight:700;">■ Cerrar Ciclo</button>
               <button class="btn small secondary" onclick="window.botCycleShowHistory()" style="font-size:11px;padding:6px 14px;border-radius:7px;font-weight:700;">📜 Historial</button>
@@ -850,40 +882,43 @@ function addP2PBotStyles(){
               <button class="btn small ghost bot-cycle-side-btn active" type="button" data-side="SELL" onclick="window.botSetCycleSideFilter('SELL')" style="font-size:11px;padding:5px 12px;border-radius:6px;background:rgba(52,211,153,.14);border-color:rgba(52,211,153,.4);color:#34d399;">Venta</button>
               <button class="btn small ghost bot-cycle-side-btn" type="button" data-side="BUY" onclick="window.botSetCycleSideFilter('BUY')" style="font-size:11px;padding:5px 12px;border-radius:6px;color:#fb7185;border-color:rgba(251,113,133,.25);">Compra</button>
             </div>
-            <p id="botCycleEmptyHint" style="margin-top:10px;font-size:12px;color:#64748b;">No hay un ciclo activo. Inicia uno para llevar el conteo automático de ventas de esta cuenta.</p>
+            <div id="botCycleEmptyHint" class="bot-cycle-empty">
+              <span class="bce-icon">⏸️</span>
+              <p>No hay un ciclo activo. Inicia uno para llevar el conteo automático de ventas de esta cuenta.</p>
+            </div>
             <div id="botCycleInfo" style="margin-top:12px;display:none;">
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;">
-                <div class="bot-cycle-tile">
+                <div class="bot-cycle-tile bot-cycle-tile2 bct-inicio">
                   <div class="bot-cycle-tile-label">Inicio</div>
                   <div class="bot-cycle-tile-value" id="botCycleStartTime" style="font-size:13px;">—</div>
                 </div>
-                <div class="bot-cycle-tile">
+                <div class="bot-cycle-tile bot-cycle-tile2 bct-usdt">
                   <div class="bot-cycle-tile-label" id="botCycleUsdtLabel">USDT vendidos</div>
                   <div class="bot-cycle-tile-value" id="botCycleUsdt">0</div>
                 </div>
-                <div class="bot-cycle-tile">
+                <div class="bot-cycle-tile bot-cycle-tile2 bct-clp">
                   <div class="bot-cycle-tile-label" id="botCycleClpLabel">CLP Binance</div>
-                  <div class="bot-cycle-tile-value" id="botCycleBinanceClp">0</div>
+                  <div class="bot-cycle-tile-value" id="botCycleBinanceClp" style="color:#60a5fa;">0</div>
                 </div>
-                <div class="bot-cycle-tile" id="botCycleManualClpTile">
+                <div class="bot-cycle-tile bot-cycle-tile2 bct-manual" id="botCycleManualClpTile">
                   <div class="bot-cycle-tile-label">CLP manual</div>
-                  <div class="bot-cycle-tile-value" id="botCycleManualClp">0</div>
+                  <div class="bot-cycle-tile-value" id="botCycleManualClp" style="color:#fbbf24;">0</div>
                 </div>
-                <div class="bot-cycle-tile" style="border-color:rgba(0,212,255,.25);">
+                <div class="bot-cycle-tile bot-cycle-tile2 bct-total" style="border-color:rgba(0,212,255,.25);">
                   <div class="bot-cycle-tile-label">Total CLP</div>
-                  <div class="bot-cycle-tile-value" id="botCycleTotalClp" style="color:#00d4ff;">0</div>
+                  <div class="bot-cycle-tile-value" id="botCycleTotalClp" style="color:#00d4ff;font-size:16px;">0</div>
                 </div>
-                <div class="bot-cycle-tile" onclick="window.botCycleEditMinClose()" style="cursor:pointer;" title="Click para editar el monto de auto-cierre">
+                <div class="bot-cycle-tile bot-cycle-tile2 bct-autocierre" onclick="window.botCycleEditMinClose()" style="cursor:pointer;" title="Click para editar el monto de auto-cierre">
                   <div class="bot-cycle-tile-label">Auto-cierre en ✏️</div>
-                  <div class="bot-cycle-tile-value" id="botCycleMinClose" style="font-size:13px;">—</div>
+                  <div class="bot-cycle-tile-value" id="botCycleMinClose" style="font-size:13px;color:#c084fc;">—</div>
                 </div>
               </div>
               <div style="margin-top:10px;">
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-                  <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.3px;">Órdenes de este ciclo</div>
+                  <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.3px;">🧾 Órdenes de este ciclo</div>
                   <span id="botCycleSetAsideChip" onclick="window.botCycleToggleSetAsideList()" style="display:none;cursor:pointer;font-size:10px;font-weight:700;padding:2px 9px;border-radius:999px;background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.3);color:#fbbf24;"></span>
                 </div>
-                <div id="botCycleOrdersList" style="max-height:220px;overflow-y:auto;border:1px solid rgba(148,163,184,.12);border-radius:8px;">
+                <div id="botCycleOrdersList" style="max-height:220px;overflow-y:auto;border:1px solid rgba(148,163,184,.12);border-radius:8px;background:rgba(8,15,28,.35);">
                   <div style="color:#64748b;font-size:11px;text-align:center;padding:12px 0;">Sin órdenes todavía</div>
                 </div>
                 <div id="botCycleSetAsideList" style="display:none;margin-top:8px;border:1px solid rgba(251,191,36,.2);border-radius:8px;background:rgba(251,191,36,.04);"></div>
@@ -5183,7 +5218,7 @@ function addP2PBotStyles(){
       btn.style.borderColor = active ? (isBuyBtn ? "rgba(251,113,133,.4)" : "rgba(52,211,153,.4)") : (isBuyBtn ? "rgba(251,113,133,.25)" : "rgba(52,211,153,.25)");
     });
     const titleEl = document.getElementById("botCycleSectionTitle");
-    if(titleEl) titleEl.textContent = window.botCycleSideFilter === "BUY" ? "🔄 Ciclo de Compra" : "🔄 Ciclo de Ventas";
+    if(titleEl) titleEl.textContent = window.botCycleSideFilter === "BUY" ? "Ciclo de Compra" : "Ciclo de Ventas";
     const usdtLabelEl = document.getElementById("botCycleUsdtLabel");
     if(usdtLabelEl) usdtLabelEl.textContent = window.botCycleSideFilter === "BUY" ? "USDT comprados" : "USDT vendidos";
     // "CLP manual" / "+ Venta Manual" no aplican al Ciclo de Compra (pedido
