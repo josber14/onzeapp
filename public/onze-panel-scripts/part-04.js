@@ -432,6 +432,13 @@ function addP2PBotStyles(){
     .icon-btn-sm{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;border:1px solid rgba(148,163,184,.08);background:rgba(15,23,42,.4);color:#94a3b8;cursor:pointer;transition:all .12s;flex-shrink:0;}
     .icon-btn-sm:hover{background:rgba(248,113,113,.08);color:#fb7185;border-color:rgba(248,113,113,.15);}
     .icon-btn-sm svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+
+    /* Botón "Exportar Compras" -- pedido explícito del usuario (sep 2026):
+       solo ícono de descarga, sin texto, estilo botón redondeado teal
+       (mandó una captura de referencia exacta). */
+    .bot-icon-btn-download{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#2dd4bf,#14b8a6);border:none;cursor:pointer;transition:filter .15s;box-shadow:0 2px 8px -2px rgba(20,184,166,.55);flex-shrink:0;}
+    .bot-icon-btn-download:hover{filter:brightness(1.08);}
+    .bot-icon-btn-download svg{width:18px;height:18px;stroke:#04241f;stroke-width:2.4;fill:none;stroke-linecap:round;stroke-linejoin:round;}
     .bot-ad-card .ad-actions .toggle-switch{width:36px;height:20px;}
     .bot-ad-card .ad-actions .toggle-switch .slider::before{width:16px;height:16px;}
     .ad-bot-config{margin-top:10px;border-top:1px solid rgba(148,163,184,.1);padding-top:10px;}
@@ -879,7 +886,9 @@ function addP2PBotStyles(){
                    (con número de orden) para llevar la contabilidad. Se
                    oculta en Venta a propósito (el usuario pidió esto SOLO
                    para Compra: "la venta como está ya está bien"). -->
-              <button class="btn small secondary" id="botCycleExportBuyBtn" onclick="window.botCycleExportBuy()" style="font-size:11px;padding:6px 14px;border-radius:7px;font-weight:700;display:none;">⬇️ Exportar Compras</button>
+              <button class="bot-icon-btn-download" id="botCycleExportBuyBtn" onclick="window.botCycleExportBuy()" title="Exportar Compras" style="display:none;">
+                <svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+              </button>
             </div>
             <!-- Selector Venta/Compra -- mismo patrón que el de "Anuncios" (sep
                  2026): separa el Ciclo de Compra del de Venta sin tocar nada
