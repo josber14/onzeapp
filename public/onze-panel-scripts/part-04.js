@@ -879,7 +879,7 @@ function addP2PBotStyles(){
                    (con número de orden) para llevar la contabilidad. Se
                    oculta en Venta a propósito (el usuario pidió esto SOLO
                    para Compra: "la venta como está ya está bien"). -->
-              <button class="btn small secondary" id="botCycleExportBuyBtn" onclick="window.botCycleExportBuy()" style="font-size:11px;padding:6px 14px;border-radius:7px;font-weight:700;display:none;">🧾 Exportar Compras</button>
+              <button class="btn small secondary" id="botCycleExportBuyBtn" onclick="window.botCycleExportBuy()" style="font-size:11px;padding:6px 14px;border-radius:7px;font-weight:700;display:none;">⬇️ Exportar Compras</button>
             </div>
             <!-- Selector Venta/Compra -- mismo patrón que el de "Anuncios" (sep
                  2026): separa el Ciclo de Compra del de Venta sin tocar nada
@@ -5808,7 +5808,7 @@ function addP2PBotStyles(){
     const first = new Date(today.getFullYear(), today.getMonth(), 1);
     const pad = (n) => String(n).padStart(2, "0");
     const toIsoDate = (d) => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
-    botCycleModalShell("botCycleExportModal", "🧾 Exportar Compras", `
+    botCycleModalShell("botCycleExportModal", "⬇️ Exportar Compras", `
       <p style="color:#aaa;font-size:13px;margin-bottom:14px;">
         Busca las compras reales (con número de orden) de un rango de fechas, para llevar la contabilidad. No incluye compras manuales.
       </p>
