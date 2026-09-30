@@ -77,9 +77,17 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const label = searchParams.get("label") || "ONZE";
 
+    // Bybit es una cuenta única fija -- no tiene concepto de ONZE/ZINPLE
+    // (ver engine.ts, runBybitCycle: "sin importar bajo qué label esté
+    // corriendo el timer del panel, el ciclo de Bybit siempre usa ONZE").
+    // Si se buscara con el label de Binance que esté seleccionado en ese
+    // momento (ej. ZINPLE), el total de Bybit saldría siempre en 0 aunque
+    // haya un ciclo real activo -- el ciclo de Bybit vive siempre bajo
+    // "ONZE" en la base, sin importar qué pestaña de Binance se esté
+    // mirando.
     const [binanceTotal, bybitTotal] = await Promise.all([
       totalForExchange(session.tenantId, label, "binance"),
-      totalForExchange(session.tenantId, label, "bybit"),
+      totalForExchange(session.tenantId, "ONZE", "bybit"),
     ]);
 
     return Response.json({

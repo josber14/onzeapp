@@ -5590,8 +5590,15 @@ function addP2PBotStyles(){
 
   window.botCycleMaybeAskCloseOther = async function(closedExchange, label){
     const otherExchange = closedExchange === "binance" ? "bybit" : "binance";
+    // Bybit es una cuenta única fija (sin ONZE/ZINPLE, ver engine.ts) -- su
+    // ciclo siempre vive bajo el label "ONZE" en la base, sin importar qué
+    // pestaña de Binance (ONZE/ZINPLE) se acaba de cerrar. Al revés
+    // (cerrando desde Bybit y preguntando por Binance) se usa el label que
+    // ya se tenía a mano -- Binance sí puede tener ONZE y ZINPLE corriendo
+    // cada uno por su lado.
+    const otherLabel = otherExchange === "bybit" ? "ONZE" : label;
     try{
-      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(label) + "&exchange=" + encodeURIComponent(otherExchange) + "&side=SELL", { credentials:"include" });
+      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(otherLabel) + "&exchange=" + encodeURIComponent(otherExchange) + "&side=SELL", { credentials:"include" });
       const data = await res.json();
       if(!data?.ok || !data?.active) return; // sin ciclo activo del otro lado, nada que preguntar
       const otherName = otherExchange === "binance" ? "Binance" : "Bybit";
@@ -5603,7 +5610,7 @@ function addP2PBotStyles(){
         <div style="display:flex;gap:10px;justify-content:flex-end;">
           <button onclick="document.getElementById('botCycleCloseOtherModal').remove()"
             style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">No, dejarlo así</button>
-          <button onclick="window.botCycleCloseOtherConfirm('${otherExchange}','${label}')"
+          <button onclick="window.botCycleCloseOtherConfirm('${otherExchange}','${otherLabel}')"
             style="padding:10px 16px;background:rgba(239,68,68,.85);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Sí, cerrar también</button>
         </div>
       `);
