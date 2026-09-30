@@ -873,6 +873,13 @@ function addP2PBotStyles(){
               <button class="btn small secondary" id="botCycleAddSaleBtn" onclick="window.botCycleAddSale()" style="font-size:11px;padding:6px 14px;border-radius:7px;display:none;font-weight:700;">+ Venta Manual</button>
               <button class="btn small" id="botCycleCloseBtn" onclick="window.botCycleClose()" style="font-size:11px;padding:6px 14px;border-radius:7px;display:none;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.3);color:#fca5a5;font-weight:700;">■ Cerrar Ciclo</button>
               <button class="btn small secondary" onclick="window.botCycleShowHistory()" style="font-size:11px;padding:6px 14px;border-radius:7px;font-weight:700;">📜 Historial</button>
+              <!-- "Exportar Compras" (sep 2026, pedido explícito del usuario):
+                   solo para Compra -- la trabajadora que factura necesita
+                   buscar/descargar por rango de fecha las compras reales
+                   (con número de orden) para llevar la contabilidad. Se
+                   oculta en Venta a propósito (el usuario pidió esto SOLO
+                   para Compra: "la venta como está ya está bien"). -->
+              <button class="btn small secondary" id="botCycleExportBuyBtn" onclick="window.botCycleExportBuy()" style="font-size:11px;padding:6px 14px;border-radius:7px;font-weight:700;display:none;">🧾 Exportar Compras</button>
             </div>
             <!-- Selector Venta/Compra -- mismo patrón que el de "Anuncios" (sep
                  2026): separa el Ciclo de Compra del de Venta sin tocar nada
@@ -5221,11 +5228,19 @@ function addP2PBotStyles(){
     if(titleEl) titleEl.textContent = window.botCycleSideFilter === "BUY" ? "Ciclo de Compra" : "Ciclo de Ventas";
     const usdtLabelEl = document.getElementById("botCycleUsdtLabel");
     if(usdtLabelEl) usdtLabelEl.textContent = window.botCycleSideFilter === "BUY" ? "USDT comprados" : "USDT vendidos";
-    // "CLP manual" / "+ Venta Manual" no aplican al Ciclo de Compra (pedido
-    // explícito del usuario, sep 2026) -- se ocultan solo para esa vista, sin
-    // tocar nada del lado Venta.
+    // "Compra Manual" (sep 2026, pedido explícito del usuario): antes esto
+    // ocultaba "CLP manual" y "+ Venta Manual" en el Ciclo de Compra -- el
+    // usuario notó que sin eso "CLP gastado" y "Total CLP" siempre mostraban
+    // el mismo número (nunca había nada manual que sumar) y pidió agregar
+    // la opción de compra manual. El mecanismo (tabla y endpoint
+    // /api/p2p/cycle/manual-sale) ya era genérico -- no dependía del side --
+    // así que solo hacía falta dejar de ocultarlo acá.
     const manualTileEl = document.getElementById("botCycleManualClpTile");
-    if(manualTileEl) manualTileEl.style.display = (window.botCycleSideFilter === "BUY") ? "none" : "";
+    if(manualTileEl) manualTileEl.style.display = "";
+    const addBtnLabelEl = document.getElementById("botCycleAddSaleBtn");
+    if(addBtnLabelEl) addBtnLabelEl.textContent = window.botCycleSideFilter === "BUY" ? "+ Compra Manual" : "+ Venta Manual";
+    const exportBuyBtn = document.getElementById("botCycleExportBuyBtn");
+    if(exportBuyBtn) exportBuyBtn.style.display = window.botCycleSideFilter === "BUY" ? "" : "none";
     botCycleRefresh();
   };
 
@@ -5278,10 +5293,8 @@ function addP2PBotStyles(){
       const emptyHint = document.getElementById("botCycleEmptyHint");
       if(cycle){
         startBtn.style.display = "none";
-        // "+ Venta Manual" no aplica al Ciclo de Compra (pedido explícito
-        // del usuario, sep 2026) -- no tiene sentido registrar una "venta"
-        // manual sobre un anuncio que compra, no vende.
-        addBtn.style.display = requestedSide === "BUY" ? "none" : "";
+        addBtn.style.display = "";
+        addBtn.textContent = requestedSide === "BUY" ? "+ Compra Manual" : "+ Venta Manual";
         closeBtn.style.display = "";
         info.style.display = "block";
         if(emptyHint) emptyHint.style.display = "none";
@@ -5294,7 +5307,7 @@ function addP2PBotStyles(){
         const clpLabelEl = document.getElementById("botCycleClpLabel");
         if(clpLabelEl) clpLabelEl.textContent = requestedSide === "BUY" ? "CLP gastado" : "CLP " + (botSelectedExchange || "binance").charAt(0).toUpperCase() + (botSelectedExchange || "binance").slice(1);
         const manualTileEl2 = document.getElementById("botCycleManualClpTile");
-        if(manualTileEl2) manualTileEl2.style.display = requestedSide === "BUY" ? "none" : "";
+        if(manualTileEl2) manualTileEl2.style.display = "";
         const usdtLabelEl2 = document.getElementById("botCycleUsdtLabel");
         if(usdtLabelEl2) usdtLabelEl2.textContent = requestedSide === "BUY" ? "USDT comprados" : "USDT vendidos";
         document.getElementById("botCycleStartTime").textContent = new Date(cycle.startTime).toLocaleString();
@@ -5539,9 +5552,12 @@ function addP2PBotStyles(){
   };
 
   window.botCycleAddSale = function(){
-    botCycleModalShell("botCycleAddSaleModal", "+ Venta manual", `
+    const isBuySale = window.botCycleSideFilter === "BUY";
+    botCycleModalShell("botCycleAddSaleModal", isBuySale ? "+ Compra manual" : "+ Venta manual", `
       <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
-        Registra una venta que no pasó por Binance (ej. pago directo a un cliente) dentro del ciclo activo.
+        ${isBuySale
+          ? "Registra una compra que no pasó por el anuncio (ej. USDT comprado directo a una persona) dentro del ciclo activo."
+          : "Registra una venta que no pasó por Binance (ej. pago directo a un cliente) dentro del ciclo activo."}
       </p>
       <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">Concepto</label>
       <input id="botCycleSaleConceptInput" type="text" placeholder="Ej: PayPal - Juan Pérez"
@@ -5777,6 +5793,119 @@ function addP2PBotStyles(){
           style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cerrar</button>
       </div>
     `);
+  };
+
+  // "Exportar Compras" (sep 2026, pedido explícito del usuario): su
+  // trabajadora necesita facturar todo lo que entra por Compra y para eso
+  // necesita buscar/descargar las compras reales (con número de orden) de
+  // un rango de fechas -- no solo del ciclo activo, un rango puede cruzar
+  // varios ciclos ya cerrados. Solo para Compra (pedido explícito: "la
+  // venta como está ya está bien"). El backend (buy-export/route.ts) ya
+  // junta y filtra las órdenes de todos los ciclos de Compra que caigan en
+  // el rango -- acá solo se pide, se muestra, y se arma el CSV.
+  window.botCycleExportBuy = function(){
+    const today = new Date();
+    const first = new Date(today.getFullYear(), today.getMonth(), 1);
+    const pad = (n) => String(n).padStart(2, "0");
+    const toIsoDate = (d) => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+    botCycleModalShell("botCycleExportModal", "🧾 Exportar Compras", `
+      <p style="color:#aaa;font-size:13px;margin-bottom:14px;">
+        Busca las compras reales (con número de orden) de un rango de fechas, para llevar la contabilidad. No incluye compras manuales.
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <div style="flex:1;">
+          <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">Desde</label>
+          <input id="botCycleExportFrom" type="date" value="${toIsoDate(first)}"
+            style="width:100%;box-sizing:border-box;padding:9px;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#fff;">
+        </div>
+        <div style="flex:1;">
+          <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">Hasta</label>
+          <input id="botCycleExportTo" type="date" value="${toIsoDate(today)}"
+            style="width:100%;box-sizing:border-box;padding:9px;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#fff;">
+        </div>
+      </div>
+      <button onclick="window.botCycleExportSearch()" class="btn small" style="width:100%;margin-bottom:14px;font-weight:700;">🔍 Buscar</button>
+      <div id="botCycleExportResults"></div>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+        <button onclick="document.getElementById('botCycleExportModal').remove()"
+          style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cerrar</button>
+      </div>
+    `);
+    window.botCycleExportSearch();
+  };
+
+  window.__botCycleExportData = null;
+  window.botCycleExportSearch = async function(){
+    const resEl = document.getElementById("botCycleExportResults");
+    if(!resEl) return;
+    const fromStr = document.getElementById("botCycleExportFrom")?.value;
+    const toStr = document.getElementById("botCycleExportTo")?.value;
+    if(!fromStr || !toStr){ resEl.innerHTML = "<p style='color:#fca5a5;font-size:12px;'>Elige ambas fechas.</p>"; return; }
+    const fromMs = new Date(fromStr + "T00:00:00").getTime();
+    const toMs = new Date(toStr + "T23:59:59.999").getTime();
+    if(!(toMs >= fromMs)){ resEl.innerHTML = "<p style='color:#fca5a5;font-size:12px;'>El rango de fechas es inválido.</p>"; return; }
+    resEl.innerHTML = "<p style='color:#64748b;font-size:12px;'>Buscando...</p>";
+    try{
+      const url = "/api/p2p/cycle/buy-export?label=" + encodeURIComponent(botActiveLabel || "ONZE") + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance") + "&from=" + fromMs + "&to=" + toMs;
+      const r = await fetch(url, { credentials:"include" });
+      const data = await r.json();
+      if(!data?.ok){ resEl.innerHTML = "<p style='color:#fca5a5;font-size:12px;'>" + escHtml(data?.error || "Error al buscar") + "</p>"; return; }
+      window.__botCycleExportData = data;
+      if(!data.orders || !data.orders.length){
+        resEl.innerHTML = "<p style='color:#64748b;font-size:12px;'>No hay compras en ese rango.</p>";
+        return;
+      }
+      const rows = data.orders.map(o => {
+        const d = o.createTime ? new Date(o.createTime).toLocaleString("es-CL", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" }) : "—";
+        return "<div style='display:flex;justify-content:space-between;gap:8px;padding:6px 10px;border-bottom:1px solid rgba(148,163,184,.08);font-size:11px;'>" +
+          "<span style='color:#94a3b8;'>" + d + "</span>" +
+          "<span style='color:#cbd5e1;'>#" + escHtml(String(o.orderNumber)) + "</span>" +
+          "<span style='color:#e2e8f0;'>" + Number(o.amount || 0).toFixed(2) + " USDT</span>" +
+          "<span style='color:#34d399;font-weight:700;'>$" + Math.round(Number(o.totalPrice || 0)).toLocaleString() + "</span>" +
+        "</div>";
+      }).join("");
+      resEl.innerHTML = `
+        <div style="max-height:260px;overflow-y:auto;border:1px solid rgba(148,163,184,.12);border-radius:8px;background:rgba(8,15,28,.35);margin-bottom:10px;">${rows}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
+          <div class="bot-cycle-tile"><div class="bot-cycle-tile-label">Órdenes</div><div class="bot-cycle-tile-value">${data.count}</div></div>
+          <div class="bot-cycle-tile"><div class="bot-cycle-tile-label">Total USDT</div><div class="bot-cycle-tile-value">${Number(data.totalUsdt || 0).toFixed(2)}</div></div>
+          <div class="bot-cycle-tile" style="border-color:rgba(0,212,255,.25);"><div class="bot-cycle-tile-label">Total CLP</div><div class="bot-cycle-tile-value" style="color:#00d4ff;">$${Math.round(Number(data.totalClp || 0)).toLocaleString()}</div></div>
+        </div>
+        <button onclick="window.botCycleExportDownloadCsv()" class="btn small" style="width:100%;font-weight:700;background:linear-gradient(135deg,#059669,#047857);border:none;color:#fff;">⬇ Descargar CSV</button>
+      `;
+    }catch(e){
+      resEl.innerHTML = "<p style='color:#fca5a5;font-size:12px;'>Error al buscar.</p>";
+    }
+  };
+
+  // El CSV se arma en el navegador a partir de los mismos datos que ya
+  // trajo la búsqueda -- no hace falta un endpoint aparte ni una librería de
+  // Excel: un .csv con BOM se abre directo en Excel (tildes y ñ incluidos)
+  // y es exactamente lo que pidió el usuario: número de orden, USDT, CLP,
+  // más el total CLP al final.
+  window.botCycleExportDownloadCsv = function(){
+    const data = window.__botCycleExportData;
+    if(!data || !data.orders || !data.orders.length) return;
+    const fromStr = document.getElementById("botCycleExportFrom")?.value || "";
+    const toStr = document.getElementById("botCycleExportTo")?.value || "";
+    const esc = (v) => '"' + String(v).replace(/"/g, '""') + '"';
+    const lines = [["Fecha", "Numero de orden", "USDT", "CLP"].map(esc).join(",")];
+    data.orders.forEach(o => {
+      const d = o.createTime ? new Date(o.createTime).toLocaleString("es-CL") : "";
+      lines.push([d, o.orderNumber || "", Number(o.amount || 0).toFixed(2), Math.round(Number(o.totalPrice || 0))].map(esc).join(","));
+    });
+    lines.push(["", "", "", ""].map(esc).join(","));
+    lines.push(["TOTAL", "", Number(data.totalUsdt || 0).toFixed(2), Math.round(Number(data.totalClp || 0))].map(esc).join(","));
+    const csv = "﻿" + lines.join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "compras_" + (botActiveLabel || "ONZE") + "_" + fromStr + "_a_" + toStr + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   window.botCycleShowDetail = async function(id){
