@@ -1461,19 +1461,20 @@ function addP2PBotStyles(){
             <span class="slider"></span>
           </span>
         </span>
-        ${(a.fromBinance || a.fromBybit) ? (() => {
+        ${a.fromBinance ? (() => {
           const isAdOnline = a.status === 'online' || a.status === 'active';
-          const exName = a.fromBybit ? 'Bybit' : 'Binance';
-          // Bybit no tiene una acción real de "pausa" -- apagar cancela el
-          // anuncio de verdad, y prender de nuevo publica uno nuevo (puede
-          // fallar mientras la cuenta siga restringida como "Trial
-          // Advertiser"). El título del switch lo deja explícito solo para
-          // Bybit -- en Binance sí es una pausa real, sin ese riesgo.
-          const onTitle = a.fromBybit ? 'Apagar anuncio (lo CANCELA de verdad en Bybit)' : 'Apagar anuncio en ' + exName;
-          const offTitle = a.fromBybit ? 'Prender anuncio (publica uno nuevo en Bybit, puede fallar si la cuenta está restringida)' : 'Prender anuncio en ' + exName;
+          // Bybit NO tiene esta pausa real (confirmado a fondo, sep 2026:
+          // ni la API pública ni la app tienen un "OFFLINE"/"PAUSE" para un
+          // anuncio -- "apagar" solo se puede hacer cancelándolo de verdad,
+          // que el usuario pidió explícitamente NO usar). El único "modo
+          // ausente" real de Bybit vive en su sitio web interno
+          // (x-api/fiat/otc/otc/maker/work-config/switch), autenticado con
+          // la sesión del navegador, no con la API -- se descartó por ser
+          // tan frágil como la vieja integración de chat de Binance por
+          // Playwright (ya deprecada). Este botón queda solo para Binance.
           return `<span style="display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;color:${isAdOnline ? '#60a5fa' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
           <span>Anuncio</span>
-          <span class="toggle-switch toggle-switch-ad" title="${isAdOnline ? onTitle : offTitle}" onclick="event.stopPropagation();window.toggleAdOnline('${a.fromBybit ? 'bybit' : 'binance'}','${escHtml(a.adId||'')}',!${isAdOnline},this)">
+          <span class="toggle-switch toggle-switch-ad" title="${isAdOnline ? 'Apagar anuncio en Binance' : 'Prender anuncio en Binance'}" onclick="event.stopPropagation();window.toggleAdOnline('binance','${escHtml(a.adId||'')}',!${isAdOnline},this)">
             <input type="checkbox" ${isAdOnline?'checked':''}>
             <span class="slider"></span>
           </span>
@@ -3601,15 +3602,15 @@ function addP2PBotStyles(){
                   <span class="slider"></span>
                 </span>
               </span>
-              ${(a.fromBinance || a.fromBybit) ? (() => {
+              ${a.fromBinance ? (() => {
                 const isAdOnline = a.status === 'online' || a.status === 'active';
-                const exName = a.fromBybit ? 'Bybit' : 'Binance';
-                const onTitle = a.fromBybit ? 'Apagar anuncio (lo CANCELA de verdad en Bybit)' : 'Apagar anuncio en ' + exName;
-                const offTitle = a.fromBybit ? 'Prender anuncio (publica uno nuevo en Bybit, puede fallar si la cuenta está restringida)' : 'Prender anuncio en ' + exName;
+                // Bybit no tiene esta pausa real -- ver comentario largo en
+                // el otro lugar donde se renderiza este mismo botón, más
+                // arriba en este archivo. Solo Binance.
                 return `
               <span style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:${isAdOnline ? '#60a5fa' : '#64748b'};letter-spacing:.3px;text-transform:uppercase;">
                 <span>Anuncio</span>
-                <span class="toggle-switch toggle-switch-ad" title="${isAdOnline ? onTitle : offTitle}" onclick="event.stopPropagation();window.toggleAdOnline('${a.fromBybit ? 'bybit' : 'binance'}','${escHtml(a.adId||'')}',!${isAdOnline},this)">
+                <span class="toggle-switch toggle-switch-ad" title="${isAdOnline ? 'Apagar anuncio en Binance' : 'Prender anuncio en Binance'}" onclick="event.stopPropagation();window.toggleAdOnline('binance','${escHtml(a.adId||'')}',!${isAdOnline},this)">
                   <input type="checkbox" ${isAdOnline?'checked':''}>
                   <span class="slider"></span>
                 </span>

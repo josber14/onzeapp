@@ -229,50 +229,6 @@ export class BybitP2PClient {
     });
   }
 
-  // Botón "Apagar/Prender anuncio" del panel (sep 2026, pedido explícito
-  // del usuario -- quiere poder apagar el anuncio de Bybit desde el panel
-  // sin tener que entrar a la app del teléfono). Bybit NO tiene una acción
-  // de "pausa" real (ver comentario de reactivateOfflineAd) -- la única
-  // forma real de que el anuncio deje de estar visible es CANCELARLO de
-  // verdad (removeAd). "Prender" de nuevo entonces no es "reactivar" sino
-  // CREAR un anuncio nuevo con los mismos datos del que se canceló -- igual
-  // que la recreación automática del bot, puede fallar mientras la cuenta
-  // siga restringida como "Trial Advertiser" (ver AGENTS.md). Devuelve el
-  // nuevo adId para que quien llama actualice su propia fila en la base.
-  async recreateFromCancelled(id: string): Promise<string> {
-    const detailRes = await this.getAdDetail(id);
-    const ad = detailRes?.result;
-    if (!ad) throw new Error(`No se pudo leer el detalle del anuncio ${id} para volver a publicarlo`);
-
-    const payObjs = ad.paymentTerms ?? ad.payments ?? [];
-    const paymentIds = Array.isArray(payObjs) ? payObjs.map((p: any) => String(p.id ?? p.paymentId ?? p)) : [];
-    const tps = ad.tradingPreferenceSet ?? {};
-    const strTps: any = {};
-    for (const k of Object.keys(tps)) strTps[k] = String(tps[k] ?? "");
-
-    const res = await this.postAd({
-      tokenId: ad.tokenId || "USDT",
-      currencyId: ad.currencyId || "CLP",
-      side: String(ad.side === 0 ? 0 : 1) as "0" | "1",
-      price: String(ad.price ?? "0"),
-      priceType: String(ad.priceType ?? "0"),
-      premium: String(ad.premium ?? "0"),
-      quantity: String(ad.lastQuantity ?? ad.quantity ?? "0"),
-      minAmount: String(ad.minAmount ?? "0"),
-      maxAmount: String(ad.maxAmount ?? "0"),
-      paymentPeriod: String(ad.paymentPeriod ?? "15") as any,
-      paymentIds,
-      remark: String(ad.remark ?? ""),
-      tradingPreferenceSet: strTps,
-      itemType: String(ad.itemType ?? "ORIGIN"),
-      status: 10,
-    } as any);
-
-    const newAdId = res?.result?.itemId ?? res?.result?.item?.id ?? res?.result?.id;
-    if (!newAdId) throw new Error(`Bybit no devolvió el id del anuncio nuevo (respuesta: ${JSON.stringify(res).slice(0, 300)})`);
-    return String(newAdId);
-  }
-
   // ─── Orders ───────────────────────────────────────────────────
 
   async getOrders(params: {

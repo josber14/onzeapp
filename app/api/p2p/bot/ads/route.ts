@@ -434,46 +434,17 @@ export async function PUT(req: NextRequest) {
         return Response.json({ ok: false, error: `Binance API error: ${e.message}` }, { status: 500 });
       }
     }
-    if (typeof adOnline === "boolean" && exchange === "bybit") {
-      if (!adId) {
-        return Response.json({ ok: false, error: "adId es requerido para prender/apagar el anuncio" }, { status: 400 });
-      }
-      try {
-        const client = await getBybitClient(session.tenantId);
-        if (!client) {
-          return Response.json({ ok: false, error: "Sin credenciales Bybit" }, { status: 400 });
-        }
-        // Bybit no tiene una acción de "pausa" real (confirmado contra su
-        // documentación oficial -- ver reactivateOfflineAd en
-        // bybit-adapter.ts) -- apagar significa cancelar el anuncio de
-        // verdad, y prender de nuevo significa crear uno nuevo con los
-        // mismos datos (puede fallar mientras la cuenta siga restringida
-        // como "Trial Advertiser", igual que la recreación automática).
-        // A diferencia de Binance (donde "Anuncio" es independiente de
-        // "Bot"), acá SÍ hay que pausar también la gestión del bot al
-        // apagar -- si no, el ciclo de precio seguiría intentando
-        // actualizar un anuncio que ya no existe de verdad, cada pocos
-        // segundos, sin parar.
-        if (!adOnline) {
-          await client.removeAd(String(adId));
-          await prisma.p2PBotAd.updateMany({
-            where: { tenantId: session.tenantId, exchange: "bybit", label, adId: String(adId) },
-            data: { botEnabled: false },
-          });
-        } else {
-          const newAdId = await client.recreateFromCancelled(String(adId));
-          const dbRow = await prisma.p2PBotAd.findFirst({
-            where: { tenantId: session.tenantId, exchange: "bybit", label, adId: String(adId) },
-          });
-          if (dbRow) {
-            await prisma.p2PBotAd.update({ where: { id: dbRow.id }, data: { adId: newAdId, botEnabled: true } });
-          }
-        }
-        return Response.json({ ok: true });
-      } catch (e: any) {
-        return Response.json({ ok: false, error: `Bybit API error: ${e.message}` }, { status: 500 });
-      }
-    }
+    // Bybit NO tiene botón de "Anuncio" (prender/apagar) -- se investigó a
+    // fondo (sep 2026) y su API pública no tiene ningún concepto de pausa
+    // real sin cancelar el anuncio de verdad (ver reactivateOfflineAd en
+    // bybit-adapter.ts, y el comentario del bloque Binance arriba). El
+    // mecanismo real que usa la app de Bybit ("Modo activo") es un endpoint
+    // interno de su sitio web, autenticado por cookie de sesión, no
+    // alcanzable desde nuestro cliente de API-key/HMAC -- el usuario
+    // rechazó explícitamente la alternativa de cancelar+recrear el anuncio
+    // ("eso de q se borre no me sirve"), así que este botón se removió por
+    // completo para Bybit en vez de dejar un compromiso que borra el
+    // anuncio real.
 
     // For Bybit: auto-delete old ad before creating new one
     //
