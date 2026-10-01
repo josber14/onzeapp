@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { BybitP2PClient, bybitOrderStatusLabel } from "@/lib/p2p-bot/bybit-adapter";
+import { triggerCapacityEngineNow } from "@/lib/p2p-capacity-engine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -122,8 +123,19 @@ export async function GET(req: NextRequest) {
       const client = new BybitP2PClient(creds.apiKey, creds.secretKey);
       const allOrders = await fetchAllBybitOrders(client, startTimestamp);
 
+      // Pedido explícito del usuario (oct 2026): un capacity que se completa
+      // al 100% con una venta real de Bybit no puede quedar "Activo"
+      // esperando hasta 30 min al próximo cron del motor de capacity -- se
+      // dispara en caliente, una sola vez por esta sincronización, si
+      // alguna orden pasó a COMPLETED recién acá (nueva o recién
+      // completada).
+      let shouldTriggerCapacityEngine = false;
       for (const o of allOrders) {
         try {
+          const existing = await prisma.bybitOrder.findUnique({
+            where: { orderNumber: o.orderNumber },
+            select: { orderStatus: true },
+          });
           await prisma.bybitOrder.upsert({
             where: { orderNumber: o.orderNumber },
             update: { orderStatus: o.orderStatus, syncedAt: new Date() },
@@ -144,7 +156,13 @@ export async function GET(req: NextRequest) {
               createdAt: new Date(o.createTime),
             },
           });
+          if (o.orderStatus === "COMPLETED" && existing?.orderStatus !== "COMPLETED") {
+            shouldTriggerCapacityEngine = true;
+          }
         } catch (_) {}
+      }
+      if (shouldTriggerCapacityEngine) {
+        await triggerCapacityEngineNow(tenantId);
       }
 
       return Response.json({

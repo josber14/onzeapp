@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { triggerCapacityEngineNow } from "@/lib/p2p-capacity-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +84,13 @@ export async function POST(req: NextRequest) {
     update: data,
     create: { id: String(item.orderNumber), ...data },
   });
+
+  // Pedido explícito del usuario (oct 2026): un capacity que se completa al
+  // 100% con esta venta no puede quedar "Activo" esperando hasta 30 min al
+  // próximo cron -- se dispara el motor de inmediato, en el servidor (nunca
+  // el cálculo inseguro del navegador), para que pase a "finished" en el
+  // acto si corresponde.
+  await triggerCapacityEngineNow(tenantId);
 
   return NextResponse.json({ ok: true });
 }

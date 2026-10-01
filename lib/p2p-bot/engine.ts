@@ -4,6 +4,7 @@ import { BinanceP2PClient } from "./binance-adapter";
 import { canCallPriority, canCallNonUrgent, recordCall, getUsage } from "./rate-limiter";
 import { computeCycleOrderStats, computeLocalCycleStats, mapCycleOrdersForDisplay, excludeOrdersFromStats, mergeExtraOrdersIntoStats } from "./cycle-stats";
 import { processChats } from "./chat-agent";
+import { triggerCapacityEngineNow } from "../p2p-capacity-engine";
 import type {
   P2PBotConfigData,
   P2PBotExchangeConfigData,
@@ -798,6 +799,14 @@ async function syncBinanceOrdersOnly(
   label: string,
   log: (level: string, exchange: string | null, message: string, details?: any) => Promise<void>
 ) {
+  // Pedido explícito del usuario (oct 2026): un capacity que se completa al
+  // 100% con una venta REAL no puede quedar "Activo" esperando hasta 30 min
+  // al próximo cron del motor de capacity -- se dispara en caliente apenas
+  // una orden SELL/CLP pasa a COMPLETED acá (nueva o recién completada), una
+  // sola vez por corrida de sync, nunca por cada orden individual ni en cada
+  // llamada sin cambios reales (evita pagar el cálculo completo de FIFO en
+  // cada ciclo de precio, que corre cada pocos segundos).
+  let shouldTriggerCapacityEngine = false;
   try {
     const ordersRes = await client.getOrders({ page: 1, rows: 30 });
     const binanceOrders = ordersRes?.data ?? [];
@@ -805,6 +814,7 @@ async function syncBinanceOrdersOnly(
       const orderId = o.orderNumber ?? o.orderNo ?? o.id;
       const newStatus = String(o.orderStatus ?? o.status ?? "unknown");
       const commissionUsdt = Number(o.commission ?? 0);
+      const isSellClpCompleted = newStatus === "COMPLETED" && o.tradeType === "SELL" && (o.fiat || "CLP") === "CLP";
       const existing = await prisma.p2PBotOrder.findFirst({
         where: { tenantId, orderNumber: orderId, exchange: "binance" },
       });
@@ -819,6 +829,7 @@ async function syncBinanceOrdersOnly(
               ...(existing.commission == null && commissionUsdt > 0 ? { commission: commissionUsdt } : {}),
             },
           });
+          if (isSellClpCompleted && existing.status !== "COMPLETED") shouldTriggerCapacityEngine = true;
         }
       } else {
         await prisma.p2PBotOrder.create({
@@ -835,12 +846,16 @@ async function syncBinanceOrdersOnly(
             executedAt: o.createTime ? new Date(o.createTime) : new Date(),
           },
         });
+        if (isSellClpCompleted) shouldTriggerCapacityEngine = true;
       }
     }
   } catch (e: any) {
     if (!e.message?.includes("-9000") && !e.message?.includes("-1000")) {
       await log( "warn", "binance", `Error órdenes: ${e.message}`);
     }
+  }
+  if (shouldTriggerCapacityEngine) {
+    await triggerCapacityEngineNow(tenantId);
   }
 }
 
