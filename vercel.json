@@ -19,7 +19,7 @@
     },
     {
       "path": "/api/internal/p2p-capacity-engine",
-      "schedule": "*/5 * * * *"
+      "schedule": "*/30 * * * *"
     }
   ]
 }
