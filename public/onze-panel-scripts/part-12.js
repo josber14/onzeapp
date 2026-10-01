@@ -3235,13 +3235,28 @@
       const currentMonth = p2pChileMonthKey(new Date());
 
       if(!data.throughMonth){
-        // Primera vez que corre este mecanismo para este tenant -- se
-        // marca el mes actual como punto de partida SIN sumar nada a la
-        // acumulada, para no sumar de golpe todo el historial hasta ahora.
+        // Primera vez que corre este mecanismo para este tenant -- BUG REAL
+        // encontrado y corregido (oct 2026, pedido explícito del usuario):
+        // esto marcaba el MES ACTUAL como "ya sumado" para no sumar de
+        // golpe todo el historial -- pero como más abajo esta función solo
+        // suma el mes QUE SIGUE a throughMonth una vez que termina, marcar
+        // el mes actual como punto de partida hacía que ESE mes nunca se
+        // sumara jamás al acumulado (el siguiente que se evaluaba a sumar
+        // siempre era el de un mes después, nunca el de arranque). Confirmado
+        // en vivo: el mes donde se activó/reinició este mecanismo (sep 2026)
+        // desapareció por completo de Capital P2P al llegar octubre, aunque
+        // tuvo ventas reales todo el mes. Arreglo: se marca el mes ANTERIOR
+        // al actual como punto de partida (no el actual) -- así el mes en
+        // curso ahora mismo sigue viéndose en vivo como "Este mes" y se
+        // suma solo al Capital P2P cuando de verdad termine, igual que
+        // cualquier otro mes futuro. Ningún mes queda afuera nunca más.
+        const prevMonthDate = new Date();
+        prevMonthDate.setMonth(prevMonthDate.getMonth() - 1);
+        const prevMonth = p2pChileMonthKey(prevMonthDate);
         await fetch("/api/p2p/initial-capital", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ throughMonth: currentMonth, accumulatedProfit: Number(data.accumulatedProfit || 0) }),
+          body: JSON.stringify({ throughMonth: prevMonth, accumulatedProfit: Number(data.accumulatedProfit || 0) }),
         });
         return;
       }
