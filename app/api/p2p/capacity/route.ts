@@ -213,6 +213,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Capacity ya estaba finalizado en servidor" }, { status: 409 });
   }
 
+  // Bug real confirmado en vivo (oct 2026, plata real afectada): un capacity
+  // YA finalizado se volvió a recalcular y sobrescribir con números
+  // distintos (y hasta ventas ya asignadas a OTRO capacity se contaron de
+  // nuevo acá, doble) -- causado por una pestaña vieja (localhost o
+  // producción) que seguía corriendo el cálculo inseguro del navegador sin
+  // enterarse de que esta cuenta ya pasó al motor autoritativo del
+  // servidor. Un capacity "finished" tiene que quedar CONGELADO para
+  // siempre -- ni el navegador ni ninguna pestaña vieja pueden volver a
+  // tocar sus números finales, pase lo que pase del lado del cliente. Se
+  // permite únicamente un reenvío IDÉNTICO (mismo monto final, mismo pago
+  // manual) -- un reintento de red inofensivo, no una re-escritura real.
+  if (existing?.status === "finished" && incomingStatus === "finished") {
+    const sameClp = Number(existing.finalClpReceived || 0) === Number(item.finalClpReceived || 0);
+    const sameManual = Number(existing.manualPaymentsClp || 0) === Number(item.manualPaymentsClp || 0);
+    if (!sameClp || !sameManual) {
+      console.warn("[P2P POST] BLOQUEADO: intento de re-finalizar capacity ya congelado", item.id,
+        "existente:", existing.finalClpReceived?.toString(), existing.manualPaymentsClp?.toString(),
+        "nuevo:", item.finalClpReceived, item.manualPaymentsClp);
+      return NextResponse.json(
+        { ok: false, error: "Este capacity ya está finalizado y congelado -- no se puede volver a cerrar con otros números." },
+        { status: 409 }
+      );
+    }
+  }
+
   // Motor de Capacity del lado del servidor (ver AGENTS.md). Backstop de
   // respaldo para una pestaña vieja que no se enteró del modo autoritativo
   // (ver window.__p2pServerAuthority / autoFinishP2PCapacities en el panel):
