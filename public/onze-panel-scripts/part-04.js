@@ -5418,10 +5418,22 @@ function addP2PBotStyles(){
 
   async function botCycleRefreshCombinedSummary(requestedLabel){
     try{
-      const res = await fetch("/api/p2p/cycle/combined-totals?label=" + encodeURIComponent(requestedLabel), { credentials:"include" });
+      // Bug real confirmado en vivo (oct 2026): el parámetro "label" de este
+      // endpoint SOLO afecta la búsqueda del lado Binance (Bybit no tiene
+      // label -- el servidor siempre usa "ONZE" para Bybit, ver
+      // combined-totals/route.ts). Pero mientras se está mirando Bybit/OKX,
+      // botActiveLabel se FUERZA a "ONZE" (ver botSelectExchange), aunque la
+      // cuenta de Binance con el ciclo real activo sea ZINPLE -- entonces
+      // "CLP Binance" del resumen combinado siempre daba $0 al mirar Bybit
+      // si el ciclo real de Binance estaba bajo ZINPLE. Se usa siempre el
+      // label de Binance REAL (el que queda guardado en localStorage al
+      // cambiar de pestaña ONZE/ZINPLE), sin importar qué exchange se esté
+      // mirando ahora mismo -- no el forzado que llega en requestedLabel.
+      const realBinanceLabel = localStorage.getItem("botActiveLabel") || "ONZE";
+      const res = await fetch("/api/p2p/cycle/combined-totals?label=" + encodeURIComponent(realBinanceLabel), { credentials:"include" });
       const data = await res.json();
       if(!data?.ok) return;
-      if((botActiveLabel || "ONZE") !== requestedLabel || (window.botCycleSideFilter || "SELL") === "BUY") return;
+      if((localStorage.getItem("botActiveLabel") || "ONZE") !== realBinanceLabel || (window.botCycleSideFilter || "SELL") === "BUY") return;
       const combinedEl = document.getElementById("botCycleCombinedSummary");
       if(!combinedEl) return;
       combinedEl.style.display = "block";
