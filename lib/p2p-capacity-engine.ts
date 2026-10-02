@@ -69,15 +69,15 @@ async function loadTenantSales(tenantId: number): Promise<FifoSaleInput[]> {
   return sales;
 }
 
-export async function processTenantCapacityEngine(tenantId: number) {
-  const [capacityRows, settings] = await Promise.all([
-    prisma.p2PCapacity.findMany({ where: { tenantId }, orderBy: { id: "asc" } }),
-    prisma.tenantSettings.findUnique({
-      where: { tenantId },
-      select: { p2pCapacityServerAuthority: true },
-    }),
-  ]);
-  if (!capacityRows.length) return { tenantId, skipped: true };
+// Cálculo FIFO fresco, de solo lectura -- NO escribe nada en Neon. Pensado
+// para validar una acción del cliente (ej. "Completar saldo") contra la
+// verdad del servidor antes de aceptarla, sin los efectos secundarios de
+// processTenantCapacityEngine() (que si puede cerrar capacitys). Reusa la
+// misma fuente de datos que el motor real, así nunca puede dar un número
+// distinto al que el cron/disparo inmediato ya usan.
+export async function computeFreshCapacityFifoResult(tenantId: number) {
+  const capacityRows = await prisma.p2PCapacity.findMany({ where: { tenantId }, orderBy: { id: "asc" } });
+  if (!capacityRows.length) return null;
 
   const capacities: FifoCapacityInput[] = capacityRows.map((c) => ({
     id: c.id,
@@ -100,7 +100,16 @@ export async function processTenantCapacityEngine(tenantId: number) {
     prisma.p2PCapitalMarkedSale.findMany({ where: { tenantId }, select: { id: true, totalPrice: true } }),
   ]);
   const markedAsOwnCapital = new Map(markedRows.map((r) => [r.id, Number(r.totalPrice)]));
-  const result = computeP2PCapacityFifo(capacities, sales, markedAsOwnCapital);
+  return computeP2PCapacityFifo(capacities, sales, markedAsOwnCapital);
+}
+
+export async function processTenantCapacityEngine(tenantId: number) {
+  const settings = await prisma.tenantSettings.findUnique({
+    where: { tenantId },
+    select: { p2pCapacityServerAuthority: true },
+  });
+  const result = await computeFreshCapacityFifoResult(tenantId);
+  if (!result) return { tenantId, skipped: true };
 
   const authoritative = !!settings?.p2pCapacityServerAuthority;
   const toFinish = result.capacities.filter((c) => c.shouldBeFinished);

@@ -252,12 +252,42 @@
       .then(async res => {
         const data = await res.json().catch(()=>null);
         if(!res.ok || !data?.ok){
-          throw new Error(data?.error || res.statusText || "Error servidor");
+          // Pedido explícito del usuario (oct 2026): un 409 es un rechazo
+          // DELIBERADO del servidor (ej. "Completar saldo" con datos
+          // desactualizados -- ver la validación nueva en
+          // app/api/p2p/capacity/route.ts) -- reintentar ciegamente 3 veces
+          // manda EXACTAMENTE los mismos datos equivocados otra vez, y al
+          // final se perdía el mensaje útil ("recarga la página") detrás de
+          // un "no se pudo guardar" genérico. Un 409 se muestra de una, sin
+          // reintentar -- los demás códigos (red, 500, etc.) sí siguen
+          // reintentando como antes, esos sí pueden ser transitorios.
+          const err = new Error(data?.error || res.statusText || "Error servidor");
+          err.status = res.status;
+          throw err;
         }
         if(typeof onSuccess === 'function') onSuccess(item);
       })
       .catch(e => {
         console.warn('Error sync capacity (intento '+(attempt+1)+'):', e.message);
+        if(e.status === 409){
+          if(typeof showToast === "function") showToast("⚠️ " + e.message, "error");
+          if(typeof onzeAlert === "function") onzeAlert(e.message);
+          // El guardado local (optimista) ya había mostrado este capacity
+          // como completado ANTES de saber que el servidor lo iba a
+          // rechazar -- sin esto, la pantalla seguiría mintiendo "completado"
+          // aunque el servidor nunca lo aceptó. Se fuerza a traer el estado
+          // real del servidor de inmediato (pisando el candado de "guardado
+          // local reciente" de 12s, que existe para el caso contrario -- acá
+          // justo queremos descartar lo local porque el servidor lo rechazó).
+          window.__p2pCapacityLastSave = 0;
+          if(typeof window.syncP2PCapacityFromServer === "function"){
+            window.syncP2PCapacityFromServer().then(function(){
+              if(typeof renderP2PCapacityPanel === "function") renderP2PCapacityPanel();
+              if(typeof updateP2PDashboardWithCapacity === "function") updateP2PDashboardWithCapacity();
+            });
+          }
+          return;
+        }
         if(attempt < 2){
           setTimeout(function(){ retry(item, attempt+1); }, 2000);
         } else {

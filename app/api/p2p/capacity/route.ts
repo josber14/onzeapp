@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { computeFreshCapacityFifoResult } from "@/lib/p2p-capacity-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -258,6 +259,46 @@ export async function POST(req: NextRequest) {
       );
     }
   }
+
+  // Bug real confirmado en vivo DOS VECES el mismo día (oct 2026, plata
+  // real afectada): el botón "Completar saldo" rellena el monto con el
+  // "Restante" que esa pestaña puntual tiene calculado -- si esa pestaña
+  // (muy probablemente el teléfono, por quedarse abierta sin refrescar más
+  // tiempo que el resto) tiene un "ya recibido por ventas reales"
+  // desactualizado, el pago manual calculado sale mal (de más o de menos),
+  // aunque el capacity quede "matemáticamente cuadrado" (total = ventas +
+  // pago manual, sin importar que la ventas reales estén mal repartidas).
+  // Pedido explícito del usuario tras el segundo incidente: que el SERVIDOR
+  // sea el único juez de "cuánto se ha recibido de verdad" antes de aceptar
+  // un cierre manual -- recalcula fresco acá mismo (misma fuente que el
+  // cron/disparo inmediato, nunca el navegador) y rechaza si lo que mandó
+  // el cliente como "ya recibido por ventas" no coincide.
+  if (existing?.status === "active" && incomingStatus === "finished" && manualAction) {
+    try {
+      const fresh = await computeFreshCapacityFifoResult(session.tenantId);
+      const freshCap = fresh?.capacities.find((c) => c.id === String(item.id));
+      if (freshCap) {
+        const claimedReceived = Number(item.finalClpReceived || 0);
+        const realReceived = freshCap.clpReceived;
+        if (Math.abs(claimedReceived - realReceived) > 1) {
+          console.warn("[P2P POST] BLOQUEADO: Completar saldo con 'ya recibido' desactualizado", item.id,
+            "pantalla dice:", claimedReceived, "servidor calcula:", realReceived);
+          return NextResponse.json(
+            {
+              ok: false,
+              error: `Tu pantalla tiene datos desactualizados -- según el servidor, este capacity ya recibió $${Math.round(realReceived).toLocaleString("es-CL")} CLP por ventas reales (tu pantalla decía $${Math.round(claimedReceived).toLocaleString("es-CL")}). Recarga la página y vuelve a intentar completar el saldo.`,
+            },
+            { status: 409 }
+          );
+        }
+      }
+    } catch (e: any) {
+      console.warn("[P2P POST] Error validando Completar saldo contra el servidor:", e?.message);
+      // No bloquear el cierre si la validación en sí falla (ej. error de
+      // red interno) -- solo bloquear cuando SÍ se pudo comparar y no coincidió.
+    }
+  }
+
   const data: any = {
     tenantId: session.tenantId,
     provider: String(item.provider || ""),
