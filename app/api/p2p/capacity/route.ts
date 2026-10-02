@@ -112,13 +112,35 @@ function summarizeOldCapacitySaleParts(parts: RawSalePart[], capBuyPrice: number
   return { dailyBuckets, lockedOrders };
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const cookieStore = await cookies();
   const token = cookieStore.get("onze_session")?.value || null;
   const session = verifySessionToken(token);
   if (!session?.tenantId) {
     return NextResponse.json({ ok: false, error: "No autorizado" }, { status: 401 });
   }
+
+  // Pedido explícito del usuario (oct 2026, plata real afectada): en días de
+  // mucho volumen de ventas, el "ya recibido" que calcula el navegador
+  // (datos cacheados en localStorage) queda desactualizado casi al instante,
+  // chocando una y otra vez contra la validación de "Completar saldo" (ver
+  // POST más abajo) y obligando a recargar toda la página cada vez. Este
+  // endpoint le permite al panel consultar el número REAL y fresco de un
+  // capacity puntual (misma fuente que usa la validación del servidor,
+  // computeFreshCapacityFifoResult) justo antes de abrir el modal y justo
+  // antes de enviarlo -- así el margen de desfase pasa de "lo que tarde el
+  // usuario en volver a la pestaña" a solo los segundos entre esta consulta
+  // y el envío, mucho más difícil de que una venta nueva alcance a colarse.
+  const freshReceivedFor = req.nextUrl.searchParams.get("freshReceivedFor");
+  if (freshReceivedFor) {
+    const fresh = await computeFreshCapacityFifoResult(session.tenantId);
+    const capFresh = fresh?.capacities.find((c) => c.id === freshReceivedFor);
+    if (!capFresh) {
+      return NextResponse.json({ ok: false, error: "Capacity no encontrado" }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true, clpReceived: capFresh.clpReceived, pendingClp: capFresh.pendingClp });
+  }
+
   const [items, settings] = await Promise.all([
     prisma.p2PCapacity.findMany({
       where: { tenantId: session.tenantId },

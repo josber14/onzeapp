@@ -1971,10 +1971,23 @@
     const capStats = stats.capacities.find(c => c.id === id);
     if(!capStats) { onzeAlert("No se pudo calcular el restante"); return; }
 
-    const remainingUsdt = Number(capStats.remainingUsdt || 0);
     const capacityClpTotal = Number(cap.capacityClp || 0);
     const existingManualPaid = Number(cap.manualPaymentsClp || 0);
-    const clpReceived = Number(capStats.clpReceived || 0);
+    let clpReceived = Number(capStats.clpReceived || 0);
+    // Pedido explícito del usuario (oct 2026): consultar el "ya recibido"
+    // REAL y fresco del servidor justo al abrir el modal, en vez de confiar
+    // en lo que el navegador tenía calculado (puede estar desactualizado en
+    // segundos si hay mucho volumen de ventas) -- ver el endpoint nuevo en
+    // app/api/p2p/capacity/route.ts. Si la consulta falla, se sigue con el
+    // valor local para no bloquear el modal.
+    try {
+      const freshRes = await fetch("/api/p2p/capacity?freshReceivedFor=" + encodeURIComponent(id), { credentials: "include" });
+      const freshData = await freshRes.json().catch(() => null);
+      if (freshRes.ok && freshData?.ok && typeof freshData.clpReceived === "number") {
+        clpReceived = freshData.clpReceived;
+      }
+    } catch (_) {}
+    const remainingUsdt = Number(capStats.remainingUsdt || 0);
     // Restante = lo que falta por cubrir del capacity total, descontando
     // ventas reales Y pagos manuales ya hechos (ver finishCapacityManually).
     const remainingClp = Math.max(capacityClpTotal - existingManualPaid - clpReceived, 0);
@@ -2035,7 +2048,7 @@
     document.getElementById("completeCapacityModal")?.remove();
   };
 
-  window.finishCapacityManually = function(id, manualClpPayment){
+  window.finishCapacityManually = async function(id, manualClpPayment){
     // Mismo resguardo que autoFinishP2PCapacities() -- completar a mano
     // también usa calculateP2PCapacityStats(), así que también podría
     // incluir por error una venta ya marcada como "capital propio" si esa
@@ -2070,7 +2083,21 @@
     // -- ambas formas de pago compiten por el mismo monto fijo, sin pisarse.
     const capacityClpTotal = Number(cap.capacityClp || 0);
     const existingManualPaid = Number(cap.manualPaymentsClp || 0);
-    const clpReceived = Number(capStats.clpReceived || 0);
+    let clpReceived = Number(capStats.clpReceived || 0);
+    // Pedido explícito del usuario (oct 2026, plata real afectada): consultar
+    // el "ya recibido" REAL justo antes de enviar, no el que calculó el
+    // navegador con datos que pueden tener segundos/minutos de atraso en un
+    // día de mucho volumen -- el servidor va a validar exactamente este
+    // mismo número (ver POST en app/api/p2p/capacity/route.ts), así que
+    // usar la misma fuente acá evita el rebote de "datos desactualizados"
+    // en el caso normal, sin bajarle nada de seguridad al chequeo real.
+    try {
+      const freshRes = await fetch("/api/p2p/capacity?freshReceivedFor=" + encodeURIComponent(id), { credentials: "include" });
+      const freshData = await freshRes.json().catch(() => null);
+      if (freshRes.ok && freshData?.ok && typeof freshData.clpReceived === "number") {
+        clpReceived = freshData.clpReceived;
+      }
+    } catch (_) {}
     const remainingClp = Math.max(capacityClpTotal - existingManualPaid - clpReceived, 0);
     const payment = Math.min(manualClpPayment, remainingClp);
     const newManualPaid = existingManualPaid + payment;
