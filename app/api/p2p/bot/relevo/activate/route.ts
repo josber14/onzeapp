@@ -203,12 +203,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Wing2 sin diferencia configurada todavía -- le damos una de arranque más
-  // grande que el paso del leader, para que quede ordenado detrás de él
-  // (estrategia "top1" normal, sin código nuevo -- ver engine.ts).
+  // Wing2 sin diferencia configurada todavía -- pedido explícito del
+  // usuario: usa el MISMO paso chico que el leader (0,01 contra el 2do
+  // lugar real), no uno más grande -- el leader ya va a terminar más abajo
+  // de forma natural (baja de a poquito sin parar, no solo "compite contra
+  // el 2do lugar"), así que no hace falta un margen extra para que wing2
+  // quede ordenado detrás de él.
   const wing2Row = await prisma.p2PBotAd.findFirst({ where: { tenantId, exchange: "bybit", label, botRelevoRole: "wing2" } });
   if (wing2Row && wing2Row.botTop1Diff == null) {
-    await prisma.p2PBotAd.update({ where: { id: wing2Row.id }, data: { botTop1Diff: Math.max(tickStep * 5, 0.5) } });
+    await prisma.p2PBotAd.update({ where: { id: wing2Row.id }, data: { botTop1Diff: tickStep } });
   }
 
   return NextResponse.json({ ok: true, created });
