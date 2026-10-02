@@ -217,11 +217,11 @@ export async function POST(req: NextRequest) {
     return { ...sourceAd, id: String(newId), price: Number(postFields.price) };
   }
 
-  const created: { role: string; adId: string }[] = [];
+  const created: { role: string; adId: string; wasCloned: boolean }[] = [];
   try {
     // Leader: el que ya existe, se le asigna el rol, sin tocar su precio.
     await ensureLocalRow(leaderAd, "leader");
-    created.push({ role: "leader", adId: String(leaderAd.id) });
+    created.push({ role: "leader", adId: String(leaderAd.id), wasCloned: false });
 
     // Wing2 y wing3: usan los anuncios 2do y 3ro si ya existían (hay 2 o 3),
     // o se clonan nuevos en Bybit si faltan (hay solo 1).
@@ -229,30 +229,47 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < roles.length; i++) {
       const role = roles[i];
       let ad = ordered[i + 1];
+      let wasCloned = false;
       if (!ad) {
         // Falta este anuncio -- clonar el leader en Bybit como punto de
         // partida (mismos métodos de pago/límites/cantidad, mismo precio
         // inicial -- el motor lo ajusta solo desde el primer ciclo).
         ad = await cloneAdOnBybit(leaderAd, Number(leaderAd.price));
+        wasCloned = true;
       }
       await ensureLocalRow(ad, role);
-      created.push({ role, adId: String(ad.id) });
+      created.push({ role, adId: String(ad.id), wasCloned });
     }
   } catch (e: any) {
-    // Bug real confirmado en vivo (oct 2026): si la activación fallaba a
-    // mitad de camino (ej. Bybit rechaza clonar wing2/wing3 con 90043), el
-    // leader ya había quedado con botRelevoRole="leader" guardado -- eso
-    // bloqueaba CUALQUIER intento futuro de activar (el chequeo de "ya
-    // activa" de arriba lo detecta como si el relevo ya estuviera armado).
-    // Ahora se deshace todo lo que se alcanzó a asignar en este intento
-    // fallido, dejando los anuncios exactamente como estaban antes --
-    // nunca queda "a medio configurar".
+    // Bug real confirmado en vivo (oct 2026, dos incidentes seguidos):
+    // 1) Si la activación fallaba a mitad de camino, el leader quedaba con
+    //    botRelevoRole="leader" guardado -- bloqueaba cualquier intento
+    //    futuro (el chequeo de "ya activa" de arriba lo detectaba como si
+    //    el relevo ya estuviera armado). Eso ya se arregla abajo (limpiar
+    //    el rol de TODO lo tocado en este intento).
+    // 2) Más grave: si wing2 SÍ se alcanzó a clonar en Bybit de verdad (un
+    //    anuncio real nuevo) antes de que wing3 fallara, ese anuncio
+    //    quedaba VIVO y gestionado (botEnabled:true) con el rol ya
+    //    limpiado -- el ciclo normal lo tomaba como un anuncio "top1" común
+    //    SIN su propia configuración completa, y terminó publicando un
+    //    precio real por debajo del margen de seguridad esperado
+    //    (confirmado en vivo por el usuario, $993, tuvo que borrarlo a mano
+    //    en la app). Ahora, cualquier anuncio que este intento haya CLONADO
+    //    de verdad en Bybit se borra de Bybit y de nuestra base por
+    //    completo si la activación no se completa -- nunca queda un
+    //    anuncio real huérfano compitiendo solo. El leader (nunca clonado,
+    //    siempre preexistente) solo se le limpia el rol, no se borra.
     for (const item of created) {
       try {
-        await prisma.p2PBotAd.updateMany({
-          where: { tenantId, exchange: "bybit", label, adId: item.adId },
-          data: { botRelevoRole: null, botRelevoTickStep: null, botRelevoTickBudget: null },
-        });
+        if (item.wasCloned) {
+          try { await client.removeAd(item.adId); } catch (_) {}
+          await prisma.p2PBotAd.deleteMany({ where: { tenantId, exchange: "bybit", label, adId: item.adId } });
+        } else {
+          await prisma.p2PBotAd.updateMany({
+            where: { tenantId, exchange: "bybit", label, adId: item.adId },
+            data: { botRelevoRole: null, botRelevoTickStep: null, botRelevoTickBudget: null },
+          });
+        }
       } catch (_) {}
     }
     return NextResponse.json(
