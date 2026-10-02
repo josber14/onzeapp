@@ -341,7 +341,20 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const merged = [...binanceAds, ...bybitAds, ...ads.map(a => ({
+    // Bug real confirmado en vivo (oct 2026): este fallback (anuncios SOLO de
+    // nuestra base, sin datos en vivo del exchange) existe para cuando la
+    // llamada en vivo a Binance/Bybit falla por algo transitorio -- en el
+    // caso normal queda invisible (el deduplicado de más abajo lo descarta
+    // porque el anuncio en vivo ya reclamó esa misma clave primero). Pero
+    // antes mapeaba TODAS las filas de la base sin filtrar, incluidas las
+    // desactivadas hace meses -- la primera vez que la llamada en vivo
+    // falló de verdad (sin dejar ningún error en los logs, porque ese
+    // catch es silencioso a propósito), el panel mostró de golpe TODO el
+    // historial muerto como si fueran anuncios reales actuales. Ahora solo
+    // caen acá las filas que el usuario tiene realmente gestionadas
+    // (botEnabled:true) -- las desactivadas quedan invisibles pase lo que
+    // pase con la llamada en vivo, que es lo que el usuario espera ver.
+    const merged = [...binanceAds, ...bybitAds, ...ads.filter(a => a.botEnabled).map(a => ({
       id: a.id,
       exchange: a.exchange,
       adId: a.adId,
