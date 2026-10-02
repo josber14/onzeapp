@@ -2050,18 +2050,41 @@ const bybitLastUpdateAt = new Map<string, number>();
 const bybitModCount = new Map<string, number>();
 const bybitAdCache = new Map<string, any>();
 
-// "Estrategia Relevo" (oct 2026) -- precio actual del "ladder" del anuncio
-// leader, compartido en memoria para que el anuncio wing3 lo lea el MISMO
-// ciclo (ver orden de procesamiento más abajo: leader siempre se procesa
-// antes que wing3). Clave `${tenantId}:${label}`. En memoria igual que los
-// mapas de arriba -- si el servidor reinicia, el leader simplemente vuelve a
-// arrancar su ladder desde su precio real actual, no es un problema de
-// seguridad (el piso de seguridad se sigue respetando siempre).
-// `anchorPrice` es el precio del competidor real contra el que se ancló la
-// última vez -- sirve para calcular el "rango" (botRelevoTickBudget): el
-// leader no baja más de `anchorPrice - tickBudget`, aunque el piso de
-// seguridad real permita bajar más.
-const bybitRelevoLadder = new Map<string, { price: number; anchorPrice: number }>();
+// "Estrategia Relevo" (oct 2026, rediseñada tras feedback explícito del
+// usuario -- la primera versión hacía que wing3 copiara el precio del leader
+// todo el tiempo, que NO es lo que pidió). El diseño real es un RELEVO: de
+// los 2 anuncios leader/wing3, solo UNO está "activo" (bajando de precio) en
+// cada momento -- el otro está "de respaldo", quieto, sin tocarse. Cuando al
+// activo le toca recrearse (cada ~9 cambios, límite real de Bybit para
+// cualquier cuenta, no solo cuentas nuevas -- se confirmó que esto no
+// cambia), el de respaldo toma el relevo: pasa a ser el nuevo activo y
+// sigue bajando el precio exactamente donde se había quedado el anterior, y
+// el que se acaba de recrear pasa a ser el nuevo respaldo. `activeRole` es
+// el puntero que se mueve -- la etiqueta fija de cada anuncio
+// (botRelevoRole: "leader"/"wing3") nunca cambia, solo cambia CUÁL de los 2
+// está jugando el rol activo en este momento.
+//
+// `wing2Price` lo escribe el anuncio wing2 cada ciclo (se procesa primero,
+// ver el orden más abajo) para que el activo sepa si ya aseguró el 2do
+// puesto y puede dejar de bajar agresivo.
+//
+// `settled` = true significa que el activo ya dejó de bajar agresivo
+// (porque se acabó el rango configurado, o porque ya no hace falta seguir
+// bajando -- ver la lógica en el bloque de precio) y se quedó ajustado a
+// "wing2Price - paso". Vuelve a false solo si la competencia real reaparece.
+//
+// En memoria, mismo patrón que los mapas de arriba -- si el servidor
+// reinicia, se pierde el estado del relevo (quién estaba activo, en qué
+// precio) pero NUNCA se pierde seguridad: el activo siempre respeta el piso
+// de seguridad real, y si el estado se resetea simplemente se vuelve a
+// arrancar con "leader" activo desde su precio real actual.
+const bybitRelevoState = new Map<string, {
+  activeRole: "leader" | "wing3";
+  ladderPrice: number;
+  anchorPrice: number;
+  settled: boolean;
+  wing2Price: number | null;
+}>();
 
 // Lock a nivel de base de datos (no solo en memoria) para "recrear anuncio"
 // -- confirmado en vivo: dos ejecuciones del ciclo corriendo al mismo tiempo
@@ -2202,11 +2225,12 @@ async function runBybitCycle(
       }
     } catch (e) {}
 
-    // "Estrategia Relevo": el leader se procesa SIEMPRE antes que wing3 en
-    // cada ciclo, para que wing3 lea el precio del ladder recién calculado
-    // por el leader en el mismo ciclo (no el de un ciclo anterior). Un
-    // anuncio sin rol (o wing2) no se ve afectado por este orden.
-    const relevoOrder: Record<string, number> = { leader: 0, wing2: 1, wing3: 2 };
+    // "Estrategia Relevo": wing2 se procesa SIEMPRE primero, para que el
+    // anuncio activo (leader o wing3, el que esté jugando ese rol este
+    // ciclo) pueda leer el precio de wing2 recién calculado -- lo necesita
+    // para saber si ya aseguró el 2do puesto y puede dejar de bajar
+    // agresivo. Un anuncio sin rol no se ve afectado por este orden.
+    const relevoOrder: Record<string, number> = { wing2: 0, leader: 1, wing3: 1 };
     managedAds = [...managedAds].sort(
       (a: any, b: any) => (relevoOrder[a.botRelevoRole ?? ""] ?? 1) - (relevoOrder[b.botRelevoRole ?? ""] ?? 1)
     );
@@ -2287,28 +2311,111 @@ async function runBybitCycle(
       let safeFloor: number;
 
       const adRelevoRole = (managedAd as any).botRelevoRole as string | null;
-      const adRelevoTickStep = (managedAd as any).botRelevoTickStep != null ? Number((managedAd as any).botRelevoTickStep) : 0.01;
-      const relevoLadderKey = `${tenantId}:${label}`;
+      const relevoKey = `${tenantId}:${label}`;
+      // Paso/rango SIEMPRE se leen del anuncio con la etiqueta fija "leader"
+      // (pedido explícito del usuario: un solo lugar de configuración para
+      // el par, sin importar cuál de los 2 esté jugando el rol activo en
+      // este momento).
+      const leaderIdentityAd = managedAds.find((a: any) => a.botRelevoRole === "leader");
+      const adRelevoTickStep = leaderIdentityAd?.botRelevoTickStep != null ? Number(leaderIdentityAd.botRelevoTickStep) : 0.01;
+      const adRelevoTickBudget = leaderIdentityAd?.botRelevoTickBudget != null ? Number(leaderIdentityAd.botRelevoTickBudget) : 20;
 
-      if (adRelevoRole === "wing3") {
-        // "Estrategia Relevo": wing3 copia el precio del leader + 1 paso,
-        // SIEMPRE, sin condición -- no lee competidores para nada. La idea
-        // es que esté ya ahí, listo, el instante exacto en que el leader
-        // desaparece del mercado para recrearse (~7-14s) -- no hace falta
-        // detectar ese momento, con copiar el ladder todo el tiempo alcanza.
+      if (adRelevoRole === "leader" || adRelevoRole === "wing3") {
         safeFloor = minSellPrice * (1 + adSafeMarginPct / 100);
-        const leaderLadder = bybitRelevoLadder.get(relevoLadderKey);
-        if (leaderLadder != null) {
-          targetPrice = leaderLadder.price + adRelevoTickStep;
-          await log("debug", "bybit", `Ad ${adId} (wing3): copiando ladder del leader (${leaderLadder.price.toFixed(2)}) + paso = ${targetPrice.toFixed(2)}`);
+        const relevoState = bybitRelevoState.get(relevoKey) ?? {
+          activeRole: "leader" as const, ladderPrice: currentPrice, anchorPrice: currentPrice, settled: false, wing2Price: null,
+        };
+
+        if (adRelevoRole !== relevoState.activeRole) {
+          // "Estrategia Relevo" (relevo real, oct 2026): este anuncio está
+          // "de respaldo" ahora mismo -- NO le toca jugar el rol activo, se
+          // deja quieto, sin tocar su precio para nada. Única excepción de
+          // seguridad: si quedó con un precio viejo por debajo del piso de
+          // seguridad VIGENTE (pudo subir el costo real mientras estaba
+          // quieto), se actualiza una sola vez al piso -- nunca se deja un
+          // anuncio vendiendo bajo costo solo por estar "de respaldo".
+          if (currentPrice < safeFloor) {
+            targetPrice = safeFloor;
+            await log("info", "bybit", `Ad ${adId} (de respaldo): su precio quedó bajo el piso de seguridad, se ajusta a ${safeFloor.toFixed(2)}`);
+          } else {
+            await log("debug", "bybit", `Ad ${adId}: de respaldo este ciclo, sin cambios`);
+            continue;
+          }
         } else {
-          // El leader todavía no corrió este ciclo (deshabilitado, sin
-          // anuncio, etc.) -- nunca congelarse en el precio viejo, caer al
-          // piso de seguridad como cualquier otro rol sin target.
-          await log("warn", "bybit", `Ad ${adId} (wing3): sin ladder de leader este ciclo, usando piso de seguridad`);
-          targetPrice = safeFloor;
+          // Este anuncio es el que está jugando el rol ACTIVO ahora mismo.
+          const competitors = rawCompetitors.filter((c: any) => {
+            if (Number(c.price) < minSellPrice) return false;
+            if (adMinCapital > 0) {
+              const cap = Number(c.lastQuantity ?? c.surplusAmount ?? c.tradableQuantity ?? c.quantity ?? 0);
+              if (cap < adMinCapital) return false;
+            }
+            if (adExcludedMerchants.size > 0 && adExcludedMerchants.has(String(c.nickName || "").trim().toLowerCase())) return false;
+            return true;
+          }).sort((a: any, b: any) => Number(a.price) - Number(b.price));
+          const myAdIds = new Set(myAds.map((a: any) => a.id));
+          const sortedCompetitors = competitors.filter((c: any) => !myAdIds.has(c.id));
+          const cheapestExternal = sortedCompetitors.length > 0 ? Number(sortedCompetitors[0].price) : null;
+          const wing2Price = relevoState.wing2Price;
+
+          // "Ya ganó, aflojar": no hay competencia real cerca, o wing2 ya
+          // aseguró el 2do puesto (está por debajo de todo competidor real
+          // -- en la práctica es la misma señal). Pedido explícito del
+          // usuario: en ese caso no hace falta seguir bajando 0,01 constante,
+          // se ajusta a wing2 - paso y listo.
+          const noRealThreat = cheapestExternal == null || (wing2Price != null && wing2Price < cheapestExternal);
+
+          if (noRealThreat && !relevoState.settled) {
+            relevoState.settled = true;
+            targetPrice = wing2Price != null ? wing2Price - adRelevoTickStep : relevoState.ladderPrice;
+            await log("info", "bybit", `Ad ${adId} (activo): ya no hay competencia real / wing2 aseguró el 2do puesto -- se afloja a ${targetPrice.toFixed(2)}`);
+          } else if (relevoState.settled && !noRealThreat) {
+            // La amenaza real volvió -- se reactiva el modo agresivo desde
+            // el precio del competidor que reapareció.
+            relevoState.settled = false;
+            relevoState.anchorPrice = cheapestExternal as number;
+            targetPrice = (cheapestExternal as number) - adRelevoTickStep;
+            await log("info", "bybit", `Ad ${adId} (activo): la competencia real volvió (${cheapestExternal!.toFixed(2)}), retomando modo agresivo`);
+          } else if (relevoState.settled) {
+            // Sigue tranquilo -- mantiene el ajuste a wing2 - paso (puede
+            // haber cambiado si wing2 se movió este mismo ciclo).
+            targetPrice = wing2Price != null ? wing2Price - adRelevoTickStep : relevoState.ladderPrice;
+          } else {
+            // Modo agresivo: baja un paso por ciclo, se auto-corrige contra
+            // el mercado real (sortedCompetitors ya excluye todos nuestros
+            // propios anuncios):
+            //  - si alguien real nos superó por debajo del ladder, re-ancla
+            //    inmediatamente ahí.
+            //  - si el mercado se alejó hacia arriba, sube también para no
+            //    regalar margen de más.
+            let anchorPrice = relevoState.anchorPrice;
+            let nextLadder = relevoState.ladderPrice - adRelevoTickStep;
+            if (cheapestExternal != null && cheapestExternal < relevoState.ladderPrice) {
+              anchorPrice = cheapestExternal;
+              nextLadder = cheapestExternal - adRelevoTickStep;
+              await log("info", "bybit", `Ad ${adId} (activo): competidor real bajo nuestro ladder (${cheapestExternal.toFixed(2)}), re-anclando a ${nextLadder.toFixed(2)}`);
+            } else if (cheapestExternal != null && (cheapestExternal - adRelevoTickStep) > relevoState.ladderPrice) {
+              anchorPrice = cheapestExternal;
+              nextLadder = cheapestExternal - adRelevoTickStep;
+              await log("info", "bybit", `Ad ${adId} (activo): mercado se alejó, recuperando margen a ${nextLadder.toFixed(2)}`);
+            }
+
+            // Rango configurado (botRelevoTickBudget): si se agota, cuenta
+            // IGUAL que "ya ganó, aflojar" -- mismo ajuste a wing2 - paso.
+            const rangeFloor = anchorPrice - adRelevoTickBudget;
+            if (nextLadder < rangeFloor) {
+              relevoState.settled = true;
+              targetPrice = wing2Price != null ? wing2Price - adRelevoTickStep : rangeFloor;
+              await log("info", "bybit", `Ad ${adId} (activo): se agotó el rango configurado (${adRelevoTickBudget} CLP bajo ${anchorPrice.toFixed(2)}), se afloja a ${targetPrice.toFixed(2)}`);
+            } else {
+              targetPrice = nextLadder;
+            }
+            relevoState.anchorPrice = anchorPrice;
+          }
+
+          if (targetPrice < safeFloor) targetPrice = safeFloor;
+          relevoState.ladderPrice = targetPrice;
         }
-        if (targetPrice < safeFloor) targetPrice = safeFloor;
+        bybitRelevoState.set(relevoKey, relevoState);
 
       } else if (adStrategy === "spread") {
         // Precio fijo sobre el costo real, sin comisión (Bybit no cobra) --
@@ -2348,53 +2455,6 @@ async function runBybitCycle(
       // Safe margin floor (incluye margen de seguridad)
       safeFloor = minSellPrice * (1 + adSafeMarginPct / 100);
 
-      if (adRelevoRole === "leader") {
-        // "Estrategia Relevo": el leader no persigue un competidor puntual --
-        // baja su propio ladder un paso fijo TODOS los ciclos, sin parar, para
-        // que un bot rival que lea nuestro precio siempre encuentre uno
-        // nuevo. Se auto-corrige contra el mercado real (sortedCompetitors ya
-        // excluye todos nuestros propios anuncios, así que su primer elemento
-        // es siempre el competidor externo más barato real):
-        //  - si alguien real nos superó por debajo del ladder, re-ancla
-        //    inmediatamente ahí (no sigue bajando de a poquito desde una base
-        //    ya superada).
-        //  - si el mercado se alejó hacia arriba, sube también para no
-        //    regalar margen de más.
-        // Además de nunca bajar del piso de seguridad real, hay un segundo
-        // piso configurable (botRelevoTickBudget, pedido explícito del
-        // usuario): nunca más de "tickBudget" CLP por debajo del competidor
-        // real contra el que se ancló la última vez -- al llegar ahí, el
-        // leader se queda quieto (deja de bajar) hasta que el mercado se
-        // mueva de verdad y dispare un re-anclado nuevo (arriba o abajo).
-        const adRelevoTickBudget = (managedAd as any).botRelevoTickBudget != null ? Number((managedAd as any).botRelevoTickBudget) : 20;
-        const cheapestExternal = sortedCompetitors.length > 0 ? Number(sortedCompetitors[0].price) : null;
-        const prevLadder = bybitRelevoLadder.get(relevoLadderKey);
-        const prevLadderPrice = prevLadder?.price ?? currentPrice;
-        let anchorPrice = prevLadder?.anchorPrice ?? cheapestExternal ?? currentPrice;
-        let nextLadder = prevLadderPrice - adRelevoTickStep;
-
-        if (cheapestExternal != null && cheapestExternal < prevLadderPrice) {
-          anchorPrice = cheapestExternal;
-          nextLadder = cheapestExternal - adRelevoTickStep;
-          await log("info", "bybit", `Ad ${adId} (leader): competidor real bajo nuestro ladder (${cheapestExternal.toFixed(2)}), re-anclando a ${nextLadder.toFixed(2)}`);
-        } else if (cheapestExternal != null && (cheapestExternal - adRelevoTickStep) > prevLadderPrice) {
-          anchorPrice = cheapestExternal;
-          nextLadder = cheapestExternal - adRelevoTickStep;
-          await log("info", "bybit", `Ad ${adId} (leader): mercado se alejó, recuperando margen a ${nextLadder.toFixed(2)}`);
-        }
-
-        const rangeFloor = anchorPrice - adRelevoTickBudget;
-        const effectiveFloor = Math.max(rangeFloor, safeFloor);
-        if (nextLadder < effectiveFloor) {
-          if (rangeFloor > safeFloor && nextLadder < rangeFloor) {
-            await log("info", "bybit", `Ad ${adId} (leader): llegó al rango configurado (${adRelevoTickBudget} CLP bajo ${anchorPrice.toFixed(2)}), se queda quieto en ${effectiveFloor.toFixed(2)}`);
-          }
-          nextLadder = effectiveFloor;
-        }
-        targetPrice = nextLadder;
-        bybitRelevoLadder.set(relevoLadderKey, { price: targetPrice, anchorPrice });
-
-      } else {
       // Safe margin filter — solo competidores sobre safeFloor. Arranca en
       // adRankOffset (0 para top1) para que top2/top3 dejen a propósito 1 o
       // 2 competidores más baratos sin pelear por ellos.
@@ -2448,13 +2508,23 @@ async function runBybitCycle(
         await log( "warn", "bybit", `Ad ${adId}: sin competidor objetivo sobre el piso de seguridad -- cayendo al piso`);
         targetPrice = safeFloor;
       }
-      } // fin del bloque normal top1/top2/top3 (adRelevoRole !== "leader")
       // Nunca quedarse debajo del safeFloor -- SIN usar currentPrice acá
       // (Math.max(currentPrice, safeFloor) volvía a congelar en la práctica,
       // ya que currentPrice casi siempre es >= safeFloor en estado estable).
       if (targetPrice < safeFloor) { targetPrice = safeFloor; }
 
-      } // fin del bloque "top1/top2/top3/leader" (adStrategy !== "spread" && adRelevoRole !== "wing3")
+      // "Estrategia Relevo": wing2 publica su precio recién calculado al
+      // estado compartido, para que el anuncio activo (leader o wing3, el
+      // que le toque este ciclo) sepa si ya aseguró el 2do puesto.
+      if (adRelevoRole === "wing2") {
+        const relevoState = bybitRelevoState.get(relevoKey) ?? {
+          activeRole: "leader" as const, ladderPrice: currentPrice, anchorPrice: currentPrice, settled: false, wing2Price: null,
+        };
+        relevoState.wing2Price = targetPrice;
+        bybitRelevoState.set(relevoKey, relevoState);
+      }
+
+      } // fin del bloque "top1/top2/top3" (adStrategy !== "spread" && adRelevoRole !== "leader"/"wing3")
 
       // Rate limit protection solo tras rate-limit real (recreación), no en updates normales
       const lastUpdateKey = `bybit:${adId}`;
@@ -2634,6 +2704,24 @@ async function runBybitCycle(
                 bybitAdCache.delete(adId);
                 await log( "info", "bybit", `Anuncio recreado como ${createdId} (precio: ${recreatePrice.toFixed(2)})`);
                 actions.push({ action: "recreate_ad", exchange: "bybit", adId: createdId, suggestedPrice: recreatePrice, reason: `Recreado (${currentMods} mods)`, timestamp: Date.now() });
+                // "Estrategia Relevo" (relevo real): si el que se acaba de
+                // recrear era el que estaba jugando el rol activo, le pasa
+                // el relevo al otro (leader<->wing3) -- desde el ciclo
+                // siguiente, el que estaba de respaldo retoma el ladder
+                // exactamente donde se quedó, y este pasa a ser el nuevo
+                // respaldo.
+                {
+                  const adRole = (managedAd as any).botRelevoRole as string | null;
+                  if (adRole === "leader" || adRole === "wing3") {
+                    const rk = `${tenantId}:${label}`;
+                    const rs = bybitRelevoState.get(rk);
+                    if (rs && rs.activeRole === adRole) {
+                      rs.activeRole = adRole === "leader" ? "wing3" : "leader";
+                      bybitRelevoState.set(rk, rs);
+                      await log("info", "bybit", `Estrategia Relevo: se le pasa el relevo a ${rs.activeRole}`);
+                    }
+                  }
+                }
                 recreatedThisCycle = true;
                 // Skip normal update below — ya recreamos
               } else {
@@ -2726,6 +2814,20 @@ async function runBybitCycle(
                   data: { adId: String(newAdId) },
                 });
                 await log( "info", "bybit", `Anuncio recreado como ${newAdId}`);
+                // "Estrategia Relevo" -- mismo pase de relevo que en el otro
+                // camino de recreación (ver comentario detallado ahí arriba).
+                {
+                  const adRole = (managedAd as any).botRelevoRole as string | null;
+                  if (adRole === "leader" || adRole === "wing3") {
+                    const rk = `${tenantId}:${label}`;
+                    const rs = bybitRelevoState.get(rk);
+                    if (rs && rs.activeRole === adRole) {
+                      rs.activeRole = adRole === "leader" ? "wing3" : "leader";
+                      bybitRelevoState.set(rk, rs);
+                      await log("info", "bybit", `Estrategia Relevo: se le pasa el relevo a ${rs.activeRole}`);
+                    }
+                  }
+                }
               } else {
                 await prisma.p2PBotAd.update({ where: { id: managedAd.id }, data: { botEnabled: false } });
                 await log( "error", "bybit", `🚫 Ad ${adId}: se borró para recrearlo tras rate-limit pero los 2 intentos de crear el reemplazo fallaron -- se desactivó el bot en este anuncio para no quedar en un limbo. Publicarlo a mano en Bybit y reactivarlo desde el panel cuando exista.`);
