@@ -1451,8 +1451,15 @@ function addP2PBotStyles(){
         content.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:8px 0;">Sin anuncio</div>';
         return;
       }
-      const a = d.ads.find(ad => (ad.tradeType||'').toUpperCase() === 'SELL' && (ad.asset||'').toUpperCase() === 'USDT' && (ad.fiat||'').toUpperCase() === 'CLP');
-      if(!a){
+      // Pedido explícito del usuario (oct 2026, "Estrategia Relevo"): la
+      // cuenta ya puede tener varios anuncios de Bybit a la vez (antes la
+      // restricción de "alto riesgo" limitaba a 1) -- esto antes mostraba
+      // solo el PRIMER anuncio que calzara (`.find`), así que un 2do/3er
+      // anuncio nunca se podía ver ni configurar desde el panel aunque el
+      // motor ya pudiera gestionarlos. Ahora se listan todos, igual que
+      // botLoadAds ya hace para Binance.
+      const sellAds = d.ads.filter(ad => (ad.tradeType||'').toUpperCase() === 'SELL' && (ad.asset||'').toUpperCase() === 'USDT' && (ad.fiat||'').toUpperCase() === 'CLP');
+      if(!sellAds.length){
         content.innerHTML = '<div style="color:#64748b;font-size:12px;text-align:center;padding:8px 0;">Sin anuncio de venta</div>';
         return;
       }
@@ -1464,7 +1471,7 @@ function addP2PBotStyles(){
       // para Bybit (ej. esconder "Comisión" porque Bybit no cobra) pero
       // nunca se había conectado acá -- Bybit siempre usó este template
       // aparte, más simple, sin ningún panel de configuración.
-      content.innerHTML = botRenderAdPill(a, 0);
+      content.innerHTML = sellAds.map(function(ad, idx){ return botRenderAdPill(ad, idx); }).join('');
     }catch(e){
       content.innerHTML = '<div style="color:#fb7185;font-size:12px;text-align:center;padding:8px 0;">Error cargando anuncio</div>';
     }
@@ -1517,6 +1524,14 @@ function addP2PBotStyles(){
     } else {
       cfgFields.push('PriceSource','CommissionPct','SafeMarginPct','MinCompetitorCapital','CompeteTransAmount','CompetePayType','ExcludedMerchants','CycleInterval','CircuitBreakPct','MinAdPriceDiffPct');
     }
+    // "Estrategia Relevo" (oct 2026, pedido explícito del usuario): 3
+    // anuncios de Bybit coordinados -- leader/wing2/wing3. Solo tiene
+    // sentido para anuncios de Venta en Bybit (Binance y Compra no usan
+    // esto). Ver runBybitCycle en engine.ts para el motor real.
+    var relevoRole = a.botRelevoRole || '';
+    var relevoTickStep = a.botRelevoTickStep != null ? a.botRelevoTickStep : '';
+    var showRelevo = botSelectedExchange === 'bybit' && !isBuy;
+    if (showRelevo) cfgFields.push('RelevoRole');
     const cfgCount = cfgFields.length;
     return `<div class="bot-ad-pill" data-ad-real-id="${realId}" data-ad-adid="${a.adId||''}" data-ad-paytype="${payType}" data-ad-paymethods="${escHtml(JSON.stringify(pms || []))}" data-ad-tradetype="${isBuy ? 'BUY' : 'SELL'}">
       <div class="bot-ad-card-header">
@@ -1595,6 +1610,19 @@ function addP2PBotStyles(){
             <input id="adCfg_${realId}_SpreadPct" type="number" step="0.01" data-stored-pct="${spreadPct}" placeholder="923.00" oninput="window.botAdUpdateSpreadHint(${realId})" onchange="window.botAdSpreadPriceChanged(${realId},this.value)">
             <span id="adCfg_${realId}_SpreadHint" style="font-size:10px;color:#34d399;"></span>
           </label>`}
+          ${showRelevo ? `<label>Rol Relevo
+            <select id="adCfg_${realId}_RelevoRole" onchange="botAdCfgRelevoRoleChange(${realId},this.value);botSaveAdCfgField(${realId},'botRelevoRole',this.value)">
+              <option value="" ${relevoRole===''?'selected':''}>Ninguno</option>
+              <option value="leader" ${relevoRole==='leader'?'selected':''}>Leader</option>
+              <option value="wing2" ${relevoRole==='wing2'?'selected':''}>Wing 2 (defensor 2do puesto)</option>
+              <option value="wing3" ${relevoRole==='wing3'?'selected':''}>Wing 3 (refuerzo/relevo)</option>
+            </select>
+            <span class="help-text">Leader baja el precio sin parar; Wing3 lo copia de refuerzo; Wing2 usa la Estrategia de arriba (Top 1) con una diferencia más grande</span>
+          </label>
+          <label id="adCfg_${realId}_RelevoTickStepLabel" style="${(relevoRole==='leader'||relevoRole==='wing3')?'':'display:none;'}">Paso ladder (CLP)
+            <input id="adCfg_${realId}_RelevoTickStep" type="number" step="0.01" value="${relevoTickStep}" placeholder="0.01" onchange="botSaveAdCfgField(${realId},'botRelevoTickStep',this.value)">
+            <span class="help-text">Cuánto baja el precio cada ciclo (Leader) o cuánto queda por encima del Leader (Wing3)</span>
+          </label>` : ''}
           ${isBuy ? '' : `<label>Precio fuente
             <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
               <select id="adCfg_${realId}_PriceSource" onchange="botSaveAdCfgField(${realId},'botPriceSource',this.value);botUpdateAdCostBadge(${realId});botAdUpdateSafeMarginHint(${realId})" style="flex:0 0 100px;padding:7px 10px;border-radius:6px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;font-size:12px;outline:none;font-family:inherit;">
@@ -1721,6 +1749,13 @@ function addP2PBotStyles(){
     if(t) t.style.display = isTopN ? '' : 'none';
     if(s) s.style.display = isTopN ? 'none' : '';
     if(value === 'spread') window.botAdUpdateSpreadPriceField(realId);
+  };
+
+  // "Estrategia Relevo" (oct 2026): el campo "Paso ladder" solo tiene sentido
+  // para Leader/Wing3 -- Wing2 usa la Estrategia normal de arriba.
+  window.botAdCfgRelevoRoleChange = function(realId, value){
+    var el = document.getElementById("adCfg_" + realId + "_RelevoTickStepLabel");
+    if(el) el.style.display = (value === 'leader' || value === 'wing3') ? '' : 'none';
   };
 
   // Pedido explícito del usuario (ago 2026): "Spread fijo" se escribe como un
@@ -1873,7 +1908,7 @@ function addP2PBotStyles(){
       var excludedList = String(value || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
       body[field] = excludedList.length ? excludedList : null;
     } else {
-      body[field] = value === '' ? null : (field === 'botStrategy' || field === 'botPriceSource' ? value : Number(value));
+      body[field] = value === '' ? null : (field === 'botStrategy' || field === 'botPriceSource' || field === 'botRelevoRole' ? value : Number(value));
     }
     // Resalta el campo que realmente se está guardando (antes siempre
     // resaltaba "Margen seguridad" sin importar cuál campo fuera).
@@ -4263,7 +4298,7 @@ function addP2PBotStyles(){
     if(field === 'botCompetePayTypes'){
       body[field] = value === 'match' ? ['__match_ad__'] : ['all'];
     } else {
-      body[field] = value === '' ? null : (field === 'botStrategy' || field === 'botPriceSource' ? value : Number(value));
+      body[field] = value === '' ? null : (field === 'botStrategy' || field === 'botPriceSource' || field === 'botRelevoRole' ? value : Number(value));
     }
     try{
       const r = await fetch("/api/p2p/bot/ads", {

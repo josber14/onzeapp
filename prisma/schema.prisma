@@ -1688,6 +1688,15 @@ model P2PBotAd {
   botCircuitBreakPct      Decimal?  @db.Decimal(8, 4)
   botDailyVolumeCapUsdt   Decimal?  @db.Decimal(18, 8)
   botMinAdPriceDiffPct    Decimal?  @db.Decimal(8, 4)
+  // "Estrategia Relevo" (oct 2026, pedido explícito del usuario): 3 anuncios de
+  // Bybit coordinados entre sí -- leader (baja precio sin parar, ciclo a
+  // ciclo), wing3 (copia el precio del leader + 1 paso, de refuerzo mientras
+  // el leader se recrea) y wing2 (defiende el 2do puesto, usa la estrategia
+  // "top1" normal sin código nuevo). Null = anuncio normal, sin rol.
+  botRelevoRole           String?
+  // Paso en CLP que bajan leader/wing3 cada ciclo. Null = 0.01 por defecto
+  // (ver runBybitCycle en engine.ts).
+  botRelevoTickStep       Decimal?  @db.Decimal(18, 8)
   recreateLockUntil       DateTime?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @default(now())

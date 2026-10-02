@@ -122,6 +122,8 @@ export async function GET(req: NextRequest) {
               botCircuitBreakPct: localAd?.botCircuitBreakPct ? Number(localAd.botCircuitBreakPct) : null,
               botDailyVolumeCapUsdt: localAd?.botDailyVolumeCapUsdt ? Number(localAd.botDailyVolumeCapUsdt) : null,
               botMinAdPriceDiffPct: localAd?.botMinAdPriceDiffPct != null ? Number(localAd.botMinAdPriceDiffPct) : null,
+              botRelevoRole: localAd?.botRelevoRole || null,
+              botRelevoTickStep: localAd?.botRelevoTickStep != null ? Number(localAd.botRelevoTickStep) : null,
               createdAt: a.createDate || a.createdAt || new Date().toISOString(),
               fromBinance: true,
             };
@@ -327,6 +329,8 @@ export async function GET(req: NextRequest) {
             botCircuitBreakPct: localAd?.botCircuitBreakPct ? Number(localAd.botCircuitBreakPct) : null,
             botDailyVolumeCapUsdt: localAd?.botDailyVolumeCapUsdt ? Number(localAd.botDailyVolumeCapUsdt) : null,
             botMinAdPriceDiffPct: localAd?.botMinAdPriceDiffPct != null ? Number(localAd.botMinAdPriceDiffPct) : null,
+            botRelevoRole: localAd?.botRelevoRole || null,
+            botRelevoTickStep: localAd?.botRelevoTickStep != null ? Number(localAd.botRelevoTickStep) : null,
             createdAt: a.createDate ? new Date(Number(a.createDate)).toISOString() : new Date().toISOString(),
             fromBybit: true,
             };
@@ -373,6 +377,8 @@ export async function GET(req: NextRequest) {
       botCircuitBreakPct: a.botCircuitBreakPct ? Number(a.botCircuitBreakPct) : null,
       botDailyVolumeCapUsdt: a.botDailyVolumeCapUsdt ? Number(a.botDailyVolumeCapUsdt) : null,
       botMinAdPriceDiffPct: a.botMinAdPriceDiffPct != null ? Number(a.botMinAdPriceDiffPct) : null,
+      botRelevoRole: a.botRelevoRole || null,
+      botRelevoTickStep: a.botRelevoTickStep != null ? Number(a.botRelevoTickStep) : null,
       createdAt: a.createdAt.toISOString(),
       fromBybit: false,
     }))];
@@ -404,7 +410,7 @@ export async function PUT(req: NextRequest) {
 
     const body = await req.json();
     const label = body.label || req.nextUrl.searchParams.get("label") || "ONZE";
-    const { id, adId, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged, botEnabled, botTop1Diff, botSafeMarginPct, botCompetePayTypes, botExcludedMerchants, botMatchAllowedMerchants, botPriceFloorPct, botPriceSource, botCommissionPct, botMinCompetitorCapital, botCompeteTransAmount, botStrategy, botSpreadPct, botCycleInterval, botCircuitBreakPct, botDailyVolumeCapUsdt, botMinAdPriceDiffPct, adOnline, nickname } = body;
+    const { id, adId, exchange, tradeType, asset, fiat, priceType, price, amount, minAmount, maxAmount, paymentMethods, payTime, status, isActive, botManaged, botEnabled, botTop1Diff, botSafeMarginPct, botCompetePayTypes, botExcludedMerchants, botMatchAllowedMerchants, botPriceFloorPct, botPriceSource, botCommissionPct, botMinCompetitorCapital, botCompeteTransAmount, botStrategy, botSpreadPct, botCycleInterval, botCircuitBreakPct, botDailyVolumeCapUsdt, botMinAdPriceDiffPct, botRelevoRole, botRelevoTickStep, adOnline, nickname } = body;
 
     if (!exchange) {
       return Response.json({ ok: false, error: "exchange es requerido" }, { status: 400 });
@@ -482,20 +488,15 @@ export async function PUT(req: NextRequest) {
             if (payTime) updateParams.paymentPeriod = payTime;
             if (status) updateParams.status = status === "online" ? 10 : 20;
             await client.updateAd(updateParams);
-          } else if (!id && !adId) {
-            // Creating new ad: delete ALL existing Bybit ads first
-            const existingAds = await prisma.p2PBotAd.findMany({
-              where: { tenantId: session.tenantId, exchange: "bybit" },
-            });
-            for (const existing of existingAds) {
-              try {
-                if (existing.adId) await client.removeAd(existing.adId);
-              } catch (_) {}
-              await prisma.p2PBotAd.deleteMany({
-                where: { id: existing.id, tenantId: session.tenantId },
-              });
-            }
           }
+          // Ya NO existe una rama de "crear anuncio nuevo de Bybit desde el
+          // panel" (oct 2026, "Estrategia Relevo"): esa rama borraba TODOS
+          // los anuncios Bybit existentes antes de crear el nuevo, asumiendo
+          // que la cuenta solo maneja 1 a la vez -- ahora soportamos varios a
+          // propósito (leader/wing2/wing3). El panel nunca llama a este PUT
+          // sin id/adId de todos modos (los anuncios Bybit se crean siempre
+          // directo en la app de Bybit, y el GET los detecta solo), así que
+          // no hace falta ningún camino alternativo acá.
         }
       } catch (e: any) {
         return Response.json({ ok: false, error: `Bybit API error: ${e.message}` }, { status: 500 });
@@ -568,6 +569,8 @@ export async function PUT(req: NextRequest) {
     if (botCircuitBreakPct !== undefined) updateData.botCircuitBreakPct = botCircuitBreakPct;
     if (botDailyVolumeCapUsdt !== undefined) updateData.botDailyVolumeCapUsdt = botDailyVolumeCapUsdt;
     if (botMinAdPriceDiffPct !== undefined) updateData.botMinAdPriceDiffPct = botMinAdPriceDiffPct;
+    if (botRelevoRole !== undefined) updateData.botRelevoRole = botRelevoRole === '' ? null : botRelevoRole;
+    if (botRelevoTickStep !== undefined) updateData.botRelevoTickStep = botRelevoTickStep;
     if (body.label !== undefined) updateData.label = body.label;
     if (nickname !== undefined) updateData.nickname = nickname === '' ? null : nickname;
 
