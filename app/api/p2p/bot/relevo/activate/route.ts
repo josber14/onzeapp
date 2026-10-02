@@ -189,12 +189,32 @@ export async function POST(req: NextRequest) {
       itemType: String(sourceAd.itemType ?? "ORIGIN"),
       status: 10,
     };
-    const res = await client.postAd(postFields);
-    const newId = res?.result?.itemId ?? res?.result?.item?.id ?? res?.result?.id;
-    if (!newId) {
-      throw new Error(`Bybit no devolvió el id del anuncio nuevo (respuesta: ${JSON.stringify(res).slice(0, 300)})`);
+    // Bybit rechaza (90043) crear un anuncio nuevo con un precio a menos de
+    // 0.1% de diferencia de uno YA existente -- al clonar el leader para
+    // crear wing2/wing3, el precio de arranque es literalmente el mismo,
+    // así que siempre choca con esto. No importa el precio exacto de
+    // arranque (el motor lo corrige solo desde el primer ciclo) -- mismo
+    // patrón de reintento con precio ajustado que ya usa la recreación en
+    // engine.ts, con más pasos acá porque wing2 Y wing3 compiten por el
+    // mismo "hueco" de precio contra el leader Y entre sí.
+    let newId: string | null = null;
+    let lastErr: any = null;
+    for (let attempt = 0; attempt < 4 && !newId; attempt++) {
+      const bump = 1 + 0.003 * (attempt + 1); // 0.3%, 0.6%, 0.9%, 1.2%
+      if (attempt > 0) postFields.price = (newPrice * bump).toFixed(2);
+      try {
+        const res = await client.postAd(postFields);
+        newId = res?.result?.itemId ?? res?.result?.item?.id ?? res?.result?.id ?? null;
+        if (!newId) lastErr = new Error(`Bybit no devolvió el id del anuncio nuevo (respuesta: ${JSON.stringify(res).slice(0, 300)})`);
+      } catch (e: any) {
+        lastErr = e;
+        if (!String(e.message).includes("90043")) break; // otro error -- no insistir con el mismo truco
+      }
     }
-    return { ...sourceAd, id: String(newId), price: newPrice };
+    if (!newId) {
+      throw lastErr || new Error("No se pudo crear el anuncio clonado");
+    }
+    return { ...sourceAd, id: String(newId), price: Number(postFields.price) };
   }
 
   const created: { role: string; adId: string }[] = [];
@@ -219,8 +239,24 @@ export async function POST(req: NextRequest) {
       created.push({ role, adId: String(ad.id) });
     }
   } catch (e: any) {
+    // Bug real confirmado en vivo (oct 2026): si la activación fallaba a
+    // mitad de camino (ej. Bybit rechaza clonar wing2/wing3 con 90043), el
+    // leader ya había quedado con botRelevoRole="leader" guardado -- eso
+    // bloqueaba CUALQUIER intento futuro de activar (el chequeo de "ya
+    // activa" de arriba lo detecta como si el relevo ya estuviera armado).
+    // Ahora se deshace todo lo que se alcanzó a asignar en este intento
+    // fallido, dejando los anuncios exactamente como estaban antes --
+    // nunca queda "a medio configurar".
+    for (const item of created) {
+      try {
+        await prisma.p2PBotAd.updateMany({
+          where: { tenantId, exchange: "bybit", label, adId: item.adId },
+          data: { botRelevoRole: null, botRelevoTickStep: null, botRelevoTickBudget: null },
+        });
+      } catch (_) {}
+    }
     return NextResponse.json(
-      { ok: false, error: `Error activando la estrategia: ${e.message}. Revisa el panel -- puede que algún anuncio haya quedado a medio configurar.` },
+      { ok: false, error: `Error activando la estrategia: ${e.message}. Se deshizo lo que se alcanzó a configurar -- puedes volver a intentar.` },
       { status: 500 }
     );
   }
