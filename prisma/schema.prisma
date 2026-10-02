@@ -1697,6 +1697,10 @@ model P2PBotAd {
   // Paso en CLP que bajan leader/wing3 cada ciclo. Null = 0.01 por defecto
   // (ver runBybitCycle en engine.ts).
   botRelevoTickStep       Decimal?  @db.Decimal(18, 8)
+  // Rango máximo (CLP) que el leader puede bajar por debajo del competidor
+  // real contra el que se ancló, antes de quedarse quieto a esperar que el
+  // mercado se mueva de verdad. Solo aplica a leader. Null = 20 por defecto.
+  botRelevoTickBudget     Decimal?  @db.Decimal(18, 8)
   recreateLockUntil       DateTime?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @default(now())

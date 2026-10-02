@@ -2057,7 +2057,11 @@ const bybitAdCache = new Map<string, any>();
 // mapas de arriba -- si el servidor reinicia, el leader simplemente vuelve a
 // arrancar su ladder desde su precio real actual, no es un problema de
 // seguridad (el piso de seguridad se sigue respetando siempre).
-const bybitRelevoLadder = new Map<string, number>();
+// `anchorPrice` es el precio del competidor real contra el que se ancló la
+// última vez -- sirve para calcular el "rango" (botRelevoTickBudget): el
+// leader no baja más de `anchorPrice - tickBudget`, aunque el piso de
+// seguridad real permita bajar más.
+const bybitRelevoLadder = new Map<string, { price: number; anchorPrice: number }>();
 
 // Lock a nivel de base de datos (no solo en memoria) para "recrear anuncio"
 // -- confirmado en vivo: dos ejecuciones del ciclo corriendo al mismo tiempo
@@ -2295,8 +2299,8 @@ async function runBybitCycle(
         safeFloor = minSellPrice * (1 + adSafeMarginPct / 100);
         const leaderLadder = bybitRelevoLadder.get(relevoLadderKey);
         if (leaderLadder != null) {
-          targetPrice = leaderLadder + adRelevoTickStep;
-          await log("debug", "bybit", `Ad ${adId} (wing3): copiando ladder del leader (${leaderLadder.toFixed(2)}) + paso = ${targetPrice.toFixed(2)}`);
+          targetPrice = leaderLadder.price + adRelevoTickStep;
+          await log("debug", "bybit", `Ad ${adId} (wing3): copiando ladder del leader (${leaderLadder.price.toFixed(2)}) + paso = ${targetPrice.toFixed(2)}`);
         } else {
           // El leader todavía no corrió este ciclo (deshabilitado, sin
           // anuncio, etc.) -- nunca congelarse en el precio viejo, caer al
@@ -2356,23 +2360,39 @@ async function runBybitCycle(
         //    ya superada).
         //  - si el mercado se alejó hacia arriba, sube también para no
         //    regalar margen de más.
-        // Nunca baja del piso de seguridad. Guarda el resultado para que
-        // wing3 lo lea este mismo ciclo (ver orden de managedAds más arriba).
+        // Además de nunca bajar del piso de seguridad real, hay un segundo
+        // piso configurable (botRelevoTickBudget, pedido explícito del
+        // usuario): nunca más de "tickBudget" CLP por debajo del competidor
+        // real contra el que se ancló la última vez -- al llegar ahí, el
+        // leader se queda quieto (deja de bajar) hasta que el mercado se
+        // mueva de verdad y dispare un re-anclado nuevo (arriba o abajo).
+        const adRelevoTickBudget = (managedAd as any).botRelevoTickBudget != null ? Number((managedAd as any).botRelevoTickBudget) : 20;
         const cheapestExternal = sortedCompetitors.length > 0 ? Number(sortedCompetitors[0].price) : null;
-        const prevLadder = bybitRelevoLadder.get(relevoLadderKey) ?? currentPrice;
-        let nextLadder = prevLadder - adRelevoTickStep;
+        const prevLadder = bybitRelevoLadder.get(relevoLadderKey);
+        const prevLadderPrice = prevLadder?.price ?? currentPrice;
+        let anchorPrice = prevLadder?.anchorPrice ?? cheapestExternal ?? currentPrice;
+        let nextLadder = prevLadderPrice - adRelevoTickStep;
 
-        if (cheapestExternal != null && cheapestExternal < prevLadder) {
+        if (cheapestExternal != null && cheapestExternal < prevLadderPrice) {
+          anchorPrice = cheapestExternal;
           nextLadder = cheapestExternal - adRelevoTickStep;
           await log("info", "bybit", `Ad ${adId} (leader): competidor real bajo nuestro ladder (${cheapestExternal.toFixed(2)}), re-anclando a ${nextLadder.toFixed(2)}`);
-        } else if (cheapestExternal != null && (cheapestExternal - adRelevoTickStep) > prevLadder) {
+        } else if (cheapestExternal != null && (cheapestExternal - adRelevoTickStep) > prevLadderPrice) {
+          anchorPrice = cheapestExternal;
           nextLadder = cheapestExternal - adRelevoTickStep;
           await log("info", "bybit", `Ad ${adId} (leader): mercado se alejó, recuperando margen a ${nextLadder.toFixed(2)}`);
         }
 
-        if (nextLadder < safeFloor) nextLadder = safeFloor;
+        const rangeFloor = anchorPrice - adRelevoTickBudget;
+        const effectiveFloor = Math.max(rangeFloor, safeFloor);
+        if (nextLadder < effectiveFloor) {
+          if (rangeFloor > safeFloor && nextLadder < rangeFloor) {
+            await log("info", "bybit", `Ad ${adId} (leader): llegó al rango configurado (${adRelevoTickBudget} CLP bajo ${anchorPrice.toFixed(2)}), se queda quieto en ${effectiveFloor.toFixed(2)}`);
+          }
+          nextLadder = effectiveFloor;
+        }
         targetPrice = nextLadder;
-        bybitRelevoLadder.set(relevoLadderKey, targetPrice);
+        bybitRelevoLadder.set(relevoLadderKey, { price: targetPrice, anchorPrice });
 
       } else {
       // Safe margin filter — solo competidores sobre safeFloor. Arranca en

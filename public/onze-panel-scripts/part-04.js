@@ -834,6 +834,7 @@ function addP2PBotStyles(){
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
                 <span style="font-size:13px;font-weight:700;color:#e2e8f0;">Anuncio Bybit</span>
                 <span style="flex:1;"></span>
+                <span id="botRelevoBtnContainer"></span>
                 <button class="btn small ghost" type="button" onclick="window.botSyncNow()" style="font-size:10px;">↻</button>
               </div>
               <div id="botBybitAdContent"></div>
@@ -1472,10 +1473,97 @@ function addP2PBotStyles(){
       // nunca se había conectado acá -- Bybit siempre usó este template
       // aparte, más simple, sin ningún panel de configuración.
       content.innerHTML = sellAds.map(function(ad, idx){ return botRenderAdPill(ad, idx); }).join('');
+      window.botRenderRelevoButton(sellAds);
     }catch(e){
       content.innerHTML = '<div style="color:#fb7185;font-size:12px;text-align:center;padding:8px 0;">Error cargando anuncio</div>';
     }
   }
+
+  // "Estrategia Relevo" (oct 2026, pedido explícito del usuario): un botón
+  // único que arma/desarma los 3 anuncios coordinados, en vez de asignar el
+  // rol a mano en cada uno. "Activa" se deriva de si existe un leader --
+  // no hay una bandera aparte que se pueda desincronizar.
+  window.botRenderRelevoButton = function(sellAds){
+    var btnContainer = document.getElementById("botRelevoBtnContainer");
+    if(!btnContainer) return;
+    var hasLeader = (sellAds || []).some(function(ad){ return ad.botRelevoRole === 'leader'; });
+    btnContainer.innerHTML = hasLeader
+      ? '<button class="btn small danger" type="button" onclick="window.relevoDeactivate()" style="font-size:10px;">🛑 Desactivar Relevo</button>'
+      : '<button class="btn small" type="button" onclick="window.openRelevoActivateModal()" style="font-size:10px;background:rgba(0,212,255,.15);color:#00d4ff;border-color:rgba(0,212,255,.3);">🔁 Activar Relevo</button>';
+  };
+
+  window.openRelevoActivateModal = function(){
+    var modal = document.getElementById("relevoActivateModal");
+    if(modal) modal.remove();
+    modal = document.createElement("div");
+    modal.id = "relevoActivateModal";
+    modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:20px;";
+    modal.addEventListener("click", function(e){ if(e.target === modal) modal.remove(); });
+    modal.innerHTML = `
+      <div style="background:#0d2137;border:1px solid #2a4a6a;border-radius:16px;padding:24px;max-width:420px;width:90%;">
+        <h3 style="color:#00d4ff;margin-bottom:4px;">🔁 Activar Estrategia Relevo</h3>
+        <p style="color:#8aa0ba;font-size:12px;margin-bottom:16px;">Si tienes menos de 3 anuncios de Venta en Bybit, se van a crear automáticamente (clonando el que ya existe) hasta tener 3: Leader, Wing2 y Wing3.</p>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <label style="font-size:12px;color:#94a3b8;">Paso ladder (CLP)
+            <input id="relevoTickStepInput" type="number" step="0.01" value="0.01" style="width:100%;margin-top:4px;padding:8px;border-radius:6px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;">
+          </label>
+          <label style="font-size:12px;color:#94a3b8;">Rango de bajada agresiva (CLP)
+            <input id="relevoTickBudgetInput" type="number" step="1" value="20" style="width:100%;margin-top:4px;padding:8px;border-radius:6px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;">
+          </label>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:18px;">
+          <button class="btn small ghost" type="button" style="flex:1;" onclick="document.getElementById('relevoActivateModal').remove()">Cancelar</button>
+          <button class="btn small" type="button" style="flex:1;background:rgba(0,212,255,.15);color:#00d4ff;border-color:rgba(0,212,255,.3);" onclick="window.relevoActivate()">Activar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  };
+
+  window.relevoActivate = async function(){
+    var tickStep = document.getElementById("relevoTickStepInput")?.value || "0.01";
+    var tickBudget = document.getElementById("relevoTickBudgetInput")?.value || "20";
+    var ok = await onzeConfirm("Esto puede crear anuncios NUEVOS y REALES en tu cuenta de Bybit (clonando el que ya tienes). ¿Confirmas que quieres activar la Estrategia Relevo?");
+    if(!ok) return;
+    var modal = document.getElementById("relevoActivateModal");
+    if(modal) modal.remove();
+    try{
+      const r = await fetch("/api/p2p/bot/relevo/activate", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ label: botActiveLabel || "ONZE", tickStep: tickStep, tickBudget: tickBudget })
+      });
+      const d = await r.json().catch(function(){ return null; });
+      if(!r.ok || !d?.ok){
+        onzeAlert("No se pudo activar: " + (d?.error || r.statusText));
+        return;
+      }
+      if(typeof showToast === "function") showToast("✅ Estrategia Relevo activada");
+      window.botLoadAds();
+    }catch(e){
+      onzeAlert("Error activando la estrategia: " + e.message);
+    }
+  };
+
+  window.relevoDeactivate = async function(){
+    var ok = await onzeConfirm("Esto va a BORRAR de verdad 2 de los 3 anuncios de Bybit (Wing2 y Wing3), y el anuncio Leader va a quedar compitiendo con la estrategia Top 1 normal. ¿Confirmas que quieres desactivar la Estrategia Relevo?");
+    if(!ok) return;
+    try{
+      const r = await fetch("/api/p2p/bot/relevo/deactivate", {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ label: botActiveLabel || "ONZE" })
+      });
+      const d = await r.json().catch(function(){ return null; });
+      if(!r.ok || !d?.ok){
+        onzeAlert("No se pudo desactivar: " + (d?.error || r.statusText));
+        return;
+      }
+      if(typeof showToast === "function") showToast("✅ Estrategia Relevo desactivada");
+      window.botLoadAds();
+    }catch(e){
+      onzeAlert("Error desactivando la estrategia: " + e.message);
+    }
+  };
 
   function botRenderAdPill(a, idx){
     const isFirst = idx === 0;
