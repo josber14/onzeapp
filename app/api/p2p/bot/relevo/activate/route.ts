@@ -112,6 +112,23 @@ export async function POST(req: NextRequest) {
   const leaderAd = ordered[0];
   const leaderRow = localByAdId.get(String(leaderAd.id));
 
+  // Pedido explícito del usuario (confirmado leyendo el anuncio real: margen
+  // de seguridad 1.31%, capital mínimo competidor 5, circuit breaker 1%,
+  // etc. -- todos MÁS estrictos que el fallback a nivel de exchange de
+  // Bybit): un anuncio nuevo (wing2/wing3) creado por este botón debe
+  // heredar la MISMA configuración de seguridad que ya tenía el leader, no
+  // quedar en null y caer al fallback del exchange (que puede ser menos
+  // estricto, como en este caso 0.26% en vez de 1.31%). Solo se copia al
+  // CREAR una fila nueva -- si el anuncio ya existía con su propia
+  // configuración (caso de 2 o 3 anuncios ya armados a mano), esa
+  // configuración se respeta tal cual, sin pisarla.
+  const SAFETY_FIELDS = [
+    "botPriceSource", "botPriceFloorPct", "botSafeMarginPct",
+    "botMinCompetitorCapital", "botCompeteTransAmount", "botCompetePayTypes",
+    "botExcludedMerchants", "botMatchAllowedMerchants", "botCycleInterval",
+    "botCircuitBreakPct", "botMinAdPriceDiffPct",
+  ] as const;
+
   async function ensureLocalRow(ad: any, role: string) {
     const existing = localByAdId.get(String(ad.id));
     const data: any = {
@@ -137,6 +154,11 @@ export async function POST(req: NextRequest) {
     };
     if (existing) {
       return prisma.p2PBotAd.update({ where: { id: existing.id }, data });
+    }
+    if (leaderRow) {
+      for (const field of SAFETY_FIELDS) {
+        if (leaderRow[field] != null) data[field] = leaderRow[field];
+      }
     }
     return prisma.p2PBotAd.create({ data });
   }
