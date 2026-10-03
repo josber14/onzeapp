@@ -2120,6 +2120,58 @@ async function claimBybitRecreateLock(managedAdDbId: number): Promise<boolean> {
   return result.count > 0;
 }
 
+// Bug real confirmado en vivo (oct 2026, "Estrategia Relevo"): postAd() a
+// veces SÍ crea el anuncio de verdad en Bybit pero la respuesta no trae el
+// id en ninguno de los lugares que ya se revisan (extractAdId devuelve
+// undefined) -- el código entonces asumía "falló" y reintentaba con OTRO
+// postAd(), creando un SEGUNDO anuncio real duplicado sin darse cuenta, o
+// chocando con el límite de cuenta (912120060, "máx 2 anuncios") porque el
+// primero SÍ seguía ahí sin que lo supiéramos. Resultado real observado:
+// un wing2 recreado terminó con botEnabled:false (el código creyó que los
+// 2 intentos fallaron) mientras el anuncio real sí existía, publicado y
+// vivo, sin ningún rol asignado -- el panel de GET lo auto-detectó después
+// como "anuncio nuevo" genérico, pero sin su botRelevoRole.
+//
+// Esta función intenta RECUPERAR el id real en vez de asumir que no se
+// creó: si postAd() no tiró excepción pero no se pudo leer el id de la
+// respuesta, se vuelve a consultar getMyAds() buscando un anuncio online,
+// del mismo lado/moneda/precio que el que se acaba de publicar, que no sea
+// ninguno de los ids que ya conocíamos de antes -- si aparece uno, es casi
+// seguro el que se acaba de crear.
+async function postAdRecoveringId(
+  client: BybitP2PClient,
+  postFields: any,
+  knownAdIds: Set<string>,
+  log: (level: string, exchange: string | null, message: string, details?: any) => Promise<void>
+): Promise<string | null> {
+  const res = await client.postAd(postFields);
+  let id: string | null = res?.result?.itemId ?? res?.result?.item?.id ?? res?.result?.id ?? null;
+  if (id) return String(id);
+
+  await log("warn", "bybit", `postAd OK pero no se pudo extraer el id de la respuesta (${JSON.stringify(res).slice(0, 300)}) -- buscando el anuncio recién creado en getMyAds antes de asumir que falló`);
+  try {
+    await new Promise((r) => setTimeout(r, 2000));
+    const myAdsRes = await client.getMyAds(1, 50);
+    const items: any[] = myAdsRes?.result?.items || [];
+    const match = items.find(
+      (a: any) =>
+        Number(a.status) === 10 &&
+        a.side === 1 &&
+        String(a.tokenId).toUpperCase() === "USDT" &&
+        String(a.currencyId).toUpperCase() === "CLP" &&
+        String(a.price) === String(postFields.price) &&
+        !knownAdIds.has(String(a.id))
+    );
+    if (match) {
+      await log("info", "bybit", `Recuperado: el anuncio sí se había creado (${match.id}), no hacía falta reintentar`);
+      return String(match.id);
+    }
+  } catch (e: any) {
+    await log("warn", "bybit", `Error buscando el anuncio recién creado para recuperar su id: ${e.message}`);
+  }
+  return null;
+}
+
 async function runBybitCycle(
   tenantId: number,
   config: P2PBotConfigData | P2PBotExchangeConfigData,
@@ -2662,8 +2714,9 @@ async function runBybitCycle(
               tradingPreferenceSet: strTps,
               itemType: String(fullAd.itemType ?? "ORIGIN"), status: 10,
             };
-            const extractAdId = (res: any) =>
-              res?.result?.itemId ?? res?.result?.item?.id ?? res?.result?.id;
+            // Ids que ya conocemos de antes (para no confundir el anuncio
+            // recién creado con uno que ya existía) -- ver postAdRecoveringId.
+            const knownAdIds = new Set<string>([adId, ...managedAds.map((a: any) => String(a.adId))]);
 
             let removed = false;
             for (let retry = 0; retry < 3; retry++) {
@@ -2681,18 +2734,13 @@ async function runBybitCycle(
               for (let attempt = 0; attempt < 2 && !createdId; attempt++) {
                 await new Promise(r => setTimeout(r, 7000));
                 try {
-                  const newAdRes = await client.postAd(postFields);
-                  createdId = extractAdId(newAdRes);
-                  if (!createdId) {
-                    await log( "warn", "bybit", `Ad ${adId}: postAd OK pero no se pudo extraer ID (respuesta: ${JSON.stringify(newAdRes).slice(0, 300)})`);
-                  }
+                  createdId = await postAdRecoveringId(client, postFields, knownAdIds, log);
                 } catch (e2: any) {
                   if (e2.message?.includes("90043")) {
                     const retryPrice = Math.max(recreatePrice * 1.005, minSellPrice * 1.005);
                     postFields.price = retryPrice.toFixed(2);
                     try {
-                      const retryRes = await client.postAd(postFields);
-                      createdId = extractAdId(retryRes);
+                      createdId = await postAdRecoveringId(client, postFields, knownAdIds, log);
                     } catch { /* se cuenta como intento fallido, ver abajo */ }
                   }
                   if (!createdId) {
@@ -2790,6 +2838,8 @@ async function runBybitCycle(
               status: 10,
             };
 
+            const knownAdIds = new Set<string>([adId, ...managedAds.map((a: any) => String(a.adId))]);
+
             let removed = false;
             for (let retry = 0; retry < 3; retry++) {
               try { await client.removeAd(adId); removed = true; break; }
@@ -2806,15 +2856,13 @@ async function runBybitCycle(
               for (let attempt = 0; attempt < 2 && !newAdId; attempt++) {
                 await new Promise(r => setTimeout(r, 7000));
                 try {
-                  const newAdRes = await client.postAd(postFields);
-                  newAdId = newAdRes?.result?.item?.id ?? newAdRes?.result?.id ?? null;
+                  newAdId = await postAdRecoveringId(client, postFields, knownAdIds, log);
                 } catch (e2: any) {
                   if (e2.message?.includes("90043")) {
                     const retryPrice = Math.max(currentPrice * 1.005, minSellPrice * 1.005);
                     postFields.price = retryPrice.toFixed(2);
                     try {
-                      const retryRes = await client.postAd(postFields);
-                      newAdId = retryRes?.result?.item?.id ?? retryRes?.result?.id ?? null;
+                      newAdId = await postAdRecoveringId(client, postFields, knownAdIds, log);
                     } catch { /* se cuenta como intento fallido, ver abajo */ }
                   }
                   if (!newAdId) {
