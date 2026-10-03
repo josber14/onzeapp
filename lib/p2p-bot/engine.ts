@@ -2068,21 +2068,27 @@ const bybitAdCache = new Map<string, any>();
 // ver el orden más abajo) para que el activo sepa si ya aseguró el 2do
 // puesto y puede dejar de bajar agresivo.
 //
-// `settled` = true significa que el activo ya dejó de bajar agresivo
-// (porque se acabó el rango configurado, o porque ya no hace falta seguir
-// bajando -- ver la lógica en el bloque de precio) y se quedó ajustado a
-// "wing2Price - paso". Vuelve a false solo si la competencia real reaparece.
-//
 // En memoria, mismo patrón que los mapas de arriba -- si el servidor
 // reinicia, se pierde el estado del relevo (quién estaba activo, en qué
 // precio) pero NUNCA se pierde seguridad: el activo siempre respeta el piso
 // de seguridad real, y si el estado se resetea simplemente se vuelve a
 // arrancar con "leader" activo desde su precio real actual.
+// `aggressive` = true significa que el activo detectó que el competidor
+// real bajó su precio DE VERDAD (comparando contra `lastCompetitorPrice`,
+// el precio del ciclo anterior) y por eso entró en modo "segundero" (baja
+// 0,01 por ciclo sin parar). Mientras `aggressive` sea false, el activo
+// simplemente se posiciona 1 paso por debajo del competidor real, SIN
+// seguir bajando solo -- pedido explícito del usuario: no tiene sentido
+// gastar margen bajando continuo si el rival no se está moviendo de
+// verdad. `lastCompetitorPrice` es el precio del competidor real tal como
+// se vio en el ciclo ANTERIOR -- se compara contra el de este ciclo para
+// detectar ese movimiento.
 const bybitRelevoState = new Map<string, {
   activeRole: "leader" | "wing3";
   ladderPrice: number;
   anchorPrice: number;
-  settled: boolean;
+  aggressive: boolean;
+  lastCompetitorPrice: number | null;
   wing2Price: number | null;
 }>();
 
@@ -2323,7 +2329,7 @@ async function runBybitCycle(
       if (adRelevoRole === "leader" || adRelevoRole === "wing3") {
         safeFloor = minSellPrice * (1 + adSafeMarginPct / 100);
         const relevoState = bybitRelevoState.get(relevoKey) ?? {
-          activeRole: "leader" as const, ladderPrice: currentPrice, anchorPrice: currentPrice, settled: false, wing2Price: null,
+          activeRole: "leader" as const, ladderPrice: currentPrice, anchorPrice: currentPrice, aggressive: false, lastCompetitorPrice: null, wing2Price: null,
         };
 
         if (adRelevoRole !== relevoState.activeRole) {
@@ -2357,28 +2363,35 @@ async function runBybitCycle(
           const cheapestExternal = sortedCompetitors.length > 0 ? Number(sortedCompetitors[0].price) : null;
           const wing2Price = relevoState.wing2Price;
 
+          // Pedido explícito del usuario (oct 2026): el modo "segundero"
+          // (bajar 0,01 por ciclo sin parar) NO se prende solo porque exista
+          // un competidor real cerca -- se prende específicamente cuando ese
+          // competidor BAJÓ su precio de verdad respecto al ciclo anterior
+          // (evidencia de que está compitiendo activamente). Mientras el
+          // rival esté quieto, no tiene sentido gastar margen bajando solo.
+          const competitorDropped = cheapestExternal != null && relevoState.lastCompetitorPrice != null && cheapestExternal < relevoState.lastCompetitorPrice;
+          if (competitorDropped && !relevoState.aggressive) {
+            relevoState.aggressive = true;
+            relevoState.anchorPrice = cheapestExternal as number;
+            await log("info", "bybit", `Ad ${adId} (activo): el competidor real bajó de precio (${cheapestExternal!.toFixed(2)}) -- entra en modo segundero continuo`);
+          }
+
           // "Ya ganó, aflojar": no hay competencia real cerca, o wing2 ya
           // aseguró el 2do puesto (está por debajo de todo competidor real
-          // -- en la práctica es la misma señal). Pedido explícito del
-          // usuario: en ese caso no hace falta seguir bajando 0,01 constante,
-          // se ajusta a wing2 - paso y listo.
+          // -- en la práctica es la misma señal). Solo aplica si estábamos en
+          // modo agresivo -- en modo simple no hay nada que aflojar.
           const noRealThreat = cheapestExternal == null || (wing2Price != null && wing2Price < cheapestExternal);
 
-          if (noRealThreat && !relevoState.settled) {
-            relevoState.settled = true;
+          if (!relevoState.aggressive) {
+            // Modo simple (por defecto, o tras aflojar): un solo descuento
+            // del competidor real, SIN seguir bajando solo -- se recalcula
+            // cada ciclo, pero si el rival no se movió, da el mismo número
+            // (y el envío a Bybit se salta más abajo por "sin cambios").
+            targetPrice = cheapestExternal != null ? cheapestExternal - adRelevoTickStep : relevoState.ladderPrice;
+          } else if (noRealThreat) {
+            relevoState.aggressive = false;
             targetPrice = wing2Price != null ? wing2Price - adRelevoTickStep : relevoState.ladderPrice;
             await log("info", "bybit", `Ad ${adId} (activo): ya no hay competencia real / wing2 aseguró el 2do puesto -- se afloja a ${targetPrice.toFixed(2)}`);
-          } else if (relevoState.settled && !noRealThreat) {
-            // La amenaza real volvió -- se reactiva el modo agresivo desde
-            // el precio del competidor que reapareció.
-            relevoState.settled = false;
-            relevoState.anchorPrice = cheapestExternal as number;
-            targetPrice = (cheapestExternal as number) - adRelevoTickStep;
-            await log("info", "bybit", `Ad ${adId} (activo): la competencia real volvió (${cheapestExternal!.toFixed(2)}), retomando modo agresivo`);
-          } else if (relevoState.settled) {
-            // Sigue tranquilo -- mantiene el ajuste a wing2 - paso (puede
-            // haber cambiado si wing2 se movió este mismo ciclo).
-            targetPrice = wing2Price != null ? wing2Price - adRelevoTickStep : relevoState.ladderPrice;
           } else {
             // Modo agresivo: baja un paso por ciclo, se auto-corrige contra
             // el mercado real (sortedCompetitors ya excluye todos nuestros
@@ -2403,7 +2416,7 @@ async function runBybitCycle(
             // IGUAL que "ya ganó, aflojar" -- mismo ajuste a wing2 - paso.
             const rangeFloor = anchorPrice - adRelevoTickBudget;
             if (nextLadder < rangeFloor) {
-              relevoState.settled = true;
+              relevoState.aggressive = false;
               targetPrice = wing2Price != null ? wing2Price - adRelevoTickStep : rangeFloor;
               await log("info", "bybit", `Ad ${adId} (activo): se agotó el rango configurado (${adRelevoTickBudget} CLP bajo ${anchorPrice.toFixed(2)}), se afloja a ${targetPrice.toFixed(2)}`);
             } else {
@@ -2412,6 +2425,7 @@ async function runBybitCycle(
             relevoState.anchorPrice = anchorPrice;
           }
 
+          relevoState.lastCompetitorPrice = cheapestExternal;
           if (targetPrice < safeFloor) targetPrice = safeFloor;
           relevoState.ladderPrice = targetPrice;
         }
@@ -2518,7 +2532,7 @@ async function runBybitCycle(
       // que le toque este ciclo) sepa si ya aseguró el 2do puesto.
       if (adRelevoRole === "wing2") {
         const relevoState = bybitRelevoState.get(relevoKey) ?? {
-          activeRole: "leader" as const, ladderPrice: currentPrice, anchorPrice: currentPrice, settled: false, wing2Price: null,
+          activeRole: "leader" as const, ladderPrice: currentPrice, anchorPrice: currentPrice, aggressive: false, lastCompetitorPrice: null, wing2Price: null,
         };
         relevoState.wing2Price = targetPrice;
         bybitRelevoState.set(relevoKey, relevoState);
