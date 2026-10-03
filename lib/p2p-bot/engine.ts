@@ -2709,16 +2709,26 @@ async function runBybitCycle(
                 // el relevo al otro (leader<->wing3) -- desde el ciclo
                 // siguiente, el que estaba de respaldo retoma el ladder
                 // exactamente donde se quedó, y este pasa a ser el nuevo
-                // respaldo.
+                // respaldo. "Modo 2 anuncios" (oct 2026, pedido explícito del
+                // usuario -- Bybit lo limita a 2 anuncios de Venta/CLP por
+                // ahora, sin wing3): si el otro rol no existe entre los
+                // anuncios gestionados, NO se pasa el relevo a nadie --
+                // leader se queda siendo el activo para siempre y
+                // simplemente se recrea en su lugar cada vez, igual que
+                // cualquier anuncio normal sin esta estrategia.
                 {
                   const adRole = (managedAd as any).botRelevoRole as string | null;
                   if (adRole === "leader" || adRole === "wing3") {
-                    const rk = `${tenantId}:${label}`;
-                    const rs = bybitRelevoState.get(rk);
-                    if (rs && rs.activeRole === adRole) {
-                      rs.activeRole = adRole === "leader" ? "wing3" : "leader";
-                      bybitRelevoState.set(rk, rs);
-                      await log("info", "bybit", `Estrategia Relevo: se le pasa el relevo a ${rs.activeRole}`);
+                    const otherRole = adRole === "leader" ? "wing3" : "leader";
+                    const otherExists = managedAds.some((a: any) => a.botRelevoRole === otherRole);
+                    if (otherExists) {
+                      const rk = `${tenantId}:${label}`;
+                      const rs = bybitRelevoState.get(rk);
+                      if (rs && rs.activeRole === adRole) {
+                        rs.activeRole = otherRole;
+                        bybitRelevoState.set(rk, rs);
+                        await log("info", "bybit", `Estrategia Relevo: se le pasa el relevo a ${rs.activeRole}`);
+                      }
                     }
                   }
                 }
@@ -2815,16 +2825,21 @@ async function runBybitCycle(
                 });
                 await log( "info", "bybit", `Anuncio recreado como ${newAdId}`);
                 // "Estrategia Relevo" -- mismo pase de relevo que en el otro
-                // camino de recreación (ver comentario detallado ahí arriba).
+                // camino de recreación (ver comentario detallado ahí arriba,
+                // incluido el "modo 2 anuncios" sin wing3).
                 {
                   const adRole = (managedAd as any).botRelevoRole as string | null;
                   if (adRole === "leader" || adRole === "wing3") {
-                    const rk = `${tenantId}:${label}`;
-                    const rs = bybitRelevoState.get(rk);
-                    if (rs && rs.activeRole === adRole) {
-                      rs.activeRole = adRole === "leader" ? "wing3" : "leader";
-                      bybitRelevoState.set(rk, rs);
-                      await log("info", "bybit", `Estrategia Relevo: se le pasa el relevo a ${rs.activeRole}`);
+                    const otherRole = adRole === "leader" ? "wing3" : "leader";
+                    const otherExists = managedAds.some((a: any) => a.botRelevoRole === otherRole);
+                    if (otherExists) {
+                      const rk = `${tenantId}:${label}`;
+                      const rs = bybitRelevoState.get(rk);
+                      if (rs && rs.activeRole === adRole) {
+                        rs.activeRole = otherRole;
+                        bybitRelevoState.set(rk, rs);
+                        await log("info", "bybit", `Estrategia Relevo: se le pasa el relevo a ${rs.activeRole}`);
+                      }
                     }
                   }
                 }

@@ -35,6 +35,14 @@ export async function POST(req: NextRequest) {
   const label = body?.label || "ONZE";
   const tickStep = body?.tickStep != null && body.tickStep !== "" ? Number(body.tickStep) : 0.01;
   const tickBudget = body?.tickBudget != null && body.tickBudget !== "" ? Number(body.tickBudget) : 20;
+  // "Modo 2 anuncios" (oct 2026, pedido explícito del usuario): Bybit limita
+  // esta cuenta a 2 anuncios de Venta/CLP simultáneos por ahora (confirmado
+  // en vivo, error 912120060, no es cosa de nuestro código) -- hasta que eso
+  // cambie, se arma Leader + Wing2 nada más, sin Wing3. El motor
+  // (runBybitCycle) ya maneja esto solo: si no existe un anuncio wing3, el
+  // leader nunca le "pasa el relevo" a nadie y simplemente se recrea en su
+  // lugar, como cualquier anuncio normal.
+  const maxAds = body?.maxAds === 2 ? 2 : 3;
 
   const bybitClient = await getBybitClient(tenantId, label);
   if (!bybitClient) {
@@ -76,11 +84,11 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  if (onlineSell.length > 3) {
+  if (onlineSell.length > maxAds) {
     return NextResponse.json(
       {
         ok: false,
-        error: `Hay ${onlineSell.length} anuncios de Venta en línea en Bybit -- la Estrategia Relevo necesita como máximo 3. Apaga (bot) los que sobren desde el panel y vuelve a intentar.`,
+        error: `Hay ${onlineSell.length} anuncios de Venta en línea en Bybit -- este modo de la Estrategia Relevo necesita como máximo ${maxAds}. Apaga (bot) los que sobren desde el panel y vuelve a intentar.`,
       },
       { status: 400 }
     );
@@ -224,8 +232,9 @@ export async function POST(req: NextRequest) {
     created.push({ role: "leader", adId: String(leaderAd.id), wasCloned: false });
 
     // Wing2 y wing3: usan los anuncios 2do y 3ro si ya existían (hay 2 o 3),
-    // o se clonan nuevos en Bybit si faltan (hay solo 1).
-    const roles: Array<"wing2" | "wing3"> = ["wing2", "wing3"];
+    // o se clonan nuevos en Bybit si faltan (hay solo 1). "Modo 2 anuncios":
+    // solo se arma wing2, sin wing3 -- ver comentario de maxAds más arriba.
+    const roles: Array<"wing2" | "wing3"> = maxAds === 2 ? ["wing2"] : ["wing2", "wing3"];
     for (let i = 0; i < roles.length; i++) {
       const role = roles[i];
       let ad = ordered[i + 1];

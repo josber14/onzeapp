@@ -1502,8 +1502,14 @@ function addP2PBotStyles(){
     modal.innerHTML = `
       <div style="background:#0d2137;border:1px solid #2a4a6a;border-radius:16px;padding:24px;max-width:420px;width:90%;">
         <h3 style="color:#00d4ff;margin-bottom:4px;">🔁 Activar Estrategia Relevo</h3>
-        <p style="color:#8aa0ba;font-size:12px;margin-bottom:16px;">Si tienes menos de 3 anuncios de Venta en Bybit, se van a crear automáticamente (clonando el que ya existe) hasta tener 3: Leader, Wing2 y Wing3.</p>
+        <p style="color:#8aa0ba;font-size:12px;margin-bottom:16px;">Si tienes menos anuncios de Venta en Bybit de los que elijas abajo, se van a crear automáticamente (clonando el que ya existe).</p>
         <div style="display:flex;flex-direction:column;gap:12px;">
+          <label style="font-size:12px;color:#94a3b8;">Cantidad de anuncios
+            <select id="relevoMaxAdsInput" style="width:100%;margin-top:4px;padding:8px;border-radius:6px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;">
+              <option value="2" selected>2 (Leader + Wing2 -- Bybit te limita a 2 por ahora)</option>
+              <option value="3">3 (Leader + Wing2 + Wing3 -- con respaldo)</option>
+            </select>
+          </label>
           <label style="font-size:12px;color:#94a3b8;">Paso ladder (CLP)
             <input id="relevoTickStepInput" type="number" step="0.01" value="0.01" style="width:100%;margin-top:4px;padding:8px;border-radius:6px;border:1px solid rgba(148,163,184,.15);background:rgba(15,23,42,.5);color:#f8fafc;">
           </label>
@@ -1522,6 +1528,7 @@ function addP2PBotStyles(){
   window.relevoActivate = async function(){
     var tickStep = document.getElementById("relevoTickStepInput")?.value || "0.01";
     var tickBudget = document.getElementById("relevoTickBudgetInput")?.value || "20";
+    var maxAds = Number(document.getElementById("relevoMaxAdsInput")?.value || "2");
     var ok = await onzeConfirm("Esto puede crear anuncios NUEVOS y REALES en tu cuenta de Bybit (clonando el que ya tienes). ¿Confirmas que quieres activar la Estrategia Relevo?");
     if(!ok) return;
     var modal = document.getElementById("relevoActivateModal");
@@ -1530,7 +1537,7 @@ function addP2PBotStyles(){
       const r = await fetch("/api/p2p/bot/relevo/activate", {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ label: botActiveLabel || "ONZE", tickStep: tickStep, tickBudget: tickBudget })
+        body: JSON.stringify({ label: botActiveLabel || "ONZE", tickStep: tickStep, tickBudget: tickBudget, maxAds: maxAds })
       });
       const d = await r.json().catch(function(){ return null; });
       if(!r.ok || !d?.ok){
