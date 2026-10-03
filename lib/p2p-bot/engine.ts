@@ -2928,9 +2928,22 @@ async function runBybitCycle(
               await log( "warn", "bybit", `Ad ${adId}: no se pudo reactivar: ${e2.message}`);
             }
           } else if (e.message?.includes("90043")) {
-            let adjustPrice = targetPrice > currentPrice ? targetPrice * 1.005 : targetPrice * 0.995;
-            if (adjustPrice < minSellPrice) adjustPrice = minSellPrice * 1.005;
-            await log( "info", "bybit", `Ad ${adId}: 90043, reintentando con ajuste >0.5% (${adjustPrice.toFixed(2)})`);
+            // Bug real confirmado en vivo (oct 2026, plata real afectada):
+            // este ajuste usaba un salto fijo de 0,5% del precio -- varios
+            // pesos de un solo golpe, mucho más de lo que hace falta para
+            // superar el "0,1% de diferencia mínima" que pide Bybit. Peor
+            // aún: solo se comparaba contra minSellPrice (el costo puro, SIN
+            // el margen de seguridad configurado) -- un ajuste hacia abajo
+            // podía terminar publicando un precio por debajo del piso de
+            // seguridad real (confirmado en vivo: wing2 terminó en 993,88
+            // con un piso real de ~996,1). Ahora el ajuste es chico (0,15%,
+            // apenas lo necesario para despegarse del 0,1% de Bybit) y
+            // SIEMPRE respeta el piso de seguridad real (safeFloor, con
+            // margen incluido), nunca solo el costo puro.
+            const direction = targetPrice >= currentPrice ? 1 : -1;
+            let adjustPrice = targetPrice * (1 + direction * 0.0015);
+            if (adjustPrice < safeFloor) adjustPrice = safeFloor;
+            await log( "info", "bybit", `Ad ${adId}: 90043, reintentando con ajuste chico (${adjustPrice.toFixed(2)})`);
             try {
               await client.updateAd({ ...updateFields, price: adjustPrice.toFixed(2) });
               bybitModCount.set(modKey, currentMods + 1);
