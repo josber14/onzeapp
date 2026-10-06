@@ -563,6 +563,20 @@ model TenantSettings {
   // y el navegador deja de intentar hacerlo por su cuenta. Se activa cuenta
   // por cuenta, a mano, solo después de varios días de modo sombra limpio.
   p2pCapacityServerAuthority      Boolean   @default(false)
+  // Bug real confirmado en vivo (oct 2026, plata real afectada -- cuenta de
+  // Hector): sin esto, dos disparos casi simultáneos del motor de capacity
+  // (ej. una venta de Binance y una de Bybit sincronizando casi al mismo
+  // tiempo, cada una llamando a triggerCapacityEngineNow) podían correr en
+  // PARALELO -- cada uno leía el mismo snapshot de capacitys activos ANTES
+  // de que el otro guardara su resultado, así que los dos le asignaban la
+  // MISMA venta real completa a un capacity DISTINTO, duplicando el monto
+  // (confirmado: una misma orden contada completa en 2, 3 y hasta 4
+  // capacitys a la vez). Este candado (mismo patrón que
+  // P2PBotAd.recreateLockUntil) asegura que el motor de capacity de un
+  // tenant nunca corra 2 veces en paralelo -- un disparo que llega mientras
+  // otro ya está corriendo simplemente se salta (el cron de cada 30 min, o
+  // el próximo disparo real, lo termina agarrando igual).
+  capacityEngineLockUntil        DateTime?
   // Clave de 4 dígitos para proteger "Liberar" en el panel P2P (jul 2026) —
   // nunca se guarda en texto plano, solo el hash (bcryptjs, mismo patrón que
   // el login). El bloqueo temporal es para que no se pueda "adivinar" por

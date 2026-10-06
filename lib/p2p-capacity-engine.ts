@@ -103,7 +103,50 @@ export async function computeFreshCapacityFifoResult(tenantId: number) {
   return computeP2PCapacityFifo(capacities, sales, markedAsOwnCapital);
 }
 
+// Candado de solo este tenant (ver comentario completo junto al campo en
+// prisma/schema.prisma) -- evita que 2 corridas de processTenantCapacityEngine
+// se solapen para la misma cuenta. TTL de 60s: de sobra para una corrida
+// normal (lee capacitys+ventas, calcula en memoria, escribe); si una corrida
+// se cuelga de verdad, el candado igual se libera solo pasado ese tiempo.
+async function claimCapacityEngineLock(tenantId: number): Promise<boolean> {
+  const lockMs = 60000;
+  const result = await prisma.tenantSettings.updateMany({
+    where: {
+      tenantId,
+      OR: [{ capacityEngineLockUntil: null }, { capacityEngineLockUntil: { lt: new Date() } }],
+    },
+    data: { capacityEngineLockUntil: new Date(Date.now() + lockMs) },
+  });
+  return result.count > 0;
+}
+
+async function releaseCapacityEngineLock(tenantId: number): Promise<void> {
+  await prisma.tenantSettings.updateMany({ where: { tenantId }, data: { capacityEngineLockUntil: null } });
+}
+
 export async function processTenantCapacityEngine(tenantId: number) {
+  // Bug real confirmado en vivo (oct 2026, cuenta de Hector, plata real
+  // afectada): sin este candado, 2 disparos casi simultáneos (ej. una venta
+  // de Binance y una de Bybit sincronizando casi al mismo tiempo) corrían
+  // esta función en PARALELO -- cada uno leía el mismo snapshot de
+  // capacitys ANTES de que el otro guardara su resultado, y ambos le
+  // asignaban la MISMA venta real completa a un capacity DISTINTO,
+  // duplicando el monto (confirmado: una misma orden contada completa en
+  // 2, 3 y hasta 4 capacitys a la vez). Si no se puede tomar el candado,
+  // esta corrida se salta entera -- el cron de cada 30 min, o el próximo
+  // disparo real, la termina agarrando igual con datos frescos.
+  const gotLock = await claimCapacityEngineLock(tenantId);
+  if (!gotLock) {
+    return { tenantId, skipped: true, reason: "ya hay otra corrida del motor de capacity en curso para este tenant" };
+  }
+  try {
+    return await processTenantCapacityEngineLocked(tenantId);
+  } finally {
+    await releaseCapacityEngineLock(tenantId);
+  }
+}
+
+async function processTenantCapacityEngineLocked(tenantId: number) {
   const settings = await prisma.tenantSettings.findUnique({
     where: { tenantId },
     select: { p2pCapacityServerAuthority: true },
