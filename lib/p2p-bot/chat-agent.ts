@@ -2236,6 +2236,28 @@ export function normalizeOrder(raw: any, exchange: string) {
 }
 
 async function fetchMessages(exchange: string, client: any, orderNo: string, _orderCreatedAt?: string): Promise<ChatMessage[]> {
+  // Bug real confirmado en vivo (oct 2026): en Bybit el chat es por SESIÓN
+  // con el comprador (ver resolveChatSessionId en bybit-adapter.ts, que
+  // busca por sessionName == apodo del comprador), no por orden -- un
+  // comprador recurrente que ya hizo una orden antes comparte la MISMA
+  // sesión, así que getChatMessages trae el historial de TODAS sus órdenes
+  // mezclado, no solo la actual. Sin filtrar por fecha, lastComprobantTime()
+  // encontraba el comprobante de una orden VIEJA (de días atrás) y, como ya
+  // pasó de sobra el minuto de espera, el aviso "Vi tu comprobante... marca
+  // Pagado" se disparaba en la orden NUEVA antes de que el comprador mandara
+  // absolutamente nada -- confirmado leyendo el chat real de Bybit de la
+  // orden 2108193630204260352 (8 oct 2026): el aviso salió 12s después del
+  // mensaje de cuenta, con cero actividad del comprador de por medio, porque
+  // la misma sesión traía de arrastre la orden del comprador del 3 de
+  // octubre. orderCreatedAt ya se pasaba a esta función pero nunca se
+  // usaba (_orderCreatedAt, con guion bajo) -- ahora se usa para cortar
+  // cualquier mensaje anterior al inicio de ESTA orden.
+  // Margen de 60s hacia atrás: por si nuestro createdAt guardado queda
+  // levemente después del primer mensaje real de Bybit para la orden (reloj
+  // no perfectamente sincronizado) -- de sobra para no cortar mensajes
+  // legítimos de ESTA orden, y nada comparado a la diferencia de horas/días
+  // real contra una orden anterior del mismo comprador.
+  const orderStartMs = _orderCreatedAt ? new Date(_orderCreatedAt).getTime() - 60000 : 0;
   // REST API: fast (~1s), returns real user messages (type: "text") and system (type: "system")
   try {
     if (exchange === "binance") {
@@ -2248,7 +2270,8 @@ async function fetchMessages(exchange: string, client: any, orderNo: string, _or
         self: !!m.self,
         createTime: Number(m.createTime ?? 0),
         imageUrl: m.imageUrl ?? m.thumbnailUrl ?? null,
-      })).sort((a: any, b: any) => a.createTime - b.createTime);
+      })).filter((m: any) => !orderStartMs || m.createTime >= orderStartMs)
+        .sort((a: any, b: any) => a.createTime - b.createTime);
     }
 
     // Bybit: forma real de la respuesta confirmada contra la documentación
@@ -2272,7 +2295,8 @@ async function fetchMessages(exchange: string, client: any, orderNo: string, _or
         createTime: Number(m.createDate ?? 0),
         imageUrl: isImage ? (m.message ?? null) : null,
       };
-    }).sort((a: any, b: any) => a.createTime - b.createTime);
+    }).filter((m: any) => !orderStartMs || m.createTime >= orderStartMs)
+      .sort((a: any, b: any) => a.createTime - b.createTime);
   } catch {
     return [];
   }
