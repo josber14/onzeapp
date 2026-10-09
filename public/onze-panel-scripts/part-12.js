@@ -2084,18 +2084,28 @@
     const capacityClpTotal = Number(cap.capacityClp || 0);
     const existingManualPaid = Number(cap.manualPaymentsClp || 0);
     let clpReceived = Number(capStats.clpReceived || 0);
-    // Pedido explícito del usuario (oct 2026, plata real afectada): consultar
-    // el "ya recibido" REAL justo antes de enviar, no el que calculó el
-    // navegador con datos que pueden tener segundos/minutos de atraso en un
-    // día de mucho volumen -- el servidor va a validar exactamente este
-    // mismo número (ver POST en app/api/p2p/capacity/route.ts), así que
-    // usar la misma fuente acá evita el rebote de "datos desactualizados"
-    // en el caso normal, sin bajarle nada de seguridad al chequeo real.
+    // Bug real confirmado en vivo (oct 2026, plata real afectada): antes solo
+    // clpReceived se pedía fresco al servidor -- usedUsdt/commissionUsdt/
+    // commissionClp/saleParts seguían saliendo de capStats (el motor del
+    // NAVEGADOR, calculado en un instante distinto) y se guardaban juntos en
+    // la misma fila "finished" de Neon, pudiendo no coincidir entre sí
+    // (confirmado: un capacity quedó con finalClpReceived que no sumaba
+    // igual a su propio finalSaleParts). Ahora los 5 campos salen de la
+    // MISMA respuesta fresca del servidor -- o, si el fetch falla, los 5
+    // salen de capStats (incluido clpReceived) para no volver a mezclar.
+    let usedUsdt = Number(capStats.usedUsdt || 0);
+    let commissionUsdt = Number(capStats.commissionUsdt || 0);
+    let commissionClp = Number(capStats.commissionClp || 0);
+    let saleParts = capStats.saleParts || [];
     try {
       const freshRes = await fetch("/api/p2p/capacity?freshReceivedFor=" + encodeURIComponent(id), { credentials: "include" });
       const freshData = await freshRes.json().catch(() => null);
       if (freshRes.ok && freshData?.ok && typeof freshData.clpReceived === "number") {
         clpReceived = freshData.clpReceived;
+        usedUsdt = Number(freshData.usedUsdt || 0);
+        commissionUsdt = Number(freshData.commissionUsdt || 0);
+        commissionClp = Number(freshData.commissionClp || 0);
+        saleParts = Array.isArray(freshData.saleParts) ? freshData.saleParts : saleParts;
       }
     } catch (_) {}
     const remainingClp = Math.max(capacityClpTotal - existingManualPaid - clpReceived, 0);
@@ -2120,11 +2130,11 @@
         ...cap,
         status: "finished",
         finishedAt: new Date().toISOString(),
-        finalSoldUsdt: Number(capStats.usedUsdt || 0),
+        finalSoldUsdt: usedUsdt,
         finalClpReceived: clpReceived,
-        finalCommissionUsdt: Number(capStats.commissionUsdt || 0),
-        finalCommissionClp: Number(capStats.commissionClp || 0),
-        finalSaleParts: capStats.saleParts || [],
+        finalCommissionUsdt: commissionUsdt,
+        finalCommissionClp: commissionClp,
+        finalSaleParts: saleParts,
         manualPaymentClp: Number(cap.manualPaymentClp || 0) + payment,
         manualPaymentsClp: newManualPaid,
         manualPayments: newPayments
@@ -2998,7 +3008,20 @@
       </div>
 
       ${
-        !displayItems.length && Number(stats.unassignedSaleUsdt || 0) > 0
+        // Bug real confirmado en vivo (oct 2026): este aviso solo se mostraba
+        // cuando NO había ningún capacity activo (!displayItems.length) --
+        // en cuanto existía al menos uno, el aviso desaparecía aunque
+        // siguieran quedando ventas sueltas sin asignar. Resultado: un
+        // capacity nuevo absorbía en silencio una venta vieja (ej. de meses
+        // atrás) sin que el usuario tuviera ninguna oportunidad de verla
+        // venir -- pedido explícito del usuario: "yo quiero que ellas queden
+        // como ventas pendientes por asignar [visibles] y al momento que yo
+        // cree el capacity la venta entra en el capacity creado". El aviso
+        // ahora se muestra SIEMPRE que haya ventas sin asignar, exista o no
+        // un capacity activo -- el botón "Registrar compra" sigue llevando
+        // al mismo flujo de siempre (resolveP2PUnassignedAsNewCapacity),
+        // que ya pre-llena fecha y monto correctos.
+        Number(stats.unassignedSaleUsdt || 0) > 0
           ? `<div class="p2p-capacity-card" style="margin-top:12px;border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.07);">
               <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
                 <div>

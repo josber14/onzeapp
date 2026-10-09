@@ -138,7 +138,24 @@ export async function GET(req: NextRequest) {
     if (!capFresh) {
       return NextResponse.json({ ok: false, error: "Capacity no encontrado" }, { status: 404 });
     }
-    return NextResponse.json({ ok: true, clpReceived: capFresh.clpReceived, pendingClp: capFresh.pendingClp });
+    // Bug real confirmado en vivo (oct 2026): finishCapacityManually() en el
+    // panel usaba clpReceived de ACÁ (motor del servidor) pero usedUsdt/
+    // commissionUsdt/commissionClp/saleParts del motor del NAVEGADOR
+    // (calculateP2PCapacityStats, consultado en un instante distinto) --
+    // dos fuentes mezcladas en una sola fila "finished" de Neon, que podían
+    // no coincidir entre sí (confirmado: un capacity quedó con
+    // finalClpReceived $2.193.218 pero la suma real de su propio
+    // finalSaleParts daba $2.196.635). Ahora se devuelven TODOS los campos
+    // del mismo cálculo fresco, para que el panel deje de mezclar motores.
+    return NextResponse.json({
+      ok: true,
+      clpReceived: capFresh.clpReceived,
+      pendingClp: capFresh.pendingClp,
+      usedUsdt: capFresh.usedUsdt,
+      commissionUsdt: capFresh.commissionUsdt,
+      commissionClp: capFresh.commissionClp,
+      saleParts: capFresh.saleParts,
+    });
   }
 
   const [items, settings] = await Promise.all([
