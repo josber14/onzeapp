@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { computeFreshCapacityFifoResult } from "@/lib/p2p-capacity-engine";
+import { computeFreshCapacityFifoResult, claimCapacityEngineLock, releaseCapacityEngineLock } from "@/lib/p2p-capacity-engine";
 
 export const dynamic = "force-dynamic";
 
@@ -312,56 +312,87 @@ export async function POST(req: NextRequest) {
   // un cierre manual -- recalcula fresco acá mismo (misma fuente que el
   // cron/disparo inmediato, nunca el navegador) y rechaza si lo que mandó
   // el cliente como "ya recibido por ventas" no coincide.
-  if (existing?.status === "active" && incomingStatus === "finished" && manualAction) {
-    try {
-      const fresh = await computeFreshCapacityFifoResult(session.tenantId);
-      const freshCap = fresh?.capacities.find((c) => c.id === String(item.id));
-      if (freshCap) {
-        const claimedReceived = Number(item.finalClpReceived || 0);
-        const realReceived = freshCap.clpReceived;
-        if (Math.abs(claimedReceived - realReceived) > 1) {
-          console.warn("[P2P POST] BLOQUEADO: Completar saldo con 'ya recibido' desactualizado", item.id,
-            "pantalla dice:", claimedReceived, "servidor calcula:", realReceived);
-          return NextResponse.json(
-            {
-              ok: false,
-              error: `Tu pantalla tiene datos desactualizados -- según el servidor, este capacity ya recibió $${Math.round(realReceived).toLocaleString("es-CL")} CLP por ventas reales (tu pantalla decía $${Math.round(claimedReceived).toLocaleString("es-CL")}). Recarga la página y vuelve a intentar completar el saldo.`,
-            },
-            { status: 409 }
-          );
-        }
-      }
-    } catch (e: any) {
-      console.warn("[P2P POST] Error validando Completar saldo contra el servidor:", e?.message);
-      // No bloquear el cierre si la validación en sí falla (ej. error de
-      // red interno) -- solo bloquear cuando SÍ se pudo comparar y no coincidió.
+  // Bug real confirmado en vivo (oct 2026, plata real afectada, tenant 1):
+  // el candado de processTenantCapacityEngine() (lib/p2p-capacity-engine.ts)
+  // solo protegía al motor automático contra SÍ MISMO -- esta escritura
+  // manual ("Completar saldo") es una vía COMPLETAMENTE DISTINTA que nunca
+  // pasaba por ese candado. Confirmado: un capacity recién creado quedó
+  // "finished" usando las MISMAS 8 ventas reales que el motor automático
+  // YA había usado para cerrar OTRO capacity 12 minutos antes -- $4.885.000
+  // CLP contados dos veces, porque la validación de arriba (comparar el
+  // monto) corrió, pasó, y la escritura real sucedió DESPUÉS, sin ningún
+  // candado que impidiera que el motor automático hiciera lo mismo con las
+  // mismas ventas en el medio. Ahora se toma el MISMO candado por tenant
+  // que usa el motor automático, desde ANTES de la validación fresca hasta
+  // DESPUÉS de la escritura -- cualquier otra escritura (automática o
+  // manual) que intente tocar capacitys de este tenant al mismo tiempo se
+  // tiene que esperar o se salta, nunca corre en paralelo con esta.
+  const isNewFinish = existing?.status === "active" && incomingStatus === "finished";
+  let gotLock = true;
+  if (isNewFinish) {
+    gotLock = await claimCapacityEngineLock(session.tenantId);
+    if (!gotLock) {
+      return NextResponse.json(
+        { ok: false, error: "Hay otra actualización de capacity corriendo para esta cuenta justo ahora -- esperá unos segundos y probá de nuevo." },
+        { status: 409 }
+      );
     }
   }
 
-  const data: any = {
-    tenantId: session.tenantId,
-    provider: String(item.provider || ""),
-    capacityClp: Number(item.capacityClp || 0),
-    buyPrice: Number(item.buyPrice || 0),
-    usdtAmount: Number(item.usdtAmount || 0),
-    date: String(item.date || ""),
-    status: incomingStatus,
-    finishedAt: item.finishedAt ? new Date(item.finishedAt) : null,
-    finalSoldUsdt: item.finalSoldUsdt !== undefined && item.finalSoldUsdt !== null ? Number(item.finalSoldUsdt) : null,
-    finalClpReceived: item.finalClpReceived !== undefined && item.finalClpReceived !== null ? Number(item.finalClpReceived) : null,
-    finalCommissionUsdt: item.finalCommissionUsdt !== undefined && item.finalCommissionUsdt !== null ? Number(item.finalCommissionUsdt) : null,
-    finalCommissionClp: item.finalCommissionClp !== undefined && item.finalCommissionClp !== null ? Number(item.finalCommissionClp) : null,
-    finalSaleParts: (item.finalSaleParts && Array.isArray(item.finalSaleParts) ? item.finalSaleParts : null)
-      || (item.saleParts && Array.isArray(item.saleParts) ? item.saleParts : null),
-    manualPaymentClp: item.manualPaymentClp !== undefined && item.manualPaymentClp !== null ? Number(item.manualPaymentClp) : null,
-    manualPaymentsClp: item.manualPaymentsClp !== undefined && item.manualPaymentsClp !== null ? Number(item.manualPaymentsClp) : null,
-    manualPayments: Array.isArray(item.manualPayments) ? item.manualPayments : null,
-  };
-  const upserted = existing
-    ? await prisma.p2PCapacity.update({ where: { id: String(item.id) }, data })
-    : await prisma.p2PCapacity.create({ data: { id: String(item.id), ...data } });
-  console.log("[P2P POST] upserted", upserted.id, "→ status:", upserted.status);
-  return NextResponse.json({ ok: true });
+  try {
+    if (isNewFinish && manualAction) {
+      try {
+        const fresh = await computeFreshCapacityFifoResult(session.tenantId);
+        const freshCap = fresh?.capacities.find((c) => c.id === String(item.id));
+        if (freshCap) {
+          const claimedReceived = Number(item.finalClpReceived || 0);
+          const realReceived = freshCap.clpReceived;
+          if (Math.abs(claimedReceived - realReceived) > 1) {
+            console.warn("[P2P POST] BLOQUEADO: Completar saldo con 'ya recibido' desactualizado", item.id,
+              "pantalla dice:", claimedReceived, "servidor calcula:", realReceived);
+            return NextResponse.json(
+              {
+                ok: false,
+                error: `Tu pantalla tiene datos desactualizados -- según el servidor, este capacity ya recibió $${Math.round(realReceived).toLocaleString("es-CL")} CLP por ventas reales (tu pantalla decía $${Math.round(claimedReceived).toLocaleString("es-CL")}). Recarga la página y vuelve a intentar completar el saldo.`,
+              },
+              { status: 409 }
+            );
+          }
+        }
+      } catch (e: any) {
+        console.warn("[P2P POST] Error validando Completar saldo contra el servidor:", e?.message);
+        // No bloquear el cierre si la validación en sí falla (ej. error de
+        // red interno) -- solo bloquear cuando SÍ se pudo comparar y no coincidió.
+      }
+    }
+
+    const data: any = {
+      tenantId: session.tenantId,
+      provider: String(item.provider || ""),
+      capacityClp: Number(item.capacityClp || 0),
+      buyPrice: Number(item.buyPrice || 0),
+      usdtAmount: Number(item.usdtAmount || 0),
+      date: String(item.date || ""),
+      status: incomingStatus,
+      finishedAt: item.finishedAt ? new Date(item.finishedAt) : null,
+      finalSoldUsdt: item.finalSoldUsdt !== undefined && item.finalSoldUsdt !== null ? Number(item.finalSoldUsdt) : null,
+      finalClpReceived: item.finalClpReceived !== undefined && item.finalClpReceived !== null ? Number(item.finalClpReceived) : null,
+      finalCommissionUsdt: item.finalCommissionUsdt !== undefined && item.finalCommissionUsdt !== null ? Number(item.finalCommissionUsdt) : null,
+      finalCommissionClp: item.finalCommissionClp !== undefined && item.finalCommissionClp !== null ? Number(item.finalCommissionClp) : null,
+      finalSaleParts: (item.finalSaleParts && Array.isArray(item.finalSaleParts) ? item.finalSaleParts : null)
+        || (item.saleParts && Array.isArray(item.saleParts) ? item.saleParts : null),
+      manualPaymentClp: item.manualPaymentClp !== undefined && item.manualPaymentClp !== null ? Number(item.manualPaymentClp) : null,
+      manualPaymentsClp: item.manualPaymentsClp !== undefined && item.manualPaymentsClp !== null ? Number(item.manualPaymentsClp) : null,
+      manualPayments: Array.isArray(item.manualPayments) ? item.manualPayments : null,
+    };
+    const upserted = existing
+      ? await prisma.p2PCapacity.update({ where: { id: String(item.id) }, data })
+      : await prisma.p2PCapacity.create({ data: { id: String(item.id), ...data } });
+    console.log("[P2P POST] upserted", upserted.id, "→ status:", upserted.status);
+    return NextResponse.json({ ok: true });
+  } finally {
+    if (isNewFinish && gotLock) await releaseCapacityEngineLock(session.tenantId);
+  }
 }
 
 export async function DELETE(req: NextRequest) {

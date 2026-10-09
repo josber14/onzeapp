@@ -139,6 +139,26 @@ async function releaseCapacityEngineLock(tenantId: number): Promise<void> {
   await prisma.tenantSettings.updateMany({ where: { tenantId }, data: { capacityEngineLockUntil: null } });
 }
 
+// Bug real confirmado en vivo (oct 2026, plata real afectada -- cuenta del
+// usuario principal, Josber, tenant 1): el candado de arriba solo protegía
+// processTenantCapacityEngine() contra SÍ MISMO -- pero "Completar saldo"
+// (app/api/p2p/capacity/route.ts, POST con manualAction=true) escribe un
+// capacity "finished" por una vía COMPLETAMENTE DISTINTA, sin pasar nunca
+// por processTenantCapacityEngine ni por este candado. Confirmado en vivo:
+// un capacity recién creado (cap_1791488772069, creado 17:27) quedó
+// "finished" con las MISMAS 8 ventas reales que OTRO capacity ya había
+// cerrado 12 minutos antes (cap_1791562112423, completado 17:15) -- $4,885,000
+// CLP contados dos veces. La validación de "Completar saldo" solo compara
+// el NÚMERO total (claimedReceived vs fresco calculado), nunca si esas
+// ventas ya estaban bloqueadas por otro capacity que se cerró en el
+// instante exacto entre la validación y la escritura real -- una carrera
+// clásica entre dos escrituras que nunca se enteran una de la otra.
+// Se exporta el candado para que CUALQUIER código que vaya a ESCRIBIR un
+// capacity "finished" (automático o manual) tome el mismo candado por
+// tenant antes de hacerlo -- una sola fuente de exclusión mutua real,
+// sin importar por qué puerta entre la escritura.
+export { claimCapacityEngineLock, releaseCapacityEngineLock };
+
 export async function processTenantCapacityEngine(tenantId: number) {
   // Bug real confirmado en vivo (oct 2026, cuenta de Hector, plata real
   // afectada): sin este candado, 2 disparos casi simultáneos (ej. una venta
