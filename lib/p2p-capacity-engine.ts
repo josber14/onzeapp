@@ -17,7 +17,7 @@ import { computeP2PCapacityFifo, type FifoCapacityInput, type FifoSaleInput } fr
 // (acá se necesita el historial COMPLETO para que el reparto FIFO sea
 // correcto).
 async function loadTenantSales(tenantId: number): Promise<FifoSaleInput[]> {
-  const [binanceOrders, bybitOrders, manualSales] = await Promise.all([
+  const [binanceOrders, bybitOrders, manualSales, settings] = await Promise.all([
     prisma.p2PBotOrder.findMany({
       where: { tenantId, exchange: "binance", tradeType: "SELL", fiat: "CLP", status: "COMPLETED" },
       select: { orderNumber: true, amount: true, totalPrice: true, unitPrice: true, commission: true, executedAt: true },
@@ -30,10 +30,23 @@ async function loadTenantSales(tenantId: number): Promise<FifoSaleInput[]> {
       where: { tenantId },
       select: { id: true, exchange: true, amount: true, totalPrice: true, unitPrice: true, commission: true, executedAt: true },
     }),
+    prisma.tenantSettings.findUnique({ where: { tenantId }, select: { p2pResetCutoff: true } }),
   ]);
+
+  // Bug real confirmado en vivo (oct 2026, plata real afectada): el motor del
+  // SERVIDOR (este archivo -- usado tanto por el cron como por "Completar
+  // saldo") nunca respetaba p2pResetCutoff ("Empezar de cero"), a diferencia
+  // del navegador (ver getP2PCapacityBaselineTs/calculateP2PCapacityStats en
+  // onze-panel.html, que SÍ lo filtra). Resultado: una venta de MESES antes
+  // del reinicio, invisible en el panel, podía reaparecer por el lado del
+  // servidor y colarse en un capacity nuevo (confirmado: una venta real del
+  // 9 de julio apareciendo en un capacity creado en octubre, pese a que el
+  // navegador ya no la mostraba). Ahora ambos motores aplican el mismo corte.
+  const cutoff = settings?.p2pResetCutoff ? Number(settings.p2pResetCutoff) : 0;
 
   const sales: FifoSaleInput[] = [];
   for (const o of binanceOrders) {
+    if (cutoff && o.executedAt.getTime() < cutoff) continue;
     sales.push({
       orderNumber: o.orderNumber,
       exchange: "binance",
@@ -45,6 +58,7 @@ async function loadTenantSales(tenantId: number): Promise<FifoSaleInput[]> {
     });
   }
   for (const o of bybitOrders) {
+    if (cutoff && o.createdAt.getTime() < cutoff) continue;
     sales.push({
       orderNumber: o.orderNumber,
       exchange: "bybit",
@@ -56,6 +70,7 @@ async function loadTenantSales(tenantId: number): Promise<FifoSaleInput[]> {
     });
   }
   for (const m of manualSales) {
+    if (cutoff && new Date(m.executedAt).getTime() < cutoff) continue;
     sales.push({
       orderNumber: m.id,
       exchange: m.exchange,
