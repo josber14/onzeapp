@@ -91,7 +91,20 @@ async function loadTenantSales(tenantId: number): Promise<FifoSaleInput[]> {
 // misma fuente de datos que el motor real, así nunca puede dar un número
 // distinto al que el cron/disparo inmediato ya usan.
 export async function computeFreshCapacityFifoResult(tenantId: number) {
-  const capacityRows = await prisma.p2PCapacity.findMany({ where: { tenantId }, orderBy: { id: "asc" } });
+  // Bug real confirmado en vivo (oct 2026, plata real afectada): esta
+  // consulta no excluía la fila especial "_capital" (capital inicial,
+  // nunca debe competir por ventas nuevas -- ver calculateP2PCapacityStats()
+  // en el navegador, que SÍ la filtra). Al incluirla, computeP2PCapacityFifo
+  // la trataba como un capacity activo más (status != "finished"), y como
+  // su fecha es la más antigua de todas, siempre absorbía la primera venta
+  // real disponible hasta completar su propio capacityClp -- robándole esa
+  // plata a los capacitys reales en TODOS los cálculos de este motor
+  // (incluye "Completar saldo" y el cierre automático). Confirmado:
+  // $18.880,60 de una venta real de Bybit (9 oct 2026) quedaban atrapados
+  // ahí para siempre, restando exactamente ese monto a todo capacity real
+  // desde ese punto en adelante -- por eso "Completar saldo" mostraba un
+  // "restante" distinto (mayor) al de la tarjeta principal del panel.
+  const capacityRows = await prisma.p2PCapacity.findMany({ where: { tenantId, status: { not: "_capital" } }, orderBy: { id: "asc" } });
   if (!capacityRows.length) return null;
 
   const capacities: FifoCapacityInput[] = capacityRows.map((c) => ({
