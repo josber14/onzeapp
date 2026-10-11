@@ -264,13 +264,42 @@ export async function POST(req: NextRequest) {
   // tocar sus números finales, pase lo que pase del lado del cliente. Se
   // permite únicamente un reenvío IDÉNTICO (mismo monto final, mismo pago
   // manual) -- un reintento de red inofensivo, no una re-escritura real.
+  //
+  // Bug real confirmado en vivo DE NUEVO (oct 2026, plata real afectada,
+  // tenant 1, cuenta con 2 personas usando el panel a la vez -- dueño +
+  // operadora anotando ventas OKX en otra pestaña): esta validación solo
+  // comparaba los DOS TOTALES (finalClpReceived, manualPaymentsClp), nunca
+  // el detalle de finalSaleParts. Dos pestañas pueden llegar al MISMO total
+  // (ej. $10.000.000, el capacityClp completo) repartiéndolo entre
+  // ÓRDENES DISTINTAS -- cada pestaña ve "su" combinación de ventas reales
+  // disponibles en el momento en que calculó, y ambas pueden sumar el mismo
+  // número sin que ninguna de las dos sepa que la otra ya usó alguna de esas
+  // órdenes para OTRO capacity. El chequeo de arriba (solo totales) dejaba
+  // pasar esto como "reenvío idéntico inofensivo" y sobrescribía el detalle
+  // real y correcto con uno nuevo que duplicaba órdenes ya usadas en otro
+  // capacity -- confirmado: 3 capacitys afectados, $2.234.278 CLP contados
+  // dos veces en menos de una hora. Ahora también se compara la FIRMA del
+  // detalle (cada orderNumber + su assignedClp, redondeado, ordenado) -- un
+  // reenvío solo se considera idéntico si el detalle completo coincide, no
+  // solo el total.
+  function salePartsSignature(parts: any): string {
+    const arr = Array.isArray(parts) ? parts : [];
+    return arr
+      .map((p: any) => `${String(p?.orderNumber || "")}:${Math.round(Number(p?.assignedClp || 0))}`)
+      .sort()
+      .join("|");
+  }
   if (existing?.status === "finished" && incomingStatus === "finished") {
     const sameClp = Number(existing.finalClpReceived || 0) === Number(item.finalClpReceived || 0);
     const sameManual = Number(existing.manualPaymentsClp || 0) === Number(item.manualPaymentsClp || 0);
-    if (!sameClp || !sameManual) {
+    const incomingParts = item.finalSaleParts && Array.isArray(item.finalSaleParts) ? item.finalSaleParts
+      : (item.saleParts && Array.isArray(item.saleParts) ? item.saleParts : null);
+    const sameParts = salePartsSignature(existing.finalSaleParts) === salePartsSignature(incomingParts);
+    if (!sameClp || !sameManual || !sameParts) {
       console.warn("[P2P POST] BLOQUEADO: intento de re-finalizar capacity ya congelado", item.id,
         "existente:", existing.finalClpReceived?.toString(), existing.manualPaymentsClp?.toString(),
-        "nuevo:", item.finalClpReceived, item.manualPaymentsClp);
+        "nuevo:", item.finalClpReceived, item.manualPaymentsClp,
+        "mismoDetalle:", sameParts);
       return NextResponse.json(
         { ok: false, error: "Este capacity ya está finalizado y congelado -- no se puede volver a cerrar con otros números." },
         { status: 409 }
