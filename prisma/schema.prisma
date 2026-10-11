@@ -1819,6 +1819,16 @@ model P2PCycleManualSale {
   amountClp Decimal  @db.Decimal(18, 2)
   createdAt DateTime @default(now())
   cycle     P2PCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  // Pedido explícito del usuario (oct 2026): "1 solo proceso" -- al guardar
+  // una venta manual (P2PManualSale, la que alimenta ganancia/capacity),
+  // esta misma entrada de ciclo se crea automáticamente, sin que el usuario
+  // tenga que repetirlo a mano con "+ Venta Manual". Este campo guarda el id
+  // de ESA venta manual (P2PManualSale.id) para poder hacer upsert idempotente
+  // (reintentos de red no duplican) y para borrar esta fila si la venta
+  // manual original se borra. Null para ventas agregadas a mano desde el
+  // botón "+ Venta Manual" (sin venta manual de origen) -- esas siguen
+  // funcionando exactamente igual que antes.
+  sourceManualSaleId String? @unique
 
   @@index([cycleId])
 }

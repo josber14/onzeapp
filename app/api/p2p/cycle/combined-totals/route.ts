@@ -77,24 +77,27 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const label = searchParams.get("label") || "ONZE";
 
-    // Bybit es una cuenta única fija -- no tiene concepto de ONZE/ZINPLE
-    // (ver engine.ts, runBybitCycle: "sin importar bajo qué label esté
-    // corriendo el timer del panel, el ciclo de Bybit siempre usa ONZE").
-    // Si se buscara con el label de Binance que esté seleccionado en ese
-    // momento (ej. ZINPLE), el total de Bybit saldría siempre en 0 aunque
-    // haya un ciclo real activo -- el ciclo de Bybit vive siempre bajo
-    // "ONZE" en la base, sin importar qué pestaña de Binance se esté
-    // mirando.
-    const [binanceTotal, bybitTotal] = await Promise.all([
+    // Bybit y OKX son cuentas únicas fijas -- no tienen concepto de
+    // ONZE/ZINPLE (ver engine.ts, runBybitCycle: "sin importar bajo qué
+    // label esté corriendo el timer del panel, el ciclo de Bybit siempre usa
+    // ONZE"; mismo criterio para OKX, que ni siquiera tiene bot -- solo
+    // ventas manuales, ver syncManualSaleToActiveCycle en manual-sale/
+    // route.ts). Si se buscara con el label de Binance que esté seleccionado
+    // en ese momento (ej. ZINPLE), el total saldría siempre en 0 aunque haya
+    // un ciclo real activo -- esos ciclos viven siempre bajo "ONZE" en la
+    // base, sin importar qué pestaña de Binance se esté mirando.
+    const [binanceTotal, bybitTotal, okxTotal] = await Promise.all([
       totalForExchange(session.tenantId, label, "binance"),
       totalForExchange(session.tenantId, "ONZE", "bybit"),
+      totalForExchange(session.tenantId, "ONZE", "okx"),
     ]);
 
     return Response.json({
       ok: true,
       binanceTotal,
       bybitTotal,
-      combinedTotal: binanceTotal + bybitTotal,
+      okxTotal,
+      combinedTotal: binanceTotal + bybitTotal + okxTotal,
     });
   } catch (error: any) {
     return Response.json({ ok: false, error: error.message }, { status: 500 });

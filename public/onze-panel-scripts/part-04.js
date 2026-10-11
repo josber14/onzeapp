@@ -841,17 +841,21 @@ function addP2PBotStyles(){
             </div>
           </div>
 
-          <!-- Resumen combinado Binance+Bybit (sep 2026, pedido explícito del
-               usuario): tarjeta PROPIA, separada de "Ciclo de Ventas" --
-               antes vivía adentro de esa misma tarjeta y se veía como un
-               dato más del ciclo individual, lo cual confundía. Es un total
-               aparte (suma de los ciclos ACTIVOS de cada exchange, 0 si ese
-               exchange no tiene ninguno abierto -- ver
-               app/api/p2p/cycle/combined-totals/route.ts) y ahora se ve como
-               tal: su propio recuadro, con su propio estilo. Solo aplica a
-               Venta, no a Compra (mismo criterio de siempre). -->
+          <!-- Resumen combinado Binance+Bybit+OKX (sep 2026, pedido
+               explícito del usuario; OKX agregado oct 2026): tarjeta PROPIA,
+               separada de "Ciclo de Ventas" -- antes vivía adentro de esa
+               misma tarjeta y se veía como un dato más del ciclo individual,
+               lo cual confundía. Es un total aparte (suma de los ciclos
+               ACTIVOS de cada exchange, 0 si ese exchange no tiene ninguno
+               abierto -- ver app/api/p2p/cycle/combined-totals/route.ts) y
+               ahora se ve como tal: su propio recuadro, con su propio
+               estilo. Solo aplica a Venta, no a Compra (mismo criterio de
+               siempre). OKX no tiene bot (solo ventas manuales), así que su
+               total acá viene 100% de "+ Venta Manual"/ventas manuales
+               auto-sumadas -- ver syncManualSaleToActiveCycle en
+               manual-sale/route.ts. -->
           <div id="botCycleCombinedSummary" class="bot-combined-card" style="grid-column:1/-1;display:none;">
-            <div class="bot-combined-title"><span class="dot"></span>Resumen combinado · Binance + Bybit</div>
+            <div class="bot-combined-title"><span class="dot"></span>Resumen combinado · Binance + Bybit + OKX</div>
             <div class="bot-combined-grid">
               <div class="bot-combined-tile">
                 <div class="bot-combined-tile-label">🟡 CLP Binance</div>
@@ -860,6 +864,10 @@ function addP2PBotStyles(){
               <div class="bot-combined-tile">
                 <div class="bot-combined-tile-label">🟠 CLP Bybit</div>
                 <div class="bot-combined-tile-value" id="botCycleCombinedBybit" style="color:#f7a600;">—</div>
+              </div>
+              <div class="bot-combined-tile">
+                <div class="bot-combined-tile-label">⚫ CLP OKX</div>
+                <div class="bot-combined-tile-value" id="botCycleCombinedOkx" style="color:#e2e8f0;">—</div>
               </div>
               <div class="bot-combined-tile" style="border-color:rgba(0,212,255,.35);background:rgba(0,212,255,.05);">
                 <div class="bot-combined-tile-label">🔗 Total combinado</div>
@@ -5569,6 +5577,7 @@ function addP2PBotStyles(){
       combinedEl.style.display = "block";
       document.getElementById("botCycleCombinedBinance").textContent = "$" + Math.round(Number(data.binanceTotal || 0)).toLocaleString();
       document.getElementById("botCycleCombinedBybit").textContent = "$" + Math.round(Number(data.bybitTotal || 0)).toLocaleString();
+      document.getElementById("botCycleCombinedOkx").textContent = "$" + Math.round(Number(data.okxTotal || 0)).toLocaleString();
       document.getElementById("botCycleCombinedTotal").textContent = "$" + Math.round(Number(data.combinedTotal || 0)).toLocaleString();
     }catch(e){}
   }

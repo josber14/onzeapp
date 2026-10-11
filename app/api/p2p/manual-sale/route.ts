@@ -52,6 +52,70 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ok: true, orders });
 }
 
+// Pedido explícito del usuario (oct 2026): "1 solo proceso" -- antes, una
+// venta manual (Binance/Bybit/OKX) había que cargarla DOS VECES: acá (para
+// que cuente para ganancia/capacity) y de nuevo a mano con el botón
+// "+ Venta Manual" del Ciclo de Ventas (para que cuente en el combinado /
+// Resumen P2P del ciclo). Ahora, si hay un ciclo de VENTA activo para este
+// exchange (y, para Binance, para el label correcto -- Bybit/OKX siempre
+// usan "ONZE", igual que el resto del sistema de ciclos, ver
+// combined-totals/route.ts), esta misma venta se suma sola a ese ciclo.
+// Upsert por sourceManualSaleId -- idempotente, así un reintento de red
+// (postP2PManualSaleToServer reintenta hasta 3 veces) nunca duplica la
+// entrada del ciclo aunque dupliqué la llamada a este endpoint.
+async function syncManualSaleToActiveCycle(tenantId: number, exchange: string, label: string, orderNumber: string, totalPrice: number) {
+  try {
+    const cycleLabel = exchange === "binance" ? label : "ONZE";
+    const cycle = await prisma.p2PCycle.findFirst({
+      where: { tenantId, exchange, label: cycleLabel, side: "SELL", status: "active" },
+    });
+    if (!cycle) return;
+
+    const concept = `Venta manual ${exchange}`;
+    await prisma.p2PCycleManualSale.upsert({
+      where: { sourceManualSaleId: orderNumber },
+      update: { amountClp: totalPrice, concept },
+      create: { cycleId: cycle.id, concept, amountClp: totalPrice, sourceManualSaleId: orderNumber },
+    });
+
+    const totalManualClp = await prisma.p2PCycleManualSale.aggregate({
+      where: { cycleId: cycle.id },
+      _sum: { amountClp: true },
+    });
+    await prisma.p2PCycle.update({
+      where: { id: cycle.id },
+      data: { totalManualClp: totalManualClp._sum.amountClp || 0 },
+    });
+  } catch (e: any) {
+    console.warn("[P2P manual-sale] No se pudo sumar al ciclo activo:", e?.message);
+    // No bloquear el guardado de la venta manual por esto -- la venta ya
+    // quedó guardada (lo que importa para ganancia/capacity); el ciclo se
+    // puede sumar a mano como respaldo si esto llegara a fallar.
+  }
+}
+
+// Borra, si existe, la entrada de ciclo que se había creado automáticamente
+// para esta venta manual -- simétrico a syncManualSaleToActiveCycle(), para
+// que borrar una venta manual (ej. cargada por error) no deje su monto
+// pegado para siempre en el total del ciclo.
+async function removeManualSaleFromCycle(orderNumber: string) {
+  try {
+    const row = await prisma.p2PCycleManualSale.findUnique({ where: { sourceManualSaleId: orderNumber } });
+    if (!row) return;
+    await prisma.p2PCycleManualSale.delete({ where: { id: row.id } });
+    const totalManualClp = await prisma.p2PCycleManualSale.aggregate({
+      where: { cycleId: row.cycleId },
+      _sum: { amountClp: true },
+    });
+    await prisma.p2PCycle.update({
+      where: { id: row.cycleId },
+      data: { totalManualClp: totalManualClp._sum.amountClp || 0 },
+    });
+  } catch (e: any) {
+    console.warn("[P2P manual-sale] No se pudo quitar del ciclo activo:", e?.message);
+  }
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session?.tenantId) {
@@ -85,6 +149,8 @@ export async function POST(req: NextRequest) {
     create: { id: String(item.orderNumber), ...data },
   });
 
+  await syncManualSaleToActiveCycle(tenantId, data.exchange, String(item.label || "ONZE"), String(item.orderNumber), data.totalPrice);
+
   // Pedido explícito del usuario (oct 2026): un capacity que se completa al
   // 100% con esta venta no puede quedar "Activo" esperando hasta 30 min al
   // próximo cron -- se dispara el motor de inmediato, en el servidor (nunca
@@ -108,6 +174,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   await prisma.p2PManualSale.deleteMany({ where: { id, tenantId } });
+  await removeManualSaleFromCycle(id);
 
   return NextResponse.json({ ok: true });
 }

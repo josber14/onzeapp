@@ -6029,6 +6029,12 @@
           createdAt: now.toISOString(),
           _manual: true,
           exchange: exVal,
+          // Pedido explícito del usuario (oct 2026): para que esta venta se
+          // sume sola al Ciclo de Ventas activo del lado del servidor (ver
+          // /api/p2p/manual-sale, syncManualSaleToActiveCycle) -- solo
+          // importa para Binance (ONZE/ZINPLE); Bybit/OKX siempre usan el
+          // ciclo "ONZE" sin importar este valor.
+          label: localStorage.getItem("botActiveLabel") || "ONZE",
         };
 
         if(exVal === "bybit"){
