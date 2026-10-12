@@ -507,9 +507,14 @@ function addP2PBotStyles(){
     .bot-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
     .bot-cols-full{grid-column:1/-1;}
     .bot-card{background:rgba(15,23,42,.3);border:1px solid rgba(148,163,184,.06);border-radius:12px;padding:14px;}
-    .bot-cycle-tile{background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:9px 12px;}
+    .bot-cycle-tile{background:rgba(15,23,42,.5);border:1px solid rgba(148,163,184,.1);border-radius:10px;padding:9px 12px;min-width:0;}
     .bot-cycle-tile-label{font-size:10px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px;}
-    .bot-cycle-tile-value{font-size:14px;color:#e2e8f0;font-weight:700;}
+    /* Bug visual confirmado (oct 2026): numeros de orden largos (20 digitos)
+       se salian del cuadro -- en un hijo flex:1, min-width:auto por defecto
+       impide que se achique por debajo del ancho de su contenido. Con
+       min-width:0 arriba y word-break aca, el numero se parte de linea en
+       vez de desbordar. */
+    .bot-cycle-tile-value{font-size:14px;color:#e2e8f0;font-weight:700;overflow-wrap:break-word;word-break:break-all;}
 
     /* Resumen combinado Binance+Bybit -- pedido explícito del usuario (sep
        2026): tarjeta propia, separada visualmente del detalle de cada
@@ -5599,10 +5604,12 @@ function addP2PBotStyles(){
     return modal;
   }
 
-  window.botCycleStart = function(){
+  window.botCycleStart = async function(){
     const lbl = botActiveLabel || "ONZE";
-    const cuentaTag = botSelectedExchange === "binance" ? lbl : botSelectedExchange.toUpperCase();
-    const isBuy = window.botCycleSideFilter === "BUY";
+    const currentExchange = botSelectedExchange || "binance";
+    const side = window.botCycleSideFilter || "SELL";
+    const cuentaTag = currentExchange === "binance" ? lbl : currentExchange.toUpperCase();
+    const isBuy = side === "BUY";
     const modalTitle = isBuy ? "▶ Iniciar ciclo de compra" : "▶ Iniciar ciclo de ventas";
     // Para Compra, el auto-cierre es un límite de CLP GASTADO en el ciclo (ej.
     // un cupo diario de banco) -- al llegar ahí, el ciclo se cierra Y el
@@ -5613,16 +5620,52 @@ function addP2PBotStyles(){
     const minHint = isBuy
       ? "Cuando el CLP gastado en este ciclo llegue a este monto, el ciclo se cierra solo y el anuncio de Compra se apaga y se oculta en Binance. Deja 0 para no autocerrar."
       : "Cuando el saldo del bot baje a este nivel, el ciclo se cerrará solo. Deja 0 para cerrarlo solo al llegar a 0.";
+
+    // Pedido explícito del usuario (oct 2026): el mismo mecanismo de
+    // "también cerrar" al cerrar ciclo, pero al revés -- al INICIAR, mostrar
+    // casillas para los otros exchanges que todavía NO tengan un ciclo de
+    // venta activo (si ya está abierto, no hay nada que iniciar ahí, así que
+    // no aparece casilla). Sin marcar ninguna, se inicia solo el exchange
+    // desde el que se apretó "Iniciar Ciclo" -- igual que antes. Solo aplica
+    // a Venta, igual que el cierre múltiple.
+    let extraCheckboxesHtml = "";
+    if (!isBuy) {
+      const candidates = ["binance", "bybit", "okx"].filter(ex => ex !== currentExchange);
+      const checks = await Promise.all(candidates.map(async (ex) => {
+        const exLabel = ex === "binance" ? lbl : "ONZE";
+        try{
+          const r = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(exLabel) + "&exchange=" + encodeURIComponent(ex) + "&side=SELL", { credentials:"include" });
+          const d = await r.json();
+          return (d?.ok && !d?.active) ? { exchange: ex, label: exLabel } : null;
+        }catch(e){ return null; }
+      }));
+      const closedOnes = checks.filter(Boolean);
+      if (closedOnes.length) {
+        const rows = closedOnes.map(a => {
+          const name = a.exchange.charAt(0).toUpperCase() + a.exchange.slice(1);
+          return `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.12);border-radius:8px;margin-bottom:6px;cursor:pointer;">
+            <input type="checkbox" class="botCycleStartAlsoCheck" value="${a.exchange}" data-label="${escHtml(a.label)}" style="width:16px;height:16px;">
+            <span style="flex:1;font-size:13px;color:#e2e8f0;">${name}${a.exchange === "binance" ? " · " + escHtml(a.label) : ""}</span>
+          </label>`;
+        }).join("");
+        extraCheckboxesHtml = `
+          <p style="color:#94a3b8;font-size:12px;margin:14px 0 6px;">También iniciar ciclo en:</p>
+          ${rows}
+        `;
+      }
+    }
+
     botCycleModalShell("botCycleStartModal", modalTitle, `
       <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
         Cuenta: <strong style="color:#fff;">${escHtml(cuentaTag)}</strong><br>
         Se contarán las ventas P2P y manuales desde este momento hasta que cierres el ciclo.
       </p>
       <label style="display:block;color:#aaa;font-size:12px;margin-bottom:4px;">${minLabel}</label>
-      <p style="color:#64748b;font-size:11px;margin-bottom:8px;">${minHint}</p>
+      <p style="color:#64748b;font-size:11px;margin-bottom:8px;">${minHint}${extraCheckboxesHtml ? " (se usa el mismo monto para los que marques abajo)" : ""}</p>
       <input id="botCycleStartMinInput" type="text" inputmode="decimal" value="${isBuy ? "" : "90"}" placeholder="${isBuy ? "Ej: 8000000" : ""}"
         style="width:100%;box-sizing:border-box;padding:10px;background:#071828;border:1px solid #1a3a5a;border-radius:6px;color:#fff;margin-bottom:8px;">
-      <p id="botCycleStartErr" style="color:#fca5a5;font-size:12px;margin-bottom:8px;display:none;"></p>
+      ${extraCheckboxesHtml}
+      <p id="botCycleStartErr" style="color:#fca5a5;font-size:12px;margin:8px 0;display:none;"></p>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px;">
         <button onclick="document.getElementById('botCycleStartModal').remove()"
           style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
@@ -5637,16 +5680,28 @@ function addP2PBotStyles(){
     const lbl = botActiveLabel || "ONZE";
     const errEl = document.getElementById("botCycleStartErr");
     const minClose = parseFloat(document.getElementById("botCycleStartMinInput")?.value || "0") || 0;
+    const currentExchange = botSelectedExchange || "binance";
+    const side = window.botCycleSideFilter || "SELL";
+    const extraTargets = Array.from(document.querySelectorAll(".botCycleStartAlsoCheck:checked")).map(el => ({ exchange: el.value, label: el.getAttribute("data-label") || "ONZE" }));
+    const targets = [{ exchange: currentExchange, label: lbl }, ...extraTargets];
+    let startedCount = 0;
     try{
-      const res = await fetch("/api/p2p/cycle/start", {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ label: lbl, exchange: botSelectedExchange || "binance", side: window.botCycleSideFilter || "SELL", minCloseBalance: minClose })
-      });
-      const data = await res.json();
-      if(!data.ok){
-        if(errEl){ errEl.textContent = data.error || "Error al iniciar ciclo"; errEl.style.display = "block"; }
-        return;
+      // Secuencial a propósito, igual que el cierre múltiple -- cada POST
+      // toma un candado propio por tenant+exchange+label+side.
+      for (const target of targets) {
+        const res = await fetch("/api/p2p/cycle/start", {
+          method:"POST", credentials:"include",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ label: target.label, exchange: target.exchange, side, minCloseBalance: minClose })
+        });
+        const data = await res.json();
+        if(!data.ok){
+          const prefix = target.exchange !== currentExchange ? (target.exchange.charAt(0).toUpperCase() + target.exchange.slice(1) + ": ") : "";
+          if(errEl){ errEl.textContent = prefix + (data.error || "Error al iniciar ciclo"); errEl.style.display = "block"; }
+          if (startedCount) botCycleRefresh();
+          return;
+        }
+        startedCount++;
       }
       document.getElementById("botCycleStartModal")?.remove();
       botCycleRefresh();
