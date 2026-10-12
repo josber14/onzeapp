@@ -5761,15 +5761,58 @@ function addP2PBotStyles(){
 
   window.botCycleClose = async function(){
     const lbl = botActiveLabel || "ONZE";
+    const currentExchange = botSelectedExchange || "binance";
+    const side = window.botCycleSideFilter || "SELL";
     let preview = null;
     try{
-      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(lbl) + "&exchange=" + encodeURIComponent(botSelectedExchange || "binance") + "&side=" + encodeURIComponent(window.botCycleSideFilter || "SELL"), { credentials:"include" });
+      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(lbl) + "&exchange=" + encodeURIComponent(currentExchange) + "&side=" + encodeURIComponent(side), { credentials:"include" });
       const status = await res.json();
       preview = status?.active || null;
     }catch(e){}
     const totalUsdt = preview ? Number(preview.totalUsdt || 0).toFixed(2) : "—";
     const totalClp = preview ? Math.round(Number(preview.totalBinanceClp || 0) + Number(preview.totalManualClp || 0)).toLocaleString() : "—";
-    const closeModalTitle = window.botCycleSideFilter === "BUY" ? "■ Cerrar ciclo de compra" : "■ Cerrar ciclo de ventas";
+    const closeModalTitle = side === "BUY" ? "■ Cerrar ciclo de compra" : "■ Cerrar ciclo de ventas";
+
+    // Pedido explícito del usuario (oct 2026): poder elegir, en el momento de
+    // cerrar, cuáles OTROS exchanges cerrar junto con este -- antes solo se
+    // preguntaba Binance<->Bybit, uno detrás del otro con un cartel aparte, y
+    // OKX quedaba afuera por completo. El exchange desde el que se abre este
+    // cartel SIEMPRE se cierra (no tiene casilla); los otros 2 -- si tienen
+    // un ciclo de venta activo -- aparecen como casillas opcionales, sin
+    // marcar por defecto, y el usuario decide a cuáles suma el cierre. Solo
+    // aplica a Venta (Compra se queda igual que antes, sin esta opción).
+    let extraCheckboxesHtml = "";
+    if (side === "SELL") {
+      const candidates = ["binance", "bybit", "okx"].filter(ex => ex !== currentExchange);
+      const checks = await Promise.all(candidates.map(async (ex) => {
+        // Bybit/OKX son cuentas únicas fijas (sin ONZE/ZINPLE, ver engine.ts
+        // y combined-totals/route.ts) -- su ciclo siempre vive bajo el label
+        // "ONZE", sin importar qué pestaña de Binance esté activa.
+        const exLabel = ex === "binance" ? lbl : "ONZE";
+        try{
+          const r = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(exLabel) + "&exchange=" + encodeURIComponent(ex) + "&side=SELL", { credentials:"include" });
+          const d = await r.json();
+          return (d?.ok && d?.active) ? { exchange: ex, label: exLabel, cycle: d.active } : null;
+        }catch(e){ return null; }
+      }));
+      const active = checks.filter(Boolean);
+      if (active.length) {
+        const rows = active.map(a => {
+          const name = a.exchange.charAt(0).toUpperCase() + a.exchange.slice(1);
+          const clp = Math.round(Number(a.cycle.totalBinanceClp || 0) + Number(a.cycle.totalManualClp || 0)).toLocaleString();
+          return `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.12);border-radius:8px;margin-bottom:6px;cursor:pointer;">
+            <input type="checkbox" class="botCycleCloseAlsoCheck" value="${a.exchange}" data-label="${escHtml(a.label)}" style="width:16px;height:16px;">
+            <span style="flex:1;font-size:13px;color:#e2e8f0;">${name}${a.exchange === "binance" ? " · " + escHtml(a.label) : ""}</span>
+            <span style="font-size:12px;color:#00d4ff;font-weight:700;">$${clp}</span>
+          </label>`;
+        }).join("");
+        extraCheckboxesHtml = `
+          <p style="color:#94a3b8;font-size:12px;margin:14px 0 6px;">También tienen un ciclo de ventas activo. ¿Cerrar también?</p>
+          ${rows}
+        `;
+      }
+    }
+
     botCycleModalShell("botCycleCloseModal", closeModalTitle, `
       <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
         Se calcularán los totales finales de este ciclo y quedará archivado.
@@ -5778,8 +5821,9 @@ function addP2PBotStyles(){
         <div class="bot-cycle-tile" style="flex:1;"><div class="bot-cycle-tile-label">USDT vendidos</div><div class="bot-cycle-tile-value">${totalUsdt}</div></div>
         <div class="bot-cycle-tile" style="flex:1;border-color:rgba(0,212,255,.25);"><div class="bot-cycle-tile-label">Total CLP</div><div class="bot-cycle-tile-value" style="color:#00d4ff;">$${totalClp}</div></div>
       </div>
-      <p id="botCycleCloseErr" style="color:#fca5a5;font-size:12px;margin-bottom:8px;display:none;"></p>
-      <div style="display:flex;gap:10px;justify-content:flex-end;">
+      ${extraCheckboxesHtml}
+      <p id="botCycleCloseErr" style="color:#fca5a5;font-size:12px;margin:8px 0;display:none;"></p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:${extraCheckboxesHtml ? "14px" : "0"};">
         <button onclick="document.getElementById('botCycleCloseModal').remove()"
           style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">Cancelar</button>
         <button onclick="window.botCycleCloseConfirm()"
@@ -5793,75 +5837,33 @@ function addP2PBotStyles(){
     const closedExchange = botSelectedExchange || "binance";
     const closedLabel = botActiveLabel || "ONZE";
     const closedSide = window.botCycleSideFilter || "SELL";
+    const extraTargets = Array.from(document.querySelectorAll(".botCycleCloseAlsoCheck:checked")).map(el => ({ exchange: el.value, label: el.getAttribute("data-label") || "ONZE" }));
+    const targets = [{ exchange: closedExchange, label: closedLabel }, ...extraTargets];
+    const closedCycles = [];
     try{
-      const res = await fetch("/api/p2p/cycle/close", {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ label: closedLabel, exchange: closedExchange, side: closedSide })
-      });
-      const data = await res.json();
-      if(!data.ok){
-        if(errEl){ errEl.textContent = data.error || "Error al cerrar ciclo"; errEl.style.display = "block"; }
-        return;
+      // Secuencial a propósito (no Promise.all): cada POST toca el motor de
+      // capacity del mismo tenant -- mandarlos todos a la vez multiplicaría
+      // las chances de pisarse con el motor automático corriendo de fondo.
+      for (const target of targets) {
+        const res = await fetch("/api/p2p/cycle/close", {
+          method:"POST", credentials:"include",
+          headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ label: target.label, exchange: target.exchange, side: closedSide })
+        });
+        const data = await res.json();
+        if(!data.ok){
+          const prefix = target.exchange !== closedExchange ? (target.exchange.charAt(0).toUpperCase() + target.exchange.slice(1) + ": ") : "";
+          if(errEl){ errEl.textContent = prefix + (data.error || "Error al cerrar ciclo"); errEl.style.display = "block"; }
+          // Lo que ya se cerró en este loop queda cerrado (no hay rollback) --
+          // se refleja igual para que el usuario vea qué sí se alcanzó a
+          // cerrar antes del error.
+          if (closedCycles.length) botCycleRefresh();
+          return;
+        }
+        closedCycles.push({ exchange: target.exchange, label: target.label, cycle: data.cycle });
       }
       document.getElementById("botCycleCloseModal")?.remove();
-      window.botCycleShowCloseResult(data.cycle);
-      botCycleRefresh();
-      // Pedido explícito del usuario (sep 2026): con Binance y Bybit
-      // corriendo Ciclo de Ventas por separado, preguntar de una vez si
-      // también quiere cerrar el otro -- solo aplica a Venta.
-      if(closedSide === "SELL" && (closedExchange === "binance" || closedExchange === "bybit")){
-        window.botCycleMaybeAskCloseOther(closedExchange, closedLabel);
-      }
-    }catch(e){
-      if(errEl){ errEl.textContent = "Error al cerrar ciclo"; errEl.style.display = "block"; }
-    }
-  };
-
-  window.botCycleMaybeAskCloseOther = async function(closedExchange, label){
-    const otherExchange = closedExchange === "binance" ? "bybit" : "binance";
-    // Bybit es una cuenta única fija (sin ONZE/ZINPLE, ver engine.ts) -- su
-    // ciclo siempre vive bajo el label "ONZE" en la base, sin importar qué
-    // pestaña de Binance (ONZE/ZINPLE) se acaba de cerrar. Al revés
-    // (cerrando desde Bybit y preguntando por Binance) se usa el label que
-    // ya se tenía a mano -- Binance sí puede tener ONZE y ZINPLE corriendo
-    // cada uno por su lado.
-    const otherLabel = otherExchange === "bybit" ? "ONZE" : label;
-    try{
-      const res = await fetch("/api/p2p/cycle/status?label=" + encodeURIComponent(otherLabel) + "&exchange=" + encodeURIComponent(otherExchange) + "&side=SELL", { credentials:"include" });
-      const data = await res.json();
-      if(!data?.ok || !data?.active) return; // sin ciclo activo del otro lado, nada que preguntar
-      const otherName = otherExchange === "binance" ? "Binance" : "Bybit";
-      botCycleModalShell("botCycleCloseOtherModal", "¿Cerrar también " + otherName + "?", `
-        <p style="color:#aaa;font-size:13px;margin-bottom:16px;">
-          También tiene un ciclo de ventas activo en ${otherName}. ¿Quiere cerrarlo ahora mismo también?
-        </p>
-        <p id="botCycleCloseOtherErr" style="color:#fca5a5;font-size:12px;margin-bottom:8px;display:none;"></p>
-        <div style="display:flex;gap:10px;justify-content:flex-end;">
-          <button onclick="document.getElementById('botCycleCloseOtherModal').remove()"
-            style="padding:10px 16px;background:#2a4a6a;color:#fff;border:none;border-radius:6px;cursor:pointer;">No, dejarlo así</button>
-          <button onclick="window.botCycleCloseOtherConfirm('${otherExchange}','${otherLabel}')"
-            style="padding:10px 16px;background:rgba(239,68,68,.85);color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Sí, cerrar también</button>
-        </div>
-      `);
-    }catch(e){}
-  };
-
-  window.botCycleCloseOtherConfirm = async function(otherExchange, label){
-    const errEl = document.getElementById("botCycleCloseOtherErr");
-    try{
-      const res = await fetch("/api/p2p/cycle/close", {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ label, exchange: otherExchange, side: "SELL" })
-      });
-      const data = await res.json();
-      if(!data.ok){
-        if(errEl){ errEl.textContent = data.error || "Error al cerrar ciclo"; errEl.style.display = "block"; }
-        return;
-      }
-      document.getElementById("botCycleCloseOtherModal")?.remove();
-      window.botCycleShowCloseResult(data.cycle);
+      window.botCycleShowCloseResult(closedCycles);
       botCycleRefresh();
     }catch(e){
       if(errEl){ errEl.textContent = "Error al cerrar ciclo"; errEl.style.display = "block"; }
@@ -5877,18 +5879,36 @@ function addP2PBotStyles(){
     </div>`;
   }
 
-  window.botCycleShowCloseResult = function(cycle){
-    const totalUsdt = Number(cycle.totalUsdt || 0).toFixed(2);
-    const totalClp = Math.round(Number(cycle.totalBinanceClp || 0) + Number(cycle.totalManualClp || 0)).toLocaleString();
-    botCycleModalShell("botCycleResultModal", "✅ Ciclo cerrado", `
-      <div style="display:flex;gap:8px;margin-bottom:10px;">
-        <div class="bot-cycle-tile" style="flex:1;"><div class="bot-cycle-tile-label">USDT vendidos</div><div class="bot-cycle-tile-value">${totalUsdt}</div></div>
-        <div class="bot-cycle-tile" style="flex:1;border-color:rgba(0,212,255,.25);"><div class="bot-cycle-tile-label">Total CLP</div><div class="bot-cycle-tile-value" style="color:#00d4ff;">$${totalClp}</div></div>
-      </div>
-      <div style="display:flex;gap:8px;margin-bottom:16px;">
-        ${botCycleOrderRow("Primera orden", cycle.firstOrderNumber, cycle.firstOrderClp)}
-        ${botCycleOrderRow("Última orden", cycle.lastOrderNumber, cycle.lastOrderClp)}
-      </div>
+  // Acepta tanto un solo ciclo cerrado (objeto) como una lista de
+  // { exchange, label, cycle } -- cierre múltiple (oct 2026, ver
+  // botCycleCloseConfirm): cada exchange cerrado se muestra en su propio
+  // bloque, uno debajo del otro, con su propio USDT/CLP/primera/última orden.
+  window.botCycleShowCloseResult = function(cycleOrList){
+    const entries = Array.isArray(cycleOrList)
+      ? cycleOrList
+      : [{ exchange: botSelectedExchange || "binance", label: botActiveLabel || "ONZE", cycle: cycleOrList }];
+    const blocks = entries.map(({ exchange, label, cycle }) => {
+      const totalUsdt = Number(cycle.totalUsdt || 0).toFixed(2);
+      const totalClp = Math.round(Number(cycle.totalBinanceClp || 0) + Number(cycle.totalManualClp || 0)).toLocaleString();
+      const name = exchange.charAt(0).toUpperCase() + exchange.slice(1);
+      const heading = entries.length > 1
+        ? `<div style="font-size:12px;font-weight:700;color:#00ff88;text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;">${name}${exchange === "binance" ? " · " + escHtml(label) : ""}</div>`
+        : "";
+      return `<div style="${entries.length > 1 ? "padding:12px;background:rgba(15,23,42,.4);border:1px solid rgba(148,163,184,.1);border-radius:10px;margin-bottom:10px;" : ""}">
+        ${heading}
+        <div style="display:flex;gap:8px;margin-bottom:10px;">
+          <div class="bot-cycle-tile" style="flex:1;"><div class="bot-cycle-tile-label">USDT vendidos</div><div class="bot-cycle-tile-value">${totalUsdt}</div></div>
+          <div class="bot-cycle-tile" style="flex:1;border-color:rgba(0,212,255,.25);"><div class="bot-cycle-tile-label">Total CLP</div><div class="bot-cycle-tile-value" style="color:#00d4ff;">$${totalClp}</div></div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          ${botCycleOrderRow("Primera orden", cycle.firstOrderNumber, cycle.firstOrderClp)}
+          ${botCycleOrderRow("Última orden", cycle.lastOrderNumber, cycle.lastOrderClp)}
+        </div>
+      </div>`;
+    }).join("");
+    const title = entries.length > 1 ? `✅ ${entries.length} ciclos cerrados` : "✅ Ciclo cerrado";
+    botCycleModalShell("botCycleResultModal", title, `
+      <div style="margin-bottom:6px;">${blocks}</div>
       <div style="display:flex;justify-content:flex-end;">
         <button onclick="document.getElementById('botCycleResultModal').remove()"
           style="padding:10px 16px;background:#00ff88;color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:bold;">Cerrar</button>
