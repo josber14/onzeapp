@@ -3463,24 +3463,53 @@ async function offerSplitPayment(
     amount = Number(cs.receivedReceiptsClp);
   }
   let accounts = await getAvailableAccounts(tenantId, exchange, label);
-  // La primera cuota va al banco que YA se le había mandado antes (lo más
-  // probable es que ya haya empezado a transferir ahí) — el resto de las
-  // cuotas usa bancos DISTINTOS, nunca repite uno ya ofrecido. Antes de este
-  // fix, el reparto ignoraba esto y podía mandar el mismo banco (ej. Banco
-  // Estado) para las dos cuotas, algo que el comprador ya había dicho que no
-  // le funcionaba para el monto completo.
+  // genuineSplit: true cuando el monto a repartir es MENOR al total, o sea
+  // cuando sí hay algo real que dividir entre 2+ cuentas. Cuando es false
+  // (amount >= total, ya corregido arriba con receivedReceiptsClp si había
+  // un monto probado menor), distributeAmount() va a producir UN solo chunk
+  // por el total completo — ahí no hay división real, solo hace falta
+  // ofrecer una cuenta de reemplazo.
+  const genuineSplit = amount < total;
   if (cs.chosenBank) {
-    accounts = [...accounts.filter((a: any) => a.bank === cs.chosenBank), ...accounts.filter((a: any) => a.bank !== cs.chosenBank)];
+    if (genuineSplit) {
+      // La primera cuota va al banco que YA se le había mandado antes (lo
+      // más probable es que ya haya empezado a transferir ahí) — el resto
+      // de las cuotas usa bancos DISTINTOS, nunca repite uno ya ofrecido.
+      accounts = [...accounts.filter((a: any) => a.bank === cs.chosenBank), ...accounts.filter((a: any) => a.bank !== cs.chosenBank)];
+    } else {
+      // Bug real confirmado en vivo (oct 2026): cuando no hay división real
+      // (el monto bloqueado es el total completo), el único chunk terminaba
+      // siendo el MISMO banco ya ofrecido (cs.chosenBank) — el bot decía
+      // "vamos a dividir el pago" pero repetía exactamente la cuenta que el
+      // comprador ya dijo que no le funcionaba. Acá se invierte la
+      // prioridad: el banco ya ofrecido va al FINAL, para que el chunk único
+      // (el monto completo) caiga en un banco genuinamente DISTINTO.
+      accounts = [...accounts.filter((a: any) => a.bank !== cs.chosenBank), ...accounts.filter((a: any) => a.bank === cs.chosenBank)];
+    }
   }
   const chunks = distributeAmount(accounts, amount, total);
   if (chunks.length > 0) {
-    const msg = ["Sin problema, vamos a dividir el pago. Aquí tienes las cuentas:\n"];
+    const isBankSwitch = !genuineSplit && chunks.length === 1;
+    const msg = isBankSwitch
+      ? ["Entendido, probemos con otra cuenta para el monto completo:\n"]
+      : ["Sin problema, vamos a dividir el pago. Aquí tienes las cuentas:\n"];
     chunks.forEach((c: any, i: number) => {
-      msg.push(`--- Cuenta ${i + 1} ---\n${formatSingleAccount(c)}\nMonto: $${formatCLP(c.assignedAmount)}\n`);
+      msg.push(isBankSwitch
+        ? `${formatSingleAccount(c)}\nMonto: $${formatCLP(c.assignedAmount)}\n`
+        : `--- Cuenta ${i + 1} ---\n${formatSingleAccount(c)}\nMonto: $${formatCLP(c.assignedAmount)}\n`);
     });
-    msg.push("Importante: ambas transferencias deben salir de cuentas a tu nombre (el titular de la orden) — no aceptamos que una parte la pague otra persona.");
-    msg.push("Ve realizando las transferencias y enviando los comprobantes de cada una. Quedo atento.");
-    await sendThenTransition(client, exchange, order.orderNumber, cs, msg.join("\n"), "account_sent", { partialAmount: amount, chosenAccountIds: chunks.map((c: any) => c.id), retryCount: 0 });
+    if (isBankSwitch) {
+      msg.push("Importante: la transferencia debe salir de una cuenta a tu nombre (el titular de la orden).");
+    } else {
+      msg.push("Importante: ambas transferencias deben salir de cuentas a tu nombre (el titular de la orden) — no aceptamos que una parte la pague otra persona.");
+      msg.push("Ve realizando las transferencias y enviando los comprobantes de cada una. Quedo atento.");
+    }
+    await sendThenTransition(client, exchange, order.orderNumber, cs, msg.join("\n"), "account_sent", {
+      partialAmount: amount,
+      chosenAccountIds: chunks.map((c: any) => c.id),
+      ...(isBankSwitch ? { chosenBank: chunks[0].bank } : {}),
+      retryCount: 0,
+    });
   } else {
     await sendThenTransition(client, exchange, order.orderNumber, cs,
       "Entendido, con ese monto no podemos dividir el pago. ¿Puedes intentar con otra cuenta?",

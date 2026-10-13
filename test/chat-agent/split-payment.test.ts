@@ -108,3 +108,37 @@ describe("chat-agent: aviso de dinero faltante al recibir un comprobante", () =>
     expect(lastMsg).toMatch(/\$460\.000/);
   });
 });
+
+describe("chat-agent: offerSplitPayment no repite el banco ya bloqueado cuando no hay división real", () => {
+  // Reproduce en vivo (oct 2026): un comprador con la cuenta de BANCO DE CHILE
+  // ya enviada avisó que su banco no le deja pasar el TOTAL de la orden (no
+  // un monto menor) -- no hay nada real que dividir. Antes de este fix, el
+  // bot decía "vamos a dividir el pago" pero mandaba una sola cuenta: la
+  // MISMA de BANCO DE CHILE ya rechazada, sin resolver nada.
+  it("ofrece un banco DISTINTO cuando el límite reportado es igual al total de la orden", async () => {
+    const client = createFakeP2PClient("binance");
+    const order = makeOrder({ totalPrice: 460000 });
+
+    await processOrder(TENANT_ID, "binance", client, order, [], "ONZE"); // saludo
+    client.pushClientMessage("1"); // personal
+    await processOrder(TENANT_ID, "binance", client, order, [], "ONZE"); // awaiting_bank_choice
+
+    client.pushClientMessage("banco de chile porfa");
+    await processOrder(TENANT_ID, "binance", client, order, [], "ONZE"); // account_sent, chosenBank = BANCO DE CHILE
+
+    const csBefore = fakePrisma.__getChatStateByOrder(TENANT_ID, "binance", order.orderNumber);
+    expect(csBefore.chosenBank).toMatch(/BANCO DE CHILE/i);
+
+    // El límite que reporta es el TOTAL completo -- no hay división real posible.
+    client.pushClientMessage("el banco solo me permite 460000");
+    await processOrder(TENANT_ID, "binance", client, order, [], "ONZE");
+
+    const lastMsg = client.getLastSentMessage()!;
+    expect(lastMsg).not.toMatch(/BANCO DE CHILE/i);
+    expect(lastMsg).toMatch(/\$460\.000/);
+    expect(lastMsg).not.toMatch(/vamos a dividir el pago/i);
+
+    const csAfter = fakePrisma.__getChatStateByOrder(TENANT_ID, "binance", order.orderNumber);
+    expect(csAfter.chosenBank).not.toMatch(/BANCO DE CHILE/i);
+  });
+});
